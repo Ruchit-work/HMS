@@ -92,7 +92,7 @@ export default function HealthInformationSection() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800 mb-1">Stay Hydrated</p>
-                    <p className="text-xs text-slate-600">Drink 8-10 glasses of water daily for optimal kidney function and overall health.</p>
+                    <p className="text-xs text-slate-600">Drink 8-10 glasses of water daily, especially during summer. Try buttermilk (chaas) and coconut water for natural hydration.</p>
                   </div>
                 </div>
 
@@ -102,7 +102,7 @@ export default function HealthInformationSection() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800 mb-1">Daily Exercise</p>
-                    <p className="text-xs text-slate-600">Take a 30-minute walk daily to improve cardiovascular health and mental well-being.</p>
+                    <p className="text-xs text-slate-600">Practice yoga, take morning walks in parks, or do Surya Namaskar. Even 30 minutes of walking daily improves health significantly.</p>
                   </div>
                 </div>
 
@@ -112,7 +112,7 @@ export default function HealthInformationSection() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800 mb-1">Quality Sleep</p>
-                    <p className="text-xs text-slate-600">Get 7-9 hours of quality sleep each night for optimal recovery and immune function.</p>
+                    <p className="text-xs text-slate-600">Sleep 7-9 hours daily. Try light dinner before 8 PM, avoid screens 1 hour before bed, and maintain consistent sleep schedule.</p>
                   </div>
                 </div>
 
@@ -122,7 +122,7 @@ export default function HealthInformationSection() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800 mb-1">Stress Management</p>
-                    <p className="text-xs text-slate-600">Practice 10 minutes of meditation or deep breathing to reduce stress and anxiety.</p>
+                    <p className="text-xs text-slate-600">Practice 10 minutes of meditation (dhyan), pranayama breathing, or listen to calming music. Spend time with family and friends.</p>
                   </div>
                 </div>
               </div>
@@ -135,8 +135,8 @@ export default function HealthInformationSection() {
                     <span className="text-slate-600 text-sm">🍃</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-800 mb-1">Spring Health</p>
-                    <p className="text-xs text-slate-600">Manage allergies with proper medication, keep windows closed during high pollen days, and use air purifiers indoors.</p>
+                    <p className="text-sm font-medium text-slate-800 mb-1">Summer Health (March-June)</p>
+                    <p className="text-xs text-slate-600">Stay hydrated with nimbu paani, wear cotton clothes, use sunscreen, avoid going out during peak heat (12-4 PM). Eat light, fresh foods.</p>
                   </div>
                 </div>
 
@@ -145,8 +145,8 @@ export default function HealthInformationSection() {
                     <span className="text-slate-600 text-sm">☀️</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-800 mb-1">Summer Safety</p>
-                    <p className="text-xs text-slate-600">Stay cool, wear sunscreen (SPF 30+), stay hydrated, and avoid prolonged sun exposure during peak hours.</p>
+                    <p className="text-sm font-medium text-slate-800 mb-1">Monsoon Health (June-September)</p>
+                    <p className="text-xs text-slate-600">Prevent waterborne diseases, drink boiled water, avoid street food, wear mosquito repellent, keep surroundings clean to prevent dengue/malaria.</p>
                   </div>
                 </div>
 
@@ -155,8 +155,8 @@ export default function HealthInformationSection() {
                     <span className="text-slate-600 text-sm">🍁</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-800 mb-1">Fall Wellness</p>
-                    <p className="text-xs text-slate-600">Boost immunity with vitamin C, get flu shots, maintain indoor humidity levels, and prepare for seasonal changes.</p>
+                    <p className="text-sm font-medium text-slate-800 mb-1">Post-Monsoon (October-November)</p>
+                    <p className="text-xs text-slate-600">Boost immunity with amla, tulsi, and ginger. Eat seasonal fruits, maintain cleanliness, and get flu vaccination. Prepare for winter health needs.</p>
                   </div>
                 </div>
 
@@ -165,8 +165,8 @@ export default function HealthInformationSection() {
                     <span className="text-slate-600 text-sm">❄️</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-800 mb-1">Winter Care</p>
-                    <p className="text-xs text-slate-600">Stay warm, maintain indoor humidity, get flu shots, and be cautious of icy conditions to prevent falls.</p>
+                    <p className="text-sm font-medium text-slate-800 mb-1">Winter Health (December-February)</p>
+                    <p className="text-xs text-slate-600">Keep warm with layered clothing, eat hot meals, drink warm water, use moisturizer for dry skin, and be careful of morning fog while driving.</p>
                   </div>
                 </div>
               </div>
@@ -176,35 +176,35 @@ export default function HealthInformationSection() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Annual physical examination and health screening</p>
+                  <p className="text-sm text-slate-700">Annual health checkup with complete blood count (CBC)</p>
                 </div>
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Blood pressure monitoring (monthly if at risk)</p>
+                  <p className="text-sm text-slate-700">Blood pressure monitoring (especially important in Indian population)</p>
                 </div>
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Cholesterol screening (every 5 years, more frequent if at risk)</p>
+                  <p className="text-sm text-slate-700">Diabetes screening (HbA1c test annually after 30 years)</p>
                 </div>
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Diabetes screening (annually if at risk)</p>
+                  <p className="text-sm text-slate-700">Heart health screening (ECG, lipid profile every 2 years)</p>
                 </div>
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Age-appropriate cancer screenings (mammograms, colonoscopies, etc.)</p>
+                  <p className="text-sm text-slate-700">Thyroid function test (TSH) annually</p>
                 </div>
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Keep vaccinations up to date (flu, COVID-19, tetanus, etc.)</p>
+                  <p className="text-sm text-slate-700">Vitamin D and B12 levels (common deficiencies in India)</p>
                 </div>
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Dental checkups and cleanings (every 6 months)</p>
+                  <p className="text-sm text-slate-700">Cancer screenings (Pap smear for women, PSA for men over 50)</p>
                 </div>
                 <div className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   <span className="text-slate-600">✓</span>
-                  <p className="text-sm text-slate-700">Eye examinations (every 1-2 years)</p>
+                  <p className="text-sm text-slate-700">Vaccinations: COVID-19, flu, hepatitis B, typhoid</p>
                 </div>
               </div>
             )}
@@ -213,22 +213,22 @@ export default function HealthInformationSection() {
               <div className="space-y-4">
                 <div className="p-4 border border-slate-200 rounded-lg">
                   <p className="text-sm font-semibold text-slate-800 mb-2">When should I see a doctor?</p>
-                  <p className="text-xs text-slate-600">For persistent symptoms lasting more than 3-5 days, severe pain, fever above 101°F, difficulty breathing, chest pain, or any emergency symptoms. Trust your instincts - if something feels wrong, seek medical attention.</p>
+                  <p className="text-xs text-slate-600">For fever above 100°F, persistent cough/cold for 3+ days, severe headache, chest pain, difficulty breathing, or any emergency. In monsoon season, be extra cautious about waterborne diseases.</p>
                 </div>
 
                 <div className="p-4 border border-slate-200 rounded-lg">
-                  <p className="text-sm font-semibold text-slate-800 mb-2">How often should I get checkups?</p>
-                  <p className="text-xs text-slate-600">Annual checkups for healthy adults under 50. More frequent visits if you have chronic conditions, are over 65, or have risk factors. Your doctor will recommend the best schedule for your health needs.</p>
+                  <p className="text-sm font-semibold text-slate-800 mb-2">What health insurance should I have?</p>
+                  <p className="text-xs text-slate-600">Consider comprehensive health insurance covering hospitalization, OPD expenses, and critical illnesses. Many Indian insurers offer family floater plans. Keep your insurance card handy during visits.</p>
                 </div>
 
                 <div className="p-4 border border-slate-200 rounded-lg">
                   <p className="text-sm font-semibold text-slate-800 mb-2">What should I bring to appointments?</p>
-                  <p className="text-xs text-slate-600">Bring your ID, insurance card, current medication list, medical records, list of questions, and any recent test results. Having this information ready helps make the most of your visit.</p>
+                  <p className="text-xs text-slate-600">Bring Aadhaar card/ID proof, insurance details, previous medical reports, current medications (including Ayurvedic/home remedies), and a list of questions. Arrive 10-15 minutes early.</p>
                 </div>
 
                 <div className="p-4 border border-slate-200 rounded-lg">
-                  <p className="text-sm font-semibold text-slate-800 mb-2">How can I prepare for my appointment?</p>
-                  <p className="text-xs text-slate-600">Write down your symptoms, questions, and concerns beforehand. Bring a list of current medications and supplements. Arrive 15 minutes early for paperwork, and don't hesitate to ask questions during your visit.</p>
+                  <p className="text-sm font-semibold text-slate-800 mb-2">How to manage common Indian health issues?</p>
+                  <p className="text-xs text-slate-600">For acidity: eat smaller meals, avoid spicy food. For seasonal allergies: keep windows closed, use air purifiers. For joint pain: regular exercise, maintain healthy weight. Always consult doctor for persistent issues.</p>
                 </div>
               </div>
             )}
@@ -281,8 +281,8 @@ export default function HealthInformationSection() {
                   <span className="text-slate-600">🏥</span>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-800">Insurance Guide</h3>
-                  <p className="text-sm text-slate-600">Coverage details and billing information</p>
+                  <h3 className="font-semibold text-slate-800">Health Insurance Guide</h3>
+                  <p className="text-sm text-slate-600">Indian health insurance coverage, cashless treatment, and claim procedures</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -300,8 +300,8 @@ export default function HealthInformationSection() {
                   <span className="text-slate-600">💻</span>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-800">Portal Tutorial</h3>
-                  <p className="text-sm text-slate-600">Learn how to use the patient portal effectively</p>
+                  <h3 className="font-semibold text-slate-800">Patient Portal Tutorial</h3>
+                  <p className="text-sm text-slate-600">Step-by-step guide to book appointments, view reports, and manage health records</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -319,8 +319,8 @@ export default function HealthInformationSection() {
                   <span className="text-slate-600">📞</span>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-800">Contact Directory</h3>
-                  <p className="text-sm text-slate-600">Important phone numbers and contact information</p>
+                  <h3 className="font-semibold text-slate-800">Emergency Contacts</h3>
+                  <p className="text-sm text-slate-600">Hospital emergency numbers, ambulance services, and helpline contacts</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

@@ -19,9 +19,15 @@ const COMMON_CONDITIONS = [
   { id: 'diabetes', label: 'Diabetes', icon: '💉' },
   { id: 'hypertension', label: 'High Blood Pressure', icon: '🩸' },
   { id: 'heart_disease', label: 'Heart Disease', icon: '❤️' },
-  { id: 'asthma', label: 'Asthma', icon: '🫁' },
-  { id: 'thyroid', label: 'Thyroid Problems', icon: '🦋' },
+  { id: 'thyroid', label: 'Thyroid Disorders', icon: '🦋' },
+  { id: 'anemia', label: 'Anemia/Vitamin Deficiency', icon: '🩹' },
+  { id: 'asthma', label: 'Asthma/Breathing Problems', icon: '🫁' },
+  { id: 'arthritis', label: 'Arthritis/Joint Pain', icon: '🦴' },
   { id: 'kidney', label: 'Kidney Disease', icon: '🫘' },
+  { id: 'pcos', label: 'PCOS (Women)', icon: '👩' },
+  { id: 'depression', label: 'Depression/Anxiety', icon: '🧘' },
+  { id: 'migraine', label: 'Migraine/Headaches', icon: '🧠' },
+  { id: 'skin_allergy', label: 'Skin Problems/Allergies', icon: '🧴' },
 ]
 
 export default function MedicalHistoryChecklist({
@@ -89,7 +95,7 @@ export default function MedicalHistoryChecklist({
           type="text"
           value={allergies}
           onChange={(e) => onAllergiesChange(e.target.value)}
-          placeholder="e.g., Penicillin, Peanuts"
+          placeholder="e.g., Penicillin, Peanuts, Dust"
           className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
         />
         {!allergies && (
@@ -111,7 +117,7 @@ export default function MedicalHistoryChecklist({
           type="text"
           value={currentMedications}
           onChange={(e) => onMedicationsChange(e.target.value)}
-          placeholder="e.g., Metformin 500mg"
+          placeholder="e.g., Metformin 500mg, Thyroxine 50mcg"
           className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
         />
         {!currentMedications && (

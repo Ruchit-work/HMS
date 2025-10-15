@@ -1,15 +1,109 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
+import fs from "fs";
+import path from "path";
 
-// Groq AI Integration for Medical Diagnosis
+// Load Indian Patient Dataset from JSON file
+function loadIndianPatientDataset() {
+  try {
+    const dataPath = path.join(process.cwd(), 'src', 'data', 'indian_patient_dataset.json');
+    const fileContent = fs.readFileSync(dataPath, 'utf8');
+    return JSON.parse(fileContent);
+  } catch (error) {
+    console.log("Could not load Indian patient dataset:", error.message);
+    return [];
+  }
+}
+
+// Find similar cases from Indian dataset
+function findSimilarCases(symptoms, patientInfo, dataset) {
+  if (!dataset || dataset.length === 0) return [];
+  
+  const symptomsLower = symptoms.toLowerCase();
+  const patientInfoLower = patientInfo.toLowerCase();
+  
+  // Score cases based on symptom similarity
+  const scoredCases = dataset.map(case_data => {
+    let score = 0;
+    
+    // Exact symptom matches
+    case_data.symptoms.forEach(symptom => {
+      if (symptomsLower.includes(symptom.toLowerCase())) {
+        score += 2;
+      }
+    });
+    
+    // Partial symptom matches
+    case_data.symptoms.forEach(symptom => {
+      const symptomWords = symptom.toLowerCase().split(' ');
+      symptomWords.forEach(word => {
+        if (word.length > 3 && symptomsLower.includes(word)) {
+          score += 0.5;
+        }
+      });
+    });
+    
+    // Region/environment context
+    if (patientInfoLower.includes(case_data.region.toLowerCase())) {
+      score += 1;
+    }
+    
+    return { ...case_data, relevance_score: score };
+  });
+  
+  // Return top 3 most relevant cases
+  return scoredCases
+    .filter(case_data => case_data.relevance_score > 0)
+    .sort((a, b) => b.relevance_score - a.relevance_score)
+    .slice(0, 3);
+}
+
+// Groq AI Integration for Medical Diagnosis with Indian Patient Dataset
 async function getAIDiagnosis(symptoms, patientInfo) {
-  const prompt = `You are an experienced medical doctor. Analyze this patient case and provide a comprehensive medical assessment.
+  // Load dataset from JSON file
+  const indianPatientDataset = loadIndianPatientDataset();
+  
+  // Find similar cases from Indian dataset
+  const similarCases = findSimilarCases(symptoms, patientInfo, indianPatientDataset);
+  
+  // Log dataset usage for debugging
+  console.log(`Dataset usage: Found ${similarCases.length} similar cases out of ${indianPatientDataset.length} total cases`);
+  if (similarCases.length > 0) {
+    console.log(`Top match: ${similarCases[0].case_id} (${similarCases[0].diagnosis}) - Score: ${similarCases[0].relevance_score}`);
+  }
+  
+  // Build context from similar cases
+  let contextExamples = "";
+  if (similarCases.length > 0) {
+    contextExamples = "\n\n**RELEVANT INDIAN PATIENT CASES FOR REFERENCE:**\n";
+    similarCases.forEach((case_data, index) => {
+      contextExamples += `\nCase ${index + 1} (${case_data.region}, Age: ${case_data.age}):
+- Symptoms: ${case_data.symptoms.join(', ')}
+- Duration: ${case_data.duration}
+- Environment: ${case_data.environment}
+- Diagnosis: ${case_data.diagnosis}
+- Tests: ${case_data.recommended_tests.join(', ')}
+- Treatment: ${case_data.treatment_plan}
+- Notes: ${case_data.ai_notes}`;
+    });
+  }
+
+  const prompt = `You are an experienced medical doctor specializing in Indian healthcare patterns and diseases. Analyze this patient case and provide a comprehensive medical assessment.
 
 **PATIENT INFORMATION:**
 ${patientInfo}
 
 **PRESENTING SYMPTOMS:**
-${symptoms}
+${symptoms}${contextExamples}
+
+**INSTRUCTIONS:**
+Consider the regional healthcare patterns, common Indian diseases, and similar cases above. Focus on:
+1. Indian-specific disease patterns (monsoon diseases, tropical infections, regional health issues)
+2. Common Indian medications and treatment protocols
+3. Regional healthcare infrastructure considerations
+4. Cultural and environmental factors affecting health
+
+**IMPORTANT:** If similar cases are provided above, reference them by case number (e.g., "Similar to Case 1 from Rajasthan") and explain how they relate to this patient.
 
 Provide your analysis in this EXACT format:
 

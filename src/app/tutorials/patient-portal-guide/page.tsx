@@ -8,8 +8,7 @@ export default function PatientPortalTutorial() {
     <div className="min-h-screen bg-gray-50">
       <PageHeader 
         title="Patient Portal Tutorial"
-        subtitle="Learn how to use our patient portal effectively"
-      />
+        subtitle="भारतीय रोगियों के लिए पोर्टल गाइड - Learn how to use our patient portal effectively" icon={""}      />
       
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
@@ -27,51 +26,52 @@ export default function PatientPortalTutorial() {
                 <div className="p-6 border border-slate-200 rounded-lg">
                   <h3 className="font-semibold text-slate-800 mb-3">📱 Getting Started</h3>
                   <ul className="space-y-2 text-sm text-slate-600">
-                    <li>• Create your account using your email</li>
-                    <li>• Verify your email address</li>
-                    <li>• Complete your profile information</li>
-                    <li>• Set up two-factor authentication</li>
+                    <li>• Create account using mobile number or email</li>
+                    <li>• Verify OTP sent to your mobile</li>
+                    <li>• Complete profile with Aadhaar card details</li>
+                    <li>• Add family members to your account</li>
                   </ul>
                 </div>
 
                 <div className="p-6 border border-slate-200 rounded-lg">
                   <h3 className="font-semibold text-slate-800 mb-3">📅 Booking Appointments</h3>
                   <ul className="space-y-2 text-sm text-slate-600">
-                    <li>• Browse available doctors and specializations</li>
-                    <li>• Select your preferred date and time</li>
-                    <li>• Fill out the appointment form</li>
-                    <li>• Complete payment securely</li>
+                    <li>• Browse doctors by specialization (Cardiology, Orthopedics, etc.)</li>
+                    <li>• Check available slots (morning/evening sessions)</li>
+                    <li>• Fill symptoms and medical history</li>
+                    <li>• Pay online via UPI, cards, or net banking</li>
                   </ul>
                 </div>
 
                 <div className="p-6 border border-slate-200 rounded-lg">
                   <h3 className="font-semibold text-slate-800 mb-3">📋 Managing Appointments</h3>
                   <ul className="space-y-2 text-sm text-slate-600">
-                    <li>• View upcoming appointments</li>
-                    <li>• Reschedule or cancel appointments</li>
-                    <li>• Download appointment confirmations</li>
-                    <li>• View appointment history</li>
+                    <li>• View upcoming appointments with doctor details</li>
+                    <li>• Reschedule 24 hours before appointment</li>
+                    <li>• Download appointment slip for hospital visit</li>
+                    <li>• Access previous consultation reports</li>
                   </ul>
                 </div>
 
                 <div className="p-6 border border-slate-200 rounded-lg">
                   <h3 className="font-semibold text-slate-800 mb-3">👤 Profile Management</h3>
                   <ul className="space-y-2 text-sm text-slate-600">
-                    <li>• Update personal information</li>
-                    <li>• Add medical history and allergies</li>
-                    <li>• Manage insurance details</li>
-                    <li>• Update emergency contacts</li>
+                    <li>• Update personal details and address</li>
+                    <li>• Add medical history, allergies, current medications</li>
+                    <li>• Upload health insurance details</li>
+                    <li>• Set emergency contacts and family details</li>
                   </ul>
                 </div>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-                <h3 className="font-semibold text-blue-800 mb-3">💡 Pro Tips</h3>
+                <h3 className="font-semibold text-blue-800 mb-3">💡 भारतीय रोगियों के लिए टिप्स</h3>
                 <ul className="space-y-2 text-sm text-blue-700">
-                  <li>• Book appointments in advance to secure your preferred time slots</li>
-                  <li>• Keep your profile updated with current medications and allergies</li>
-                  <li>• Download the appointment confirmation for your records</li>
-                  <li>• Use the contact directory for quick access to important numbers</li>
+                  <li>• Book morning slots (9-11 AM) for faster consultation</li>
+                  <li>• Carry Aadhaar card and insurance details to hospital</li>
+                  <li>• Download appointment slip on your mobile for easy access</li>
+                  <li>• Keep emergency contacts updated for family members</li>
+                  <li>• Use UPI for faster payment processing</li>
                 </ul>
               </div>
 

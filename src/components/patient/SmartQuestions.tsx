@@ -43,23 +43,23 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
   // Render questions based on category
   const renderQuestions = () => {
     switch (category) {
-      case "fever_cold":
+      case "monsoon_diseases":
         return (
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
-                Do you have fever?
+                Do you have high fever?
               </label>
               <div className="flex gap-2">
-                {['Yes', 'No', 'Not sure'].map(option => (
+                {['Yes (>100°F)', 'No', 'Not sure'].map(option => (
                   <button
                     key={option}
                     type="button"
                     onClick={() => updateAnswer('hasFever', option)}
                     className={`flex-1 py-1.5 px-3 rounded-lg border-2 font-medium text-xs transition-all ${
                       answers.hasFever === option
-                        ? 'bg-teal-500 text-white border-teal-500'
-                        : 'bg-white border-slate-300 text-slate-700 hover:border-teal-300'
+                        ? 'bg-red-500 text-white border-red-500'
+                        : 'bg-white border-slate-300 text-slate-700 hover:border-red-300'
                     }`}
                   >
                     {option}
@@ -70,18 +70,18 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
 
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
-                How long?
+                How many days?
               </label>
               <select
                 value={answers.duration || ''}
                 onChange={(e) => updateAnswer('duration', e.target.value)}
-                className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               >
                 <option value="">Select...</option>
-                <option value="today">Today</option>
+                <option value="today">Started today</option>
                 <option value="1-2">1-2 days</option>
                 <option value="3-5">3-5 days</option>
-                <option value="week">Week+</option>
+                <option value="week+">More than a week</option>
               </select>
             </div>
 
@@ -90,15 +90,15 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 Other symptoms:
               </label>
               <div className="grid grid-cols-3 gap-1.5">
-                {['Cough', 'Sore Throat', 'Headache', 'Body Ache', 'Runny Nose', 'Weakness'].map(symptom => (
+                {['Body Pain', 'Headache', 'Rash', 'Bleeding', 'Low Platelets', 'Joint Pain'].map(symptom => (
                   <button
                     key={symptom}
                     type="button"
                     onClick={() => toggleSymptom(symptom)}
                     className={`py-1.5 px-2 rounded-lg border-2 text-xs font-medium transition-all ${
                       (answers.symptoms || []).includes(symptom)
-                        ? 'bg-teal-100 border-teal-400 text-teal-800'
-                        : 'bg-white border-slate-200 text-slate-700 hover:border-teal-300'
+                        ? 'bg-red-100 border-red-400 text-red-800'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-red-300'
                     }`}
                   >
                     {(answers.symptoms || []).includes(symptom) ? '✓ ' : ''}{symptom}
@@ -174,7 +174,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
           </div>
         )
 
-      case "diabetes":
+      case "diabetes_complications":
         return (
           <div className="space-y-4">
             <div>
@@ -182,7 +182,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 Visit type? <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-2 gap-3">
-                {['Regular Checkup', 'New Symptoms'].map(type => (
+                {['Regular Checkup', 'New Complications'].map(type => (
                   <button
                     key={type}
                     type="button"
@@ -194,6 +194,28 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     }`}
                   >
                     {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Any complications?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {['Diabetic Foot', 'Eye Problems', 'Kidney Issues', 'Nerve Pain', 'Heart Problems', 'None'].map(complication => (
+                  <button
+                    key={complication}
+                    type="button"
+                    onClick={() => toggleSymptom(complication)}
+                    className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      (answers.symptoms || []).includes(complication)
+                        ? 'bg-purple-100 border-purple-400 text-purple-800'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300'
+                    }`}
+                  >
+                    {(answers.symptoms || []).includes(complication) ? '✓ ' : ''}{complication}
                   </button>
                 ))}
               </div>
@@ -223,13 +245,13 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Last blood sugar reading (if known):
+                Last HbA1c reading (if known):
               </label>
               <input
                 type="text"
-                value={answers.bloodSugar || ''}
-                onChange={(e) => updateAnswer('bloodSugar', e.target.value)}
-                placeholder="e.g., 140 mg/dL or Fasting/Random"
+                value={answers.hba1c || ''}
+                onChange={(e) => updateAnswer('hba1c', e.target.value)}
+                placeholder="e.g., 7.5% or last 3 months average"
                 className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
@@ -276,15 +298,77 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
           </div>
         )
 
+      case "cardiac_issues":
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                What's the main concern?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {['Chest Pain', 'Breathing Difficulty', 'High BP', 'Heart Palpitations', 'Swelling', 'Family History'].map(issue => (
+                  <button
+                    key={issue}
+                    type="button"
+                    onClick={() => toggleSymptom(issue)}
+                    className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      (answers.symptoms || []).includes(issue)
+                        ? 'bg-red-100 border-red-400 text-red-800'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-red-300'
+                    }`}
+                  >
+                    {(answers.symptoms || []).includes(issue) ? '✓ ' : ''}{issue}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Current BP reading (if known):
+              </label>
+              <input
+                type="text"
+                value={answers.bpReading || ''}
+                onChange={(e) => updateAnswer('bpReading', e.target.value)}
+                placeholder="e.g., 140/90 mmHg"
+                className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Current heart medications:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {['ACE Inhibitors', 'Beta Blockers', 'Diuretics', 'Statins', 'Aspirin', 'None'].map(med => (
+                  <button
+                    key={med}
+                    type="button"
+                    onClick={() => toggleSymptom(med)}
+                    className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      (answers.symptoms || []).includes(med)
+                        ? 'bg-red-100 border-red-400 text-red-800'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-red-300'
+                    }`}
+                  >
+                    {(answers.symptoms || []).includes(med) ? '✓ ' : ''}{med}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+
       case "stomach_digestive":
         return (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Main problem:
+                मुख्य समस्या: (Main problem:)
               </label>
               <div className="grid grid-cols-2 gap-2">
-                {['Stomach Pain', 'Nausea/Vomiting', 'Diarrhea', 'Constipation', 'Acidity', 'Bloating'].map(issue => (
+                {['पेट दर्द (Stomach Pain)', 'उल्टी/मतली (Nausea/Vomiting)', 'दस्त (Diarrhea)', 'कब्ज (Constipation)', 'एसिडिटी (Acidity)', 'गैस/सूजन (Bloating)'].map(issue => (
                   <button
                     key={issue}
                     type="button"
@@ -303,17 +387,17 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                How long?
+                कितने दिन से? (How long?)
               </label>
               <select
                 value={answers.duration || ''}
                 onChange={(e) => updateAnswer('duration', e.target.value)}
                 className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               >
-                <option value="">Select...</option>
-                <option value="today">Started today</option>
-                <option value="few-days">Few days</option>
-                <option value="week-plus">More than a week</option>
+                <option value="">चुनें... (Select...)</option>
+                <option value="today">आज शुरू हुआ (Started today)</option>
+                <option value="few-days">कुछ दिनों से (Few days)</option>
+                <option value="week-plus">एक सप्ताह से ज्यादा (More than a week)</option>
               </select>
             </div>
           </div>
