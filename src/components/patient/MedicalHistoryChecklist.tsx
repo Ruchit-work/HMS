@@ -77,8 +77,13 @@ export default function MedicalHistoryChecklist({
 
       {/* Allergies */}
       <div className="mb-2">
-        <label className="block text-xs font-medium text-slate-700 mb-1">
+        <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-2">
           Allergies?
+          {allergies && (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+              ✓ From Profile
+            </span>
+          )}
         </label>
         <input
           type="text"
@@ -87,12 +92,20 @@ export default function MedicalHistoryChecklist({
           placeholder="e.g., Penicillin, Peanuts"
           className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
         />
+        {!allergies && (
+          <p className="text-xs text-slate-500 mt-1">No allergies saved in profile. You can add here.</p>
+        )}
       </div>
 
       {/* Current Medications */}
       <div>
-        <label className="block text-xs font-medium text-slate-700 mb-1">
+        <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-2">
           Current medications?
+          {currentMedications && (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+              ✓ From Profile
+            </span>
+          )}
         </label>
         <input
           type="text"
@@ -101,6 +114,9 @@ export default function MedicalHistoryChecklist({
           placeholder="e.g., Metformin 500mg"
           className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
         />
+        {!currentMedications && (
+          <p className="text-xs text-slate-500 mt-1">No medications saved in profile. You can add here.</p>
+        )}
       </div>
     </div>
   )

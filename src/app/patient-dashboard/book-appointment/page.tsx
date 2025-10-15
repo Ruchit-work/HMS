@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import Notification from "@/components/Notification"
 import BookAppointmentForm from "@/components/patient/BookAppointmentForm"
+import AppointmentSuccessModal from "@/components/patient/AppointmentSuccessModal"
 import PageHeader from "@/components/ui/PageHeader"
 import { UserData, Doctor, NotificationData } from "@/types/patient"
 import Footer from "@/components/Footer"
@@ -16,6 +17,8 @@ export default function BookAppointmentPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState<NotificationData | null>(null)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successAppointmentData, setSuccessAppointmentData] = useState<any>(null)
 
   const { user, loading } = useAuth("patient")
 
@@ -57,14 +60,6 @@ export default function BookAppointmentPage() {
     paymentData: { cardNumber: string; cardName: string; expiryDate: string; cvv: string; upiId: string }
   }) => {
     const { selectedDoctor, appointmentData, paymentMethod, paymentType, paymentData } = formData
-    
-    if (!userData.drinkingHabits || !userData.smokingHabits || !userData.vegetarian) {
-      setNotification({ 
-        type: "error", 
-        message: "Please complete your social & lifestyle information in Edit Profile before booking appointments" 
-      })
-      return
-    }
     
     if (!selectedDoctor) {
       setNotification({ type: "error", message: "Please select a doctor" })
@@ -117,6 +112,11 @@ export default function BookAppointmentPage() {
         patientDrinkingHabits: userData.drinkingHabits,
         patientSmokingHabits: userData.smokingHabits,
         patientVegetarian: userData.vegetarian,
+        
+        // Patient Medical Info (visible to doctor)
+        patientAllergies: userData.allergies || "",
+        patientCurrentMedications: userData.currentMedications || "",
+        
         doctorId: selectedDoctor,
         doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
         doctorSpecialization: selectedDoctorData.specialization || "",
@@ -137,18 +137,19 @@ export default function BookAppointmentPage() {
         updatedAt: new Date().toISOString()
       })
 
-      const successMessage = paymentType === "partial"
-        ? `Partial payment (₹${AMOUNT_TO_PAY}) successful! Appointment booked. Pay remaining ₹${REMAINING_AMOUNT} at hospital. Transaction ID: ${transactionId}`
-        : `Payment successful! Appointment booked. Transaction ID: ${transactionId}`
-      
-      setNotification({ 
-        type: "success", 
-        message: successMessage
+      // Show success modal with appointment details
+      setSuccessAppointmentData({
+        doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
+        doctorSpecialization: selectedDoctorData.specialization,
+        appointmentDate: appointmentData.date,
+        appointmentTime: appointmentData.time,
+        transactionId: transactionId,
+        paymentAmount: AMOUNT_TO_PAY,
+        paymentType: paymentType,
+        remainingAmount: paymentType === "partial" ? REMAINING_AMOUNT : 0,
+        patientName: `${userData.firstName} ${userData.lastName}`
       })
-
-      setTimeout(() => {
-        window.location.href = "/patient-dashboard/appointments"
-      }, 2000)
+      setShowSuccessModal(true)
       
     } catch (error: any) {
       console.error("Error processing payment:", error)
@@ -180,6 +181,13 @@ export default function BookAppointmentPage() {
           submitting={submitting}
         />
       </main>
+
+      {/* Appointment Success Modal */}
+      <AppointmentSuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        appointmentData={successAppointmentData}
+      />
 
       {notification && (
         <Notification 

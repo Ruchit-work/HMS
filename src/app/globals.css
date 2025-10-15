@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Extra Small Screen Utilities */
+@media (min-width: 475px) {
+  .xs\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* Healthcare Design System - Modern Color Palette */
 @theme {
   --color-primary: #0891b2; /* Teal - Trust & Healthcare */

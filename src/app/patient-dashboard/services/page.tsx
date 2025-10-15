@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import PageHeader from "@/components/ui/PageHeader"
@@ -278,12 +279,12 @@ export default function ServicesPage() {
               >
                 📞 Call: 1800-XXX-XXXX
               </a>
-              <a
+              <Link
                 href="/patient-dashboard/book-appointment"
                 className="px-6 py-3 bg-blue-700 text-white font-semibold rounded-lg hover:bg-blue-800 transition-all duration-300 hover:scale-105"
               >
                 📅 Book Appointment
-              </a>
+              </Link>
             </div>
           </div>
         </div>

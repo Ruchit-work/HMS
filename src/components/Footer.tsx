@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 export default function Footer() {
   const currentYear = new Date().getFullYear()
 
@@ -41,34 +43,34 @@ export default function Footer() {
             <h3 className="text-white font-bold text-lg mb-4">Quick Links</h3>
             <ul className="space-y-2">
               <li>
-                <a href="/patient-dashboard" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
+                <Link href="/patient-dashboard" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
                   <span>→</span>
                   <span>Patient Dashboard</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/patient-dashboard/doctors" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
+                <Link href="/patient-dashboard/doctors" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
                   <span>→</span>
                   <span>Find Doctors</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/patient-dashboard/services" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
+                <Link href="/patient-dashboard/services" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
                   <span>→</span>
                   <span>Our Services</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/patient-dashboard/facilities" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
+                <Link href="/patient-dashboard/facilities" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
                   <span>→</span>
                   <span>Facilities</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/patient-dashboard/book-appointment" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
+                <Link href="/patient-dashboard/book-appointment" className="text-sm hover:text-teal-400 transition-colors flex items-center gap-2">
                   <span>→</span>
                   <span>Book Appointment</span>
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

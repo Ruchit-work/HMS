@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
@@ -15,6 +17,7 @@ import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
 
 export default function DoctorDashboard() {
+  const router = useRouter()
   const [userData, setUserData] = useState<any>(null)
   const [appointments, setAppointments] = useState<any[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -66,6 +69,7 @@ export default function DoctorDashboard() {
         // Fetch appointments
         await fetchAppointments(user.uid)
       }
+
     }
 
     fetchData()
@@ -118,6 +122,13 @@ export default function DoctorDashboard() {
   const openCompletionModal = (appointmentId: string) => {
     setSelectedAppointmentId(appointmentId)
     setShowCompletionModal(true)
+  }
+
+  const viewAppointmentDetails = (appointment: any) => {
+    // Store the appointment ID in sessionStorage to auto-expand it on the appointments page
+    sessionStorage.setItem('expandAppointmentId', appointment.id)
+    // Navigate to appointments page using Next.js router
+    router.push('/doctor-dashboard/appointments')
   }
 
   // Complete appointment with medicine and notes
@@ -174,7 +185,6 @@ export default function DoctorDashboard() {
   const todayAppointments = appointments.filter((appointment: any) => 
     new Date(appointment.appointmentDate).toDateString() === new Date().toDateString()
   ).length
-  const confirmedAppointments = appointments.filter((appointment: any) => appointment.status === "confirmed").length
   const completedAppointments = appointments.filter((appointment: any) => appointment.status === "completed").length
 
   return (
@@ -209,11 +219,16 @@ export default function DoctorDashboard() {
           />
           
           <DashboardCard
-            title="Confirmed"
-            value={confirmedAppointments}
-            icon="⏰"
+            title="This Week"
+            value={appointments.filter((apt: any) => {
+              const aptDate = new Date(apt.appointmentDate)
+              const today = new Date()
+              const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+              return aptDate >= today && aptDate <= weekFromNow
+            }).length}
+            icon="📊"
             iconBgColor="bg-purple-100"
-            subtitle="Pending checkups"
+            subtitle="Upcoming appointments"
           />
 
           <DashboardCard
@@ -306,7 +321,10 @@ export default function DoctorDashboard() {
                               </p>
                             </div>
                             {!isPast && (
-                              <button className="px-3 py-1 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 transition-colors font-semibold">
+                              <button 
+                                onClick={() => viewAppointmentDetails(apt)}
+                                className="px-3 py-1 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 transition-colors font-semibold"
+                              >
                                 View
                               </button>
                             )}
@@ -320,57 +338,8 @@ export default function DoctorDashboard() {
             })()}
           </div>
 
-          {/* Notifications & Quick Actions Panel */}
+          {/* Quick Actions Panel */}
           <div className="space-y-6">
-            {/* Notifications */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <span>🔔</span>
-                  <span>Notifications</span>
-                </h2>
-                {confirmedAppointments > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
-                    {confirmedAppointments}
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                {confirmedAppointments > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-sm font-semibold text-blue-800 flex items-center gap-2">
-                      <span>📋</span>
-                      {confirmedAppointments} pending appointment{confirmedAppointments > 1 ? 's' : ''}
-                    </p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      Review and complete checkups
-                    </p>
-                  </div>
-                )}
-
-                {todayAppointments > 0 && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                    <p className="text-sm font-semibold text-green-800 flex items-center gap-2">
-                      <span>⏰</span>
-                      {todayAppointments} appointment{todayAppointments > 1 ? 's' : ''} today
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">
-                      Check today's schedule above
-                    </p>
-                  </div>
-                )}
-
-                {confirmedAppointments === 0 && todayAppointments === 0 && (
-                  <div className="text-center py-6">
-                    <span className="text-3xl block mb-2">✅</span>
-                    <p className="text-sm text-slate-600">All caught up!</p>
-                    <p className="text-xs text-slate-400 mt-1">No pending notifications</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Quick Actions */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md">
               <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -379,7 +348,7 @@ export default function DoctorDashboard() {
               </h2>
 
               <div className="space-y-2">
-                <a
+                <Link
                   href="/doctor-dashboard/appointments"
                   className="flex items-center gap-3 p-3 bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-200 rounded-lg hover:shadow-md transition-all group"
                 >
@@ -390,9 +359,9 @@ export default function DoctorDashboard() {
                     <p className="font-semibold text-slate-800 text-sm">View All Appointments</p>
                     <p className="text-xs text-slate-600">Manage patient visits</p>
                   </div>
-                </a>
+                </Link>
 
-                <a
+                <Link
                   href="/doctor-dashboard/profile"
                   className="flex items-center gap-3 p-3 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg hover:shadow-md transition-all group"
                 >
@@ -403,7 +372,7 @@ export default function DoctorDashboard() {
                     <p className="font-semibold text-slate-800 text-sm">My Profile</p>
                     <p className="text-xs text-slate-600">Update information</p>
                   </div>
-                </a>
+                </Link>
 
                 <button
                   onClick={handleRefreshAppointments}
@@ -479,12 +448,12 @@ export default function DoctorDashboard() {
                 </svg>
                 Refresh
               </button>
-              <a 
+              <Link 
                 href="/doctor-dashboard/appointments"
                 className="text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors"
               >
                 View All →
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -529,12 +498,12 @@ export default function DoctorDashboard() {
                 </div>
               ))}
               {appointments.length > 5 && (
-                <a 
+                <Link 
                   href="/doctor-dashboard/appointments"
                   className="block text-center py-3 text-sm font-semibold text-teal-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
                 >
                   View {appointments.length - 5} more appointments →
-                </a>
+                </Link>
               )}
             </div>
           )}

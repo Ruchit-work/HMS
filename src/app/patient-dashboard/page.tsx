@@ -1,14 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where, addDoc } from "firebase/firestore"
+import { doc, getDoc, getDocs, collection, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import Notification from "@/components/Notification"
-import BookAppointmentForm from "@/components/patient/BookAppointmentForm"
 import CancelAppointmentModal from "@/components/patient/CancelAppointmentModal"
 import HeroCarousel from "@/components/patient/HeroCarousel"
+import HealthInformationSection from "@/components/patient/HealthInformationSection"
 import PageHeader from "@/components/ui/PageHeader"
 import Footer from "@/components/Footer"
 import { UserData, Doctor, Appointment, NotificationData } from "@/types/patient"
@@ -18,7 +19,6 @@ export default function PatientDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState<NotificationData | null>(null)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null)
@@ -68,143 +68,6 @@ export default function PatientDashboard() {
     return null
   }
 
-  const handleAppointmentSubmit = async (formData: {
-    selectedDoctor: string
-    appointmentData: { date: string; time: string; problem: string; medicalHistory: string }
-    paymentMethod: "card" | "upi" | "cash"
-    paymentType: "full" | "partial"
-    paymentData: { cardNumber: string; cardName: string; expiryDate: string; cvv: string; upiId: string }
-  }) => {
-    const { selectedDoctor, appointmentData, paymentMethod, paymentType, paymentData } = formData
-    
-    // Check if social/lifestyle info is filled
-    if (!userData.drinkingHabits || !userData.smokingHabits || !userData.vegetarian) {
-      setNotification({ 
-        type: "error", 
-        message: "Please complete your social & lifestyle information in Edit Profile before booking appointments" 
-      })
-      return
-    }
-    
-    // Validate doctor selection
-    if (!selectedDoctor) {
-      setNotification({ type: "error", message: "Please select a doctor" })
-      return
-    }
-
-    // Validate appointment data
-    if (!appointmentData.date || !appointmentData.time || !appointmentData.problem) {
-      setNotification({ type: "error", message: "Please fill all required fields" })
-      return
-    }
-
-    // Validate payment method specific fields
-    if (paymentMethod === "card") {
-      if (!paymentData.cardNumber || !paymentData.cardName || !paymentData.expiryDate || !paymentData.cvv) {
-        setNotification({ type: "error", message: "Please fill all card details" })
-        return
-      }
-    } else if (paymentMethod === "upi") {
-      if (!paymentData.upiId) {
-        setNotification({ type: "error", message: "Please enter UPI ID" })
-        return
-      }
-    }
-
-    setSubmitting(true)
-    
-    try {
-      // Simulate payment processing (2 seconds delay)
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Generate transaction ID
-      const transactionId = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`
-      
-      const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
-      
-      if (!selectedDoctorData) {
-        throw new Error("Doctor not found")
-      }
-
-      const CONSULTATION_FEE = selectedDoctorData.consultationFee || 500
-      const PARTIAL_PAYMENT_AMOUNT = Math.ceil(CONSULTATION_FEE * 0.1)
-      const REMAINING_AMOUNT = CONSULTATION_FEE - PARTIAL_PAYMENT_AMOUNT
-      const AMOUNT_TO_PAY = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
-      
-      // Create appointment with payment info
-      await addDoc(collection(db, "appointments"), {
-        // Patient Information
-        patientId: user?.uid,
-        patientName: `${userData.firstName} ${userData.lastName}`,
-        patientEmail: userData.email,
-        patientPhone: userData.phoneNumber || "",
-        patientGender: userData.gender || "",
-        patientBloodGroup: userData.bloodGroup || "",
-        patientDateOfBirth: userData.dateOfBirth || "",
-        
-        // Patient Lifestyle (visible to doctor)
-        patientDrinkingHabits: userData.drinkingHabits,
-        patientSmokingHabits: userData.smokingHabits,
-        patientVegetarian: userData.vegetarian,
-        
-        // Doctor Information
-        doctorId: selectedDoctor,
-        doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
-        doctorSpecialization: selectedDoctorData.specialization || "",
-        
-        // Appointment Details
-        appointmentDate: appointmentData.date,
-        appointmentTime: appointmentData.time,
-        
-        // Medical Information
-        chiefComplaint: appointmentData.problem,
-        medicalHistory: appointmentData.medicalHistory || "",
-        
-        // Payment Information
-        paymentStatus: "paid",
-        paymentMethod: paymentMethod,
-        paymentType: paymentType,
-        totalConsultationFee: CONSULTATION_FEE,
-        paymentAmount: AMOUNT_TO_PAY,
-        remainingAmount: paymentType === "partial" ? REMAINING_AMOUNT : 0,
-        transactionId: transactionId,
-        paidAt: new Date().toISOString(),
-        
-        // Status & Metadata
-        status: "confirmed",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      })
-
-      // Show success message
-      const successMessage = paymentType === "partial"
-        ? ` Partial payment (₹${AMOUNT_TO_PAY}) successful! Appointment booked. Pay remaining ₹${REMAINING_AMOUNT} at hospital. Transaction ID: ${transactionId}`
-        : ` Payment successful! Appointment booked. Transaction ID: ${transactionId}`
-      
-      setNotification({ 
-        type: "success", 
-        message: successMessage
-      })
-      
-      // Refresh appointments list
-      const appointmentsQuery = query(collection(db, "appointments"), where("patientId", "==", user.uid))
-      const appointmentsSnapshot = await getDocs(appointmentsQuery)
-      const appointmentsList = appointmentsSnapshot.docs.map((doc) => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as Appointment))
-      setAppointments(appointmentsList)
-      
-    } catch (error: any) {
-      console.error("Error processing payment:", error)
-      setNotification({ 
-        type: "error", 
-        message: error.message || "Payment failed. Please try again." 
-      })
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   // Open cancel confirmation modal
   const openCancelModal = (appointment: Appointment) => {
@@ -277,7 +140,7 @@ export default function PatientDashboard() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 sm:mb-8">
-          <a 
+          <Link 
             href="/patient-dashboard/book-appointment" 
             className="bg-white border-2 border-teal-200 rounded-xl p-4 hover:border-teal-400 hover:shadow-lg transition-all group"
           >
@@ -290,9 +153,9 @@ export default function PatientDashboard() {
                 <p className="text-xs text-slate-500">Schedule a new visit</p>
                   </div>
                   </div>
-          </a>
+          </Link>
           
-          <a 
+          <Link 
             href="/patient-dashboard/appointments" 
             className="bg-white border-2 border-blue-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-lg transition-all group"
           >
@@ -305,9 +168,9 @@ export default function PatientDashboard() {
                 <p className="text-xs text-slate-500">View all appointments</p>
                     </div>
                   </div>
-          </a>
+          </Link>
           
-          <a 
+          <Link 
             href="/patient-dashboard/doctors" 
             className="bg-white border-2 border-green-200 rounded-xl p-4 hover:border-green-400 hover:shadow-lg transition-all group"
           >
@@ -320,9 +183,9 @@ export default function PatientDashboard() {
                 <p className="text-xs text-slate-500">Find specialists</p>
                       </div>
                       </div>
-          </a>
+          </Link>
           
-          <a 
+          <Link 
             href="/patient-dashboard/services" 
             className="bg-white border-2 border-blue-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-lg transition-all group"
           >
@@ -335,9 +198,9 @@ export default function PatientDashboard() {
                 <p className="text-xs text-slate-500">Hospital services</p>
                       </div>
                       </div>
-          </a>
+          </Link>
           
-          <a 
+          <Link 
             href="/patient-dashboard/facilities" 
             className="bg-white border-2 border-purple-200 rounded-xl p-4 hover:border-purple-400 hover:shadow-lg transition-all group"
           >
@@ -350,9 +213,9 @@ export default function PatientDashboard() {
                 <p className="text-xs text-slate-500">Infrastructure</p>
                       </div>
                       </div>
-          </a>
+          </Link>
           
-          <a 
+          <Link 
             href="/patient-dashboard/profile" 
             className="bg-white border-2 border-purple-200 rounded-xl p-4 hover:border-purple-400 hover:shadow-lg transition-all group"
           >
@@ -365,7 +228,7 @@ export default function PatientDashboard() {
                 <p className="text-xs text-slate-500">View & edit profile</p>
                       </div>
                       </div>
-          </a>
+          </Link>
                 </div>
 
         {/* Medical Specialties Section */}
@@ -380,40 +243,50 @@ export default function PatientDashboard() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
-              <div className="text-center">
-                <span className="text-2xl block mb-1">❤️</span>
-                <h3 className="font-medium text-slate-800 text-xs">Cardiology</h3>
+            <Link href="/patient-dashboard/doctors?specialization=Cardiology" className="block">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
+                <div className="text-center">
+                  <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">❤️</span>
+                  <h3 className="font-medium text-slate-800 text-xs group-hover:text-teal-700 transition-colors">Cardiology</h3>
+                </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
-              <div className="text-center">
-                <span className="text-2xl block mb-1">🦴</span>
-                <h3 className="font-medium text-slate-800 text-xs">Orthopedics</h3>
+            <Link href="/patient-dashboard/doctors?specialization=Orthopedics" className="block">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
+                <div className="text-center">
+                  <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🦴</span>
+                  <h3 className="font-medium text-slate-800 text-xs group-hover:text-teal-700 transition-colors">Orthopedics</h3>
+                </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
-              <div className="text-center">
-                <span className="text-2xl block mb-1">👶</span>
-                <h3 className="font-medium text-slate-800 text-xs">Pediatrics</h3>
+            <Link href="/patient-dashboard/doctors?specialization=Pediatrics" className="block">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
+                <div className="text-center">
+                  <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">👶</span>
+                  <h3 className="font-medium text-slate-800 text-xs group-hover:text-teal-700 transition-colors">Pediatrics</h3>
+                </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
-              <div className="text-center">
-                <span className="text-2xl block mb-1">🧠</span>
-                <h3 className="font-medium text-slate-800 text-xs">Neurology</h3>
+            <Link href="/patient-dashboard/doctors?specialization=Neurology" className="block">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
+                <div className="text-center">
+                  <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🧠</span>
+                  <h3 className="font-medium text-slate-800 text-xs group-hover:text-teal-700 transition-colors">Neurology</h3>
+                </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
-              <div className="text-center">
-                <span className="text-2xl block mb-1">🤰</span>
-                <h3 className="font-medium text-slate-800 text-xs">Gynecology</h3>
+            <Link href="/patient-dashboard/doctors?specialization=Gynecology" className="block">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
+                <div className="text-center">
+                  <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🤰</span>
+                  <h3 className="font-medium text-slate-800 text-xs group-hover:text-teal-700 transition-colors">Gynecology</h3>
+                </div>
               </div>
-            </div>
+            </Link>
 
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
               <div className="text-center">
@@ -457,32 +330,26 @@ export default function PatientDashboard() {
               </div>
             </div>
 
-            <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
-              <div className="text-center flex flex-col items-center justify-center h-full">
-                <span className="text-2xl block mb-1">➕</span>
-                <h3 className="font-medium text-slate-800 text-xs">View All</h3>
+            <Link href="/patient-dashboard/doctors" className="block">
+              <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
+                <div className="text-center flex flex-col items-center justify-center h-full">
+                  <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🔍</span>
+                  <h3 className="font-medium text-slate-800 text-xs group-hover:text-teal-700 transition-colors">Browse All</h3>
+                </div>
               </div>
-            </div>
+            </Link>
           </div>
 
-          <div className="text-center mt-5">
-            <a 
+          {/* <div className="text-center mt-5">
+            <Link 
               href="/patient-dashboard/doctors" 
               className="inline-block bg-teal-600 text-white px-6 py-2 rounded-lg font-semibold text-sm hover:bg-teal-700 transition-all shadow-sm hover:shadow-md"
             >
               Browse All Doctors →
-            </a>
-          </div>
+            </Link>
+          </div> */}
         </div>
 
-        {/* Book Appointment Form */}
-        <BookAppointmentForm
-          user={user}
-          userData={userData}
-          doctors={doctors}
-          onSubmit={handleAppointmentSubmit}
-          submitting={submitting}
-        />
 
         {/* Recent Appointments Preview */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md">
@@ -491,12 +358,12 @@ export default function PatientDashboard() {
               <span>📋</span>
               <span>Recent Appointments</span>
             </h2>
-            <a 
+            <Link 
               href="/patient-dashboard/appointments"
               className="text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors"
             >
               View All →
-            </a>
+            </Link>
           </div>
 
           {activeAppointments.length === 0 ? (
@@ -535,7 +402,7 @@ export default function PatientDashboard() {
           </div>
 
         {/* Why Choose Us Section */}
-        <div className="bg-gradient-to-r from-teal-600 to-cyan-600 rounded-xl p-5 sm:p-6 mb-6 shadow-md">
+        <div className="bg-gradient-to-r from-teal-600 to-cyan-600 rounded-xl p-5 sm:p-6 mb-6 shadow-md mt-6">
           <h2 className="text-xl sm:text-2xl font-bold text-white text-center mb-5">
             Why Choose HMS Hospital?
           </h2>
@@ -617,7 +484,11 @@ export default function PatientDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Health Information and Patient Resources */}
+        <HealthInformationSection />
       </main>
+
 
       {/* Cancellation Confirmation Modal */}
       <CancelAppointmentModal

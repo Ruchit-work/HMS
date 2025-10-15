@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { auth } from "@/firebase/config"
 import { sendPasswordResetEmail } from "firebase/auth"
 import { useRouter } from "next/navigation"
@@ -165,9 +166,9 @@ export default function ForgotPassword() {
 
         <div className="mt-4 text-center text-sm text-slate-600">
           Don't have an account?{" "}
-          <a href="/auth/signup" className="text-cyan-600 hover:text-cyan-700 font-semibold transition-colors">
+          <Link href="/auth/signup" className="text-cyan-600 hover:text-cyan-700 font-semibold transition-colors">
             Sign up here
-          </a>
+          </Link>
         </div>
 
         {/* Security Note */}

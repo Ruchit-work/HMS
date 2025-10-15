@@ -59,8 +59,8 @@ export default function BookAppointmentForm({
   const [selectedSymptomCategory, setSelectedSymptomCategory] = useState<string | null>(null)
   const [symptomAnswers, setSymptomAnswers] = useState<any>({})
   const [medicalConditions, setMedicalConditions] = useState<string[]>([])
-  const [allergies, setAllergies] = useState("")
-  const [currentMedications, setCurrentMedications] = useState("")
+  const [allergies, setAllergies] = useState(userData?.allergies || "")
+  const [currentMedications, setCurrentMedications] = useState(userData?.currentMedications || "")
 
   // Animation direction state
   const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right')
@@ -266,6 +266,11 @@ export default function BookAppointmentForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Only allow submission if we're on the final step
+    if (currentStep !== totalSteps) {
+      return
+    }
+    
     await onSubmit({
       selectedDoctor,
       appointmentData,
@@ -368,7 +373,12 @@ export default function BookAppointmentForm({
 
       {/* Form Container */}
       <div className="p-6 overflow-hidden">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} onKeyDown={(e) => {
+          // Prevent Enter key from submitting form unless on final step
+          if (e.key === 'Enter' && currentStep !== totalSteps) {
+            e.preventDefault()
+          }
+        }}>
           {/* Step 1: Patient Information */}
           {currentStep === 1 && (
             <div className={`space-y-4 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
@@ -653,7 +663,7 @@ export default function BookAppointmentForm({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                        <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                           {allTimeSlots.map((slot) => {
                             const isBooked = bookedTimeSlots.includes(slot)
                             const isAvailable = availableTimeSlots.includes(slot)
@@ -671,7 +681,7 @@ export default function BookAppointmentForm({
                                 }}
                                 disabled={isBooked || isPast}
                                 className={`
-                                  px-3 py-2.5 rounded-lg text-sm font-medium transition-all
+                                  px-2 py-2 sm:px-3 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all
                                   ${isSelected
                                     ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-300 transform scale-105'
                                     : isPast
@@ -942,12 +952,12 @@ export default function BookAppointmentForm({
           )}
 
           {/* Navigation Buttons */}
-          <div className="flex gap-3 pt-6 mt-6 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row gap-3 pt-6 mt-6 border-t border-slate-200">
             {currentStep > 1 && (
               <button
                 type="button"
                 onClick={prevStep}
-                className="px-6 py-3.5 border-2 border-slate-300 rounded-xl hover:bg-slate-100 hover:border-slate-400 transition-all font-semibold text-slate-700 shadow-sm hover:shadow-md"
+                className="px-4 sm:px-6 py-3 sm:py-3.5 border-2 border-slate-300 rounded-xl hover:bg-slate-100 hover:border-slate-400 transition-all font-semibold text-slate-700 shadow-sm hover:shadow-md text-sm sm:text-base"
               >
                 ← Previous
               </button>
@@ -958,7 +968,7 @@ export default function BookAppointmentForm({
                 type="button"
                 onClick={nextStep}
                 disabled={!canProceedToNextStep()}
-                className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white py-3.5 px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white py-3 sm:py-3.5 px-4 sm:px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
               >
                 Next Step →
               </button>
@@ -966,7 +976,7 @@ export default function BookAppointmentForm({
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-3.5 px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-3 sm:py-3.5 px-4 sm:px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
               >
                 {submitting 
                   ? (
@@ -989,7 +999,7 @@ export default function BookAppointmentForm({
             <button
               type="button"
               onClick={handleClear}
-              className="px-6 py-3.5 border-2 border-red-300 rounded-xl hover:bg-red-50 hover:border-red-400 transition-all font-semibold text-red-700 shadow-sm hover:shadow-md"
+              className="px-4 sm:px-6 py-3 sm:py-3.5 border-2 border-red-300 rounded-xl hover:bg-red-50 hover:border-red-400 transition-all font-semibold text-red-700 shadow-sm hover:shadow-md text-sm sm:text-base"
             >
               Clear
             </button>

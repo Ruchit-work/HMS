@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import Link from "next/link"
 import { auth } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { useRouter, usePathname } from "next/navigation"
@@ -89,13 +90,12 @@ export default function GlobalHeader() {
 
   const patientLinks = [
     { href: "/patient-dashboard", label: "Home" },
-    { href: "/patient-dashboard/book-appointment", label: "Book" },
+    { href: "/patient-dashboard/book-appointment", label: "Book Appointment" },
     { href: "/patient-dashboard/doctors", label: "Doctors" },
     { href: "/patient-dashboard/services", label: "Services" },
     { href: "/patient-dashboard/facilities", label: "Facilities" },
     { href: "/patient-dashboard/appointments", label: "Appointments" },
-    { href: "/patient-dashboard/about", label: "About" },
-    { href: "/patient-dashboard/contact", label: "Contact" }
+    { href: "/patient-dashboard/about", label: "About & Support" }
   ]
 
   const doctorLinks = [
@@ -111,7 +111,7 @@ export default function GlobalHeader() {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <a 
+          <Link 
             href={isDoctor ? "/doctor-dashboard" : isPatient ? "/patient-dashboard" : "/"}
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer"
           >
@@ -121,12 +121,12 @@ export default function GlobalHeader() {
             <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-800">
               HMS
             </h1>
-          </a>
+          </Link>
           
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-4 xl:gap-6">
             {navLinks.map((link) => (
-              <a 
+              <Link 
                 key={link.href}
                 href={link.href} 
                 className={`text-sm font-medium transition-colors whitespace-nowrap ${
@@ -136,7 +136,7 @@ export default function GlobalHeader() {
                 }`}
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </nav>
 
@@ -198,7 +198,7 @@ export default function GlobalHeader() {
         >
           <nav className="max-w-7xl mx-auto px-3 sm:px-4 py-4 space-y-1">
             {navLinks.map((link, index) => (
-              <a
+              <Link
                 key={link.href}
                 href={link.href}
                 onClick={handleNavClick}
@@ -210,7 +210,7 @@ export default function GlobalHeader() {
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </nav>
         </div>

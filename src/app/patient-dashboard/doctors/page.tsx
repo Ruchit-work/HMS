@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { db } from "@/firebase/config"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
@@ -97,22 +98,22 @@ export default function DoctorsPage() {
         />
 
         {/* Stats Banner */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-6 text-center border border-slate-200">
-            <div className="text-3xl font-bold text-green-600 mb-1">{doctors.length}+</div>
-            <div className="text-sm text-slate-600">Expert Doctors</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
+          <div className="bg-white rounded-xl p-4 sm:p-6 text-center border border-slate-200">
+            <div className="text-2xl sm:text-3xl font-bold text-green-600 mb-1">{doctors.length}+</div>
+            <div className="text-xs sm:text-sm text-slate-600">Expert Doctors</div>
           </div>
-          <div className="bg-white rounded-xl p-6 text-center border border-slate-200">
-            <div className="text-3xl font-bold text-blue-600 mb-1">{specializations.length - 1}+</div>
-            <div className="text-sm text-slate-600">Specializations</div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 text-center border border-slate-200">
+            <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1">{specializations.length - 1}+</div>
+            <div className="text-xs sm:text-sm text-slate-600">Specializations</div>
           </div>
-          <div className="bg-white rounded-xl p-6 text-center border border-slate-200">
-            <div className="text-3xl font-bold text-purple-600 mb-1">24/7</div>
-            <div className="text-sm text-slate-600">Availability</div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 text-center border border-slate-200">
+            <div className="text-2xl sm:text-3xl font-bold text-purple-600 mb-1">24/7</div>
+            <div className="text-xs sm:text-sm text-slate-600">Availability</div>
           </div>
-          <div className="bg-white rounded-xl p-6 text-center border border-slate-200">
-            <div className="text-3xl font-bold text-orange-600 mb-1">4.8⭐</div>
-            <div className="text-sm text-slate-600">Patient Rating</div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 text-center border border-slate-200">
+            <div className="text-2xl sm:text-3xl font-bold text-orange-600 mb-1">4.8⭐</div>
+            <div className="text-xs sm:text-sm text-slate-600">Patient Rating</div>
           </div>
         </div>
 
@@ -177,7 +178,7 @@ export default function DoctorsPage() {
             <p className="text-slate-600">Try adjusting your search or filter criteria</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredDoctors.map((doctor) => (
               <div
                 key={doctor.id}
@@ -217,12 +218,12 @@ export default function DoctorsPage() {
                   </div>
 
                   <div className="pt-4 border-t border-slate-100">
-                    <a
+                    <Link
                       href="/patient-dashboard/book-appointment"
                       className="block w-full px-4 py-2 bg-gradient-to-r from-green-600 to-teal-600 text-white font-semibold rounded-lg text-center hover:from-green-700 hover:to-teal-700 transition-all duration-300 hover:shadow-lg"
                     >
                       Book Appointment
-                    </a>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -243,12 +244,12 @@ export default function DoctorsPage() {
             >
               📞 Call: 1800-XXX-XXXX
             </a>
-            <a
+            <Link
               href="/patient-dashboard/book-appointment"
               className="px-6 py-3 bg-green-700 text-white font-semibold rounded-lg hover:bg-green-800 transition-all duration-300 hover:scale-105"
             >
               📅 Book Now
-            </a>
+            </Link>
           </div>
         </div>
       </main>

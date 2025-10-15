@@ -1,12 +1,10 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 
 export default function Home() {
-  const router = useRouter()
-  
   // Redirect authenticated users to their dashboard
   const { loading } = usePublicRoute()
 
@@ -42,18 +40,18 @@ export default function Home() {
               Book appointments, view your medical history, and manage your healthcare journey with ease.
             </p>
             <div className="space-y-3">
-              <button 
-                onClick={() => router.push("/auth/login?role=patient")}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] shadow-md hover:shadow-lg"
+              <Link 
+                href="/auth/login?role=patient"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-3 sm:py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] shadow-md hover:shadow-lg text-center block text-sm sm:text-base"
               >
                 Patient Login
-              </button>
-              <button 
-                onClick={() => router.push("/auth/signup?role=patient")}
-                className="w-full border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-semibold px-4 py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02]"
+              </Link>
+              <Link 
+                href="/auth/signup?role=patient"
+                className="w-full border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-semibold px-4 py-3 sm:py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] text-center block text-sm sm:text-base"
               >
                 Patient Sign Up
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -69,18 +67,18 @@ export default function Home() {
               Manage your practice, view appointments, and provide quality healthcare services efficiently.
             </p>
             <div className="space-y-3">
-              <button 
-                onClick={() => router.push("/auth/login?role=doctor")}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] shadow-md hover:shadow-lg"
+              <Link 
+                href="/auth/login?role=doctor"
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-3 sm:py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] shadow-md hover:shadow-lg text-center block text-sm sm:text-base"
               >
                 Doctor Login
-              </button>
-              <button 
-                onClick={() => router.push("/auth/signup?role=doctor")}
-                className="w-full border-2 border-green-600 text-green-600 hover:bg-green-50 font-semibold px-4 py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02]"
+              </Link>
+              <Link 
+                href="/auth/signup?role=doctor"
+                className="w-full border-2 border-green-600 text-green-600 hover:bg-green-50 font-semibold px-4 py-3 sm:py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] text-center block text-sm sm:text-base"
               >
                 Doctor Sign Up
-              </button>
+              </Link>
             </div>
           </div>
         </div>

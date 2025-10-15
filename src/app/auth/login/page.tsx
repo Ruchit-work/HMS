@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { getDoc, doc } from "firebase/firestore"
@@ -195,12 +196,12 @@ export default function Login() {
                   Password
                   <span className="text-red-500 ml-1">*</span>
                 </label>
-                <a 
+                <Link 
                   href="/auth/forgot-password" 
                   className="text-xs font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
                 >
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
