@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { signInWithEmailAndPassword } from "firebase/auth"
@@ -9,13 +9,14 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 
-export default function Login() {
+function LoginContent() {
   const searchParams = useSearchParams()
   const role = searchParams.get("role") as "patient" | "doctor" | null
   
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   
@@ -32,6 +33,7 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setSuccess("")
     setLoading(true)
     
     try {
@@ -49,14 +51,24 @@ export default function Login() {
           setLoading(false)
           return
         }
-        router.push("/doctor-dashboard")
+        setSuccess("Login successful! Redirecting to doctor dashboard in 3 seconds...")
+        setLoading(false) // Stop loading state to show success message
+        // Delay redirect to show success message
+        setTimeout(() => {
+          router.replace("/doctor-dashboard")
+        }, 3000)
         return
       }
       
       // Check patient collection
       const patientDoc = await getDoc(doc(db, "patients", user.uid))
       if (patientDoc.exists()) {
-        router.push("/patient-dashboard")
+        setSuccess("Login successful! Redirecting to patient dashboard in 3 seconds...")
+        setLoading(false) // Stop loading state to show success message
+        // Delay redirect to show success message
+        setTimeout(() => {
+          router.replace("/patient-dashboard")
+        }, 3000)
         return
       }
       
@@ -161,6 +173,29 @@ export default function Login() {
                   onClick={() => setError("")}
                   className="flex-shrink-0 text-red-400 hover:text-red-600 transition-colors"
                   aria-label="Close error"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Success Alert */}
+          {success && (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 p-4 mb-6 rounded-xl shadow-lg animate-fade-in">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center animate-bounce-in">
+                  <span className="text-white text-lg font-bold">✓</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-green-800 font-semibold leading-relaxed">{success}</p>
+                </div>
+                <button
+                  onClick={() => setSuccess("")}
+                  className="flex-shrink-0 text-green-400 hover:text-green-600 transition-colors"
+                  aria-label="Close success message"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -331,3 +366,14 @@ export default function Login() {
     </div>
   )
 }
+
+export default function Login() {
+  return (
+    <Suspense fallback={<LoadingSpinner message="Loading login page..." />}>
+      <LoginContent />
+    </Suspense>
+  )
+}
+
+// Force dynamic rendering to prevent prerender errors
+export const dynamic = 'force-dynamic'

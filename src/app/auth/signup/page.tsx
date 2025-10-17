@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { auth, db } from "@/firebase/config"
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc } from "firebase/firestore"
@@ -9,7 +9,7 @@ import LoadingSpinner from "@/components/LoadingSpinner"
 import PasswordRequirements, { validatePassword, isPasswordValid } from "@/components/PasswordRequirements"
 import Notification from "@/components/Notification"
 
-export default function SignUp() {
+function SignUpContent() {
   const searchParams = useSearchParams()
   const role = searchParams.get("role") as "patient" | "doctor" | null
   const router = useRouter()
@@ -1067,3 +1067,14 @@ export default function SignUp() {
     </>
   )
 }
+
+export default function SignUp() {
+  return (
+    <Suspense fallback={<LoadingSpinner message="Loading signup page..." />}>
+      <SignUpContent />
+    </Suspense>
+  )
+}
+
+// Force dynamic rendering to prevent prerender errors
+export const dynamic = 'force-dynamic'
