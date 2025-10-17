@@ -68,7 +68,7 @@ export interface Appointment {
   patientDateOfBirth?: string
   patientDrinkingHabits?: string
   patientSmokingHabits?: string
-  patientVegetarian?: string
+  patientVegetarian?: boolean
   doctorId: string
   doctorName: string
   doctorSpecialization: string

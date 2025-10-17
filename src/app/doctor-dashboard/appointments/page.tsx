@@ -287,10 +287,10 @@ export default function DoctorAppointments() {
       setNotification({ type: "success", message: "AI diagnosis suggestion generated!" })
     } catch (error: unknown) {
       console.error("AI Diagnosis error:", error)
-      console.error("Error response:", (error as any).response?.data)
-      console.error("Error status:", (error as any).response?.status)
+      console.error("Error response:", (error as { response?: { data?: unknown; status?: number } }).response?.data)
+      console.error("Error status:", (error as { response?: { data?: unknown; status?: number } }).response?.status)
       
-      const errorMessage = (error as any).response?.data?.error || (error as Error).message || "Failed to get AI diagnosis"
+      const errorMessage = (error as { response?: { data?: { error?: string } } }).response?.data?.error || (error as Error).message || "Failed to get AI diagnosis"
       setNotification({ 
         type: "error", 
         message: `AI Diagnosis Error: ${errorMessage}` 

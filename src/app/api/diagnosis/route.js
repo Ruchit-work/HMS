@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
+import fs from 'fs';
+import path from 'path';
 
 // Load similar cases from Indian dataset
 function loadIndianPatientDataset() {
   try {
-    const fs = require('fs');
-    const path = require('path');
     const datasetPath = path.join(process.cwd(), 'src', 'data', 'indian_patient_dataset.json');
     
     if (fs.existsSync(datasetPath)) {
@@ -142,6 +142,52 @@ function findSimilarCases(symptoms, patientInfo, dataset) {
     .slice(0, 3);
 }
 
+// Validate and fix incomplete AI responses
+function validateAndFixResponse(response) {
+  // Check if response has all required sections
+  const hasDiagnosis = response.includes('🎯 PRELIMINARY DIAGNOSIS:') || response.includes('**🎯 PRELIMINARY DIAGNOSIS:**');
+  const hasTests = response.includes('🔬 RECOMMENDED TESTS:') || response.includes('**🔬 RECOMMENDED TESTS:**');
+  const hasTreatment = response.includes('💊 TREATMENT RECOMMENDATIONS:') || response.includes('**💊 TREATMENT RECOMMENDATIONS:**');
+  const hasNotes = response.includes('⚠️ IMPORTANT NOTES:') || response.includes('**⚠️ IMPORTANT NOTES:**');
+  
+  // Check for empty sections
+  const hasEmptyTests = response.includes('**🔬 RECOMMENDED TESTS:**\n1.');
+  const hasEmptyTreatment = response.includes('**💊 TREATMENT RECOMMENDATIONS:**\n1.');
+  const hasEmptyNotes = response.includes('**⚠️ IMPORTANT NOTES:**\n');
+  
+  // If response is incomplete, generate a complete fallback
+  if (!hasDiagnosis || !hasTests || !hasTreatment || !hasNotes || hasEmptyTests || hasEmptyTreatment || hasEmptyNotes) {
+    return `**🎯 PRELIMINARY DIAGNOSIS:**
+Based on the patient's presentation, a comprehensive medical evaluation is recommended to determine the underlying cause of the reported symptoms.
+
+**🔬 RECOMMENDED TESTS:**
+1. Complete Blood Count (CBC) - To assess overall health and detect infections or blood disorders
+2. Basic Metabolic Panel - To evaluate kidney function, blood sugar, and electrolyte levels
+3. Physical examination - To assess vital signs and perform targeted clinical assessment
+4. Urine analysis - To check for infections or other abnormalities
+5. Additional specific tests based on clinical findings
+
+**💊 TREATMENT RECOMMENDATIONS:**
+1. Symptomatic relief medications as appropriate for presenting symptoms
+2. Lifestyle modifications including adequate rest, hydration, and balanced nutrition
+3. Regular monitoring of symptoms and response to initial interventions
+4. Follow-up consultation with healthcare provider for comprehensive assessment
+5. Preventive measures based on identified risk factors
+
+**⚠️ IMPORTANT NOTES:**
+- Schedule a follow-up appointment with a healthcare provider for proper diagnosis
+- Monitor symptoms closely and seek immediate medical attention if they worsen
+- Maintain a detailed symptom diary to aid in diagnosis
+- Ensure proper hydration and adequate rest
+- Follow all prescribed medications and treatment plans as directed
+
+---
+*Note: This is a preliminary assessment. A thorough medical evaluation by a qualified healthcare professional is essential for accurate diagnosis and treatment.*`;
+  }
+  
+  return response;
+}
+
 // Simple AI Diagnosis
 async function getAIDiagnosis(symptoms, patientInfo, medicalHistory) {
   if (!process.env.GROQ_API_KEY) {
@@ -171,7 +217,35 @@ Medical History: ${extractedInfo.summary}
 
 ${contextExamples}
 
-Please provide a preliminary diagnosis, recommended tests, and treatment suggestions.`;
+**CRITICAL INSTRUCTIONS:**
+You MUST provide a complete medical assessment in this EXACT format. Do NOT leave any sections empty or incomplete.
+
+**🎯 PRELIMINARY DIAGNOSIS:**
+[Provide your primary diagnosis based on the symptoms and patient information - MUST be specific and actionable]
+
+**🔬 RECOMMENDED TESTS:**
+1. [MUST list specific test 1 with brief explanation - do not leave empty]
+2. [MUST list specific test 2 with brief explanation - do not leave empty]
+3. [MUST list specific test 3 with brief explanation - do not leave empty]
+[Add more tests as needed - minimum 3 tests required]
+
+**💊 TREATMENT RECOMMENDATIONS:**
+1. [MUST list specific treatment 1 with dosage if applicable - do not leave empty]
+2. [MUST list specific treatment 2 with dosage if applicable - do not leave empty]
+3. [MUST list specific treatment 3 with dosage if applicable - do not leave empty]
+[Add more treatments as needed - minimum 3 treatments required]
+
+**⚠️ IMPORTANT NOTES:**
+[MUST include important warnings, contraindications, or follow-up instructions - do not leave empty]
+
+**VALIDATION CHECK:**
+Before submitting, verify that:
+- All sections have content (no empty sections)
+- Each numbered list has at least 3 items
+- All recommendations are specific and actionable
+- No section is left blank or incomplete
+
+If you cannot provide complete information, use "General medical evaluation recommended" or similar appropriate fallback text, but NEVER leave sections empty.`;
 
   try {
     const response = await axios.post(
@@ -181,7 +255,7 @@ Please provide a preliminary diagnosis, recommended tests, and treatment suggest
         messages: [
           {
             role: "system",
-            content: "You are Dr. Sarah Kumar, a senior consultant physician. Provide medical diagnosis and treatment recommendations based on the patient information provided."
+            content: "You are Dr. Sarah Kumar, a senior consultant physician with 20+ years of experience in Indian healthcare. You MUST provide complete, structured medical assessments. Every section must be filled with specific, actionable recommendations. Never leave any section empty or incomplete. Always provide at least 3 specific tests and 3 specific treatments. Be thorough and professional in your medical assessments."
           },
           {
             role: "user",
@@ -189,7 +263,7 @@ Please provide a preliminary diagnosis, recommended tests, and treatment suggest
           }
         ],
         temperature: 0.3,
-        max_tokens: 1000,
+        max_tokens: 2000,
         top_p: 0.9
       },
       {
@@ -202,9 +276,16 @@ Please provide a preliminary diagnosis, recommended tests, and treatment suggest
     );
 
     if (response.data?.choices?.[0]?.message?.content) {
+      const aiResponse = response.data.choices[0].message.content;
+      console.log("🤖 Raw AI Response:", aiResponse);
+      
+      // Validate and fix incomplete responses
+      const validatedResponse = validateAndFixResponse(aiResponse);
+      console.log("✅ Validated Response:", validatedResponse.substring(0, 200) + "...");
+      
       return {
         success: true,
-        text: response.data.choices[0].message.content
+        text: validatedResponse
       };
     }
     throw new Error("Invalid response from AI");
@@ -232,7 +313,21 @@ function getBasicDiagnosis(symptoms, patientInfo, medicalHistory) {
       tests.push("Blood glucose test (immediate)", "HbA1c", "Kidney function tests (BUN, creatinine)", "Urine analysis");
       treatment = "MEDICINES:\n- Continue current diabetes medication as prescribed\n- Metformin 500mg twice daily if not contraindicated\n- Monitor blood sugar levels regularly\n\nGENERAL CARE:\n- Check blood glucose immediately\n- Maintain regular meal times\n- Stay well hydrated\n- Monitor for signs of ketoacidosis";
       urgent = "Seek immediate care if blood glucose >300 mg/dL or <70 mg/dL, signs of dehydration, or altered mental status";
-      return { diagnosis, tests, treatment, urgent };
+      
+      return {
+        success: true,
+        text: `**🎯 PRELIMINARY DIAGNOSIS:**
+${diagnosis}
+
+**🔬 RECOMMENDED TESTS:**
+${tests.map((test, index) => `${index + 1}. ${test}`).join('\n')}
+
+**💊 TREATMENT RECOMMENDATIONS:**
+${treatment}
+
+**⚠️ IMPORTANT NOTES:**
+${urgent}`
+      };
     }
   }
 
@@ -242,7 +337,21 @@ function getBasicDiagnosis(symptoms, patientInfo, medicalHistory) {
     tests.push("Pulmonary function test", "Chest X-ray", "Peak flow measurement");
     treatment = "MEDICINES:\n- Salbutamol inhaler 100mcg - 2 puffs as needed - For acute symptoms - Bronchodilator\n- Beclomethasone inhaler 50mcg - 2 puffs twice daily - For 7 days - Anti-inflammatory\n- Montelukast 10mg - 1 tablet at bedtime - Daily - For long-term control\n\nGENERAL CARE:\n- Avoid known triggers (dust, smoke, pollen)\n- Use peak flow meter daily\n- Maintain proper inhaler technique\n- Regular follow-up with doctor";
     urgent = "Seek immediate care if difficulty breathing worsens, blue lips/fingernails, or inability to speak in full sentences";
-    return { diagnosis, tests, treatment, urgent };
+    
+    return {
+      success: true,
+      text: `**🎯 PRELIMINARY DIAGNOSIS:**
+${diagnosis}
+
+**🔬 RECOMMENDED TESTS:**
+${tests.map((test, index) => `${index + 1}. ${test}`).join('\n')}
+
+**💊 TREATMENT RECOMMENDATIONS:**
+${treatment}
+
+**⚠️ IMPORTANT NOTES:**
+${urgent}`
+    };
   }
 
   // Fever-related conditions
@@ -252,13 +361,41 @@ function getBasicDiagnosis(symptoms, patientInfo, medicalHistory) {
       tests.push("CBC", "Dengue NS1 Antigen", "Platelet Count", "Malaria parasite test");
       treatment = "MEDICINES:\n- Paracetamol 500mg - 1 tablet every 6 hours - For 5 days - For fever and pain\n- Avoid Aspirin and NSAIDs\n\nGENERAL CARE:\n- Adequate hydration (3-4 liters daily)\n- Complete bed rest\n- Monitor platelet count daily\n- Use mosquito repellent";
       urgent = "Seek immediate care if platelet count <50,000, bleeding, severe abdominal pain, or persistent vomiting";
-      return { diagnosis, tests, treatment, urgent };
+      
+      return {
+        success: true,
+        text: `**🎯 PRELIMINARY DIAGNOSIS:**
+${diagnosis}
+
+**🔬 RECOMMENDED TESTS:**
+${tests.map((test, index) => `${index + 1}. ${test}`).join('\n')}
+
+**💊 TREATMENT RECOMMENDATIONS:**
+${treatment}
+
+**⚠️ IMPORTANT NOTES:**
+${urgent}`
+      };
     } else if (symptomsLower.includes("cough") || symptomsLower.includes("cold")) {
       diagnosis = "Viral Upper Respiratory Tract Infection";
       tests.push("Complete Blood Count (CBC)", "Throat swab culture", "Chest X-ray if needed");
       treatment = "MEDICINES:\n- Paracetamol 500mg - 1 tablet every 6 hours - For 3-5 days - For fever\n- Cetirizine 10mg - 1 tablet at bedtime - For 5 days - For nasal congestion\n- Dextromethorphan cough syrup - 10ml three times daily - For 5 days - For cough\n\nGENERAL CARE:\n- Rest and adequate hydration\n- Warm fluids and steam inhalation\n- Vitamin C 500mg once daily\n- Avoid cold foods";
       urgent = "Seek immediate care if fever exceeds 103°F, difficulty breathing, or symptoms persist beyond 3 days";
-      return { diagnosis, tests, treatment, urgent };
+      
+      return {
+        success: true,
+        text: `**🎯 PRELIMINARY DIAGNOSIS:**
+${diagnosis}
+
+**🔬 RECOMMENDED TESTS:**
+${tests.map((test, index) => `${index + 1}. ${test}`).join('\n')}
+
+**💊 TREATMENT RECOMMENDATIONS:**
+${treatment}
+
+**⚠️ IMPORTANT NOTES:**
+${urgent}`
+      };
     }
   }
 
@@ -299,11 +436,18 @@ function getBasicDiagnosis(symptoms, patientInfo, medicalHistory) {
   }
 
   return {
-    diagnosis,
-    tests,
-    treatment,
-    urgent,
-    patientInfo
+    success: true,
+    text: `**🎯 PRELIMINARY DIAGNOSIS:**
+${diagnosis}
+
+**🔬 RECOMMENDED TESTS:**
+${tests.map((test, index) => `${index + 1}. ${test}`).join('\n')}
+
+**💊 TREATMENT RECOMMENDATIONS:**
+${treatment}
+
+**⚠️ IMPORTANT NOTES:**
+${urgent}`
   };
 }
 
@@ -344,27 +488,34 @@ export async function POST(request) {
     const result = getBasicDiagnosis(symptoms, patientInfo, medicalHistory);
     console.log("📋 Fallback result:", result);
     
-    const formattedText = `**PRELIMINARY DIAGNOSIS:**
-${result.diagnosis}
+    if (result.success) {
+      return NextResponse.json([{
+        generated_text: result.text
+      }]);
+    } else {
+      return NextResponse.json([{
+        generated_text: `**🎯 PRELIMINARY DIAGNOSIS:**
+Symptoms require professional medical evaluation
 
-**PATIENT INFORMATION:**
-${result.patientInfo}
+**🔬 RECOMMENDED TESTS:**
+1. General physical examination
+2. Basic laboratory tests (CBC, metabolic panel)
+3. Vital signs assessment
 
-**RECOMMENDED TESTS:**
-${result.tests.map((test, i) => `${i + 1}. ${test}`).join('\n')}
+**💊 TREATMENT RECOMMENDATIONS:**
+- Symptomatic relief as appropriate
+- Monitor symptoms closely
+- Maintain detailed symptom diary
+- Stay hydrated and well-rested
+- Follow-up with healthcare provider for proper diagnosis
 
-**TREATMENT RECOMMENDATIONS:**
-${result.treatment}
-
-**⚠️ WHEN TO SEEK IMMEDIATE CARE:**
-${result.urgent}
+**⚠️ IMPORTANT NOTES:**
+Schedule an appointment with a healthcare provider for proper diagnosis and treatment plan.
 
 ---
-*Note: This is an AI-assisted preliminary analysis. Always consult with a qualified healthcare professional for accurate diagnosis and treatment.*`;
-
-    return NextResponse.json([{
-      generated_text: formattedText
-    }]);
+*Note: This is an AI-assisted preliminary analysis. Always consult with a qualified healthcare professional for accurate diagnosis and treatment.*`
+      }]);
+    }
 
   } catch (error) {
     console.error("Diagnosis API Error:", {
