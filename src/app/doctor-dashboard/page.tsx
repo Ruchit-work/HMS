@@ -12,14 +12,25 @@ import DashboardCard from "@/components/ui/DashboardCard"
 import PageHeader from "@/components/ui/PageHeader"
 import VisitingHoursEditor from "@/components/doctor/VisitingHoursEditor"
 import BlockedDatesManager from "@/components/doctor/BlockedDatesManager"
-import { VisitingHours, BlockedDate } from "@/types/patient"
+import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
 import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
 
+interface UserData {
+  id: string;
+  firstName: string;
+  lastName: string;
+  specialization: string;
+  email: string;
+  role: string;
+  visitingHours?: VisitingHours;
+  blockedDates?: BlockedDate[];
+}
+
 export default function DoctorDashboard() {
   const router = useRouter()
-  const [userData, setUserData] = useState<any>(null)
-  const [appointments, setAppointments] = useState<any[]>([])
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [updating, setUpdating] = useState(false)
   const [showCompletionModal, setShowCompletionModal] = useState(false)
@@ -44,7 +55,7 @@ export default function DoctorDashboard() {
       const appointmentsList = appointmentsSnapshot.docs.map((doc) => ({ 
         id: doc.id, 
         ...doc.data() 
-      }))
+      } as Appointment))
       console.log("Fetched appointments for doctor:", doctorId, "Count:", appointmentsList.length)
       setAppointments(appointmentsList)
     } catch (error) {
@@ -59,7 +70,7 @@ export default function DoctorDashboard() {
       // Get doctor data from Firestore
       const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
       if (doctorDoc.exists()) {
-        const data = doctorDoc.data()
+        const data = doctorDoc.data() as UserData
         setUserData(data)
         
         // Load visiting hours and blocked dates
@@ -99,11 +110,11 @@ export default function DoctorDashboard() {
         type: "success", 
         message: "Schedule and blocked dates saved successfully!" 
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error saving schedule:", error)
       setNotification({ 
         type: "error", 
-        message: error.message || "Failed to save schedule" 
+        message: (error as Error).message || "Failed to save schedule" 
       })
     } finally {
       setSavingSchedule(false)
@@ -124,7 +135,7 @@ export default function DoctorDashboard() {
     setShowCompletionModal(true)
   }
 
-  const viewAppointmentDetails = (appointment: any) => {
+  const viewAppointmentDetails = (appointment: Appointment) => {
     // Store the appointment ID in sessionStorage to auto-expand it on the appointments page
     sessionStorage.setItem('expandAppointmentId', appointment.id)
     // Navigate to appointments page using Next.js router
@@ -169,11 +180,11 @@ export default function DoctorDashboard() {
       setCompletionData({ medicine: "", notes: "" })
       setShowCompletionModal(false)
       setSelectedAppointmentId(null)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error completing appointment:", error)
       setNotification({ 
         type: "error", 
-        message: error.message || "Failed to complete appointment" 
+        message: (error as Error).message || "Failed to complete appointment" 
       })
     } finally {
       setUpdating(false)
@@ -182,10 +193,10 @@ export default function DoctorDashboard() {
 
   // Calculate stats
   const totalPatients = new Set(appointments.map(apt => apt.patientId)).size
-  const todayAppointments = appointments.filter((appointment: any) => 
+  const todayAppointments = appointments.filter((appointment: Appointment) => 
     new Date(appointment.appointmentDate).toDateString() === new Date().toDateString()
   ).length
-  const completedAppointments = appointments.filter((appointment: any) => appointment.status === "completed").length
+  const completedAppointments = appointments.filter((appointment: Appointment) => appointment.status === "completed").length
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
@@ -220,7 +231,7 @@ export default function DoctorDashboard() {
           
           <DashboardCard
             title="This Week"
-            value={appointments.filter((apt: any) => {
+            value={appointments.filter((apt: Appointment) => {
               const aptDate = new Date(apt.appointmentDate)
               const today = new Date()
               const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -250,7 +261,7 @@ export default function DoctorDashboard() {
                 <span>Today's Schedule</span>
               </h2>
               <span className="text-sm font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                {appointments.filter((apt: any) => 
+                {appointments.filter((apt: Appointment) => 
                   new Date(apt.appointmentDate).toDateString() === new Date().toDateString() && 
                   apt.status === "confirmed"
                 ).length} appointments
@@ -259,11 +270,11 @@ export default function DoctorDashboard() {
 
             {(() => {
               const todayAppts = appointments
-                .filter((apt: any) => 
+                .filter((apt: Appointment) => 
                   new Date(apt.appointmentDate).toDateString() === new Date().toDateString() && 
                   apt.status === "confirmed"
                 )
-                .sort((a: any, b: any) => {
+                .sort((a: Appointment, b: Appointment) => {
                   const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
                   const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
                   return dateA - dateB // Earlier appointments first
@@ -281,7 +292,7 @@ export default function DoctorDashboard() {
 
               return (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {todayAppts.map((apt: any, index: number) => {
+                  {todayAppts.map((apt: Appointment, index: number) => {
                     const [hours, minutes] = apt.appointmentTime.split(':').map(Number)
                     const time12hr = `${hours > 12 ? hours - 12 : hours}:${minutes.toString().padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`
                     const isPast = new Date(`${apt.appointmentDate}T${apt.appointmentTime}`).getTime() < Date.now()

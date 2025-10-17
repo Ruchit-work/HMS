@@ -49,7 +49,7 @@ export default function PatientProfilePage() {
     return null
   }
 
-  const handleEditProfile = async (formData: any) => {
+  const handleEditProfile = async (formData: Record<string, unknown>) => {
     if (!user) return
 
     setUpdating(true)
@@ -65,11 +65,11 @@ export default function PatientProfilePage() {
         type: "success", 
         message: "Profile updated successfully!" 
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error updating profile:", error)
       setNotification({ 
         type: "error", 
-        message: error.message || "Failed to update profile" 
+        message: (error as Error).message || "Failed to update profile" 
       })
     } finally {
       setUpdating(false)
@@ -233,7 +233,7 @@ function ProfileEditForm({
   updating 
 }: { 
   userData: UserData
-  onSubmit: (data: any) => void
+  onSubmit: (data: Record<string, unknown>) => void
   onCancel: () => void
   updating: boolean
 }) {

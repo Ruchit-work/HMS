@@ -151,11 +151,11 @@ export default function BookAppointmentPage() {
       })
       setShowSuccessModal(true)
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error processing payment:", error)
       setNotification({ 
         type: "error", 
-        message: error.message || "Payment failed. Please try again." 
+        message: (error as Error).message || "Payment failed. Please try again." 
       })
     } finally {
       setSubmitting(false)

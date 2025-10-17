@@ -10,11 +10,11 @@ import { useState, useEffect } from "react"
 
 interface SmartQuestionsProps {
   category: string
-  onComplete: (data: any) => void
+  onComplete: (data: Record<string, unknown>) => void
 }
 
 export default function SmartQuestions({ category, onComplete }: SmartQuestionsProps) {
-  const [answers, setAnswers] = useState<any>({})
+  const [answers, setAnswers] = useState<Record<string, string | string[] | boolean | number>>({})
   
   // Move hooks to top level to avoid conditional hook calls
   const [searchTerm, setSearchTerm] = useState('')
@@ -26,14 +26,14 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
     setSelectedCategory(null)
   }, [category])
 
-  const updateAnswer = (key: string, value: any) => {
+  const updateAnswer = (key: string, value: string | string[] | boolean | number) => {
     const updated = { ...answers, [key]: value }
     setAnswers(updated)
-    onComplete(updated)
+    onComplete(updated as Record<string, unknown>)
   }
 
   const toggleSymptom = (symptom: string) => {
-    const current = answers.symptoms || []
+    const current = (answers.symptoms as string[]) || []
     const updated = current.includes(symptom)
       ? current.filter((s: string) => s !== symptom)
       : [...current, symptom]
@@ -73,7 +73,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 How many days?
               </label>
               <select
-                value={answers.duration || ''}
+                value={(answers.duration as string) || ''}
                 onChange={(e) => updateAnswer('duration', e.target.value)}
                 className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               >
@@ -96,12 +96,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     type="button"
                     onClick={() => toggleSymptom(symptom)}
                     className={`py-1.5 px-2 rounded-lg border-2 text-xs font-medium transition-all ${
-                      (answers.symptoms || []).includes(symptom)
+                      ((answers.symptoms as string[]) || []).includes(symptom)
                         ? 'bg-red-100 border-red-400 text-red-800'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-red-300'
                     }`}
                   >
-                    {(answers.symptoms || []).includes(symptom) ? '✓ ' : ''}{symptom}
+                    {((answers.symptoms as string[]) || []).includes(symptom) ? '✓ ' : ''}{symptom}
                   </button>
                 ))}
               </div>
@@ -139,7 +139,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 When?
               </label>
               <select
-                value={answers.duration || ''}
+                value={(answers.duration as string) || ''}
                 onChange={(e) => updateAnswer('duration', e.target.value)}
                 className="w-full px-3 py-1.5 text-xs border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               >
@@ -161,12 +161,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     type="button"
                     onClick={() => toggleSymptom(symptom)}
                     className={`py-1.5 px-2 rounded-lg border-2 text-xs font-medium transition-all ${
-                      (answers.symptoms || []).includes(symptom)
+                      ((answers.symptoms as string[]) || []).includes(symptom)
                         ? 'bg-red-100 border-red-400 text-red-800'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-red-300'
                     }`}
                   >
-                    {(answers.symptoms || []).includes(symptom) ? '✓ ' : ''}{symptom}
+                    {((answers.symptoms as string[]) || []).includes(symptom) ? '✓ ' : ''}{symptom}
                   </button>
                 ))}
               </div>
@@ -210,12 +210,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     type="button"
                     onClick={() => toggleSymptom(complication)}
                     className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                      (answers.symptoms || []).includes(complication)
+                      ((answers.symptoms as string[]) || []).includes(complication)
                         ? 'bg-purple-100 border-purple-400 text-purple-800'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300'
                     }`}
                   >
-                    {(answers.symptoms || []).includes(complication) ? '✓ ' : ''}{complication}
+                    {((answers.symptoms as string[]) || []).includes(complication) ? '✓ ' : ''}{complication}
                   </button>
                 ))}
               </div>
@@ -232,12 +232,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     type="button"
                     onClick={() => toggleSymptom(med)}
                     className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                      (answers.symptoms || []).includes(med)
+                      ((answers.symptoms as string[]) || []).includes(med)
                         ? 'bg-purple-100 border-purple-400 text-purple-800'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300'
                     }`}
                   >
-                    {(answers.symptoms || []).includes(med) ? '✓ ' : ''}{med}
+                    {((answers.symptoms as string[]) || []).includes(med) ? '✓ ' : ''}{med}
                   </button>
                 ))}
               </div>
@@ -249,7 +249,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
               </label>
               <input
                 type="text"
-                value={answers.hba1c || ''}
+                value={(answers.hba1c as string) || ''}
                 onChange={(e) => updateAnswer('hba1c', e.target.value)}
                 placeholder="e.g., 7.5% or last 3 months average"
                 className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -288,7 +288,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 Any specific concerns?
               </label>
               <textarea
-                value={answers.concerns || ''}
+                value={(answers.concerns as string) || ''}
                 onChange={(e) => updateAnswer('concerns', e.target.value)}
                 rows={3}
                 placeholder="Optional: Describe any specific health concerns..."
@@ -312,12 +312,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     type="button"
                     onClick={() => toggleSymptom(issue)}
                     className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                      (answers.symptoms || []).includes(issue)
+                      ((answers.symptoms as string[]) || []).includes(issue)
                         ? 'bg-red-100 border-red-400 text-red-800'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-red-300'
                     }`}
                   >
-                    {(answers.symptoms || []).includes(issue) ? '✓ ' : ''}{issue}
+                    {((answers.symptoms as string[]) || []).includes(issue) ? '✓ ' : ''}{issue}
                   </button>
                 ))}
               </div>
@@ -329,7 +329,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
               </label>
               <input
                 type="text"
-                value={answers.bpReading || ''}
+                value={(answers.bpReading as string) || ''}
                 onChange={(e) => updateAnswer('bpReading', e.target.value)}
                 placeholder="e.g., 140/90 mmHg"
                 className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -347,12 +347,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     type="button"
                     onClick={() => toggleSymptom(med)}
                     className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                      (answers.symptoms || []).includes(med)
+                      ((answers.symptoms as string[]) || []).includes(med)
                         ? 'bg-red-100 border-red-400 text-red-800'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-red-300'
                     }`}
                   >
-                    {(answers.symptoms || []).includes(med) ? '✓ ' : ''}{med}
+                    {((answers.symptoms as string[]) || []).includes(med) ? '✓ ' : ''}{med}
                   </button>
                 ))}
               </div>
@@ -374,12 +374,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                     type="button"
                     onClick={() => toggleSymptom(issue)}
                     className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                      (answers.symptoms || []).includes(issue)
+                      ((answers.symptoms as string[]) || []).includes(issue)
                         ? 'bg-green-100 border-green-400 text-green-800'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-green-300'
                     }`}
                   >
-                    {(answers.symptoms || []).includes(issue) ? '✓ ' : ''}{issue}
+                    {((answers.symptoms as string[]) || []).includes(issue) ? '✓ ' : ''}{issue}
                   </button>
                 ))}
               </div>
@@ -390,7 +390,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 कितने दिन से? (How long?)
               </label>
               <select
-                value={answers.duration || ''}
+                value={(answers.duration as string) || ''}
                 onChange={(e) => updateAnswer('duration', e.target.value)}
                 className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               >
@@ -496,12 +496,12 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
         return (
           <div className="space-y-3">
             {/* Selected Condition Display (if already selected) */}
-            {answers.condition && answers.condition !== 'Other' && (
+            {answers.condition && typeof answers.condition === 'string' && answers.condition !== 'Other' && (
               <div className="bg-violet-50 border-2 border-violet-300 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">✅</span>
-                    <span className="text-sm font-semibold text-violet-800">{answers.condition}</span>
+                    <span className="text-sm font-semibold text-violet-800">{answers.condition as string}</span>
                   </div>
                   <button
                     type="button"
@@ -616,7 +616,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 </label>
                 <input
                   type="text"
-                  value={answers.customCondition || ''}
+                  value={(answers.customCondition as string) || ''}
                   onChange={(e) => updateAnswer('customCondition', e.target.value)}
                   placeholder="Enter your condition"
                   className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm"
@@ -631,7 +631,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                   How long have you had this condition?
                 </label>
                 <select
-                  value={answers.duration || ''}
+                  value={(answers.duration as string) || ''}
                   onChange={(e) => updateAnswer('duration', e.target.value)}
                   className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
                 >
@@ -657,7 +657,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 Select your condition: <span className="text-red-500">*</span>
               </label>
               <select
-                value={answers.condition || ''}
+                value={(answers.condition as string) || ''}
                 onChange={(e) => updateAnswer('condition', e.target.value)}
                 className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm"
               >
@@ -831,14 +831,14 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
               </select>
             </div>
             
-            {answers.condition && answers.condition === 'Other' && (
+            {answers.condition && typeof answers.condition === 'string' && answers.condition === 'Other' && (
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Please specify your condition:
                 </label>
                 <input
                   type="text"
-                  value={answers.customCondition || ''}
+                  value={(answers.customCondition as string) || ''}
                   onChange={(e) => updateAnswer('customCondition', e.target.value)}
                   placeholder="Enter your condition"
                   className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm"
@@ -851,7 +851,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 How long have you had this condition?
               </label>
               <select
-                value={answers.duration || ''}
+                value={(answers.duration as string) || ''}
                 onChange={(e) => updateAnswer('duration', e.target.value)}
                 className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
               >
@@ -874,7 +874,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
               Describe your concern:
             </label>
             <textarea
-              value={answers.description || ''}
+              value={(answers.description as string) || ''}
               onChange={(e) => updateAnswer('description', e.target.value)}
               rows={2}
               placeholder="Brief description..."

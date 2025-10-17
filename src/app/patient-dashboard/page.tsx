@@ -95,11 +95,11 @@ export default function PatientDashboard() {
 
       setShowCancelModal(false)
       setAppointmentToCancel(null)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error cancelling appointment:", error)
       setNotification({ 
         type: "error", 
-        message: error.message || "Failed to cancel appointment" 
+        message: (error as Error).message || "Failed to cancel appointment" 
       })
     } finally {
       setCancelling(false)

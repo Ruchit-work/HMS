@@ -11,7 +11,7 @@ import { collection, query, where, getDocs } from "firebase/firestore"
 import { db } from "@/firebase/config"
 
 interface BookAppointmentFormProps {
-  user: any
+  user: { uid: string; email: string | null }
   userData: UserData
   doctors: Doctor[]
   onSubmit: (data: {

@@ -8,11 +8,46 @@ import LoadingSpinner from "@/components/LoadingSpinner"
 import Notification from "@/components/Notification"
 import { generatePrescriptionPDF } from "@/utils/prescriptionPDF"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
+import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
 
+interface UserData {
+  id: string;
+  name: string;
+  firstName?: string;
+  email: string;
+  role: string;
+}
+
+interface Appointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientEmail: string;
+  patientPhone?: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  status: string;
+  chiefComplaint: string;
+  medicalHistory?: string;
+  patientDateOfBirth: string;
+  patientGender: string;
+  patientBloodGroup: string;
+  patientDrinkingHabits: string;
+  patientSmokingHabits: string;
+  patientVegetarian: boolean;
+  patientAllergies?: string;
+  patientCurrentMedications?: string;
+  doctorId: string;
+  doctorName?: string;
+  doctorSpecialization?: string;
+  medicine?: string;
+  doctorNotes?: string;
+}
+
 export default function DoctorAppointments() {
-  const [userData, setUserData] = useState<any>(null)
-  const [appointments, setAppointments] = useState<any[]>([])
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "thisWeek" | "nextWeek" | "history">("today")
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -23,7 +58,7 @@ export default function DoctorAppointments() {
     medicine: "",
     notes: ""
   })
-  const [patientHistory, setPatientHistory] = useState<any[]>([])
+  const [patientHistory, setPatientHistory] = useState<Appointment[]>([])
   const [aiDiagnosis, setAiDiagnosis] = useState<{[key: string]: string}>({})
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{[key: string]: boolean}>({})
   const [showHistory, setShowHistory] = useState<{[key: string]: boolean}>({})
@@ -37,7 +72,7 @@ export default function DoctorAppointments() {
 
       const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
       if (doctorDoc.exists()) {
-        const data = doctorDoc.data()
+        const data = doctorDoc.data() as UserData
         setUserData(data)
       }
 
@@ -48,7 +83,7 @@ export default function DoctorAppointments() {
       const appointmentsList = appointmentsSnapshot.docs.map((doc) => ({ 
         id: doc.id, 
         ...doc.data() 
-      }))
+      } as Appointment))
       setAppointments(appointmentsList)
     }
 
@@ -115,9 +150,9 @@ export default function DoctorAppointments() {
           )
           const snapshot = await getDocs(patientAppointmentsQuery)
           const history = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as any))
+            .map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
             .filter(apt => apt.id !== appointmentId)
-            .sort((a: any, b: any) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
+            .sort((a: Appointment, b: Appointment) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
           setPatientHistory(history)
         } catch (error) {
           console.error("Error fetching patient history:", error)
@@ -127,8 +162,8 @@ export default function DoctorAppointments() {
   }
 
   // Get latest checkup recommendation for same doctor
-  const getLatestCheckupRecommendation = (appointment: any) => {
-    const sameDoctorHistory = patientHistory.filter((historyItem: any) => 
+  const getLatestCheckupRecommendation = (appointment: Appointment) => {
+    const sameDoctorHistory = patientHistory.filter((historyItem: Appointment) => 
       historyItem.doctorId === appointment.doctorId && 
       historyItem.id !== appointment.id &&
       (historyItem.medicine || historyItem.doctorNotes)
@@ -165,7 +200,13 @@ export default function DoctorAppointments() {
 
   // Parse AI diagnosis into structured format for better display
   const parseAIDiagnosis = (text: string) => {
-    const sections: any = {
+    const sections: {
+      diagnosis: string;
+      tests: string[];
+      treatment: string;
+      urgent: string;
+      notes: string;
+    } = {
       diagnosis: '',
       tests: [],
       treatment: '',
@@ -200,7 +241,7 @@ export default function DoctorAppointments() {
   }
 
   // AI Diagnosis Function - Automatically uses patient data from appointment
-  const getAIDiagnosisSuggestion = async (appointment: any) => {
+  const getAIDiagnosisSuggestion = async (appointment: Appointment) => {
     setLoadingAiDiagnosis({...loadingAiDiagnosis, [appointment.id]: true})
     
     try {
@@ -244,12 +285,12 @@ export default function DoctorAppointments() {
       console.log("💾 Updated aiDiagnosis state:", {...aiDiagnosis, [appointment.id]: diagnosisText.substring(0, 50) + "..."})
       
       setNotification({ type: "success", message: "AI diagnosis suggestion generated!" })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("AI Diagnosis error:", error)
-      console.error("Error response:", error.response?.data)
-      console.error("Error status:", error.response?.status)
+      console.error("Error response:", (error as any).response?.data)
+      console.error("Error status:", (error as any).response?.status)
       
-      const errorMessage = error.response?.data?.error || error.message || "Failed to get AI diagnosis"
+      const errorMessage = (error as any).response?.data?.error || (error as Error).message || "Failed to get AI diagnosis"
       setNotification({ 
         type: "error", 
         message: `AI Diagnosis Error: ${errorMessage}` 
@@ -294,11 +335,11 @@ export default function DoctorAppointments() {
       setCompletionData({ medicine: "", notes: "" })
       setShowCompletionModal(false)
       setSelectedAppointmentId(null)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error completing appointment:", error)
       setNotification({ 
         type: "error", 
-        message: error.message || "Failed to complete appointment" 
+        message: (error as Error).message || "Failed to complete appointment" 
       })
     } finally {
       setUpdating(false)
@@ -347,13 +388,13 @@ export default function DoctorAppointments() {
   const nextWeekAppointments = confirmedAppointments.filter(apt => isNextWeek(apt.appointmentDate))
   
   // Sort functions
-  const sortByDateTime = (a: any, b: any) => {
+  const sortByDateTime = (a: Appointment, b: Appointment) => {
     const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`)
     const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`)
     return dateA.getTime() - dateB.getTime()
   }
   
-  const sortByDateTimeDesc = (a: any, b: any) => {
+  const sortByDateTimeDesc = (a: Appointment, b: Appointment) => {
     const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`)
     const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`)
     return dateB.getTime() - dateA.getTime()
@@ -856,7 +897,7 @@ export default function DoctorAppointments() {
                                 <span>AI Diagnostic Assistant</span>
                             </h4>
                               <p className="text-xs text-slate-600 mb-4">
-                                Get AI-powered diagnosis suggestions using patient's symptoms and medical history
+                                Get AI-powered diagnosis suggestions using patient&apos;s symptoms and medical history
                               </p>
                               <button
                                 onClick={() => getAIDiagnosisSuggestion(appointment)}
@@ -1056,12 +1097,12 @@ export default function DoctorAppointments() {
                                   )}
                                   {appointment.doctorNotes && (
                                     <div className="bg-white p-3 rounded border">
-                                      <p className="text-xs text-gray-600 mb-1 font-semibold">📝 Doctor's Notes:</p>
+                                      <p className="text-xs text-gray-600 mb-1 font-semibold">📝 Doctor&apos;s Notes:</p>
                                       <p className="text-sm text-gray-900">{appointment.doctorNotes}</p>
                                     </div>
                                   )}
                                   <button
-                                    onClick={() => generatePrescriptionPDF(appointment)}
+                                    onClick={() => generatePrescriptionPDF(appointment as unknown as AppointmentType)}
                                     className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1175,7 +1216,7 @@ export default function DoctorAppointments() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Doctor's Notes <span className="text-red-500">*</span>
+                    Doctor&apos;s Notes <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     value={completionData.notes}

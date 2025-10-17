@@ -13,7 +13,7 @@ interface AuthUser {
   email: string | null
   role: UserRole
   status?: string
-  data?: any
+  data?: Record<string, unknown>
 }
 
 export function useAuth(requiredRole?: UserRole, redirectPath?: string) {

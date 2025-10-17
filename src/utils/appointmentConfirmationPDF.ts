@@ -1,6 +1,7 @@
 import jsPDF from "jspdf"
+import { Appointment } from "@/types/patient"
 
-export function generateAppointmentConfirmationPDF(appointment: any) {
+export function generateAppointmentConfirmationPDF(appointment: Appointment) {
   const pdf = new jsPDF()
   const pageWidth = pdf.internal.pageSize.getWidth()
   
