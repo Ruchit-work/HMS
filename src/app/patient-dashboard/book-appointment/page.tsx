@@ -54,7 +54,12 @@ export default function BookAppointmentPage() {
 
   const handleAppointmentSubmit = async (formData: {
     selectedDoctor: string
-    appointmentData: { date: string; time: string; problem: string; medicalHistory: string }
+    appointmentData: {
+      date: string; time: string; problem: string; medicalHistory: string;
+      symptomOnset?: string; symptomDuration?: string; symptomSeverity?: number; symptomProgression?: string; symptomTriggers?: string; associatedSymptoms?: string;
+      vitalTemperatureC?: number; vitalBloodPressure?: string; vitalHeartRate?: number; vitalRespiratoryRate?: number; vitalSpO2?: number;
+      additionalConcern?: string;
+    }
     paymentMethod: "card" | "upi" | "cash"
     paymentType: "full" | "partial"
     paymentData: { cardNumber: string; cardName: string; expiryDate: string; cvv: string; upiId: string }
@@ -86,7 +91,7 @@ export default function BookAppointmentPage() {
     setSubmitting(true)
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // await new Promise(resolve => setTimeout(resolve, 2000))
       
       const transactionId = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`
       
@@ -100,22 +105,30 @@ export default function BookAppointmentPage() {
       const PARTIAL_PAYMENT_AMOUNT = Math.ceil(CONSULTATION_FEE * 0.1)
       const REMAINING_AMOUNT = CONSULTATION_FEE - PARTIAL_PAYMENT_AMOUNT
       const AMOUNT_TO_PAY = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
+      // Fetch latest patient profile to reflect any inline edits done during booking
+      const latestPatientDoc = await getDoc(doc(db, "patients", user.uid))
+      const latestUserData = latestPatientDoc.exists() ? (latestPatientDoc.data() as UserData) : userData
       
       await addDoc(collection(db, "appointments"), {
         patientId: user?.uid,
-        patientName: `${userData.firstName} ${userData.lastName}`,
-        patientEmail: userData.email,
-        patientPhone: userData.phoneNumber || "",
-        patientGender: userData.gender || "",
-        patientBloodGroup: userData.bloodGroup || "",
-        patientDateOfBirth: userData.dateOfBirth || "",
-        patientDrinkingHabits: userData.drinkingHabits,
-        patientSmokingHabits: userData.smokingHabits,
-        patientVegetarian: userData.vegetarian,
+        patientName: `${latestUserData.firstName} ${latestUserData.lastName}`,
+        patientEmail: latestUserData.email,
+        patientPhone: latestUserData.phoneNumber || "",
+        patientGender: latestUserData.gender || "",
+        patientBloodGroup: latestUserData.bloodGroup || "",
+        patientDateOfBirth: latestUserData.dateOfBirth || "",
+        patientDrinkingHabits: latestUserData.drinkingHabits,
+        patientSmokingHabits: latestUserData.smokingHabits,
+        patientVegetarian: latestUserData.vegetarian,
+        patientOccupation: latestUserData.occupation || "",
+        patientFamilyHistory: latestUserData.familyHistory || "",
+        patientPregnancyStatus: latestUserData.pregnancyStatus || "",
+        patientHeightCm: latestUserData.heightCm ?? null,
+        patientWeightKg: latestUserData.weightKg ?? null,
         
         // Patient Medical Info (visible to doctor)
-        patientAllergies: userData.allergies || "",
-        patientCurrentMedications: userData.currentMedications || "",
+        patientAllergies: latestUserData.allergies || "",
+        patientCurrentMedications: latestUserData.currentMedications || "",
         
         doctorId: selectedDoctor,
         doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
@@ -124,6 +137,20 @@ export default function BookAppointmentPage() {
         appointmentTime: appointmentData.time,
         chiefComplaint: appointmentData.problem,
         medicalHistory: appointmentData.medicalHistory || "",
+        patientAdditionalConcern: appointmentData.additionalConcern || "",
+        // Structured symptoms
+        symptomOnset: appointmentData.symptomOnset || "",
+        symptomDuration: appointmentData.symptomDuration || "",
+        symptomSeverity: appointmentData.symptomSeverity ?? null,
+        symptomProgression: appointmentData.symptomProgression || "",
+        symptomTriggers: appointmentData.symptomTriggers || "",
+        associatedSymptoms: appointmentData.associatedSymptoms || "",
+        // Vitals
+        vitalTemperatureC: appointmentData.vitalTemperatureC ?? null,
+        vitalBloodPressure: appointmentData.vitalBloodPressure || "",
+        vitalHeartRate: appointmentData.vitalHeartRate ?? null,
+        vitalRespiratoryRate: appointmentData.vitalRespiratoryRate ?? null,
+        vitalSpO2: appointmentData.vitalSpO2 ?? null,
         paymentStatus: "paid",
         paymentMethod: paymentMethod,
         paymentType: paymentType,

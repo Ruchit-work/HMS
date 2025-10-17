@@ -39,7 +39,7 @@ export function getDayName(date: Date): keyof VisitingHours {
 export function generateTimeSlots(daySchedule: DaySchedule): string[] {
   if (!daySchedule.isAvailable) return []
   
-  const slots: string[] = []
+  const slotSet = new Set<string>() // Use Set to avoid duplicates
   const SLOT_DURATION = 15 // minutes
   
   daySchedule.slots.forEach(timeSlot => {
@@ -47,11 +47,12 @@ export function generateTimeSlots(daySchedule: DaySchedule): string[] {
     const endMinutes = timeToMinutes(timeSlot.end)
     
     for (let minutes = startMinutes; minutes < endMinutes; minutes += SLOT_DURATION) {
-      slots.push(minutesToTime(minutes))
+      slotSet.add(minutesToTime(minutes))
     }
   })
   
-  return slots
+  // Convert Set back to array and sort
+  return Array.from(slotSet).sort()
 }
 
 // Check if a time slot is available

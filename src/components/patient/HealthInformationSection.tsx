@@ -17,7 +17,7 @@ export default function HealthInformationSection() {
         window.location.href = '/tutorials/patient-portal-guide'
         break
       default:
-        console.log('Resource clicked:', resourceType)
+        
     }
   }
 

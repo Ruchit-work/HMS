@@ -19,35 +19,11 @@ interface UserData {
   role: string;
 }
 
-interface Appointment {
-  id: string;
-  patientId: string;
-  patientName: string;
-  patientEmail: string;
-  patientPhone?: string;
-  appointmentDate: string;
-  appointmentTime: string;
-  status: string;
-  chiefComplaint: string;
-  medicalHistory?: string;
-  patientDateOfBirth: string;
-  patientGender: string;
-  patientBloodGroup: string;
-  patientDrinkingHabits: string;
-  patientSmokingHabits: string;
-  patientVegetarian: boolean;
-  patientAllergies?: string;
-  patientCurrentMedications?: string;
-  doctorId: string;
-  doctorName?: string;
-  doctorSpecialization?: string;
-  medicine?: string;
-  doctorNotes?: string;
-}
+// Use the canonical type from src/types/patient
 
 export default function DoctorAppointments() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [appointments, setAppointments] = useState<AppointmentType[]>([])
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "thisWeek" | "nextWeek" | "history">("today")
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -58,7 +34,7 @@ export default function DoctorAppointments() {
     medicine: "",
     notes: ""
   })
-  const [patientHistory, setPatientHistory] = useState<Appointment[]>([])
+  const [patientHistory, setPatientHistory] = useState<AppointmentType[]>([])
   const [aiDiagnosis, setAiDiagnosis] = useState<{[key: string]: string}>({})
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{[key: string]: boolean}>({})
   const [showHistory, setShowHistory] = useState<{[key: string]: boolean}>({})
@@ -83,7 +59,7 @@ export default function DoctorAppointments() {
       const appointmentsList = appointmentsSnapshot.docs.map((doc) => ({ 
         id: doc.id, 
         ...doc.data() 
-      } as Appointment))
+      } as AppointmentType))
       setAppointments(appointmentsList)
     }
 
@@ -149,10 +125,10 @@ export default function DoctorAppointments() {
             where("status", "==", "completed")
           )
           const snapshot = await getDocs(patientAppointmentsQuery)
-          const history = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
-            .filter(apt => apt.id !== appointmentId)
-            .sort((a: Appointment, b: Appointment) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
+      const history = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as AppointmentType))
+            .filter((apt: AppointmentType) => apt.id !== appointmentId)
+            .sort((a: AppointmentType, b: AppointmentType) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
           setPatientHistory(history)
         } catch (error) {
           console.error("Error fetching patient history:", error)
@@ -162,8 +138,8 @@ export default function DoctorAppointments() {
   }
 
   // Get latest checkup recommendation for same doctor
-  const getLatestCheckupRecommendation = (appointment: Appointment) => {
-    const sameDoctorHistory = patientHistory.filter((historyItem: Appointment) => 
+  const getLatestCheckupRecommendation = (appointment: AppointmentType) => {
+    const sameDoctorHistory = patientHistory.filter((historyItem: AppointmentType) => 
       historyItem.doctorId === appointment.doctorId && 
       historyItem.id !== appointment.id &&
       (historyItem.medicine || historyItem.doctorNotes)
@@ -219,36 +195,48 @@ export default function DoctorAppointments() {
     const testsMatch = text.match(/\*\*.*?TESTS:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
     const treatmentMatch = text.match(/\*\*.*?TREATMENT.*?:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
     const urgentMatch = text.match(/\*\*.*?(?:WHEN TO SEEK|WARNING SIGNS|RED FLAGS).*?:\*\*\s*([\s\S]*?)(?=\*\*|---|\n\n\*Note|$)/i)
-    const notesMatch = text.match(/\*\*.*?(?:NOTES|EDUCATION).*?:\*\*\s*([\s\S]*?)(?=\*\*|---|\n\n\*Note|$)/i)
+    const notesMatch = text.match(/\*\*.*?(?:⚠️\s*IMPORTANT NOTES|IMPORTANT NOTES|NOTES|EDUCATION).*?:\*\*\s*([\s\S]*?)(?=\*\*|---|\n\n\*Note|$)/i)
 
     if (diagnosisMatch) sections.diagnosis = diagnosisMatch[1].trim()
     if (testsMatch) {
       const testsList = testsMatch[1].match(/\d+\.\s*(.+?)(?=\n\d+\.|\n\n|$)/g)
       if (testsList) {
-        sections.tests = testsList.map((t: string) => t.replace(/^\d+\.\s*/, '').trim())
+        sections.tests = testsList.map((t: string) => t.replace(/^\d+\.\s*/, '').trim()).filter(test => test.length > 0)
       }
     }
     if (treatmentMatch) sections.treatment = treatmentMatch[1].trim()
     if (urgentMatch) sections.urgent = urgentMatch[1].trim()
     if (notesMatch) sections.notes = notesMatch[1].trim()
 
-    // If parsing fails, return the full text as diagnosis
-    if (!sections.diagnosis && !sections.tests.length && !sections.treatment) {
-      sections.diagnosis = text.substring(0, 500) + (text.length > 500 ? '...' : '')
-    }
-
     return sections
   }
 
   // AI Diagnosis Function - Automatically uses patient data from appointment
-  const getAIDiagnosisSuggestion = async (appointment: Appointment) => {
+  const getAIDiagnosisSuggestion = async (appointment: AppointmentType) => {
     setLoadingAiDiagnosis({...loadingAiDiagnosis, [appointment.id]: true})
     
     try {
       // Automatically build comprehensive patient info from appointment data
       const age = appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) : 'Unknown'
       let patientInfo = `Age: ${age}, Gender: ${appointment.patientGender || 'Unknown'}, Blood Group: ${appointment.patientBloodGroup || 'Unknown'}, Drinking Habits: ${appointment.patientDrinkingHabits || 'None'}, Smoking Habits: ${appointment.patientSmokingHabits || 'None'}, Diet: ${appointment.patientVegetarian || 'Unknown'}`
-      
+
+      if (appointment.patientHeightCm != null) {
+        patientInfo += `, Height: ${appointment.patientHeightCm} cm`
+      }
+      if (appointment.patientWeightKg != null) {
+        patientInfo += `, Weight: ${appointment.patientWeightKg} kg`
+      }
+      if (appointment.patientOccupation) {
+        patientInfo += `, Occupation: ${appointment.patientOccupation}`
+      }
+      if (appointment.patientFamilyHistory) {
+        patientInfo += `, Family History: ${appointment.patientFamilyHistory}`
+      }
+      if (appointment.patientPregnancyStatus) {
+        const preg = /yes/i.test(appointment.patientPregnancyStatus) ? 'Yes' : /no/i.test(appointment.patientPregnancyStatus) ? 'No' : appointment.patientPregnancyStatus
+        patientInfo += `, Pregnancy Status: ${preg}`
+      }
+
       // Add allergies - CRITICAL for prescriptions
       if (appointment.patientAllergies) {
         patientInfo += `, ALLERGIES: ${appointment.patientAllergies} (DO NOT prescribe these)`
@@ -264,25 +252,19 @@ export default function DoctorAppointments() {
       const medicalHistory = appointment.medicalHistory || ""
       
       // Call diagnosis API
-      console.log("🔍 Sending AI diagnosis request:", { symptoms, patientInfo, medicalHistory })
+      //
       const { data } = await axios.post("/api/diagnosis", {
         symptoms,
         patientInfo,
         medicalHistory
       })
-      console.log("✅ AI diagnosis response received:", data)
-      console.log("📊 Data structure:", {
-        dataLength: data?.length,
-        firstItem: data?.[0],
-        generatedText: data?.[0]?.generated_text,
-        appointmentId: appointment.id
-      })
+      //
       
       const diagnosisText = data?.[0]?.generated_text || "Unable to generate diagnosis"
-      console.log("📝 Diagnosis text to set:", diagnosisText.substring(0, 100) + "...")
+      //
       
       setAiDiagnosis({...aiDiagnosis, [appointment.id]: diagnosisText})
-      console.log("💾 Updated aiDiagnosis state:", {...aiDiagnosis, [appointment.id]: diagnosisText.substring(0, 50) + "..."})
+      //
       
       setNotification({ type: "success", message: "AI diagnosis suggestion generated!" })
     } catch (error: unknown) {
@@ -388,13 +370,13 @@ export default function DoctorAppointments() {
   const nextWeekAppointments = confirmedAppointments.filter(apt => isNextWeek(apt.appointmentDate))
   
   // Sort functions
-  const sortByDateTime = (a: Appointment, b: Appointment) => {
+  const sortByDateTime = (a: AppointmentType, b: AppointmentType) => {
     const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`)
     const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`)
     return dateA.getTime() - dateB.getTime()
   }
   
-  const sortByDateTimeDesc = (a: Appointment, b: Appointment) => {
+  const sortByDateTimeDesc = (a: AppointmentType, b: AppointmentType) => {
     const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`)
     const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`)
     return dateB.getTime() - dateA.getTime()
@@ -725,6 +707,18 @@ export default function DoctorAppointments() {
                                     <p className="text-slate-900 mt-1 font-bold text-lg">{appointment.patientBloodGroup}</p>
                                   </div>
                                 )}
+                            {appointment.patientHeightCm != null && (
+                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                <span className="text-slate-500 text-xs font-semibold">Height</span>
+                                <p className="text-slate-900 mt-1 font-semibold">{appointment.patientHeightCm} cm</p>
+                              </div>
+                            )}
+                            {appointment.patientWeightKg != null && (
+                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                <span className="text-slate-500 text-xs font-semibold">Weight</span>
+                                <p className="text-slate-900 mt-1 font-semibold">{appointment.patientWeightKg} kg</p>
+                              </div>
+                            )}
                               </div>
                               {appointment.patientDateOfBirth && (
                                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
@@ -805,6 +799,14 @@ export default function DoctorAppointments() {
                                     </span>
                                   </div>
                                 )}
+                                {appointment.patientOccupation && (
+                                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex items-center justify-between">
+                                    <span className="text-slate-600 font-medium">Occupation</span>
+                                    <span className="bg-slate-200 px-3 py-1 rounded-full text-slate-800 font-semibold text-xs">
+                                      {appointment.patientOccupation}
+                                    </span>
+                                  </div>
+                                )}
                                 {appointment.patientVegetarian && (
                                   <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex items-center justify-between">
                                     <span className="text-slate-600 font-medium">Diet</span>
@@ -860,6 +862,14 @@ export default function DoctorAppointments() {
                                   {appointment.chiefComplaint}
                                 </p>
                               </div>
+                              {appointment.patientAdditionalConcern && (
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Additional Details</span>
+                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                    {appointment.patientAdditionalConcern}
+                                  </p>
+                                </div>
+                              )}
                               {appointment.medicalHistory && (
                                 <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                   <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Medical History</span>
@@ -883,6 +893,22 @@ export default function DoctorAppointments() {
                                   <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Current Medications</span>
                                   <p className="text-slate-900 font-medium leading-relaxed">
                                     {appointment.patientCurrentMedications}
+                                  </p>
+                                </div>
+                              )}
+                              {appointment.patientFamilyHistory && (
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Family History</span>
+                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                    {appointment.patientFamilyHistory}
+                                  </p>
+                                </div>
+                              )}
+                              {appointment.patientPregnancyStatus && (
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Pregnancy Status</span>
+                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                    {appointment.patientPregnancyStatus}
                                   </p>
                                 </div>
                               )}
@@ -923,10 +949,7 @@ export default function DoctorAppointments() {
 
                           {/* AI Diagnosis Result - Clean Unified Design */}
                           {aiDiagnosis[appointment.id] && (() => {
-                            console.log("🎯 Rendering AI diagnosis for appointment:", appointment.id)
-                            console.log("📋 AI diagnosis content:", aiDiagnosis[appointment.id]?.substring(0, 100))
                             const parsed = parseAIDiagnosis(aiDiagnosis[appointment.id])
-                            console.log("🔍 Parsed diagnosis result:", parsed)
                             return (
                               <div className="bg-white rounded-xl border-2 border-slate-300 shadow-lg overflow-hidden">
                                 {/* Header */}
@@ -958,84 +981,78 @@ export default function DoctorAppointments() {
                                 {/* Content */}
                                 <div className="p-5 space-y-4">
                                   {/* Diagnosis */}
-                                  {parsed.diagnosis && (
-                                    <div className="pb-4 border-b border-slate-200">
-                                      <div className="flex items-start gap-3 mb-2">
-                                        <span className="text-lg">🩺</span>
-                                        <h5 className="font-bold text-slate-800 text-sm">PRELIMINARY DIAGNOSIS</h5>
-                                      </div>
-                                      <div className="ml-8 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        <p className="text-sm text-slate-700 font-medium leading-relaxed">
-                                          {parsed.diagnosis}
-                                        </p>
-                                      </div>
+                                  <div className="pb-4 border-b border-slate-200">
+                                    <div className="flex items-start gap-3 mb-2">
+                                      <span className="text-lg">🩺</span>
+                                      <h5 className="font-bold text-slate-800 text-sm">PRELIMINARY DIAGNOSIS</h5>
                                     </div>
-                                  )}
+                                    <div className="ml-8 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                      <p className="text-sm text-slate-700 font-medium leading-relaxed">
+                                        {parsed.diagnosis || 'Not generated'}
+                                      </p>
+                                    </div>
+                                  </div>
 
                                   {/* Tests */}
-                                  {parsed.tests.length > 0 && (
-                                    <div className="pb-4 border-b border-slate-200">
-                                      <div className="flex items-start gap-3 mb-3">
-                                        <span className="text-lg">🔬</span>
-                                        <h5 className="font-bold text-slate-800 text-sm">RECOMMENDED TESTS</h5>
-                                      </div>
-                                      <div className="ml-8 space-y-2">
-                                        {parsed.tests.map((test: string, idx: number) => (
+                                  <div className="pb-4 border-b border-slate-200">
+                                    <div className="flex items-start gap-3 mb-3">
+                                      <span className="text-lg">🔬</span>
+                                      <h5 className="font-bold text-slate-800 text-sm">RECOMMENDED TESTS</h5>
+                                    </div>
+                                    <div className="ml-8 space-y-2">
+                                      {parsed.tests.length > 0 ? (
+                                        parsed.tests.map((test: string, idx: number) => (
                                           <div key={idx} className="flex items-start gap-2 text-sm">
                                             <span className="text-slate-500 font-mono mt-0.5">{idx + 1}.</span>
                                             <span className="text-slate-700">{test}</span>
                                           </div>
-                                        ))}
-                                      </div>
+                                        ))
+                                      ) : (
+                                        <p className="text-sm text-slate-500">Not generated</p>
+                                      )}
                                     </div>
-                                  )}
+                                  </div>
 
                                   {/* Treatment */}
-                                  {parsed.treatment && (
-                                    <div className="pb-4 border-b border-slate-200">
-                                      <div className="flex items-start gap-3 mb-2">
-                                        <span className="text-lg">💊</span>
-                                        <h5 className="font-bold text-slate-800 text-sm">TREATMENT RECOMMENDATIONS</h5>
-                                      </div>
-                                      <div className="ml-8 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
-                                          {parsed.treatment}
-                                        </p>
-                                      </div>
+                                  <div className="pb-4 border-b border-slate-200">
+                                    <div className="flex items-start gap-3 mb-2">
+                                      <span className="text-lg">💊</span>
+                                      <h5 className="font-bold text-slate-800 text-sm">TREATMENT RECOMMENDATIONS</h5>
                                     </div>
-                                  )}
+                                    <div className="ml-8 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                      <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+                                        {parsed.treatment || 'Not generated'}
+                                      </p>
+                                    </div>
+                                  </div>
 
                                   {/* Urgent Care */}
-                                  {parsed.urgent && (
-                                    <div className="pb-4 border-b border-slate-200">
-                                      <div className="flex items-start gap-3 mb-2">
-                                        <span className="text-lg text-red-600">⚠️</span>
-                                        <h5 className="font-bold text-red-700 text-sm">WHEN TO SEEK IMMEDIATE CARE</h5>
-                                      </div>
-                                      <div className="ml-8 bg-red-50 p-3 rounded-lg border border-red-200">
-                                        <p className="text-sm text-red-800 font-medium leading-relaxed">
-                                          {parsed.urgent}
-                                        </p>
-                                      </div>
+                                  <div className="pb-4 border-b border-slate-200">
+                                    <div className="flex items-start gap-3 mb-2">
+                                      <span className="text-lg text-red-600">⚠️</span>
+                                      <h5 className="font-bold text-red-700 text-sm">WHEN TO SEEK IMMEDIATE CARE</h5>
                                     </div>
-                                  )}
+                                    <div className="ml-8 bg-red-50 p-3 rounded-lg border border-red-200">
+                                      <p className="text-sm text-red-800 font-medium leading-relaxed">
+                                        {parsed.urgent || 'Not generated'}
+                                      </p>
+                                    </div>
+                                  </div>
 
                                   {/* Additional Notes */}
-                                  {parsed.notes && (
-                                    <div className="pb-4 border-b border-slate-200">
-                                      <details>
-                                        <summary className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors">
-                                          <span className="text-lg">📝</span>
-                                          <h5 className="font-bold text-slate-800 text-sm">ADDITIONAL NOTES</h5>
-                                        </summary>
-                                        <div className="ml-8 mt-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                          <p className="text-sm text-slate-700 leading-relaxed">
-                                            {parsed.notes}
-                                          </p>
-                                        </div>
-                                      </details>
-                                    </div>
-                                  )}
+                                  <div className="pb-4 border-b border-slate-200">
+                                    <details>
+                                      <summary className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors">
+                                        <span className="text-lg">📝</span>
+                                        <h5 className="font-bold text-slate-800 text-sm">ADDITIONAL NOTES</h5>
+                                      </summary>
+                                      <div className="ml-8 mt-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                        <p className="text-sm text-slate-700 leading-relaxed">
+                                          {parsed.notes || 'Not generated'}
+                                        </p>
+                                      </div>
+                                    </details>
+                                  </div>
 
                                   {/* Disclaimer */}
                                   <div className="bg-amber-50 border border-amber-300 rounded-lg p-3">

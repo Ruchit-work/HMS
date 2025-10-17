@@ -56,7 +56,7 @@ export default function DoctorDashboard() {
         id: doc.id, 
         ...doc.data() 
       } as Appointment))
-      console.log("Fetched appointments for doctor:", doctorId, "Count:", appointmentsList.length)
+      
       setAppointments(appointmentsList)
     } catch (error) {
       console.error("Error fetching appointments:", error)
@@ -191,6 +191,13 @@ export default function DoctorDashboard() {
     }
   }
 
+  // Shared comparator to sort appointments by combined date and time (earliest first)
+  const compareAppointmentsByDateTime = (a: Appointment, b: Appointment) => {
+    const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
+    const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
+    return dateA - dateB
+  }
+
   // Calculate stats
   const totalPatients = new Set(appointments.map(apt => apt.patientId)).size
   const todayAppointments = appointments.filter((appointment: Appointment) => 
@@ -274,11 +281,7 @@ export default function DoctorDashboard() {
                   new Date(apt.appointmentDate).toDateString() === new Date().toDateString() && 
                   apt.status === "confirmed"
                 )
-                .sort((a: Appointment, b: Appointment) => {
-                  const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
-                  const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
-                  return dateA - dateB // Earlier appointments first
-                })
+                .sort(compareAppointmentsByDateTime)
 
               if (todayAppts.length === 0) {
                 return (
@@ -478,11 +481,7 @@ export default function DoctorDashboard() {
           ) : (
             <div className="space-y-3">
               {appointments
-                .sort((a, b) => {
-                  const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
-                  const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
-                  return dateA - dateB // Earlier appointments first
-                })
+                .sort(compareAppointmentsByDateTime)
                 .slice(0, 5)
                 .map((appointment) => (
                 <div key={appointment.id} className="border border-slate-200 rounded-lg p-4 hover:border-teal-300 hover:shadow-md transition-all">

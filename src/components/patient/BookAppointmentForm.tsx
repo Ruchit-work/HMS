@@ -7,7 +7,7 @@ import SymptomSelector, { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import SmartQuestions from "./SmartQuestions"
 import MedicalHistoryChecklist from "./MedicalHistoryChecklist"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, isDateBlocked, getBlockedDateInfo, generateTimeSlots, isTimeSlotAvailable, timeToMinutes, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import { collection, query, where, getDocs } from "firebase/firestore"
+import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore"
 import { db } from "@/firebase/config"
 
 interface BookAppointmentFormProps {
@@ -55,6 +55,10 @@ export default function BookAppointmentForm({
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [hasDuplicateAppointment, setHasDuplicateAppointment] = useState(false)
   const [duplicateAppointmentTime, setDuplicateAppointmentTime] = useState("")
+  // Inline editable profile state
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [profileDraft, setProfileDraft] = useState<Record<string, unknown>>({})
+  const [localUserData, setLocalUserData] = useState<UserData>(userData)
   // Symptom selection state
   const [selectedSymptomCategory, setSelectedSymptomCategory] = useState<string | null>(null)
   const [symptomAnswers, setSymptomAnswers] = useState<any>({})
@@ -66,6 +70,11 @@ export default function BookAppointmentForm({
   const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right')
 
   const totalSteps = 5
+
+  // Keep local view in sync if parent sends fresh data
+  useEffect(() => {
+    setLocalUserData(userData)
+  }, [userData])
 
   // Dynamic consultation fee based on selected doctor
   const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
@@ -196,6 +205,33 @@ export default function BookAppointmentForm({
     }
   }
 
+  // Inline profile edit helpers
+  const startEdit = (field: string, initial: unknown) => {
+    setEditingField(field)
+    setProfileDraft({ [field]: initial ?? "" })
+  }
+
+  const cancelEdit = () => {
+    setEditingField(null)
+    setProfileDraft({})
+  }
+
+  const saveField = async (field: string) => {
+    if (!user) return
+    try {
+      await updateDoc(doc(db, "patients", user.uid), { [field]: profileDraft[field], updatedAt: new Date().toISOString() })
+      // Reflect immediately in local view
+      setLocalUserData(prev => ({ ...prev, [field]: profileDraft[field] as never }))
+      if (field === 'allergies') setAllergies(String(profileDraft[field] || ''))
+      if (field === 'currentMedications') setCurrentMedications(String(profileDraft[field] || ''))
+    } catch (e) {
+      console.error("Inline profile update error:", e)
+    } finally {
+      setEditingField(null)
+      setProfileDraft({})
+    }
+  }
+
   // Auto-generate chief complaint from structured data
   useEffect(() => {
     if (!selectedSymptomCategory) return
@@ -203,27 +239,43 @@ export default function BookAppointmentForm({
     const category = SYMPTOM_CATEGORIES.find(c => c.id === selectedSymptomCategory)
     if (!category) return
 
-    // Build complaint text from answers
-    let complaint = category.label
-    
-    if (symptomAnswers.duration) {
-      complaint += ` for ${symptomAnswers.duration}`
-    }
-    if (symptomAnswers.symptoms && symptomAnswers.symptoms.length > 0) {
-      complaint += ` with ${symptomAnswers.symptoms.join(', ')}`
-    }
-    if (symptomAnswers.severity) {
-      complaint += ` (${symptomAnswers.severity} severity)`
-    }
-    if (symptomAnswers.reason) {
-      complaint = symptomAnswers.reason
-    }
-    if (symptomAnswers.description) {
-      complaint = symptomAnswers.description
+    const categoryLabel = category.label
+
+    // If user already typed a free-text complaint, preserve it and prefix with the category (once)
+    if ((appointmentData.problem || '').trim().length > 0) {
+      const current = appointmentData.problem.trim()
+      const alreadyPrefixed = current.toLowerCase().startsWith(categoryLabel.toLowerCase())
+      const nextProblem = alreadyPrefixed ? current : `${categoryLabel}: ${current}`
+      if (nextProblem !== appointmentData.problem) {
+        setAppointmentData(prev => ({ ...prev, problem: nextProblem }))
+      }
+      return
     }
 
+    // Otherwise, build a helpful default from category + quick answers
+    const parts: string[] = []
+    if (symptomAnswers.description) {
+      parts.push(String(symptomAnswers.description))
+    } else if (symptomAnswers.reason) {
+      parts.push(String(symptomAnswers.reason))
+    } else {
+      if (symptomAnswers.duration) parts.push(`for ${symptomAnswers.duration}`)
+      if (symptomAnswers.symptoms && (symptomAnswers.symptoms as string[]).length > 0) {
+        parts.push(`with ${(symptomAnswers.symptoms as string[]).join(', ')}`)
+      }
+    }
+
+    // Persist additional concern for downstream (summary + doctor view)
+    const additional = (symptomAnswers.description as string) || (symptomAnswers.concerns as string) || ''
+    if (additional && additional !== appointmentData.additionalConcern) {
+      setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
+    }
+
+    const detail = parts.join(' ')
+    const complaint = detail ? `${categoryLabel}: ${detail}` : categoryLabel
+
     setAppointmentData(prev => ({ ...prev, problem: complaint }))
-  }, [selectedSymptomCategory, symptomAnswers])
+  }, [selectedSymptomCategory, symptomAnswers, appointmentData.problem])
 
   // Auto-generate medical history from selections
   useEffect(() => {
@@ -242,6 +294,14 @@ export default function BookAppointmentForm({
     setAppointmentData(prev => ({ ...prev, medicalHistory: history.trim() }))
   }, [medicalConditions, allergies, currentMedications])
 
+  // When SmartQuestions updates, persist "Tell us more" free-text into appointment data
+  useEffect(() => {
+    const additional = (symptomAnswers.description as string) || (symptomAnswers.concerns as string) || ''
+    if (additional && additional !== appointmentData.additionalConcern) {
+      setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
+    }
+  }, [symptomAnswers])
+
   // Filter doctors based on symptom category
   const filteredDoctors = selectedSymptomCategory 
     ? doctors.filter(doc => {
@@ -255,7 +315,7 @@ export default function BookAppointmentForm({
   const canProceedToNextStep = () => {
     switch (currentStep) {
       case 1: return true // Patient info is auto-filled
-      case 2: return selectedSymptomCategory !== null // Must select symptom category
+      case 2: return (appointmentData.problem?.trim().length ?? 0) > 0 // Require free-text only
       case 3: return selectedDoctor !== ""
       case 4: return appointmentData.date !== "" && appointmentData.time !== "" && !hasDuplicateAppointment
       case 5: return true // Payment step
@@ -412,11 +472,101 @@ export default function BookAppointmentForm({
                     </div>
                   </div>
                   
-                  <div>
-                    <p className="text-sm text-slate-500 mb-1">Email</p>
-                    <p className="text-base text-slate-700 bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
-                      {userData?.email || ""}
-                    </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-slate-500 mb-1 flex items-center gap-2">Phone {userData?.phoneNumber && (<span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">From Profile</span>)}</p>
+                      {editingField === 'phoneNumber' ? (
+                        <div className="flex gap-2">
+                          <input type="tel" defaultValue={String(userData?.phoneNumber || "")} onChange={(e)=>setProfileDraft({ phoneNumber: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" />
+                          <button type="button" onClick={()=>saveField('phoneNumber')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
+                          <span className="text-base text-slate-800">{userData?.phoneNumber || "Not provided"}</span>
+                          <button type="button" onClick={()=>startEdit('phoneNumber', userData?.phoneNumber)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">Edit</button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500 mb-1">Email</p>
+                      <p className="text-base text-slate-700 bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
+                        {userData?.email || ""}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Quick optional profile edits */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-slate-500 mb-1">Allergies</p>
+                      {editingField === 'allergies' ? (
+                        <div className="flex gap-2">
+                          <input type="text" defaultValue={String(userData?.allergies || "")} onChange={(e)=>setProfileDraft({ allergies: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" />
+                          <button type="button" onClick={()=>saveField('allergies')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
+                          <span className="text-base text-slate-800">{userData?.allergies || "None reported"}</span>
+                          <button type="button" onClick={()=>startEdit('allergies', userData?.allergies)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">Edit</button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500 mb-1">Current Medications</p>
+                      {editingField === 'currentMedications' ? (
+                        <div className="flex gap-2">
+                          <input type="text" defaultValue={String(userData?.currentMedications || "")} onChange={(e)=>setProfileDraft({ currentMedications: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" />
+                          <button type="button" onClick={()=>saveField('currentMedications')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
+                          <span className="text-base text-slate-800">{userData?.currentMedications || "None"}</span>
+                          <button type="button" onClick={()=>startEdit('currentMedications', userData?.currentMedications)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">Edit</button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500 mb-1">Smoking</p>
+                      {editingField === 'smokingHabits' ? (
+                        <div className="flex gap-2">
+                          <select value={String((profileDraft.smokingHabits ?? localUserData?.smokingHabits) || "")} onChange={(e)=>setProfileDraft({ smokingHabits: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            <option value="">Select</option>
+                            <option value="Never">Never</option>
+                            <option value="Occasionally">Occasionally</option>
+                            <option value="Regularly">Regularly</option>
+                          </select>
+                          <button type="button" onClick={()=>saveField('smokingHabits')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
+                          <span className="text-base text-slate-800">{localUserData?.smokingHabits || "Not provided"}</span>
+                          <button type="button" onClick={()=>startEdit('smokingHabits', userData?.smokingHabits)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">Edit</button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-500 mb-1">Drinking</p>
+                      {editingField === 'drinkingHabits' ? (
+                        <div className="flex gap-2">
+                          <select value={String((profileDraft.drinkingHabits ?? localUserData?.drinkingHabits) || "")} onChange={(e)=>setProfileDraft({ drinkingHabits: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            <option value="">Select</option>
+                            <option value="Never">Never</option>
+                            <option value="Occasionally">Occasionally</option>
+                            <option value="Regularly">Regularly</option>
+                          </select>
+                          <button type="button" onClick={()=>saveField('drinkingHabits')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
+                          <span className="text-base text-slate-800">{localUserData?.drinkingHabits || "Not provided"}</span>
+                          <button type="button" onClick={()=>startEdit('drinkingHabits', userData?.drinkingHabits)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">Edit</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -426,6 +576,21 @@ export default function BookAppointmentForm({
           {/* Step 2: Symptoms & Medical Information */}
           {currentStep === 2 && (
             <div className={`space-y-3 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
+              {/* Required Free-text */}
+              <div className="bg-white border-2 border-slate-200 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-slate-800 mb-2">
+                  What brings you here? <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={appointmentData.problem}
+                  onChange={(e) => setAppointmentData({ ...appointmentData, problem: e.target.value })}
+                  rows={3}
+                  placeholder="Describe your main concern in your own words"
+                  className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  required
+                />
+                <p className="text-xs text-slate-500 mt-1">Short is fine. Examples: “Fever and body pain since 2 days”, “Cough and cold”, “Stomach ache”.</p>
+              </div>
               {/* Symptom Category Selection */}
               <div className="bg-white border-2 border-teal-200 rounded-xl p-4">
                 <SymptomSelector
@@ -444,6 +609,59 @@ export default function BookAppointmentForm({
                 </div>
               )}
 
+          {/* Structured Symptom Details */}
+          {selectedSymptomCategory && (
+            <div className="bg-white border-2 border-slate-200 rounded-xl p-4 animate-fade-in">
+              <h4 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <span>📝</span>
+                <span>Symptom Details</span>
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Duration</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., 3 days / 2 weeks"
+                    value={appointmentData.symptomDuration || ''}
+                    onChange={(e) => setAppointmentData({ ...appointmentData, symptomDuration: e.target.value })}
+                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Progression</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., worsening / improving / unchanged"
+                    value={appointmentData.symptomProgression || ''}
+                    onChange={(e) => setAppointmentData({ ...appointmentData, symptomProgression: e.target.value })}
+                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Triggers / Relievers</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., worse on exertion; better with rest"
+                    value={appointmentData.symptomTriggers || ''}
+                    onChange={(e) => setAppointmentData({ ...appointmentData, symptomTriggers: e.target.value })}
+                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Associated Symptoms</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., fever, cough, nausea"
+                    value={appointmentData.associatedSymptoms || ''}
+                    onChange={(e) => setAppointmentData({ ...appointmentData, associatedSymptoms: e.target.value })}
+                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          
               {/* Medical History Checklist */}
               {selectedSymptomCategory && (
                 <div className="animate-fade-in">
@@ -469,6 +687,9 @@ export default function BookAppointmentForm({
                   {appointmentData.medicalHistory && (
                     <p className="text-xs text-slate-600 mt-1">{appointmentData.medicalHistory}</p>
                   )}
+                  {appointmentData.additionalConcern && (
+                    <p className="text-xs text-slate-700 mt-1"><span className="font-semibold">Additional:</span> {appointmentData.additionalConcern}</p>
+                  )}
                 </div>
               )}
             </div>
@@ -488,7 +709,7 @@ export default function BookAppointmentForm({
                   )}
                 </h3>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-5">
                   {filteredDoctors.map((doctor) => (
                     <DoctorCard
                       key={doctor.id}
@@ -663,7 +884,7 @@ export default function BookAppointmentForm({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                        <div className="grid grid-cols-2 xs:grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                           {allTimeSlots.map((slot) => {
                             const isBooked = bookedTimeSlots.includes(slot)
                             const isAvailable = availableTimeSlots.includes(slot)

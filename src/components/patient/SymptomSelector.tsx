@@ -6,6 +6,8 @@
 
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
+
 export interface SymptomCategory {
   id: string
   label: string
@@ -135,14 +137,88 @@ export const SYMPTOM_CATEGORIES: SymptomCategory[] = [
 ]
 
 export default function SymptomSelector({ selectedCategory, onSelect }: SymptomSelectorProps) {
+  const [search, setSearch] = useState("")
+  const [remoteCategories, setRemoteCategories] = useState<SymptomCategory[] | null>(null)
+  const [remoteSynonyms, setRemoteSynonyms] = useState<Record<string, string> | null>(null)
+
+  // Default synonym map (English/Hinglish/Hindi) → category id
+  const DEFAULT_SYNONYMS: Record<string, string> = useMemo(() => ({
+    fever: "monsoon_diseases",
+    bukhar: "monsoon_diseases",
+    khansi: "respiratory_asthma", // cough
+    cough: "respiratory_asthma",
+    saans: "respiratory_asthma",  // breath
+    breathing: "respiratory_asthma",
+    chest: "cardiac_issues",
+    bp: "cardiac_issues",
+    sugar: "diabetes_complications",
+    diabetes: "diabetes_complications",
+    thyroid: "thyroid_problems",
+    dard: "joint_arthritis",      // pain
+    joint: "joint_arthritis",
+    pet: "gastrointestinal",      // stomach
+    stomach: "gastrointestinal",
+    rash: "skin_allergies",
+    skin: "skin_allergies",
+    uti: "kidney_uti",
+    kidney: "kidney_uti",
+    eye: "eye_problems",
+    checkup: "general_checkup",
+    routine: "general_checkup"
+  }), [])
+
+  // Try loading JSON-driven config; fallback to built-in
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/symptoms.json", { cache: "no-store" })
+        if (!res.ok) return
+        const json = await res.json()
+        if (cancelled) return
+        if (Array.isArray(json?.categories)) setRemoteCategories(json.categories)
+        if (json?.synonyms && typeof json.synonyms === 'object') setRemoteSynonyms(json.synonyms)
+      } catch (_) { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    const categories = remoteCategories ?? SYMPTOM_CATEGORIES
+    const synonyms = remoteSynonyms ?? DEFAULT_SYNONYMS
+    if (!term) return categories
+
+    const synonymHit = synonyms[term]
+    const base = categories.filter(c =>
+      c.label.toLowerCase().includes(term) || (synonymHit && c.id === synonymHit)
+    )
+    // If only synonym matched, ensure that item appears first
+    return base.sort((a, b) => (a.id === synonymHit ? -1 : b.id === synonymHit ? 1 : 0))
+  }, [search, remoteCategories, remoteSynonyms, DEFAULT_SYNONYMS])
+
   return (
     <div>
       <h3 className="text-sm font-semibold text-slate-800 mb-2">
         What brings you here? <span className="text-red-500">*</span>
       </h3>
-      
+
+      {/* Quick search (supports English/Hinglish/Hindi phrases) */}
+      <div className="mb-2">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2">🔎</span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search (e.g., fever / bukhar / khansi / stomach pain)"
+            className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+          />
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
-        {SYMPTOM_CATEGORIES.map((category) => (
+        {filtered.map((category) => (
           <button
             key={category.id}
             type="button"
@@ -161,6 +237,18 @@ export default function SymptomSelector({ selectedCategory, onSelect }: SymptomS
             </p>
           </button>
         ))}
+
+        {/* Not sure path → general_checkup */}
+        <button
+          type="button"
+          onClick={() => onSelect("general_checkup")}
+          className="p-2 sm:p-3 rounded-lg border-2 transition-all text-center bg-white border-slate-200 hover:border-teal-300"
+        >
+          <div className="text-lg sm:text-xl mb-1">❓</div>
+          <p className="text-xs sm:text-sm font-medium text-slate-800 leading-tight">
+            I’m not sure
+          </p>
+        </button>
       </div>
     </div>
   )

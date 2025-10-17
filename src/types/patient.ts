@@ -13,6 +13,11 @@ export interface UserData {
   vegetarian?: boolean
   allergies?: string
   currentMedications?: string
+  pregnancyStatus?: string
+  familyHistory?: string
+  occupation?: string
+  heightCm?: number
+  weightKg?: number
   specialization?: string
   consultationFee?: number
 }
@@ -69,6 +74,29 @@ export interface Appointment {
   patientDrinkingHabits?: string
   patientSmokingHabits?: string
   patientVegetarian?: boolean
+  patientOccupation?: string
+  patientFamilyHistory?: string
+  patientPregnancyStatus?: string
+  patientHeightCm?: number | null
+  patientWeightKg?: number | null
+  // Patient Medical Info (visible to doctor)
+  patientAllergies?: string
+  patientCurrentMedications?: string
+  // Structured symptom fields
+  symptomOnset?: string
+  symptomDuration?: string
+  symptomSeverity?: number
+  symptomProgression?: string
+  symptomTriggers?: string
+  associatedSymptoms?: string
+  // Free-text from "Tell us more" section
+  patientAdditionalConcern?: string
+  // Vitals
+  vitalTemperatureC?: number
+  vitalBloodPressure?: string
+  vitalHeartRate?: number
+  vitalRespiratoryRate?: number
+  vitalSpO2?: number
   doctorId: string
   doctorName: string
   doctorSpecialization: string
@@ -105,6 +133,19 @@ export interface AppointmentFormData {
   time: string
   problem: string
   medicalHistory: string
+  // optional structured symptoms and vitals
+  symptomOnset?: string
+  symptomDuration?: string
+  symptomSeverity?: number
+  symptomProgression?: string
+  symptomTriggers?: string
+  associatedSymptoms?: string
+  additionalConcern?: string
+  vitalTemperatureC?: number
+  vitalBloodPressure?: string
+  vitalHeartRate?: number
+  vitalRespiratoryRate?: number
+  vitalSpO2?: number
 }
 
 export interface PaymentData {

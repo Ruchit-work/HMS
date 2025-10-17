@@ -1,9 +1,3 @@
-/**
- * SmartQuestions Component
- * Category-specific health questions to gather accurate information
- * Design: Simple checkboxes, radio buttons, dropdowns - no free text
- */
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -34,10 +28,21 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
 
   const toggleSymptom = (symptom: string) => {
     const current = (answers.symptoms as string[]) || []
-    const updated = current.includes(symptom)
-      ? current.filter((s: string) => s !== symptom)
-      : [...current, symptom]
-    updateAnswer('symptoms', updated)
+    const noneLabel = 'None / I don\'t know'
+    let next: string[] = []
+
+    if (symptom === noneLabel) {
+      // Selecting "None / I don't know" clears all others and selects only this
+      next = [noneLabel]
+    } else {
+      // Selecting any concrete symptom removes the "None / I don't know" tag
+      const base = current.filter((s: string) => s !== noneLabel)
+      next = base.includes(symptom)
+        ? base.filter((s: string) => s !== symptom)
+        : [...base, symptom]
+    }
+
+    updateAnswer('symptoms', next)
   }
 
   // Render questions based on category
@@ -51,7 +56,7 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 Do you have high fever?
               </label>
               <div className="flex gap-2">
-                {['Yes (>100°F)', 'No', 'Not sure'].map(option => (
+                {['Yes (>100°F)', 'No', 'I don\'t know'].map(option => (
                   <button
                     key={option}
                     type="button"
@@ -82,15 +87,16 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 <option value="1-2">1-2 days</option>
                 <option value="3-5">3-5 days</option>
                 <option value="week+">More than a week</option>
+                <option value="unknown">I don't know</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
-                Other symptoms:
+                Main associated symptom (optional):
               </label>
               <div className="grid grid-cols-3 gap-1.5">
-                {['Body Pain', 'Headache', 'Rash', 'Bleeding', 'Low Platelets', 'Joint Pain'].map(symptom => (
+                {['Body Pain', 'Headache', 'Rash', 'Joint Pain', 'Nausea', 'None / I don\'t know'].map(symptom => (
                   <button
                     key={symptom}
                     type="button"
@@ -147,15 +153,16 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
                 <option value="today">Today</option>
                 <option value="this-week">This week</option>
                 <option value="earlier">Earlier</option>
+                <option value="unknown">I don't know</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">
-                Other symptoms:
+                Main associated symptom (optional):
               </label>
               <div className="grid grid-cols-2 gap-1.5">
-                {['Shortness of Breath', 'Sweating', 'Nausea', 'Dizziness'].map(symptom => (
+                {['Shortness of Breath', 'Sweating', 'Nausea', 'Dizziness', 'None / I don\'t know'].map(symptom => (
                   <button
                     key={symptom}
                     type="button"
@@ -648,224 +655,6 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
           </div>
         )
 
-      // Remove all the old optgroup code below
-      case "known_condition_OLD":
-        return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Select your condition: <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={(answers.condition as string) || ''}
-                onChange={(e) => updateAnswer('condition', e.target.value)}
-                className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm"
-              >
-                <option value="">-- Select your condition --</option>
-                
-                <optgroup label="🩺 General & Primary Care">
-                  <option value="General Health Concern">General Health Concern</option>
-                  <option value="Annual Checkup">Annual Checkup</option>
-                  <option value="Preventive Care">Preventive Care</option>
-                </optgroup>
-                
-                <optgroup label="❤️ Heart & Circulatory">
-                  <option value="Heart Disease">Heart Disease</option>
-                  <option value="High Blood Pressure">High Blood Pressure (Hypertension)</option>
-                  <option value="Chest Pain">Chest Pain</option>
-                  <option value="Arrhythmia">Arrhythmia (Irregular Heartbeat)</option>
-                  <option value="Heart Attack">Heart Attack / Post-Heart Attack Care</option>
-                  <option value="Varicose Veins">Varicose Veins</option>
-                  <option value="Deep Vein Thrombosis">Deep Vein Thrombosis (DVT)</option>
-                </optgroup>
-                
-                <optgroup label="🧠 Brain, Nerves & Mental Health">
-                  <option value="Stroke">Stroke / Post-Stroke Care</option>
-                  <option value="Epilepsy">Epilepsy / Seizures</option>
-                  <option value="Parkinsons">Parkinson's Disease</option>
-                  <option value="Alzheimers">Alzheimer's / Dementia</option>
-                  <option value="Multiple Sclerosis">Multiple Sclerosis</option>
-                  <option value="Migraine">Migraine / Chronic Headaches</option>
-                  <option value="Neuropathy">Neuropathy (Nerve Pain)</option>
-                  <option value="Depression">Depression</option>
-                  <option value="Anxiety">Anxiety Disorder</option>
-                  <option value="Bipolar">Bipolar Disorder</option>
-                  <option value="Schizophrenia">Schizophrenia</option>
-                  <option value="PTSD">PTSD (Post-Traumatic Stress)</option>
-                  <option value="OCD">OCD (Obsessive-Compulsive Disorder)</option>
-                </optgroup>
-                
-                <optgroup label="🫁 Lungs & Respiratory">
-                  <option value="Asthma">Asthma</option>
-                  <option value="COPD">COPD (Chronic Obstructive Pulmonary Disease)</option>
-                  <option value="Bronchitis">Chronic Bronchitis</option>
-                  <option value="Pneumonia">Pneumonia</option>
-                  <option value="Tuberculosis">Tuberculosis (TB)</option>
-                  <option value="Sleep Apnea">Sleep Apnea</option>
-                  <option value="Lung Fibrosis">Pulmonary Fibrosis</option>
-                </optgroup>
-                
-                <optgroup label="🍽️ Digestive System">
-                  <option value="GERD">GERD (Acid Reflux)</option>
-                  <option value="IBS">IBS (Irritable Bowel Syndrome)</option>
-                  <option value="Crohns">Crohn's Disease</option>
-                  <option value="Ulcerative Colitis">Ulcerative Colitis</option>
-                  <option value="Gastritis">Gastritis / Stomach Ulcers</option>
-                  <option value="Fatty Liver">Fatty Liver Disease</option>
-                  <option value="Hepatitis">Hepatitis (A/B/C)</option>
-                  <option value="Cirrhosis">Cirrhosis</option>
-                  <option value="Gallstones">Gallstones</option>
-                  <option value="Pancreatitis">Pancreatitis</option>
-                </optgroup>
-                
-                <optgroup label="💉 Hormones & Metabolism">
-                  <option value="Diabetes Type 1">Diabetes Type 1</option>
-                  <option value="Diabetes Type 2">Diabetes Type 2</option>
-                  <option value="Prediabetes">Prediabetes</option>
-                  <option value="Thyroid Hyper">Hyperthyroidism</option>
-                  <option value="Thyroid Hypo">Hypothyroidism</option>
-                  <option value="Thyroid Nodules">Thyroid Nodules</option>
-                  <option value="PCOS">PCOS (Polycystic Ovary Syndrome)</option>
-                  <option value="Obesity">Obesity / Weight Management</option>
-                  <option value="Metabolic Syndrome">Metabolic Syndrome</option>
-                </optgroup>
-                
-                <optgroup label="🩸 Blood & Cancer">
-                  <option value="Anemia">Anemia (Iron Deficiency)</option>
-                  <option value="Leukemia">Leukemia</option>
-                  <option value="Lymphoma">Lymphoma</option>
-                  <option value="Hemophilia">Hemophilia</option>
-                  <option value="Sickle Cell">Sickle Cell Disease</option>
-                  <option value="Breast Cancer">Breast Cancer</option>
-                  <option value="Lung Cancer">Lung Cancer</option>
-                  <option value="Colon Cancer">Colon / Colorectal Cancer</option>
-                  <option value="Prostate Cancer">Prostate Cancer</option>
-                  <option value="Skin Cancer">Skin Cancer / Melanoma</option>
-                </optgroup>
-                
-                <optgroup label="🦴 Bones, Muscles & Movement">
-                  <option value="Osteoarthritis">Osteoarthritis</option>
-                  <option value="Rheumatoid Arthritis">Rheumatoid Arthritis</option>
-                  <option value="Osteoporosis">Osteoporosis</option>
-                  <option value="Back Pain">Chronic Back Pain</option>
-                  <option value="Sciatica">Sciatica</option>
-                  <option value="Fibromyalgia">Fibromyalgia</option>
-                  <option value="Gout">Gout</option>
-                  <option value="Fracture">Fracture / Bone Injury</option>
-                  <option value="Sports Injury">Sports Injury</option>
-                  <option value="Carpal Tunnel">Carpal Tunnel Syndrome</option>
-                </optgroup>
-                
-                <optgroup label="🧬 Infections & Immunity">
-                  <option value="HIV">HIV/AIDS</option>
-                  <option value="COVID">COVID-19 / Long COVID</option>
-                  <option value="Dengue">Dengue Fever</option>
-                  <option value="Malaria">Malaria</option>
-                  <option value="Typhoid">Typhoid</option>
-                  <option value="Urinary Infection">Urinary Tract Infection (UTI)</option>
-                  <option value="Allergies">Seasonal Allergies</option>
-                  <option value="Food Allergies">Food Allergies</option>
-                  <option value="Lupus">Lupus (SLE)</option>
-                </optgroup>
-                
-                <optgroup label="👁️👂 Eye, Ear, Nose & Throat">
-                  <option value="Cataracts">Cataracts</option>
-                  <option value="Glaucoma">Glaucoma</option>
-                  <option value="Macular Degeneration">Macular Degeneration</option>
-                  <option value="Dry Eyes">Dry Eyes / Eye Strain</option>
-                  <option value="Sinusitis">Sinusitis</option>
-                  <option value="Tonsillitis">Tonsillitis</option>
-                  <option value="Hearing Loss">Hearing Loss</option>
-                  <option value="Vertigo">Vertigo / Dizziness</option>
-                  <option value="Tinnitus">Tinnitus (Ringing in Ears)</option>
-                </optgroup>
-                
-                <optgroup label="🧴 Skin, Hair & Nails">
-                  <option value="Eczema">Eczema</option>
-                  <option value="Psoriasis">Psoriasis</option>
-                  <option value="Acne">Acne</option>
-                  <option value="Rosacea">Rosacea</option>
-                  <option value="Hair Loss">Hair Loss / Alopecia</option>
-                  <option value="Fungal Infection">Fungal Skin Infection</option>
-                  <option value="Vitiligo">Vitiligo</option>
-                </optgroup>
-                
-                <optgroup label="🤰👶 Women & Children">
-                  <option value="Pregnancy">Pregnancy / Prenatal Care</option>
-                  <option value="Miscarriage">Miscarriage / Pregnancy Loss</option>
-                  <option value="Menopause">Menopause</option>
-                  <option value="Endometriosis">Endometriosis</option>
-                  <option value="Fibroids">Uterine Fibroids</option>
-                  <option value="Infertility">Infertility</option>
-                  <option value="Child Fever">Child - Fever</option>
-                  <option value="Child Asthma">Child - Asthma</option>
-                  <option value="Child Development">Child - Development Delay</option>
-                  <option value="Autism">Child - Autism Spectrum Disorder</option>
-                </optgroup>
-                
-                <optgroup label="🧍‍♂️ Urinary & Reproductive">
-                  <option value="Kidney Stones">Kidney Stones</option>
-                  <option value="Chronic Kidney Disease">Chronic Kidney Disease (CKD)</option>
-                  <option value="Kidney Failure">Kidney Failure / Dialysis</option>
-                  <option value="Enlarged Prostate">Enlarged Prostate (BPH)</option>
-                  <option value="Erectile Dysfunction">Erectile Dysfunction</option>
-                  <option value="Male Infertility">Male Infertility</option>
-                  <option value="Incontinence">Urinary Incontinence</option>
-                </optgroup>
-                
-                <optgroup label="🦷 Dental & Oral">
-                  <option value="Tooth Decay">Tooth Decay / Cavities</option>
-                  <option value="Gum Disease">Gum Disease</option>
-                  <option value="Wisdom Teeth">Wisdom Teeth Problems</option>
-                  <option value="Root Canal">Root Canal Treatment Needed</option>
-                  <option value="Dental Implant">Dental Implant Consultation</option>
-                </optgroup>
-                
-                <optgroup label="🧑‍⚕️ Other Conditions">
-                  <option value="Chronic Fatigue">Chronic Fatigue Syndrome</option>
-                  <option value="Chronic Pain">Chronic Pain Syndrome</option>
-                  <option value="Autoimmune">Autoimmune Disease (Unspecified)</option>
-                  <option value="Post Surgery">Post-Surgery Follow-up</option>
-                  <option value="Other">Other Condition</option>
-                </optgroup>
-              </select>
-            </div>
-            
-            {answers.condition && typeof answers.condition === 'string' && answers.condition === 'Other' && (
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Please specify your condition:
-                </label>
-                <input
-                  type="text"
-                  value={(answers.customCondition as string) || ''}
-                  onChange={(e) => updateAnswer('customCondition', e.target.value)}
-                  placeholder="Enter your condition"
-                  className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm"
-                />
-              </div>
-            )}
-            
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                How long have you had this condition?
-              </label>
-              <select
-                value={(answers.duration as string) || ''}
-                onChange={(e) => updateAnswer('duration', e.target.value)}
-                className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
-              >
-                <option value="">Select...</option>
-                <option value="newly-diagnosed">Newly diagnosed</option>
-                <option value="less-6-months">Less than 6 months</option>
-                <option value="6-months-1-year">6 months - 1 year</option>
-                <option value="1-2-years">1-2 years</option>
-                <option value="2-5-years">2-5 years</option>
-                <option value="more-5-years">More than 5 years</option>
-              </select>
-            </div>
-          </div>
-        )
 
       default:
         return (
