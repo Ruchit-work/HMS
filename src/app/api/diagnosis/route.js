@@ -1,15 +1,23 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
 
-// Import evidence-based medical analyzer
-import { EvidenceBasedMedicalAPI } from '../../../../evidence_based_medical_api.js';
-
-// Load similar cases from any available dataset (currently disabled - using evidence-based API only)
+// Load similar cases from Indian dataset
 function loadIndianPatientDataset() {
-  // No dataset loading - using pure evidence-based medical API
-  console.log("ℹ️ Using evidence-based medical API only - no dataset dependency");
-    return [];
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const datasetPath = path.join(process.cwd(), 'src', 'data', 'indian_patient_dataset.json');
+    
+    if (fs.existsSync(datasetPath)) {
+      const data = fs.readFileSync(datasetPath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading Indian patient dataset:', error);
   }
+  
+  return [];
+}
 
 // Extract and analyze medical information from patient history
 function extractMedicalInfo(medicalHistory) {
@@ -98,25 +106,25 @@ function findSimilarCases(symptoms, patientInfo, dataset) {
     
     // Exact symptom matches
     if (case_data.symptoms && Array.isArray(case_data.symptoms)) {
-    case_data.symptoms.forEach(symptom => {
+      case_data.symptoms.forEach(symptom => {
         if (symptom && symptomsLower.includes(symptom.toLowerCase())) {
-        score += 2;
-      }
-    });
+          score += 2;
+        }
+      });
     }
     
     // Partial symptom matches
     if (case_data.symptoms && Array.isArray(case_data.symptoms)) {
-    case_data.symptoms.forEach(symptom => {
+      case_data.symptoms.forEach(symptom => {
         if (symptom) {
-      const symptomWords = symptom.toLowerCase().split(' ');
-      symptomWords.forEach(word => {
-        if (word.length > 3 && symptomsLower.includes(word)) {
-          score += 0.5;
+          const symptomWords = symptom.toLowerCase().split(' ');
+          symptomWords.forEach(word => {
+            if (word.length > 3 && symptomsLower.includes(word)) {
+              score += 0.5;
+            }
+          });
         }
       });
-        }
-    });
     }
     
     // Region/environment context
@@ -134,113 +142,36 @@ function findSimilarCases(symptoms, patientInfo, dataset) {
     .slice(0, 3);
 }
 
-// Evidence-Based AI Diagnosis with WHO/CDC/Indian Health Data
+// Simple AI Diagnosis
 async function getAIDiagnosis(symptoms, patientInfo, medicalHistory) {
-  // Initialize evidence-based medical analyzer
-  const medicalAPI = new EvidenceBasedMedicalAPI();
-  
-  // Perform evidence-based medical analysis
-  const analysis = medicalAPI.analyzeSymptoms(symptoms, patientInfo, medicalHistory);
-  
-  // Load dataset from JSON file for additional context
+  if (!process.env.GROQ_API_KEY) {
+    return { success: false, error: "GROQ_API_KEY not configured" };
+  }
+
+  // Load similar cases from dataset
   const indianPatientDataset = loadIndianPatientDataset();
   const similarCases = findSimilarCases(symptoms, patientInfo, indianPatientDataset);
   
   // Extract key medical information
   const extractedInfo = extractMedicalInfo(medicalHistory);
   
-  // Log evidence-based analysis results
-  console.log(`Evidence-Based Analysis: Primary diagnosis: ${analysis.primaryDiagnosis?.name} (Confidence: ${analysis.confidence?.toFixed(2)})`);
-  console.log(`Evidence Level: ${analysis.evidenceLevel}, Urgency: ${analysis.urgency}`);
-  console.log(`Data Source: ${analysis.dataSource}`);
-  
-  // Build enhanced context from similar cases (if available)
+  // Build context from similar cases
   let contextExamples = "";
   if (similarCases.length > 0) {
-    contextExamples = "\n\n**MEDICAL DATABASE REFERENCE - SIMILAR CASES:**\n";
+    contextExamples = "\n\n**SIMILAR CASES FROM DATABASE:**\n";
     similarCases.forEach((case_data, index) => {
-      contextExamples += `\n📋 Case ${index + 1} (${case_data.region}, ${case_data.age}y ${case_data.gender}):
-🎯 PRESENTING SYMPTOMS: ${case_data.symptoms.join(', ')}
-⏱️ DURATION: ${case_data.duration}
-🏥 FINAL DIAGNOSIS: ${case_data.diagnosis}
-🔬 REQUIRED TESTS: ${case_data.recommended_tests.join(', ')}
-💊 TREATMENT PLAN: ${case_data.treatment_plan}
-📝 CLINICAL NOTES: ${case_data.ai_notes}`;
+      contextExamples += `\nCase ${index + 1}: ${case_data.symptoms.join(', ')} → ${case_data.diagnosis}`;
     });
-  } else {
-    contextExamples = "\n\n**MEDICAL DATABASE REFERENCE:**\nUsing evidence-based medical analysis from WHO/CDC/Indian Government health data for diagnosis. No similar cases found in database - relying on evidence-based medical knowledge.";
   }
 
-  // Enhanced prompt with evidence-based medical analysis
-  const prompt = `You are Dr. Sarah Kumar, a senior consultant physician with 20 years of experience in Indian healthcare. You have access to WHO, CDC, and Indian government health data for evidence-based diagnosis.
-
-**PATIENT PRESENTATION:**
-👤 Patient: ${patientInfo}
-🩺 Chief Complaint: ${symptoms}
-📋 Medical History: ${extractedInfo.summary}
-
-**EVIDENCE-BASED MEDICAL ANALYSIS:**
-🎯 Primary Diagnosis: ${analysis.primaryDiagnosis?.name || 'Analysis in progress'}
-📊 Confidence Score: ${(analysis.confidence * 100)?.toFixed(1) || '0'}%
-🏥 Evidence Level: ${analysis.evidenceLevel || 'Limited'}
-📈 ICD-10 Code: ${analysis.primaryDiagnosis?.icd10 || 'TBD'}
-📊 Prevalence: ${analysis.primaryDiagnosis?.prevalence || 'Data not available'}
-🚨 Urgency Level: ${analysis.urgency?.toUpperCase() || 'MODERATE'}
-🔍 Differential Diagnoses: ${analysis.differentialDiagnoses?.map(d => d.name).join(', ') || 'Under evaluation'}
-🔬 Recommended Tests: ${analysis.recommendedTests?.join(', ') || 'Standard evaluation'}
-📚 Data Source: ${analysis.dataSource || 'WHO/CDC/Indian Health Data'}
+  const prompt = `**PATIENT PRESENTATION:**
+Symptoms: ${symptoms}
+Patient Info: ${patientInfo}
+Medical History: ${extractedInfo.summary}
 
 ${contextExamples}
 
-**YOUR EXPERT ASSESSMENT:**
-Based on the advanced medical analysis, patient presentation, and comprehensive medical database, provide your expert diagnostic assessment.
-
-**CRITICAL REQUIREMENTS:**
-1. YOU MUST USE the primary diagnosis from the evidence-based analysis: "${analysis.primaryDiagnosis?.name}"
-2. The confidence score is ${(analysis.confidence * 100)?.toFixed(1)}% - this indicates the reliability of the diagnosis
-3. The evidence level is ${analysis.evidenceLevel} - this shows the quality of medical evidence
-4. The urgency level is ${analysis.urgency} - this determines treatment priority
-5. You MUST provide detailed reasoning based on the evidence-based analysis
-6. Reference the ICD-10 code ${analysis.primaryDiagnosis?.icd10} for medical accuracy
-7. Use the Indian prevalence data: ${analysis.primaryDiagnosis?.prevalence}
-8. Provide specific, actionable clinical guidance based on WHO/CDC/Indian guidelines
-
-**FORMAT YOUR RESPONSE EXACTLY AS:**
-
-**🚨 CRITICAL ALERTS:**
-[Based on urgency level ${analysis.urgency} - list any urgent concerns, red flags, or immediate attention needed]
-
-**🎯 EVIDENCE-BASED PRIMARY DIAGNOSIS:**
-**${analysis.primaryDiagnosis?.name || '[DIAGNOSIS TO BE CONFIRMED]'}** (ICD-10: ${analysis.primaryDiagnosis?.icd10 || 'TBD'})
-**Confidence: ${(analysis.confidence * 100)?.toFixed(1)}% | Evidence Level: ${analysis.evidenceLevel} | Urgency: ${analysis.urgency?.toUpperCase()}**
-
-[Detailed reasoning based on symptoms, age, gender, medical history, and evidence-based analysis with confidence of ${(analysis.confidence * 100)?.toFixed(1)}%]
-
-**🔍 DIFFERENTIAL DIAGNOSIS ANALYSIS:**
-1. **${analysis.differentialDiagnoses?.[0]?.name || '[Secondary Diagnosis]'}** - [Why this is less likely than primary diagnosis]
-2. **${analysis.differentialDiagnoses?.[1]?.name || '[Third Possibility]'}** - [Alternative consideration with reasoning]
-3. **[Additional considerations]** - [Other possibilities to rule out]
-
-**🔬 PRIORITY DIAGNOSTIC TESTS:**
-${analysis.recommendedTests?.map((test, i) => `${i + 1}. ${test} - [Reason based on diagnosis and symptoms]`).join('\n') || 'Standard evaluation tests'}
-
-**💊 IMMEDIATE TREATMENT APPROACH:**
-- [Based on ${analysis.primaryDiagnosis?.name} - specific treatment recommendations]
-- [Medication names, dosages, and frequency]
-- [Supportive care measures]
-
-**⚠️ WARNING SIGNS & RED FLAGS:**
-[List specific symptoms that would indicate worsening condition or complications]
-
-**🔄 FOLLOW-UP & MONITORING:**
-- [When to review patient based on urgency: ${analysis.urgency}]
-- [What parameters to monitor]
-- [When to escalate care]
-
-**📚 CLINICAL NOTES & PATIENT EDUCATION:**
-[Specific to ${analysis.primaryDiagnosis?.name} - key points for patient understanding and compliance]
-
-Remember: You are confirming an AI-assisted diagnosis with ${(analysis.confidence * 100)?.toFixed(1)}% confidence. Use your clinical judgment to validate and refine this assessment.`;
+Please provide a preliminary diagnosis, recommended tests, and treatment suggestions.`;
 
   try {
     const response = await axios.post(
@@ -250,7 +181,7 @@ Remember: You are confirming an AI-assisted diagnosis with ${(analysis.confidenc
         messages: [
           {
             role: "system",
-            content: "You are Dr. Sarah Kumar, a senior consultant physician with 20 years of experience in Indian healthcare. You have access to WHO, CDC, and Indian government health data for evidence-based diagnosis. You MUST use the evidence-based analysis provided to you and confirm the primary diagnosis. Do NOT deviate from the evidence-based primary diagnosis unless there are clear contradictions. Always provide detailed reasoning based on the confidence scores, evidence levels, and ICD-10 codes provided. Use specific medical terminology and provide actionable clinical insights based on Indian healthcare guidelines."
+            content: "You are Dr. Sarah Kumar, a senior consultant physician. Provide medical diagnosis and treatment recommendations based on the patient information provided."
           },
           {
             role: "user",
@@ -258,7 +189,7 @@ Remember: You are confirming an AI-assisted diagnosis with ${(analysis.confidenc
           }
         ],
         temperature: 0.3,
-        max_tokens: 1500,
+        max_tokens: 1000,
         top_p: 0.9
       },
       {
@@ -283,29 +214,10 @@ Remember: You are confirming an AI-assisted diagnosis with ${(analysis.confidenc
   }
 }
 
-// Evidence-based symptom diagnosis system (fallback)
+// Simple symptom diagnosis system (fallback)
 function getBasicDiagnosis(symptoms, patientInfo, medicalHistory) {
-  // Use evidence-based medical API as fallback
-  const medicalAPI = new EvidenceBasedMedicalAPI();
-  const analysis = medicalAPI.analyzeSymptoms(symptoms, patientInfo, medicalHistory);
-  
   const symptomsLower = symptoms.toLowerCase();
   const extractedInfo = extractMedicalInfo(medicalHistory);
-  
-  // Use evidence-based analysis results if available
-  if (analysis.primaryDiagnosis && analysis.confidence > 0.3) {
-    return {
-      diagnosis: analysis.primaryDiagnosis.name,
-      tests: analysis.recommendedTests || [],
-      treatment: analysis.treatmentPlan || 'Evidence-based treatment',
-      urgent: `Based on ${analysis.urgency} urgency level (${analysis.evidenceLevel})`,
-      patientInfo: patientInfo,
-      confidence: analysis.confidence,
-      evidenceLevel: analysis.evidenceLevel,
-      icd10: analysis.primaryDiagnosis.icd10,
-      dataSource: analysis.dataSource
-    };
-  }
   
   // Fallback to enhanced rule-based system
   let diagnosis = "";

@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "age": 35,
+    "gender": "Male",
+    "region": "Delhi",
+    "symptoms": ["fever", "cough", "headache"],
+    "diagnosis": "Viral Fever",
+    "treatment": "Paracetamol, Rest, Hydration"
+  },
+  {
+    "id": 2,
+    "age": 28,
+    "gender": "Female",
+    "region": "Mumbai",
+    "symptoms": ["stomach pain", "nausea", "vomiting"],
+    "diagnosis": "Gastroenteritis",
+    "treatment": "Antacids, ORS, Light diet"
+  },
+  {
+    "id": 3,
+    "age": 45,
+    "gender": "Male",
+    "region": "Bangalore",
+    "symptoms": ["chest pain", "breathing difficulty"],
+    "diagnosis": "Acute Bronchitis",
+    "treatment": "Bronchodilators, Antibiotics"
+  },
+  {
+    "id": 4,
+    "age": 52,
+    "gender": "Female",
+    "region": "Chennai",
+    "symptoms": ["joint pain", "fatigue", "morning stiffness"],
+    "diagnosis": "Rheumatoid Arthritis",
+    "treatment": "NSAIDs, Physical therapy"
+  },
+  {
+    "id": 5,
+    "age": 38,
+    "gender": "Male",
+    "region": "Kolkata",
+    "symptoms": ["headache", "blurred vision", "nausea"],
+    "diagnosis": "Migraine",
+    "treatment": "Pain relievers, Dark room rest"
+  }
+]
