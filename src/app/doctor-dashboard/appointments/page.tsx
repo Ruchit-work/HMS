@@ -173,12 +173,12 @@ export default function DoctorAppointments() {
       notes: ''
     }
 
-    // Extract sections using regex
-    const diagnosisMatch = text.match(/\*\*PRELIMINARY DIAGNOSIS:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
-    const testsMatch = text.match(/\*\*RECOMMENDED TESTS:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
-    const treatmentMatch = text.match(/\*\*TREATMENT RECOMMENDATIONS:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
-    const urgentMatch = text.match(/\*\*.*?WHEN TO SEEK.*?:\*\*\s*([\s\S]*?)(?=\*\*|---|\n\n\*Note|$)/i)
-    const notesMatch = text.match(/\*\*ADDITIONAL NOTES:\*\*\s*([\s\S]*?)(?=\*\*|---|\n\n\*Note|$)/i)
+    // Extract sections using regex - Updated to match new AI format
+    const diagnosisMatch = text.match(/\*\*.*?DIAGNOSIS:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
+    const testsMatch = text.match(/\*\*.*?TESTS:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
+    const treatmentMatch = text.match(/\*\*.*?TREATMENT.*?:\*\*\s*([\s\S]*?)(?=\*\*|$)/i)
+    const urgentMatch = text.match(/\*\*.*?(?:WHEN TO SEEK|WARNING SIGNS|RED FLAGS).*?:\*\*\s*([\s\S]*?)(?=\*\*|---|\n\n\*Note|$)/i)
+    const notesMatch = text.match(/\*\*.*?(?:NOTES|EDUCATION).*?:\*\*\s*([\s\S]*?)(?=\*\*|---|\n\n\*Note|$)/i)
 
     if (diagnosisMatch) sections.diagnosis = diagnosisMatch[1].trim()
     if (testsMatch) {
@@ -190,6 +190,11 @@ export default function DoctorAppointments() {
     if (treatmentMatch) sections.treatment = treatmentMatch[1].trim()
     if (urgentMatch) sections.urgent = urgentMatch[1].trim()
     if (notesMatch) sections.notes = notesMatch[1].trim()
+
+    // If parsing fails, return the full text as diagnosis
+    if (!sections.diagnosis && !sections.tests.length && !sections.treatment) {
+      sections.diagnosis = text.substring(0, 500) + (text.length > 500 ? '...' : '')
+    }
 
     return sections
   }
@@ -214,22 +219,40 @@ export default function DoctorAppointments() {
       }
       
       // Automatically use chief complaint and medical history
-      const symptoms = `${appointment.chiefComplaint}${appointment.medicalHistory ? '. Medical History: ' + appointment.medicalHistory : ''}`
+      const symptoms = appointment.chiefComplaint
+      const medicalHistory = appointment.medicalHistory || ""
       
       // Call diagnosis API
+      console.log("🔍 Sending AI diagnosis request:", { symptoms, patientInfo, medicalHistory })
       const { data } = await axios.post("/api/diagnosis", {
         symptoms,
-        patientInfo
+        patientInfo,
+        medicalHistory
+      })
+      console.log("✅ AI diagnosis response received:", data)
+      console.log("📊 Data structure:", {
+        dataLength: data?.length,
+        firstItem: data?.[0],
+        generatedText: data?.[0]?.generated_text,
+        appointmentId: appointment.id
       })
       
       const diagnosisText = data?.[0]?.generated_text || "Unable to generate diagnosis"
+      console.log("📝 Diagnosis text to set:", diagnosisText.substring(0, 100) + "...")
+      
       setAiDiagnosis({...aiDiagnosis, [appointment.id]: diagnosisText})
+      console.log("💾 Updated aiDiagnosis state:", {...aiDiagnosis, [appointment.id]: diagnosisText.substring(0, 50) + "..."})
+      
       setNotification({ type: "success", message: "AI diagnosis suggestion generated!" })
     } catch (error: any) {
       console.error("AI Diagnosis error:", error)
+      console.error("Error response:", error.response?.data)
+      console.error("Error status:", error.response?.status)
+      
+      const errorMessage = error.response?.data?.error || error.message || "Failed to get AI diagnosis"
       setNotification({ 
         type: "error", 
-        message: error.response?.data?.error || "Failed to get AI diagnosis" 
+        message: `AI Diagnosis Error: ${errorMessage}` 
       })
     } finally {
       setLoadingAiDiagnosis({...loadingAiDiagnosis, [appointment.id]: false})
@@ -859,7 +882,10 @@ export default function DoctorAppointments() {
 
                           {/* AI Diagnosis Result - Clean Unified Design */}
                           {aiDiagnosis[appointment.id] && (() => {
+                            console.log("🎯 Rendering AI diagnosis for appointment:", appointment.id)
+                            console.log("📋 AI diagnosis content:", aiDiagnosis[appointment.id]?.substring(0, 100))
                             const parsed = parseAIDiagnosis(aiDiagnosis[appointment.id])
+                            console.log("🔍 Parsed diagnosis result:", parsed)
                             return (
                               <div className="bg-white rounded-xl border-2 border-slate-300 shadow-lg overflow-hidden">
                                 {/* Header */}
