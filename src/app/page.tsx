@@ -27,7 +27,7 @@ export default function Home() {
         </div>
 
         {/* Main Action Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-4xl mx-auto mb-8 sm:mb-12 lg:mb-16">
+        <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto mb-8 sm:mb-12 lg:mb-16">
           {/* Patient Portal */}
           <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8 text-center hover-lift stagger-item">
             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -78,6 +78,27 @@ export default function Home() {
                 className="w-full border-2 border-green-600 text-green-600 hover:bg-green-50 font-semibold px-4 py-3 sm:py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] text-center block text-sm sm:text-base"
               >
                 Doctor Sign Up
+              </Link>
+            </div>
+          </div>
+
+          {/* Admin Portal */}
+          <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8 text-center hover-lift stagger-item">
+            <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-3 sm:mb-4">Admin Portal</h2>
+            <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 leading-relaxed">
+              Manage hospital operations, oversee staff, and monitor system performance.
+            </p>
+            <div className="space-y-3">
+              <Link 
+                href="/auth/login?role=admin"
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold px-4 py-3 sm:py-2.5 rounded-lg transition-all duration-300 active:scale-95 hover:scale-[1.02] shadow-md hover:shadow-lg text-center block text-sm sm:text-base"
+              >
+                Admin Login
               </Link>
             </div>
           </div>

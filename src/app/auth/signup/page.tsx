@@ -49,7 +49,7 @@ function SignUpContent() {
   const { loading: checking } = usePublicRoute()
 
 
-  // Redirect if no role specified
+  // Redirect if no role specified or attempting admin signup (disabled)
   useEffect(() => {
     if (!role || (role !== "patient" && role !== "doctor")) {
       router.replace("/")

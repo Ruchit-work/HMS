@@ -11,7 +11,7 @@ import LoadingSpinner from "@/components/LoadingSpinner"
 
 function LoginContent() {
   const searchParams = useSearchParams()
-  const role = searchParams.get("role") as "patient" | "doctor" | null
+  const role = searchParams.get("role") as "patient" | "doctor" | "admin" | null
   
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -25,7 +25,7 @@ function LoginContent() {
   
   // Redirect if no role specified
   useEffect(() => {
-    if (!role || (role !== "patient" && role !== "doctor")) {
+    if (!role || (role !== "patient" && role !== "doctor" && role !== "admin")) {
       router.replace("/")
     }
   }, [role, router])
@@ -40,7 +40,19 @@ function LoginContent() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
       
-      // Check doctor collection first
+      // Check admin collection first
+      const adminDoc = await getDoc(doc(db, "admins", user.uid))
+      if (adminDoc.exists()) {
+        setSuccess("Login successful! Redirecting to admin dashboard in 3 seconds...")
+        setLoading(false) // Stop loading state to show success message
+        // Delay redirect to show success message
+        setTimeout(() => {
+          router.replace("/admin-dashboard")
+        }, 3000)
+        return
+      }
+
+      // Check doctor collection
       const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
       if (doctorDoc.exists()) {
         const doctorData = doctorDoc.data()
@@ -130,10 +142,12 @@ function LoginContent() {
               </div>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">
-              {role === "doctor" ? "Doctor Login" : "Patient Login"}
+              {role === "doctor" ? "Doctor Login" : role === "admin" ? "Admin Login" : "Patient Login"}
             </h2>
             <p className="text-sm sm:text-base text-slate-600">
-              {role === "doctor" ? "Sign in to access your doctor dashboard" : "Sign in to access your patient portal"}
+              {role === "doctor" ? "Sign in to access your doctor dashboard" : 
+               role === "admin" ? "Sign in to access admin dashboard" : 
+               "Sign in to access your patient portal"}
             </p>
           </div>
 
@@ -219,7 +233,7 @@ function LoginContent() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-                  placeholder={role === "doctor" ? "doctor@hospital.com" : "patient@email.com"}
+                  placeholder={role === "doctor" ? "doctor@hospital.com" : role === "admin" ? "admin@hospital.com" : "patient@email.com"}
                   required
                 />
               </div>
@@ -272,7 +286,7 @@ function LoginContent() {
                 href={`/auth/signup?role=${role}`} 
                 className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
               >
-                Create {role === "doctor" ? "doctor" : "patient"} account
+                Create {role === "doctor" ? "doctor" : role === "admin" ? "admin" : "patient"} account
               </a>
             </p>
           </div>

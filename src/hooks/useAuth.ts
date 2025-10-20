@@ -6,7 +6,7 @@ import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 
-type UserRole = "patient" | "doctor" | null
+type UserRole = "patient" | "doctor" | "admin" | null
 
 interface AuthUser {
   uid: string
@@ -35,6 +35,28 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
       }
 
       try {
+        // Check admin collection
+        const adminDoc = await getDoc(doc(db, "admins", currentUser.uid))
+        if (adminDoc.exists()) {
+          const adminData = adminDoc.data()
+          
+          // If route requires specific role and user has different role
+          if (requiredRole && requiredRole !== "admin") {
+            router.replace("/admin-dashboard")
+            return
+          }
+
+          setUser({
+            uid: currentUser.uid,
+            email: currentUser.email,
+            role: "admin",
+            status: adminData.status,
+            data: adminData
+          })
+          setLoading(false)
+          return
+        }
+
         // Check doctor collection
         const doctorDoc = await getDoc(doc(db, "doctors", currentUser.uid))
         if (doctorDoc.exists()) {
@@ -103,6 +125,12 @@ export function usePublicRoute() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         // User is logged in - check their role and redirect to dashboard
+        const adminDoc = await getDoc(doc(db, "admins", currentUser.uid))
+        if (adminDoc.exists()) {
+          router.replace("/admin-dashboard")
+          return
+        }
+
         const doctorDoc = await getDoc(doc(db, "doctors", currentUser.uid))
         if (doctorDoc.exists()) {
           router.replace("/doctor-dashboard")

@@ -20,6 +20,7 @@ export async function POST(req) {
 
     // Build strict prompt instructing the model to output only what it is confident about
     const systemPrompt =
+      "note that : you are in india and the patient is also from india" +"show data according to indian patient"+
       "You are a clinical decision support assistant for licensed physicians. " +
       "Output only evidence-based, non-fabricated information. If uncertain or not enough information, explicitly write 'Not generated'. " +
       "Never invent tests, diagnoses, or treatments. Do not include any placeholders except 'Not generated'. " +
