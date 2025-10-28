@@ -439,8 +439,7 @@ export default function PatientManagement() {
                 onClose={() => setShowViewModal(false)}
                 title="Patient Details"
                 subtitle="Complete patient information"
-                headerColor="blue"
-            >
+                headerColor="blue"  >
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
                     {/* Personal Information */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
