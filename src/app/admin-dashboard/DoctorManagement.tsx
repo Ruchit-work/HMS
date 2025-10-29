@@ -1,7 +1,7 @@
 'use client'
 import { db } from '@/firebase/config'
 import { getDocs, where, query, collection, doc, deleteDoc, updateDoc } from 'firebase/firestore'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import AdminProtected from '@/components/AdminProtected'
@@ -57,14 +57,7 @@ export default function DoctorManagement() {
     // Import useAuth hook for protection
     const { user, loading: authLoading } = useAuth("admin")
 
-    // Protect component - only allow admins
-    if (authLoading) {
-        return <LoadingSpinner message="Loading doctor management..." />
-    }
-
-    if (!user) {
-        return null
-    }
+    // Protect component - only allow admins (moved below hooks to keep hook order stable)
 
     // Medical specializations organized by category (from signup page)
     const specializationCategories = [
@@ -240,7 +233,7 @@ export default function DoctorManagement() {
             setLoading(false)
         }
     }
-    const fetchDoctors = async () => {
+    const fetchDoctors = useCallback(async () => {
         try {
             setLoading(true)
             const doctorsRef = collection(db, 'doctors')
@@ -257,10 +250,13 @@ export default function DoctorManagement() {
         } finally {
             setLoading(false)
         }
-    }
-    useEffect(() => {
-        fetchDoctors()
     }, [])
+    useEffect(() => {
+        if (!user || authLoading) return
+        fetchDoctors()
+    }, [fetchDoctors, user, authLoading])
+
+    // After hooks: gate rendering by auth state (moved below all hooks further down)
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -458,6 +454,15 @@ export default function DoctorManagement() {
         } catch (error) {
             return 'Invalid Date'
         }
+    }
+
+    // Gate rendering by auth state (placed after all hooks)
+    if (authLoading) {
+        return <LoadingSpinner message="Loading doctor management..." />
+    }
+
+    if (!user) {
+        return null
     }
 
     return (

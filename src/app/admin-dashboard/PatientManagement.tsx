@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
 import { collection, getDocs,where,query,doc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/firebase/config'
@@ -42,14 +42,7 @@ export default function PatientManagement() {
     const [deletePatient, setDeletePatient] = useState<Patient | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-    // Protect component - only allow admins
-    if (authLoading) {
-        return <LoadingSpinner message="Loading patient management..." />
-    }
-
-    if (!user) {
-        return null
-    }
+    // Protect component - only allow admins (moved below hooks to keep hook order stable)
 
 
 
@@ -121,7 +114,7 @@ export default function PatientManagement() {
         }
     }
     
-    const fetchPatients = async () => {
+    const fetchPatients = useCallback(async () => {
         try{
             setLoading(true)
             const patientsRef = collection(db,'patients')
@@ -137,11 +130,12 @@ export default function PatientManagement() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
 
     useEffect(() => {   
+        if (!user || authLoading) return
         fetchPatients()
-    }, [])
+    }, [fetchPatients, user, authLoading])
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -197,6 +191,14 @@ export default function PatientManagement() {
         
         setFilteredPatients(filtered)
     }, [search, patients, sortField, sortOrder])
+    if (authLoading) {
+        return <LoadingSpinner message="Loading patient management..." />
+    }
+
+    if (!user) {
+        return null
+    }
+
     return (
         <AdminProtected>
             <div className="relative">
