@@ -2,11 +2,19 @@ import admin from 'firebase-admin'
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
+  const projectId = process.env.FIREBASE_PROJECT_ID
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+  // Normalize private key: remove surrounding quotes and convert escaped newlines
+  const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY || ''
+  const privateKey = rawPrivateKey
+    .replace(/^"|"$/g, '')
+    .replace(/\\n/g, '\n')
+
   admin.initializeApp({
     credential: admin.credential.cert({
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      clientEmail: process.env.NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.NEXT_PUBLIC_FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      projectId,
+      clientEmail,
+      privateKey,
     })
   })
 }
@@ -14,11 +22,11 @@ if (!admin.apps.length) {
 export async function POST(request) {
   try {
     // Check if Firebase Admin SDK is properly initialized
-    if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 
-        !process.env.NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL || 
-        !process.env.NEXT_PUBLIC_FIREBASE_PRIVATE_KEY) {
+    if (!process.env.FIREBASE_PROJECT_ID || 
+        !process.env.FIREBASE_CLIENT_EMAIL || 
+        !process.env.FIREBASE_PRIVATE_KEY) {
       return Response.json({ 
-        error: 'Firebase Admin SDK not configured. Please add the following to your .env.local file:\n\nNEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id\nNEXT_PUBLIC_FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com\nNEXT_PUBLIC_FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nYour-Private-Key-Here\\n-----END PRIVATE KEY-----"\n\nGet these values from Firebase Console > Project Settings > Service Accounts > Generate New Private Key' 
+        error: 'Firebase Admin SDK not configured. Please add the following to your .env.local file:\n\nFIREBASE_PROJECT_ID=your-project-id\nFIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com\nFIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nYour-Private-Key-Here\\n-----END PRIVATE KEY-----"\n\nNote: Keep these server-only (no NEXT_PUBLIC_). Get them from Firebase Console > Project Settings > Service Accounts > Generate New Private Key.' 
       }, { status: 500 })
     }
 
