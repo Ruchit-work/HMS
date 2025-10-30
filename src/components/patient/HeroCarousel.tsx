@@ -103,6 +103,8 @@ export default function HeroCarousel() {
                 src={slide.image}
                 alt={slide.title}
                 className="absolute inset-0 w-full h-full object-cover"
+                loading={index === 0 ? "eager" : "lazy"}
+                decoding="async"
               />
               
               {/* Dark Overlay for text readability */}

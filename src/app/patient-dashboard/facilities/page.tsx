@@ -196,7 +196,7 @@ export default function FacilitiesPage() {
   const { user, loading } = useAuth("patient")
 
   if (loading) {
-    return <LoadingSpinner message="Loading Facilities..." />
+    return null
   }
 
   if (!user) {

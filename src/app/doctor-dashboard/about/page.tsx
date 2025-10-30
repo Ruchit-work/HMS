@@ -8,7 +8,7 @@ export default function DoctorAbout() {
   const { user, loading } = useAuth("doctor")
 
   if (loading) {
-    return <LoadingSpinner message="Loading..." />
+    return null
   }
 
   if (!user) {

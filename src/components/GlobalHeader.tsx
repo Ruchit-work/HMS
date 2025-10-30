@@ -21,13 +21,17 @@ export default function GlobalHeader() {
   const shouldShowHeader = !noHeaderRoutes.includes(pathname)
 
   useEffect(() => {
+    // Use the existing auth state from Firebase
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        const data = await getUserData(currentUser.uid)
-        if (data) {
-          setUserData(data)
-        }
         setUser(currentUser)
+        // Only fetch data if we don't have it yet
+        if (!userData) {
+          const data = await getUserData(currentUser.uid)
+          if (data) {
+            setUserData(data)
+          }
+        }
       } else {
         setUser(null)
         setUserData(null)

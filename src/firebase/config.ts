@@ -1,8 +1,8 @@
 'use client'
 
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, type Firestore } from "firebase/firestore";
 
 // Check if environment variables are loaded
 const requiredEnvVars = [
@@ -26,6 +26,18 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "dummy-app-id"
 };
 
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase only once (singleton pattern)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+// Initialize Firestore with persistence cache for better performance
+let db: Firestore;
+if (getApps().length === 0) {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache(),
+  });
+} else {
+  db = getFirestore(app);
+}
+
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export { db };

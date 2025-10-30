@@ -202,7 +202,7 @@ export default function ServicesPage() {
   const { user, loading } = useAuth("patient")
 
   if (loading) {
-    return <LoadingSpinner message="Loading Services..." />
+    return null
   }
 
   if (!user) {

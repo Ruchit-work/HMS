@@ -786,7 +786,6 @@ export default function AdminDashboard() {
           {activeTab === "patients" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Patient Management</h2>
-              <p className="text-gray-600">Patient management features will be implemented here.</p>
               <PatientManagement />
             </div>
           )}
@@ -794,7 +793,6 @@ export default function AdminDashboard() {
           {activeTab === "doctors" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Doctor Management</h2>
-              <p className="text-gray-600">Doctor management features will be implemented here.</p>
               <DoctorManagement />
             </div>
           )}
@@ -802,7 +800,6 @@ export default function AdminDashboard() {
           {activeTab === "appointments" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Appointment Management</h2>
-              <p className="text-gray-600">Manage all hospital appointments</p>
               <AppoinmentManagement />
             </div>
           )}

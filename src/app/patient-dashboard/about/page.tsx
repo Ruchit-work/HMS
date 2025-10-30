@@ -40,7 +40,7 @@ export default function PatientAboutSupport() {
   }, [user])
 
   if (loading) {
-    return <LoadingSpinner message="Loading..." />
+    return null
   }
 
   if (!user) {
