@@ -8,6 +8,7 @@ import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import PasswordRequirements, { validatePassword, isPasswordValid } from "@/components/PasswordRequirements"
 import Notification from "@/components/Notification"
+import { sendEmailVerification } from "firebase/auth"
 
 function SignUpContent() {
   const searchParams = useSearchParams()

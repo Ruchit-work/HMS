@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { db } from "@/firebase/config"
+import { db, auth } from "@/firebase/config"
 import { doc, getDoc, collection, getDocs, query, orderBy, limit } from "firebase/firestore"
+import { signOut } from "firebase/auth"
 import { useAuth } from "@/hooks/useAuth"
+import { useRouter } from "next/navigation"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import Notification from "@/components/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
@@ -56,9 +58,11 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "appointments" | "reports">("overview")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
+  const router = useRouter()
 
   const fetchDashboardData = async () => {
     if (!user) return
@@ -205,6 +209,19 @@ export default function AdminDashboard() {
     setNotification({ type: "success", message: "Dashboard data refreshed!" })
   }
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth)
+      router.replace("/auth/login?role=admin")
+    } catch (error) {
+      console.error("Logout error:", error)
+      setNotification({ 
+        type: "error", 
+        message: "Failed to logout. Please try again." 
+      })
+    }
+  }
+
   if (authLoading || loading) {
     return <LoadingSpinner message="Loading admin dashboard..." />
   }
@@ -313,6 +330,18 @@ export default function AdminDashboard() {
               </svg>
               Doctors
             </button>
+
+            <Link
+              href="/admin-dashboard/campaigns"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-600 hover:bg-gray-100"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
+              </svg>
+              Campaigns
+            </Link>
             
             <button
               onClick={() => {
@@ -385,18 +414,58 @@ export default function AdminDashboard() {
                   <span className="hidden sm:inline">Refresh</span>
                 </button>
                 
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                    <span className="text-purple-600 font-semibold text-sm">
-                      {userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="hidden sm:block">
-                    <p className="text-sm font-medium text-gray-900">
-                      {userData.firstName || "Admin"}
-                    </p>
-                    <p className="text-xs text-gray-500">Administrator</p>
-                  </div>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserDropdown(!showUserDropdown)}
+                    className="flex items-center gap-2 sm:gap-3 hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <span className="text-purple-600 font-semibold text-sm">
+                        {userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="hidden sm:block text-left">
+                      <p className="text-sm font-medium text-gray-900">
+                        {userData.firstName || "Admin"}
+                      </p>
+                      <p className="text-xs text-gray-500">Administrator</p>
+                    </div>
+                    <svg 
+                      className={`w-4 h-4 text-gray-500 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* User Dropdown Menu */}
+                  {showUserDropdown && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => setShowUserDropdown(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                        <div className="px-4 py-2 border-b border-gray-200">
+                          <p className="text-sm font-medium text-gray-900">
+                            {userData.firstName || "Admin"}
+                          </p>
+                          <p className="text-xs text-gray-500">{userData.email}</p>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                          </svg>
+                          <span>Logout</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

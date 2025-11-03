@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import Link from "next/link"
+import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import Notification from "@/components/Notification"
 import DashboardCard from "@/components/ui/DashboardCard"
@@ -33,6 +34,7 @@ export default function DoctorDashboard() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [showCompletionModal, setShowCompletionModal] = useState(false)
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
   const [completionData, setCompletionData] = useState({
@@ -120,6 +122,15 @@ export default function DoctorDashboard() {
       setSavingSchedule(false)
     }
   }
+
+  useEffect(() => {
+    if (!user) return
+    const loadCampaigns = async () => {
+      const published = await fetchPublishedCampaignsForAudience('doctors')
+      setCampaigns(published)
+    }
+    loadCampaigns()
+  }, [user])
 
   if (loading) {
     return <LoadingSpinner message="Loading Doctor Dashboard..." />
@@ -209,6 +220,25 @@ export default function DoctorDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {campaigns.length > 0 && (
+          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {campaigns.map(c => (
+              <div key={c.id} className="bg-white border border-teal-200 rounded-xl p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">{c.title}</h3>
+                    <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: c.content }} />
+                    {c.ctaText && c.ctaHref && (
+                      <Link href={c.ctaHref} className="inline-block mt-3 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+                        {c.ctaText}
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         
         {/* Welcome Banner */}
         <PageHeader

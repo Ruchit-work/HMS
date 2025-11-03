@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
@@ -12,6 +11,8 @@ import HeroCarousel from "@/components/patient/HeroCarousel"
 import HealthInformationSection from "@/components/patient/HealthInformationSection"
 import PageHeader from "@/components/ui/PageHeader"
 import Footer from "@/components/Footer"
+import Link from "next/link"
+import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns"
 import { UserData, Doctor, Appointment, NotificationData } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
 
@@ -23,6 +24,7 @@ export default function PatientDashboard() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
 
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
@@ -55,6 +57,10 @@ export default function PatientDashboard() {
         ...doc.data() 
       } as Appointment))
       setAppointments(appointmentsList)
+
+      // Fetch campaigns for patients
+      const published = await fetchPublishedCampaignsForAudience('patients')
+      setCampaigns(published)
     }
 
     fetchData()
@@ -129,6 +135,26 @@ export default function PatientDashboard() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Campaigns Section */}
+          {campaigns.length > 0 && (
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {campaigns.map(c => (
+                <div key={c.id} className="bg-white border border-teal-200 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-800">{c.title}</h3>
+                      <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: c.content }} />
+                      {c.ctaText && c.ctaHref && (
+                        <Link href={c.ctaHref} className="inline-block mt-3 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
+                          {c.ctaText}
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Welcome Banner */}
         <PageHeader
           title={`Welcome back, ${userData.firstName}!`}
