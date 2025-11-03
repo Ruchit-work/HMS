@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { db, auth } from "@/firebase/config"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { signOut } from "firebase/auth"
+import ChangePasswordSection from "@/components/ChangePasswordSection"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
@@ -88,6 +89,7 @@ export default function PatientProfilePage() {
       })
     }
   }
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
@@ -240,6 +242,13 @@ export default function PatientProfilePage() {
                 </div>
               </div>
             </div>
+
+            {/* Security - Change Password */}
+            <ChangePasswordSection 
+              userEmail={user.email!}
+              accent="purple"
+              notify={(type, message) => setNotification({ type, message })}
+            />
           </div>
         </div>
       </main>

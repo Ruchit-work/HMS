@@ -6,9 +6,8 @@ import { doc, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
-import PasswordRequirements, { validatePassword, isPasswordValid } from "@/components/PasswordRequirements"
+import PasswordRequirements, { isPasswordValid } from "@/components/PasswordRequirements"
 import Notification from "@/components/Notification"
-import { sendEmailVerification } from "firebase/auth"
 
 function SignUpContent() {
   const searchParams = useSearchParams()
@@ -236,21 +235,6 @@ function SignUpContent() {
 
     // Validate phone number for patients
     if (role === "patient") {
-      // Get expected length based on country code
-      const countries = [
-        { code: "+91", length: 10 },
-        { code: "+1", length: 10 },
-        { code: "+44", length: 10 },
-        { code: "+61", length: 9 },
-        { code: "+86", length: 11 },
-        { code: "+55", length: 11 },
-        { code: "+49", length: 11 },
-        { code: "+62", length: 11 },
-      ]
-
-      const selectedCountry = countries.find(c => c.code === countryCode)
-      const expectedLength = selectedCountry?.length || 10
-
       if (!phone) {
         setError("Please enter your phone number")
         setLoading(false)
@@ -258,16 +242,9 @@ function SignUpContent() {
         return
       }
 
-      if (phone.length !== expectedLength) {
-        setError(`Phone number must be exactly ${expectedLength} digits for the selected country`)
-        setLoading(false)
-        setIsRegistering(false)
-        return
-      }
-
-      // Check if phone contains only numbers
-      if (!/^\d+$/.test(phone)) {
-        setError("Phone number should contain only digits")
+      // Allow only digits with a reasonable length range
+      if (!/^\d{7,15}$/.test(phone)) {
+        setError("Phone number should contain 7-15 digits")
         setLoading(false)
         setIsRegistering(false)
         return
