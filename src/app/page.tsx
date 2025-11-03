@@ -27,7 +27,7 @@ export default function Home() {
         </div>
 
         {/* Main Action Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto mb-8 sm:mb-12 lg:mb-16">
+        <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3   gap-6 sm:gap-8 max-w-6xl mx-auto mb-8 sm:mb-12 lg:mb-16">
           {/* Patient Portal */}
           <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8 text-center hover-lift stagger-item">
             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
