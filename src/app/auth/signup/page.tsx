@@ -8,6 +8,7 @@ import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import PasswordRequirements, { isPasswordValid } from "@/components/PasswordRequirements"
 import Notification from "@/components/Notification"
+import { sendOTP, verifyOTP } from "@/utils/twilioOTP"
 
 function SignUpContent() {
   const searchParams = useSearchParams()
@@ -38,13 +39,19 @@ function SignUpContent() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
-  const [isRegistering, setIsRegistering] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showBloodGroupDropdown, setShowBloodGroupDropdown] = useState(false)
   const [showSpecializationDropdown, setShowSpecializationDropdown] = useState(false)
   const [showQualificationDropdown, setShowQualificationDropdown] = useState(false)
-  const [dropdownLoading, setDropdownLoading] = useState(false)
   const [validating, setValidating] = useState(false)
+  // OTP state (for patients only)
+  const [otp, setOtp] = useState("")
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpVerified, setOtpVerified] = useState(false)
+  const [sendingOTP, setSendingOTP] = useState(false)
+  const [verifyingOTP, setVerifyingOTP] = useState(false)
+  const [showOTPModal, setShowOTPModal] = useState(false)
+  const [modalError, setModalError] = useState("")
   // Protect route - redirect if already authenticated
   const { loading: checking } = usePublicRoute()
 
@@ -55,6 +62,17 @@ function SignUpContent() {
       router.replace("/")
     }
   }, [role, router])
+
+  // Auto-send OTP when modal opens
+  useEffect(() => {
+    if (showOTPModal && role === "patient" && !otpSent && !sendingOTP && phone) {
+      const sendOTPOnModalOpen = async () => {
+        await handleSendOTP(false)
+      }
+      sendOTPOnModalOpen()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOTPModal])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -71,9 +89,7 @@ function SignUpContent() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // ============================================
-  // DATA: SPECIALIZATIONS & QUALIFICATIONS
-  // ============================================
+
 
   // Medical specializations organized by category
   const specializationCategories = [
@@ -221,6 +237,101 @@ function SignUpContent() {
 
   const passwordValid = isPasswordValid(password)
 
+  // Send OTP function (for patients only)
+  const handleSendOTP = async (showSuccess = true) => {
+    if (role !== "patient") return
+
+    // Validate phone number first
+    if (!phone) {
+      setError("Please enter your phone number")
+      return false
+    }
+
+    // Clean phone number and country code
+    const cleanedPhone = phone.replace(/\D/g, "")
+    const cleanedCountryCode = countryCode.replace(/\D/g, "")
+    const totalDigits = cleanedCountryCode + cleanedPhone
+
+    if (totalDigits.length < 7 || totalDigits.length > 15) {
+      setError(`Phone number should contain 7-15 digits total (including country code). Current: ${totalDigits.length} digits.`)
+      return false
+    }
+
+    setError("")
+    setSendingOTP(true)
+
+    try {
+      const fullPhoneNumber = `${countryCode}${phone}`.replace(/\s+/g, "")
+      const result = await sendOTP(fullPhoneNumber)
+
+      if (result.success) {
+        setOtpSent(true)
+        if (showSuccess) {
+          setNotification({
+            type: "success",
+            message: "OTP sent successfully! Please check your phone."
+          })
+        }
+        return true
+      } else {
+        const errorMsg = result.error || "Failed to send OTP. Please try again."
+        setError(errorMsg)
+        setModalError(errorMsg)
+        return false
+      }
+    } catch (error) {
+      const errorMsg = "Failed to send OTP. Please try again."
+      setError(errorMsg)
+      setModalError(errorMsg)
+      return false
+    } finally {
+      setSendingOTP(false)
+    }
+  }
+
+  // Verify OTP function (for patients only)
+  const handleVerifyOTP = async () => {
+    if (role !== "patient" || !otp) {
+      setError("Please enter the OTP")
+      return false
+    }
+
+    if (otp.length !== 6) {
+      setError("OTP must be 6 digits")
+      return false
+    }
+
+    setError("")
+    setVerifyingOTP(true)
+
+    try {
+      const fullPhoneNumber = `${countryCode}${phone}`.replace(/\s+/g, "")
+      const result = await verifyOTP(fullPhoneNumber, otp)
+
+      if (result.success) {
+        setOtpVerified(true)
+        // Create account after OTP verification
+        await createAccountAfterOTP()
+        return true
+      } else {
+        const errorMsg = result.error || "Invalid OTP. Please try again."
+        const fullError = result.remainingAttempts !== undefined 
+          ? `${errorMsg} (${result.remainingAttempts} attempts remaining)`
+          : errorMsg
+        setError(fullError)
+        setModalError(fullError)
+        return false
+      }
+    } catch (error) {
+      const errorMsg = "Failed to verify OTP. Please try again."
+      setError(errorMsg)
+      setModalError(errorMsg)
+      return false
+    } finally {
+      setVerifyingOTP(false)
+    }
+  }
+
   // Form submission handler
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -231,40 +342,95 @@ function SignUpContent() {
 
     setValidating(false)
     setLoading(true)
-    setIsRegistering(true)
 
-    // Validate phone number for patients
-    if (role === "patient") {
-      if (!phone) {
-        setError("Please enter your phone number")
-        setLoading(false)
-        setIsRegistering(false)
-        return
-      }
+    // ============================================
+    // STEP 1: VALIDATE ALL FORM FIELDS FIRST
+    // ============================================
 
-      // Allow only digits with a reasonable length range
-      if (!/^\d{7,15}$/.test(phone)) {
-        setError("Phone number should contain 7-15 digits")
+    // Validate required common fields
+    if (!firstName || firstName.trim() === "") {
+        setError("Please enter your first name")
         setLoading(false)
-        setIsRegistering(false)
         return
-      }
+    }
+
+    if (!lastName || lastName.trim() === "") {
+        setError("Please enter your last name")
+        setLoading(false)
+        return
+    }
+
+    // Validate email format
+    if (!email || email.trim() === "") {
+        setError("Please enter your email address")
+        setLoading(false)
+        return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+        setError("Please enter a valid email address")
+        setLoading(false)
+        return
     }
 
     // Validate password requirements
     if (!passwordValid) {
-      setError("Password does not meet all requirements")
-      setLoading(false)
-      setIsRegistering(false)
-      return
+        setError("Password does not meet all requirements")
+        setLoading(false)
+        return
     }
 
-    // Validate passwords match BEFORE creating user
+    // Validate passwords match
     if (password !== confirmPassword) {
-      setError("Passwords do not match")
+        setError("Passwords do not match")
+        setLoading(false)
+        return
+    }
+
+    // Validate patient-specific fields
+    if (role === "patient") {
+      if (!phone) {
+        setError("Please enter your phone number")
+        setLoading(false)
+        return
+      }
+
+      // Clean phone number and country code (remove non-digits)
+      const cleanedPhone = phone.replace(/\D/g, "")
+      const cleanedCountryCode = countryCode.replace(/\D/g, "")
+      const totalDigits = cleanedCountryCode + cleanedPhone
+
+      // Check if combined phone number (country code + phone) has 7-15 digits
+      if (totalDigits.length < 7 || totalDigits.length > 15) {
+        setError(`Phone number should contain 7-15 digits total (including country code). Current: ${totalDigits.length} digits.`)
+        setLoading(false)
+        return
+      }
+
+      // Also ensure the phone field itself has at least some digits
+      if (cleanedPhone.length === 0) {
+        setError("Please enter a valid phone number")
+        setLoading(false)
+        return
+      }
+
+      if (!dateOfBirth) {
+        setError("Please enter your date of birth")
+        setLoading(false)
+        return
+      }
+
+      // All validations passed for patient - now open OTP modal
+      setOtp("")
+      setOtpSent(false)
+      setOtpVerified(false)
+      setError("")
+      setModalError("")
+      setShowOTPModal(true)
+
       setLoading(false)
-      setIsRegistering(false)
-      return
+      return // Stop here, account creation will happen after OTP verification
     }
 
     // Validate doctor-specific fields
@@ -272,81 +438,45 @@ function SignUpContent() {
       if (!specialization || specialization.trim() === "") {
         setError("Please select your specialization")
         setLoading(false)
-        setIsRegistering(false)
         return
       }
 
       if (specialization === "Other" && (!customSpecialization || customSpecialization.trim() === "")) {
         setError("Please enter your custom specialization")
         setLoading(false)
-        setIsRegistering(false)
         return
       }
 
       if (!qualification || qualification.trim() === "") {
         setError("Please select your qualification")
         setLoading(false)
-        setIsRegistering(false)
         return
       }
 
       if (qualification === "Other" && (!customQualification || customQualification.trim() === "")) {
         setError("Please enter your custom qualification")
         setLoading(false)
-        setIsRegistering(false)
         return
       }
 
       if (!experience || experience.trim() === "") {
         setError("Please enter your experience")
         setLoading(false)
-        setIsRegistering(false)
         return
       }
 
       if (!consultationFee || consultationFee.trim() === "") {
         setError("Please enter your consultation fee")
         setLoading(false)
-        setIsRegistering(false)
         return
       }
-    }
 
-    try {
-      // Create user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-      const user = userCredential.user
+      // All validations passed for doctor - proceed to create account
+      try {
+        // Create user in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+        const user = userCredential.user
 
-      // Save user info to Firestore based on role from URL
-      if (role === "patient") {
-        await setDoc(doc(db, "patients", user.uid), {
-          email: email,
-          status: "active",
-          firstName: firstName,
-          lastName: lastName,
-          phone: `${countryCode}${phone}`,
-          phoneCountryCode: countryCode,
-          phoneNumber: phone,
-          dateOfBirth: dateOfBirth,
-          gender: gender,
-          bloodGroup: bloodGroup,
-          address: address,
-          createdAt: new Date().toISOString(),
-          createdBy: "self"
-        })
-
-        // Show success notification
-        setNotification({
-          type: "success",
-          message: "Patient account created successfully! Redirecting to login..."
-        })
-
-        // Sign out and redirect to login page
-        await signOut(auth)
-        setTimeout(() => {
-          router.push("/auth/login?role=patient")
-        }, 3000)
-      } else if (role === "doctor") {
         // Use custom values if "Other" was selected
         const finalSpecialization = specialization === "Other" ? customSpecialization : specialization
         const finalQualification = qualification === "Other" ? customQualification : qualification
@@ -376,10 +506,100 @@ function SignUpContent() {
         setTimeout(() => {
           router.push("/auth/login?role=doctor")
         }, 3000)
+      } catch (err: unknown) {
+        const firebaseError = err as { code?: string; message?: string }
+        let errorMessage = "Failed to sign up"
+
+        if (firebaseError.code === "auth/email-already-in-use") {
+          errorMessage = "This email is already registered. Please use a different email or sign in."
+        } else if (firebaseError.code === "auth/invalid-email") {
+          errorMessage = "Invalid email address. Please enter a valid email."
+        } else if (firebaseError.code === "auth/weak-password") {
+          errorMessage = "Password is too weak. Please use a stronger password."
+        } else {
+          errorMessage = firebaseError.message || "Failed to create account. Please try again."
+        }
+
+        setError(errorMessage)
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    // This should not be reached, but keeping as fallback
+    setLoading(false)
+  }
+
+  // Create account after OTP verification (only for patients)
+  const createAccountAfterOTP = async () => {
+    if (role !== "patient") return // Only for patients
+    
+    setLoading(true)
+    setModalError("") // Clear any previous modal errors
+
+    try {
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+
+      // Save user info to Firestore
+      await setDoc(doc(db, "patients", user.uid), {
+        email: email,
+        status: "active",
+        firstName: firstName,
+        lastName: lastName,
+        phone: `${countryCode}${phone}`,
+        phoneCountryCode: countryCode,
+        phoneNumber: phone,
+        dateOfBirth: dateOfBirth,
+        gender: gender,
+        bloodGroup: bloodGroup,
+        address: address,
+        createdAt: new Date().toISOString(),
+        createdBy: "self"
+      })
+
+      // Show success notification
+      setNotification({
+        type: "success",
+        message: "Patient account created successfully! Redirecting to login..."
+      })
+
+      // Close modal
+      setShowOTPModal(false)
+
+      // Sign out and redirect to login page
+      await signOut(auth)
+      setTimeout(() => {
+        router.push("/auth/login?role=patient")
+      }, 3000)
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string; message?: string }
+      let errorMessage = "Failed to sign up"
+
+      // Handle specific Firebase Auth errors
+      if (firebaseError.code === "auth/email-already-in-use") {
+        errorMessage = "This email is already registered. Please use a different email or sign in."
+      } else if (firebaseError.code === "auth/invalid-email") {
+        errorMessage = "Invalid email address. Please enter a valid email."
+      } else if (firebaseError.code === "auth/weak-password") {
+        errorMessage = "Password is too weak. Please use a stronger password."
+      } else {
+        errorMessage = firebaseError.message || "Failed to create account. Please try again."
       }
 
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to sign up")
+      // Show error in modal and also close it so user can see the error on form
+      setModalError(errorMessage)
+      setError(errorMessage)
+      
+      // Close modal after a short delay so user can see the error
+      setTimeout(() => {
+        setShowOTPModal(false)
+        setOtp("")
+        setOtpSent(false)
+        setOtpVerified(false)
+      }, 3000)
     } finally {
       setLoading(false)
     }
@@ -567,9 +787,15 @@ function SignUpContent() {
                       <label className="block text-sm font-medium text-slate-700 mb-2">
                         Phone Number <span className="text-red-500">*</span>
                       </label>
-                      <input type="tel" value={phone}   onChange={(e) => setPhone(e.target.value)}
+                      <input 
+                        type="tel" 
+                        value={phone}   
+                        onChange={(e) => setPhone(e.target.value)}
                         className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-                        placeholder="+91 1234567890"  pattern="[+]?[0-9\s-]+" required  />
+                        placeholder="7359057367"  
+                        pattern="[0-9\s-]+" 
+                        required
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1042,6 +1268,104 @@ function SignUpContent() {
           </div>
         </div>
       </div>
+
+      {/* OTP Verification Modal (for patients only) */}
+      {showOTPModal && role === "patient" && (
+        <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-fade-in">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-100 rounded-full mb-4">
+                <span className="text-3xl">📱</span>
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Phone Number</h3>
+              <p className="text-sm text-slate-600">
+                We've sent a 6-digit verification code to
+              </p>
+              <p className="text-sm font-semibold text-slate-900 mt-1">
+                {countryCode}{phone}
+              </p>
+            </div>
+
+            {(error || modalError) && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded-r-lg">
+                <p className="text-sm text-red-700 font-medium">{modalError || error}</p>
+              </div>
+            )}
+
+            {!otpSent ? (
+              <div className="text-center py-4">
+                <div className="animate-spin h-8 w-8 border-4 border-teal-600 border-t-transparent rounded-full mx-auto"></div>
+                <p className="text-sm text-slate-600 mt-4">Sending OTP...</p>
+              </div>
+            ) : !otpVerified ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Enter Verification Code
+                  </label>
+                  <input
+                    type="text"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    maxLength={6}
+                    className="w-full px-4 py-4 border-2 border-slate-300 rounded-lg focus:border-teal-500 focus:outline-none bg-white text-slate-900 text-center text-3xl font-bold tracking-widest"
+                    autoFocus
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleVerifyOTP}
+                  disabled={verifyingOTP || otp.length !== 6}
+                  className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white py-3 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                >
+                  {verifyingOTP ? "Verifying..." : "Verify & Create Account"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setOtp("")
+                    setOtpSent(false)
+                    setModalError("")
+                    await handleSendOTP(false)
+                  }}
+                  disabled={sendingOTP}
+                  className="w-full text-sm text-teal-600 hover:text-teal-700 font-medium disabled:opacity-50"
+                >
+                  {sendingOTP ? "Resending..." : "Resend OTP"}
+                </button>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                  <span className="text-3xl text-green-600">✓</span>
+                </div>
+                <p className="text-sm font-medium text-green-700">Verifying and creating account...</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!otpVerified && !verifyingOTP) {
+                  setShowOTPModal(false)
+                  setOtp("")
+                  setOtpSent(false)
+                  setOtpVerified(false)
+                  setError("")
+                  setModalError("")
+                }
+              }}
+              disabled={verifyingOTP || otpVerified}
+              className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {otpVerified ? "" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
