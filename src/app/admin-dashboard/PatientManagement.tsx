@@ -10,6 +10,7 @@ import { bloodGroups } from '@/constants/signup'
 import AdminProtected from '@/components/AdminProtected'
 import ViewModal from '@/components/ui/ViewModal'
 import DeleteModal from '@/components/ui/DeleteModal'
+import OTPVerificationModal from '@/components/form/OTPVerificationModal'
 // import toast from 'react-hot-toast'
 
 interface Patient {
@@ -55,6 +56,8 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
         address: '',
         dateOfBirth: ''
     })
+    const [otpModalOpen, setOtpModalOpen] = useState(false)
+    const todayStr = new Date().toISOString().split('T')[0]
 
     // Protect component - only allow admins (moved below hooks to keep hook order stable)
 
@@ -602,6 +605,12 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                                     setLoading(false)
                                     return
                                 }
+                                // If phone provided, open OTP modal first
+                                if ((newPatient.phone || '').trim()) {
+                                    setOtpModalOpen(true)
+                                    setLoading(false)
+                                    return
+                                }
                                 const payload = {
                                     ...newPatient,
                                     createdAt: new Date().toISOString(),
@@ -668,8 +677,8 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                                         </select>
                                     </div>
                                     <div className="flex flex-col space-y-1">
-                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date of Birth</label>
-                                        <input type="date" className="w-full px-3 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none" value={newPatient.dateOfBirth || ''} onChange={(e) => setNewPatient(p => ({ ...p, dateOfBirth: e.target.value }))} />
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Birthday</label>
+                                        <input type="date" max={todayStr} className="w-full px-3 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none" value={newPatient.dateOfBirth || ''} onChange={(e) => setNewPatient(p => ({ ...p, dateOfBirth: e.target.value }))} />
                                     </div>
                                 </div>
                                 <div className="mt-4">
@@ -695,6 +704,43 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                     </div>
                 </div>
             </div>
+        )}
+        {/* OTP verification modal before saving new patient */}
+        {otpModalOpen && (
+            <OTPVerificationModal
+                isOpen={otpModalOpen}
+                onClose={() => setOtpModalOpen(false)}
+                phone={newPatient.phone || ''}
+                onVerified={async () => {
+                    try {
+                        setLoading(true)
+                        const payload = {
+                            ...newPatient,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            createdBy: 'receptionist'
+                        } as any
+                        const res = await fetch('/api/admin/create-patient', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ patientData: payload })
+                        })
+                        if (!res.ok) {
+                            const data = await res.json().catch(() => ({}))
+                            throw new Error(data?.error || 'Failed to create patient')
+                        }
+                        await fetchPatients()
+                        setOtpModalOpen(false)
+                        setShowAddModal(false)
+                        setSuccessMessage('Patient added successfully!')
+                        setTimeout(() => setSuccessMessage(null), 3000)
+                    } catch (err) {
+                        setError((err as Error).message)
+                    } finally {
+                        setLoading(false)
+                    }
+                }}
+            />
         )}
         </AdminProtected>
     );

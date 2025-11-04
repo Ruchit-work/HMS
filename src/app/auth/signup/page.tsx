@@ -6,6 +6,7 @@ import { doc, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
+import OTPVerificationModal from "@/components/form/OTPVerificationModal"
 import PasswordRequirements, { isPasswordValid } from "@/components/PasswordRequirements"
 import Notification from "@/components/Notification"
 import { sendOTP, verifyOTP } from "@/utils/twilioOTP"
@@ -1129,100 +1130,22 @@ function SignUpContent() {
 
       {/* OTP Verification Modal (for patients only) */}
       {showOTPModal && role === "patient" && (
-        <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-fade-in">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-100 rounded-full mb-4">
-                <span className="text-3xl">📱</span>
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Phone Number</h3>
-              <p className="text-sm text-slate-600">
-                We've sent a 6-digit verification code to
-              </p>
-              <p className="text-sm font-semibold text-slate-900 mt-1">
-                {countryCode}{phone}
-              </p>
-            </div>
-
-            {(error || modalError) && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded-r-lg">
-                <p className="text-sm text-red-700 font-medium">{modalError || error}</p>
-              </div>
-            )}
-
-            {!otpSent ? (
-              <div className="text-center py-4">
-                <div className="animate-spin h-8 w-8 border-4 border-teal-600 border-t-transparent rounded-full mx-auto"></div>
-                <p className="text-sm text-slate-600 mt-4">Sending OTP...</p>
-              </div>
-            ) : !otpVerified ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Enter Verification Code
-                  </label>
-                  <input
-                    type="text"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="123456"
-                    maxLength={6}
-                    className="w-full px-4 py-4 border-2 border-slate-300 rounded-lg focus:border-teal-500 focus:outline-none bg-white text-slate-900 text-center text-3xl font-bold tracking-widest"
-                    autoFocus
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleVerifyOTP}
-                  disabled={verifyingOTP || otp.length !== 6}
-                  className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white py-3 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-                >
-                  {verifyingOTP ? "Verifying..." : "Verify & Create Account"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setOtp("")
-                    setOtpSent(false)
-                    setModalError("")
-                    await handleSendOTP(false)
-                  }}
-                  disabled={sendingOTP}
-                  className="w-full text-sm text-teal-600 hover:text-teal-700 font-medium disabled:opacity-50"
-                >
-                  {sendingOTP ? "Resending..." : "Resend OTP"}
-                </button>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-                  <span className="text-3xl text-green-600">✓</span>
-                </div>
-                <p className="text-sm font-medium text-green-700">Verifying and creating account...</p>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!otpVerified && !verifyingOTP) {
-                  setShowOTPModal(false)
-                  setOtp("")
-                  setOtpSent(false)
-                  setOtpVerified(false)
-                  setError("")
-                  setModalError("")
-                }
-              }}
-              disabled={verifyingOTP || otpVerified}
-              className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {otpVerified ? "" : "Cancel"}
-            </button>
-          </div>
-        </div>
+        <OTPVerificationModal
+          isOpen={showOTPModal}
+          onClose={() => {
+            if (!otpVerified && !verifyingOTP) {
+              setShowOTPModal(false)
+              setOtp("")
+              setOtpSent(false)
+              setOtpVerified(false)
+              setError("")
+              setModalError("")
+            }
+          }}
+          phone={phone}
+          countryCode={countryCode}
+          onVerified={async ()=>{ setOtpVerified(true); await createAccountAfterOTP() }}
+        />
       )}
     </>
   )

@@ -20,13 +20,13 @@ import PasswordRequirements, { isPasswordValid } from "@/components/PasswordRequ
 export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"patients" | "doctors" | "appointments">("patients")
+  const [activeTab, setActiveTab] = useState<"patients" | "doctors" | "appointments" | "book-appointment">("patients")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [userName, setUserName] = useState<string>("")
-  // Booking modal state
-  const [showBookModal, setShowBookModal] = useState(false)
+  // Booking state
   const [bookLoading, setBookLoading] = useState(false)
+  const [bookSubOpen, setBookSubOpen] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
   const [bookErrorFade, setBookErrorFade] = useState(false)
   const [doctors, setDoctors] = useState<any[]>([])
@@ -44,6 +44,7 @@ export default function ReceptionistDashboard() {
   const todayStr = useMemo(()=> new Date().toISOString().split('T')[0], [])
   const [symptomCategory, setSymptomCategory] = useState<string>('')
   const [customSymptom, setCustomSymptom] = useState('')
+  const [showPatientSuggestions, setShowPatientSuggestions] = useState(false)
   const suggestedDoctors = useMemo(()=>{
     if (!symptomCategory || symptomCategory === 'custom') return doctors
     const category = SYMPTOM_CATEGORIES.find(c=>c.id===symptomCategory)
@@ -57,6 +58,19 @@ export default function ReceptionistDashboard() {
     const s = searchPatient.toLowerCase()
     return patients.filter((p:any)=>`${p.firstName} ${p.lastName}`.toLowerCase().includes(s) || p.email?.toLowerCase().includes(s) || p.phone?.toLowerCase().includes(s))
   }, [patients, searchPatient])
+
+  // Reset relevant form fields when switching between Existing/New patient modes
+  useEffect(() => {
+    if (activeTab !== 'book-appointment') return
+    if (patientMode === 'existing') {
+      setNewPatient({ firstName:'', lastName:'', email:'', phone:'', gender:'', bloodGroup:'', dateOfBirth:'', address:'' })
+      setNewPatientPassword('')
+      setNewPatientPasswordConfirm('')
+    } else {
+      setSearchPatient('')
+      setSelectedPatientId('')
+    }
+  }, [patientMode, activeTab])
 
   // Protect route - only allow receptionists
   const { user, loading: authLoading } = useAuth()
@@ -145,7 +159,7 @@ export default function ReceptionistDashboard() {
 
   if (!user) return null
 
-  return (
+    return (
     <div className="min-h-screen bg-gray-50">
       {!sidebarOpen && (
         <button
@@ -190,6 +204,22 @@ export default function ReceptionistDashboard() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
               Appointments
             </button>
+            <button onClick={() => { if (!bookSubOpen){ setActiveTab("book-appointment") }; setBookSubOpen(!bookSubOpen) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === "book-appointment" ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" : "text-gray-600 hover:bg-gray-100"}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              Book Appointment
+            </button>
+            {bookSubOpen && (
+              <div className="ml-6 pl-3 mt-1 mb-2 space-y-1 border-l border-gray-200">
+                <button
+                  onClick={() => { setActiveTab("book-appointment"); setPatientMode('existing'); setSidebarOpen(false) }}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${activeTab === 'book-appointment' && patientMode==='existing' ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                >Existing Patient</button>
+                <button
+                  onClick={() => { setActiveTab("book-appointment"); setPatientMode('new'); setSidebarOpen(false) }}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${activeTab === 'book-appointment' && patientMode==='new' ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                >New Patient</button>
+              </div>
+            )}
           </div>
         </nav>
       </div>
@@ -201,10 +231,10 @@ export default function ReceptionistDashboard() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex-1 text-center sm:text-left">
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 capitalize">
-                  {activeTab === "patients" ? "Patient Management" : activeTab === "doctors" ? "Doctor Management" : "Appointment Management"}
+                  {activeTab === "patients" ? "Patient Management" : activeTab === "doctors" ? "Doctor Management" : activeTab === "appointments" ? "Appointment Management" : "Book Appointment"}
                 </h1>
                 <p className="text-sm sm:text-base text-gray-600 mt-1">
-                  {activeTab === "patients" ? "Manage patient records and information" : activeTab === "doctors" ? "Manage doctor profiles and schedules" : "Monitor and manage all appointments"}
+                  {activeTab === "patients" ? "Manage patient records and information" : activeTab === "doctors" ? "Manage doctor profiles and schedules" : activeTab === "appointments" ? "Monitor and manage all appointments" : "Book a new appointment for a patient"}
                 </p>
               </div>
               <div className="flex items-center gap-2 sm:gap-4">
@@ -212,7 +242,6 @@ export default function ReceptionistDashboard() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                   <span className="hidden sm:inline">Refresh</span>
                 </button>
-                <button className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm sm:text-base" onClick={()=>setShowBookModal(true)}>Book Appointment</button>
                 <div className="relative">
                   <button onClick={() => setShowUserDropdown(!showUserDropdown)} className="flex items-center gap-2 sm:gap-3 hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors">
                     <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center"><span className="text-purple-600 font-semibold text-sm">{userName.charAt(0)}</span></div>
@@ -261,42 +290,60 @@ export default function ReceptionistDashboard() {
               <AppoinmentManagement />
             </div>
           )}
-        </main>
-        {/* Book Appointment Modal */}
-        {showBookModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/20" onClick={()=>setShowBookModal(false)} />
-            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[95vh] overflow-auto">
-              <div className="px-6 py-4 border-b flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Book Appointment</h3>
-                <button onClick={()=>setShowBookModal(false)} className="text-gray-600 hover:text-gray-900">✕</button>
-              </div>
-              <div className="p-6 space-y-6">
+          {activeTab === "book-appointment" && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6">Book Appointment — {patientMode==='existing' ? 'Existing Patient' : 'New Patient'}</h2>
+              <div className="space-y-6">
                 {bookError && (
                   <div className={`bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded transition-opacity duration-1000 ease-out ${bookErrorFade ? 'opacity-0' : 'opacity-100'}`}>
                     {bookError}
                   </div>
                 )}
                 <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <label className={`px-3 py-2 rounded border ${patientMode==='existing'?'border-blue-500 bg-blue-50':'border-gray-300'}`}>
-                      <input type="radio" name="pmode" className="mr-2" checked={patientMode==='existing'} onChange={()=>setPatientMode('existing')} />
-                      Existing Patient
-                    </label>
-                    <label className={`px-3 py-2 rounded border ${patientMode==='new'?'border-blue-500 bg-blue-50':'border-gray-300'}`}>
-                      <input type="radio" name="pmode" className="mr-2" checked={patientMode==='new'} onChange={()=>setPatientMode('new')} />
-                      New Patient
-                    </label>
-                  </div>
                   {patientMode === 'existing' ? (
-                    <div>
-                      <input value={searchPatient} onChange={(e)=>setSearchPatient(e.target.value)} placeholder="Search patient by name, email or phone" className="w-full px-3 py-2 border rounded mb-3" />
-                      <select value={selectedPatientId} onChange={(e)=>setSelectedPatientId(e.target.value)} className="w-full px-3 py-2 border rounded">
-                        <option value="">Select patient</option>
-                        {filteredPatients.map((p:any)=>(
-                          <option key={p.id} value={p.id}>{p.firstName} {p.lastName} — {p.email}</option>
-                        ))}
-                      </select>
+                    <div className="relative">
+                      <input
+                        value={searchPatient}
+                        onChange={(e)=>{
+                          const val = e.target.value
+                          setSearchPatient(val)
+                          setShowPatientSuggestions(val.trim().length > 0)
+                          const match = patients.find((p:any)=>`${p.firstName} ${p.lastName} — ${p.email}`.toLowerCase() === val.toLowerCase())
+                          setSelectedPatientId(match ? match.id : '')
+                        }}
+                        placeholder="Search patient by name, email or phone"
+                        className="w-full px-3 py-2 border rounded"
+                      />
+                      {showPatientSuggestions && searchPatient.trim().length > 0 && (
+                        <div
+                          className="absolute z-10 mt-1 w-full bg-white/90 backdrop-blur-sm border border-gray-200 rounded shadow-lg max-h-64 overflow-auto"
+                          onMouseDown={(e)=>e.preventDefault()}
+                          onBlur={()=>setShowPatientSuggestions(false)}
+                        >
+                          {filteredPatients.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">No results found</div>
+                          ) : (
+                            filteredPatients.slice(0, 10).map((p:any)=>{
+                              const label = `${p.firstName} ${p.lastName} — ${p.email}`
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
+                                  onClick={()=>{
+                                    setSelectedPatientId(p.id)
+                                    setSearchPatient(label)
+                                    setShowPatientSuggestions(false)
+                                  }}
+                                >
+                                  <div className="font-medium text-gray-900">{p.firstName} {p.lastName}</div>
+                                  <div className="text-xs text-gray-600">{p.email}{p.phone ? ` • ${p.phone}` : ''}</div>
+                                </button>
+                              )
+                            })
+                          )}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -319,7 +366,10 @@ export default function ReceptionistDashboard() {
                         <option value="">Blood group</option>
                         {bloodGroups.map(bg => (<option key={bg} value={bg}>{bg}</option>))}
                       </select>
-                      <input type="date" className="px-3 py-2 border rounded" value={newPatient.dateOfBirth} onChange={(e)=>setNewPatient(v=>({...v, dateOfBirth:e.target.value}))} />
+                      <div className="flex flex-col space-y-1">
+                        <label className="text-xs font-semibold text-gray-600">Birthday</label>
+                        <input type="date" className="px-3 py-2 border rounded" max={todayStr} value={newPatient.dateOfBirth} onChange={(e)=>setNewPatient(v=>({...v, dateOfBirth:e.target.value}))} />
+                      </div>
                       <input placeholder="Address" className="px-3 py-2 border rounded sm:col-span-2" value={newPatient.address} onChange={(e)=>setNewPatient(v=>({...v, address:e.target.value}))} />
                     </div>
                   )}
@@ -343,7 +393,7 @@ export default function ReceptionistDashboard() {
                           placeholder="Describe patient symptom (e.g., severe back pain)"
                           className="w-full px-3 py-2 border rounded"
                         />
-                        <p className="text-xs text-gray-500 mt-1">Doctor list isn’t auto-filtered for custom text. Please pick a doctor.</p>
+                        <p className="text-xs text-gray-500 mt-1">Doctor list isn't auto-filtered for custom text. Please pick a doctor.</p>
                       </div>
                     )}
                   </div>
@@ -371,8 +421,7 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
               </div>
-              <div className="px-6 py-4 border-t flex justify-end gap-2">
-                <button className="px-4 py-2 rounded bg-gray-100" onClick={()=>setShowBookModal(false)}>Cancel</button>
+              <div className="mt-6 flex justify-end gap-2">
                 <button disabled={bookLoading} onClick={async()=>{
                   try{
                     setBookLoading(true); setBookError(null)
@@ -427,15 +476,26 @@ export default function ReceptionistDashboard() {
                     }
                     const res2 = await fetch('/api/receptionist/create-appointment', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ appointmentData }) })
                     if (!res2.ok){ const d = await res2.json().catch(()=>({})); throw new Error(d?.error || 'Failed to create appointment') }
-                    setShowBookModal(false)
                     setNotification({ type:'success', message:'Appointment booked successfully' })
+                    // Reset form
+                    setPatientMode('existing')
+                    setSearchPatient('')
+                    setSelectedPatientId('')
+                    setNewPatient({ firstName:'', lastName:'', email:'', phone:'', gender:'', bloodGroup:'', dateOfBirth:'', address:'' })
+                    setNewPatientPassword('')
+                    setNewPatientPasswordConfirm('')
+                    setSelectedDoctorId('')
+                    setAppointmentDate('')
+                    setAppointmentTime('')
+                    setSymptomCategory('')
+                    setCustomSymptom('')
                   }catch(e:any){ setBookError(e?.message || 'Failed') } finally { setBookLoading(false) }
-                }} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{bookLoading?'Booking...':'Book'}</button>
-              </div>
+                }} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{bookLoading?'Booking...':'Book Appointment'}</button>
+                </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </main>
+        </div>
 
       {notification && (
         <Notification 
@@ -444,6 +504,6 @@ export default function ReceptionistDashboard() {
           onClose={() => setNotification(null)}
         />
       )}
-    </div>
-  )
+        </div>
+    )
 }
