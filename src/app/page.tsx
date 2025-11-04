@@ -13,6 +13,7 @@ export default function Home() {
   }
 
   return (
+    <>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
         {/* Hero Section */}
@@ -25,6 +26,68 @@ export default function Home() {
             Manage appointments, patient records, and doctor schedules efficiently.
           </p>
         </div>
+               {/* Credentials Table Section */}
+               <div className="max-w-4xl mx-auto mt-8 sm:mt-10 mb-5">
+           <h2 className="text-xl sm:text-2xl font-bold text-center text-gray-900 mb-4 px-4">
+             Test Credentials
+           </h2>
+           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+             <div className="overflow-x-auto">
+               <table className="w-full border-collapse text-sm">
+                 <thead>
+                   <tr className="bg-gray-50 border-b border-gray-200">
+                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                       Email ID
+                     </th>
+                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                       Password
+                     </th>
+                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                       Role
+                     </th>
+                   </tr>
+                 </thead>
+                 <tbody className="bg-white divide-y divide-gray-200">
+                   {/* Add your static data rows here */}
+              
+                   <tr className="hover:bg-gray-50">
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                       Patient1@gmail.com
+                     </td>
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                     Patient1@gmail.com
+                     </td>
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                       Patient
+                     </td>
+                   </tr>
+                   <tr className="hover:bg-gray-50">
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                     Doctor1@gmail.com 
+                     </td>
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                     Doctor1@gmail.com
+                     </td>
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                       Doctor
+                     </td>
+                   </tr>
+                   <tr className="hover:bg-gray-50">
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                     Admin1@gmail.com 
+                     </td>
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                     Admin1@gmail.com
+                     </td>
+                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                       Admin
+                     </td>
+                   </tr>
+                 </tbody>
+               </table>
+             </div>
+           </div>
+         </div>
 
         {/* Main Action Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3   gap-6 sm:gap-8 max-w-6xl mx-auto mb-8 sm:mb-12 lg:mb-16">
@@ -148,5 +211,7 @@ export default function Home() {
         </div>
       </div>
     </div>
+    </>
   )
+  
 }

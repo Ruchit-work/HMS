@@ -7,6 +7,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import AdminProtected from '@/components/AdminProtected'
 import ViewModal from '@/components/ui/ViewModal'
 import DeleteModal from '@/components/ui/DeleteModal'
+import { specializationCategories, qualifications } from '@/constants/signup'
 
 interface Doctor {
     id: string
@@ -22,7 +23,7 @@ interface Doctor {
     createdAt: string
     updatedAt: string
 }
-export default function DoctorManagement() {
+export default function DoctorManagement({ canDelete = true, canAdd = true }: { canDelete?: boolean; canAdd?: boolean } = {}) {
     const [doctors, setDoctors] = useState<Doctor[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -59,160 +60,19 @@ export default function DoctorManagement() {
 
     // Protect component - only allow admins (moved below hooks to keep hook order stable)
 
-    // Medical specializations organized by category (from signup page)
-    const specializationCategories = [
-        {
-            id: "general",
-            name: "General & Primary Care",
-            icon: "🩺",
-            specializations: ["General Physician", "Family Medicine Specialist"]
-        },
-        {
-            id: "heart",
-            name: "Heart & Circulatory System",
-            icon: "❤️",
-            specializations: ["Cardiologist", "Cardiothoracic Surgeon", "Vascular Surgeon"]
-        },
-        {
-            id: "brain",
-            name: "Brain, Nerves & Mental Health",
-            icon: "🧠",
-            specializations: ["Neurologist", "Neurosurgeon", "Psychiatrist", "Psychologist"]
-        },
-        {
-            id: "lungs",
-            name: "Lungs & Respiratory System",
-            icon: "🫁",
-            specializations: ["Pulmonologist"]
-        },
-        {
-            id: "digestive",
-            name: "Digestive System",
-            icon: "🍽️",
-            specializations: ["Gastroenterologist", "Hepatologist"]
-        },
-        {
-            id: "hormones",
-            name: "Hormones & Metabolism",
-            icon: "💉",
-            specializations: ["Endocrinologist"]
-        },
-        {
-            id: "blood_cancer",
-            name: "Blood & Cancer",
-            icon: "🩸",
-            specializations: ["Hematologist", "Oncologist", "Radiation Oncologist"]
-        },
-        {
-            id: "bones",
-            name: "Bones, Muscles & Movement",
-            icon: "🦴",
-            specializations: ["Orthopedic Surgeon", "Rheumatologist", "Physiotherapist"]
-        },
-        {
-            id: "infections",
-            name: "Infections & Immunity",
-            icon: "🧬",
-            specializations: ["Infectious Disease Specialist", "Immunologist / Allergist"]
-        },
-        {
-            id: "eye_ear",
-            name: "Eye, Ear, Nose & Throat",
-            icon: "👁️",
-            specializations: ["Ophthalmologist", "ENT Specialist (Otorhinolaryngologist)"]
-        },
-        {
-            id: "skin",
-            name: "Skin, Hair & Nails",
-            icon: "🧴",
-            specializations: ["Dermatologist"]
-        },
-        {
-            id: "women_children",
-            name: "Women & Children",
-            icon: "🤰",
-            specializations: ["Gynecologist / Obstetrician (OB/GYN)", "Pediatrician", "Neonatologist"]
-        },
-        {
-            id: "urinary",
-            name: "Urinary & Reproductive System",
-            icon: "🧍‍♂️",
-            specializations: ["Urologist", "Andrologist"]
-        },
-        {
-            id: "dental",
-            name: "Dental & Oral",
-            icon: "🦷",
-            specializations: ["Dentist / Oral Surgeon"]
-        },
-        {
-            id: "advanced",
-            name: "Other Advanced Specialties",
-            icon: "🧑‍⚕️",
-            specializations: ["Nephrologist", "Anesthesiologist", "Pathologist", "Radiologist", "Emergency Medicine Specialist", "Geriatrician"]
-        },
-        {
-            id: "other",
-            name: "Other / Custom",
-            icon: "✏️",
-            specializations: ["Other"]
-        }
-    ]
-
-    // List of medical qualifications with full names (from signup page)
-    const qualifications = [
-        // 🩺 Undergraduate (Basic Medical Degrees)
-        "MBBS – Bachelor of Medicine, Bachelor of Surgery",
-        "BDS – Bachelor of Dental Surgery",
-        "BHMS – Bachelor of Homeopathic Medicine & Surgery",
-        "BAMS – Bachelor of Ayurvedic Medicine & Surgery",
-        "BUMS – Bachelor of Unani Medicine & Surgery",
-        "BSMS – Bachelor of Siddha Medicine & Surgery",
-        "BNYS – Bachelor of Naturopathy and Yogic Sciences",
-        "BVSc & AH – Bachelor of Veterinary Science and Animal Husbandry",
-
-        // 🎓 Postgraduate (Medical Specializations)
-        "MD – Doctor of Medicine",
-        "MS – Master of Surgery",
-        "DNB – Diplomate of National Board",
-        "PG Diploma – Post Graduate Diploma in Medicine",
-        "MCh – Magister Chirurgiae (Master of Surgery)",
-        "DM – Doctorate of Medicine",
-
-        // 🧠 Super-Specialization & Fellowships
-        "FNB – Fellowship of National Board",
-        "FRCS – Fellowship of the Royal College of Surgeons",
-        "MRCP – Membership of the Royal College of Physicians",
-        "MRCS – Membership of the Royal College of Surgeons",
-        "FRCOG – Fellowship of the Royal College of Obstetricians & Gynecologists",
-        "FRCPath – Fellowship of the Royal College of Pathologists",
-
-        // 🧬 Allied & Paramedical
-        "BPT – Bachelor of Physiotherapy",
-        "MPT – Master of Physiotherapy",
-        "BPharm – Bachelor of Pharmacy",
-        "MPharm – Master of Pharmacy",
-        "BSc Nursing",
-        "MSc Nursing",
-        "BMLT – Bachelor of Medical Laboratory Technology",
-        "MMLT – Master of Medical Laboratory Technology",
-        "BSc Optometry",
-        "BSc Radiology / Imaging Technology",
-
-        // Other
-        "Other"
-    ]
+    // specializationCategories and qualifications are imported from constants
    
     const handleView = (doctor: Doctor) => {
         setSelectedDoctor(doctor)
         setShowViewModal(true)
     }
     const handleDelete = (doctor: Doctor) => {
+        if (!canDelete) return
         setDeleteDoctor(doctor)
         setDeleteModal(true)
     }
     const handleDeleteConfirm = async () => {
-        if (!deleteDoctor) return
+        if (!canDelete || !deleteDoctor) return
         try {
             setLoading(true)
             setError(null)
@@ -495,13 +355,15 @@ export default function DoctorManagement() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                             <h3 className="text-lg font-semibold text-gray-900">Doctor Management</h3>
-                            <button className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                            onClick={addDoctor}>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                                <span className="hidden sm:inline">Add Doctor</span>
-                            </button>
+                            {canAdd && (
+                                <button className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                                onClick={addDoctor}>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    <span className="hidden sm:inline">Add Doctor</span>
+                                </button>
+                            )}
                         </div>
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                             <div className="relative flex-1 sm:flex-none">
@@ -550,6 +412,7 @@ export default function DoctorManagement() {
                                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Qualification</th>
                                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Experience</th>
                                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
                                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -657,16 +520,18 @@ export default function DoctorManagement() {
                                                     <span className="hidden sm:inline">View</span>
                                     </button>
                                                 
-                                                {/* Delete Button */}
-                                                <button 
-                                                    className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 hover:text-red-800 transition-colors"
-                                                    onClick={() => handleDelete(doctor)}
-                                                >
-                                                    <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                                    <span className="hidden sm:inline">Delete</span>
-                                    </button>
+                                                {/* Delete Button (hidden/disabled when canDelete is false) */}
+                                                {canDelete ? (
+                                                    <button 
+                                                        className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 hover:text-red-800 transition-colors"
+                                                        onClick={() => handleDelete(doctor)}
+                                                    >
+                                                        <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                        <span className="hidden sm:inline">Delete</span>
+                                                    </button>
+                                                ) : null}
                                             </div>
                                 </td>
                             </tr>
