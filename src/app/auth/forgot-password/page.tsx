@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useSearchParams } from "next/navigation"
 import { auth } from "@/firebase/config"
 import { sendPasswordResetEmail } from "firebase/auth"
  
@@ -11,8 +10,6 @@ export default function ForgotPassword() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
-  const searchParams = useSearchParams()
-  const role = searchParams.get("role")
  
 
  const handleSubmit = async (e:any) => {
