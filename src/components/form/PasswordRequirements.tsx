@@ -77,3 +77,5 @@ export const isPasswordValid = (pass: string): boolean => {
   return Object.values(requirements).every(Boolean)
 }
 
+
+

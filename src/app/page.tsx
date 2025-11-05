@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePublicRoute } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
 
 export default function Home() {
   // Redirect authenticated users to their dashboard

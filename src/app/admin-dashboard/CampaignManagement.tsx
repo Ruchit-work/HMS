@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import AdminProtected from "@/components/AdminProtected"
 import { Campaign, CampaignAudience, CampaignStatus, createCampaign, deleteCampaign, slugify, updateCampaign } from "@/utils/campaigns"
 import { collection, getDocs, orderBy, query } from "firebase/firestore"

@@ -5,9 +5,9 @@ import Link from "next/link"
 import { db } from "@/firebase/config"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import PageHeader from "@/components/ui/PageHeader"
-import Footer from "@/components/Footer"
+import Footer from "@/components/ui/Footer"
 
 interface Doctor {
   id: string

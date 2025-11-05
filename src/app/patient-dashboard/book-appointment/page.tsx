@@ -4,13 +4,13 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, addDoc, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/LoadingSpinner"
-import Notification from "@/components/Notification"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import Notification from "@/components/ui/Notification"
 import BookAppointmentForm from "@/components/patient/BookAppointmentForm"
 import AppointmentSuccessModal from "@/components/patient/AppointmentSuccessModal"
 import PageHeader from "@/components/ui/PageHeader"
 import { UserData, Doctor, NotificationData } from "@/types/patient"
-import Footer from "@/components/Footer"
+import Footer from "@/components/ui/Footer"
 
 export default function BookAppointmentPage() {
   const [userData, setUserData] = useState<UserData | null>(null)
