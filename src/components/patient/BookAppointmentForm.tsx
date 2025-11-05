@@ -39,7 +39,7 @@ export default function BookAppointmentForm({
     problem: "",
     medicalHistory: ""
   })
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash">("card")
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash" | null>(null)
   const [paymentType, setPaymentType] = useState<"full" | "partial">("full")
   const [paymentData, setPaymentData] = useState<PaymentData>({
     cardNumber: "",
@@ -68,6 +68,9 @@ export default function BookAppointmentForm({
 
   // Animation direction state
   const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right')
+  
+  // Confirmation modal state
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
   const totalSteps = 5
 
@@ -192,9 +195,21 @@ export default function BookAppointmentForm({
   }, [selectedDoctor, appointmentData.date, selectedDoctorData])
 
   const nextStep = () => {
-    if (currentStep < totalSteps) {
+    if (currentStep < totalSteps && canProceedToNextStep()) {
       setSlideDirection('right') // Slide from right when going forward
-      setCurrentStep(currentStep + 1)
+      const newStep = currentStep + 1
+      setCurrentStep(newStep)
+      // Reset payment method when entering step 5 to require explicit selection
+      if (newStep === 5) {
+        setPaymentMethod(null)
+        setPaymentData({
+          cardNumber: "",
+          cardName: "",
+          expiryDate: "",
+          cvv: "",
+          upiId: ""
+        })
+      }
     }
   }
 
@@ -302,6 +317,20 @@ export default function BookAppointmentForm({
     }
   }, [symptomAnswers])
 
+  // Reset payment method to null whenever step 5 becomes active
+  useEffect(() => {
+    if (currentStep === 5) {
+      setPaymentMethod(null)
+      setPaymentData({
+        cardNumber: "",
+        cardName: "",
+        expiryDate: "",
+        cvv: "",
+        upiId: ""
+      })
+    }
+  }, [currentStep])
+
   // Filter doctors based on symptom category
   const filteredDoctors = selectedSymptomCategory 
     ? doctors.filter(doc => {
@@ -318,7 +347,19 @@ export default function BookAppointmentForm({
       case 2: return (appointmentData.problem?.trim().length ?? 0) > 0 // Require free-text only
       case 3: return selectedDoctor !== ""
       case 4: return appointmentData.date !== "" && appointmentData.time !== "" && !hasDuplicateAppointment
-      case 5: return true // Payment step
+      case 5: 
+        // Payment step - require payment method selection
+        if (!paymentMethod) return false
+        // If card payment, require all card fields
+        if (paymentMethod === "card") {
+          return !!(paymentData.cardNumber && paymentData.cardName && paymentData.expiryDate && paymentData.cvv)
+        }
+        // If UPI payment, require UPI ID
+        if (paymentMethod === "upi") {
+          return !!paymentData.upiId
+        }
+        // Cash payment is always valid (no additional fields needed)
+        return true
       default: return false
     }
   }
@@ -331,10 +372,32 @@ export default function BookAppointmentForm({
       return
     }
     
+    // Validate payment method is selected
+    if (!paymentMethod || paymentMethod === null) {
+      return
+    }
+    
+    // For card/UPI payments, validate payment data is filled
+    if (paymentMethod === "card" && (!paymentData.cardNumber || !paymentData.cardName || !paymentData.expiryDate || !paymentData.cvv)) {
+      return
+    }
+    if (paymentMethod === "upi" && !paymentData.upiId) {
+      return
+    }
+    
+    // Show confirmation modal instead of directly submitting
+    setShowConfirmModal(true)
+  }
+
+  const handleConfirmSubmit = async () => {
+    if (!paymentMethod) return
+    
+    setShowConfirmModal(false)
+    
     await onSubmit({
       selectedDoctor,
       appointmentData,
-      paymentMethod,
+      paymentMethod: paymentMethod as "card" | "upi" | "cash",
       paymentType,
       paymentData
     })
@@ -355,6 +418,7 @@ export default function BookAppointmentForm({
       cvv: "",
       upiId: ""
     })
+    setPaymentMethod(null)
   }
 
   const handleClear = () => {
@@ -434,9 +498,16 @@ export default function BookAppointmentForm({
       {/* Form Container */}
       <div className="p-6 overflow-hidden">
         <form onSubmit={handleSubmit} onKeyDown={(e) => {
-          // Prevent Enter key from submitting form unless on final step
-          if (e.key === 'Enter' && currentStep !== totalSteps) {
+          // Prevent Enter key from submitting form automatically
+          // Only allow submission via explicit button click
+          if (e.key === 'Enter') {
             e.preventDefault()
+            // Only proceed if Enter is pressed on the submit button itself
+            const target = e.target as HTMLButtonElement | HTMLInputElement
+            if (currentStep === totalSteps && target.type === 'submit') {
+              // Allow submission only if explicitly clicking submit button
+              return
+            }
           }
         }}>
           {/* Step 1: Patient Information */}
@@ -1090,6 +1161,11 @@ export default function BookAppointmentForm({
                           type="text"
                           value={paymentData.cardNumber}
                           onChange={(e) => setPaymentData({...paymentData, cardNumber: e.target.value})}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                            }
+                          }}
                           placeholder="1234 5678 9012 3456"
                           maxLength={19}
                           className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -1102,6 +1178,11 @@ export default function BookAppointmentForm({
                           type="text"
                           value={paymentData.cardName}
                           onChange={(e) => setPaymentData({...paymentData, cardName: e.target.value})}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                            }
+                          }}
                           placeholder="JOHN DOE"
                           className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                           required
@@ -1114,6 +1195,11 @@ export default function BookAppointmentForm({
                             type="text"
                             value={paymentData.expiryDate}
                             onChange={(e) => setPaymentData({...paymentData, expiryDate: e.target.value})}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                              }
+                            }}
                             placeholder="12/25"
                             maxLength={5}
                             className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -1126,6 +1212,11 @@ export default function BookAppointmentForm({
                             type="text"
                             value={paymentData.cvv}
                             onChange={(e) => setPaymentData({...paymentData, cvv: e.target.value})}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                              }
+                            }}
                             placeholder="123"
                             maxLength={3}
                             className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -1145,6 +1236,11 @@ export default function BookAppointmentForm({
                           type="text"
                           value={paymentData.upiId}
                           onChange={(e) => setPaymentData({...paymentData, upiId: e.target.value})}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                            }
+                          }}
                           placeholder="yourname@upi"
                           className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                           required
@@ -1196,7 +1292,7 @@ export default function BookAppointmentForm({
             ) : (
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !canProceedToNextStep()}
                 className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-3 sm:py-3.5 px-4 sm:px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
               >
                 {submitting 
@@ -1209,11 +1305,13 @@ export default function BookAppointmentForm({
                       Processing...
                     </span>
                   )
-                  : paymentMethod === "cash" 
-                    ? `Confirm Appointment` 
-                    : paymentType === "partial"
-                      ? `Pay ₹${AMOUNT_TO_PAY} & Book`
-                      : `Book & Pay ₹${AMOUNT_TO_PAY}`}
+                  : !paymentMethod
+                    ? "Select Payment Method"
+                    : paymentMethod === "cash" 
+                      ? `Confirm Appointment` 
+                      : paymentType === "partial"
+                        ? `Pay ₹${AMOUNT_TO_PAY} & Book`
+                        : `Book & Pay ₹${AMOUNT_TO_PAY}`}
               </button>
             )}
 
@@ -1227,6 +1325,179 @@ export default function BookAppointmentForm({
           </div>
         </form>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden transform transition-all animate-fade-in">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white text-2xl">
+                  ✅
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Confirm Appointment</h3>
+                  <p className="text-sm text-green-100">Please review your details before confirming</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                disabled={submitting}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              <div className="space-y-4">
+                {/* Doctor Information */}
+                <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">👨‍⚕️</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Doctor</h4>
+                      <p className="text-lg font-bold text-blue-700">
+                        {selectedDoctorData ? `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}` : 'N/A'}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {selectedDoctorData?.specialization || 'N/A'}
+                      </p>
+                      {selectedDoctorData?.consultationFee && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          Consultation Fee: ₹{selectedDoctorData.consultationFee}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Appointment Date & Time */}
+                <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">📅</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Date & Time</h4>
+                      <p className="text-lg font-bold text-purple-700">
+                        {appointmentData.date ? new Date(appointmentData.date).toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        }) : 'N/A'}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Time: {appointmentData.time || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Symptoms/Chief Complaint */}
+                <div className="bg-orange-50 rounded-xl p-4 border-2 border-orange-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">🩺</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Chief Complaint</h4>
+                      <p className="text-gray-700 whitespace-pre-wrap">
+                        {appointmentData.problem || 'N/A'}
+                      </p>
+                      {appointmentData.additionalConcern && (
+                        <div className="mt-2 pt-2 border-t border-orange-200">
+                          <p className="text-sm font-medium text-gray-600 mb-1">Additional Concerns:</p>
+                          <p className="text-sm text-gray-700">{appointmentData.additionalConcern}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Medical History */}
+                {appointmentData.medicalHistory && (
+                  <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
+                    <div className="flex items-start gap-3">
+                      <div className="text-3xl">📋</div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 mb-1">Medical History</h4>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {appointmentData.medicalHistory}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Information */}
+                <div className="bg-green-50 rounded-xl p-4 border-2 border-green-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">💳</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Payment Details</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">Payment Method:</span>
+                          <span className="font-semibold text-green-700 capitalize">
+                            {paymentMethod === 'card' ? '💳 Card' : paymentMethod === 'upi' ? '📱 UPI' : '💵 Cash'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">Payment Type:</span>
+                          <span className="font-semibold text-green-700 capitalize">
+                            {paymentType === 'full' ? 'Full Payment' : 'Partial Payment (10%)'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-green-200">
+                          <span className="text-lg font-semibold text-gray-800">Amount to Pay:</span>
+                          <span className="text-2xl font-bold text-green-700">₹{AMOUNT_TO_PAY}</span>
+                        </div>
+                        {paymentType === 'partial' && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Remaining ₹{REMAINING_AMOUNT} to be paid at hospital
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={submitting}
+                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSubmit}
+                disabled={submitting}
+                className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    ✅ Confirm & Book Appointment
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

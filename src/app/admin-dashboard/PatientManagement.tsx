@@ -11,6 +11,7 @@ import AdminProtected from '@/components/AdminProtected'
 import ViewModal from '@/components/ui/ViewModal'
 import DeleteModal from '@/components/ui/DeleteModal'
 import OTPVerificationModal from '@/components/form/OTPVerificationModal'
+import PasswordRequirements, { isPasswordValid } from '@/components/PasswordRequirements'
 // import toast from 'react-hot-toast'
 
 interface Patient {
@@ -29,12 +30,12 @@ interface Patient {
     updatedAt: string
 }
 
-export default function PatientManagement({ canDelete = true, canAdd = true }: { canDelete?: boolean; canAdd?: boolean } = {}) {
+export default function PatientManagement({ canDelete = true, canAdd = true, disableAdminGuard = true }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean } = {}) {
     const [patients, setPatients] = useState<Patient[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
-    // Do not enforce role here; parent page controls access
+ 
     const { user, loading: authLoading } = useAuth()
     const [filteredPatients, setFilteredPatients] = useState<Patient[]>([])
     const [sortField, setSortField] = useState<string>('')
@@ -58,9 +59,10 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
     })
     const [otpModalOpen, setOtpModalOpen] = useState(false)
     const todayStr = new Date().toISOString().split('T')[0]
+    const [newPatientPassword, setNewPatientPassword] = useState('')
+    const [newPatientPasswordConfirm, setNewPatientPasswordConfirm] = useState('')
 
-    // Protect component - only allow admins (moved below hooks to keep hook order stable)
-
+   
 
 
     const handleView = (patient: Patient) => {
@@ -78,6 +80,26 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
         try {
             setLoading(true)
             setError(null) // Clear any previous errors
+            
+            // First, delete from Firebase Auth
+            try {
+                const authDeleteResponse = await fetch('/api/admin/delete-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uid: deletePatient.id, userType: 'Patient' })
+                })
+                
+                if (!authDeleteResponse.ok) {
+                    const authError = await authDeleteResponse.json().catch(() => ({}))
+                    console.warn('Failed to delete from auth:', authError)
+                    // Continue with Firestore deletion even if auth deletion fails
+                }
+            } catch (authError) {
+                console.error('Error deleting from auth:', authError)
+                // Continue with Firestore deletion even if auth deletion fails
+            }
+            
+            // Then delete from Firestore
             const patientRef = doc(db, 'patients', deletePatient.id)
             await deleteDoc(patientRef)
             
@@ -90,7 +112,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
             setDeletePatient(null)
             
             // Show success message
-            setSuccessMessage('Patient deleted successfully!')
+            setSuccessMessage('Patient deleted successfully from database and authentication!')
             
             // Auto-hide success message after 3 seconds
             setTimeout(() => {
@@ -217,9 +239,17 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
         return null
     }
 
-    return (
-        <AdminProtected>
-            <div className="relative">
+    // When disableAdminGuard=true, verify user is admin or receptionist
+    if (disableAdminGuard && user.role !== "admin" && user.role !== "receptionist") {
+        return (
+            <div className="text-center py-12">
+                <p className="text-red-600">Access denied. Admin or receptionist privileges required.</p>
+            </div>
+        )
+    }
+
+    const content = (
+        <div className="relative">
             {/* Success Notification */}
             {successMessage && (
                 <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 transform transition-all duration-300 ease-in-out animate-pulse"
@@ -580,7 +610,6 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                 loading={loading}
             />
         </div>
-        </div>
         {/* Add Patient Modal */}
         {canAdd && showAddModal && (
             <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
@@ -605,6 +634,17 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                                     setLoading(false)
                                     return
                                 }
+                                // Password validation (required)
+                                if (!isPasswordValid(newPatientPassword)) {
+                                    setError('Password does not meet requirements')
+                                    setLoading(false)
+                                    return
+                                }
+                                if (newPatientPassword !== newPatientPasswordConfirm) {
+                                    setError('Passwords do not match')
+                                    setLoading(false)
+                                    return
+                                }
                                 // If phone provided, open OTP modal first
                                 if ((newPatient.phone || '').trim()) {
                                     setOtpModalOpen(true)
@@ -615,12 +655,13 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                                     ...newPatient,
                                     createdAt: new Date().toISOString(),
                                     updatedAt: new Date().toISOString(),
-                                    createdBy: 'receptionist'
+                                    createdBy: 'admin',
+                                    status: newPatient.status || 'active'
                                 } as any
-                                const res = await fetch('/api/admin/create-patient', {
+                                const res = await fetch('/api/receptionist/create-patient', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ patientData: payload })
+                                    body: JSON.stringify({ patientData: payload, password: newPatientPassword })
                                 })
                                 if (!res.ok) {
                                     const data = await res.json().catch(() => ({}))
@@ -670,6 +711,17 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                                     <div className="flex flex-col space-y-1">
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Password *</label>
+                                        <input type="password" className="w-full px-3 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none" value={newPatientPassword} onChange={(e) => setNewPatientPassword(e.target.value)} />
+                                        <div className="pt-1"><PasswordRequirements password={newPatientPassword} /></div>
+                                    </div>
+                                    <div className="flex flex-col space-y-1">
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Confirm Password *</label>
+                                        <input type="password" className="w-full px-3 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none" value={newPatientPasswordConfirm} onChange={(e) => setNewPatientPasswordConfirm(e.target.value)} />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                                    <div className="flex flex-col space-y-1">
                                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Blood Group</label>
                                         <select className="w-full px-3 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none" value={newPatient.bloodGroup || ''} onChange={(e) => setNewPatient(p => ({ ...p, bloodGroup: e.target.value }))}>
                                             <option value="">Select</option>
@@ -714,16 +766,19 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                 onVerified={async () => {
                     try {
                         setLoading(true)
+                        if (!isPasswordValid(newPatientPassword)) { setError('Password does not meet requirements'); setLoading(false); return }
+                        if (newPatientPassword !== newPatientPasswordConfirm) { setError('Passwords do not match'); setLoading(false); return }
                         const payload = {
                             ...newPatient,
                             createdAt: new Date().toISOString(),
                             updatedAt: new Date().toISOString(),
-                            createdBy: 'receptionist'
+                            createdBy: 'admin',
+                            status: newPatient.status || 'active'
                         } as any
-                        const res = await fetch('/api/admin/create-patient', {
+                        const res = await fetch('/api/receptionist/create-patient', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ patientData: payload })
+                            body: JSON.stringify({ patientData: payload, password: newPatientPassword })
                         })
                         if (!res.ok) {
                             const data = await res.json().catch(() => ({}))
@@ -742,6 +797,16 @@ export default function PatientManagement({ canDelete = true, canAdd = true }: {
                 }}
             />
         )}
+        </div>
+    );
+
+    if (disableAdminGuard) {
+        return content
+    }
+
+    return (
+        <AdminProtected>
+            {content}
         </AdminProtected>
     );
 }

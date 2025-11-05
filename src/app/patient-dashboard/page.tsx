@@ -182,6 +182,21 @@ export default function PatientDashboard() {
           </Link>
           
           <Link 
+            href="/patient-dashboard/tutorials" 
+            className="bg-white border-2 border-indigo-200 rounded-xl p-4 hover:border-indigo-400 hover:shadow-lg transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                <span className="text-2xl">📚</span>
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">Tutorials</p>
+                <p className="text-xs text-slate-500">Patient portal guide</p>
+              </div>
+            </div>
+          </Link>
+          
+          <Link 
             href="/patient-dashboard/appointments" 
             className="bg-white border-2 border-blue-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-lg transition-all group"
           >

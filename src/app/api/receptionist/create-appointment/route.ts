@@ -46,22 +46,61 @@ export async function POST(request: Request) {
     }
 
     const nowIso = new Date().toISOString()
-    const docData = {
+    
+    // Helper function to ensure no undefined values
+    const safeValue = (val: any, defaultValue: any = "") => {
+      return val !== undefined && val !== null ? val : defaultValue
+    }
+    
+    const docData: any = {
       patientId: String(appointmentData.patientId),
       patientName: String(appointmentData.patientName),
-      patientEmail: appointmentData.patientEmail || "",
-      patientPhone: appointmentData.patientPhone || "",
+      patientEmail: safeValue(appointmentData.patientEmail, ""),
+      patientPhone: safeValue(appointmentData.patientPhone, ""),
       doctorId: String(appointmentData.doctorId),
       doctorName: String(appointmentData.doctorName),
-      doctorSpecialization: appointmentData.doctorSpecialization || "",
+      doctorSpecialization: safeValue(appointmentData.doctorSpecialization, ""),
       appointmentDate: String(appointmentData.appointmentDate),
       appointmentTime: String(appointmentData.appointmentTime),
-      status: appointmentData.status || "confirmed",
+      status: safeValue(appointmentData.status, "confirmed"),
       paymentAmount: typeof appointmentData.paymentAmount === 'number' ? appointmentData.paymentAmount : 0,
-      createdAt: appointmentData.createdAt || nowIso,
+      createdAt: safeValue(appointmentData.createdAt, nowIso),
       updatedAt: nowIso,
-      createdBy: appointmentData.createdBy || "receptionist"
+      createdBy: safeValue(appointmentData.createdBy, "receptionist")
     }
+    
+    // Include optional patient health fields only if they exist and are not undefined
+    if (appointmentData.patientGender !== undefined) docData.patientGender = safeValue(appointmentData.patientGender, "")
+    if (appointmentData.patientBloodGroup !== undefined) docData.patientBloodGroup = safeValue(appointmentData.patientBloodGroup, "")
+    if (appointmentData.patientDateOfBirth !== undefined) docData.patientDateOfBirth = safeValue(appointmentData.patientDateOfBirth, "")
+    if (appointmentData.patientDrinkingHabits !== undefined) docData.patientDrinkingHabits = safeValue(appointmentData.patientDrinkingHabits, "")
+    if (appointmentData.patientSmokingHabits !== undefined) docData.patientSmokingHabits = safeValue(appointmentData.patientSmokingHabits, "")
+    if (appointmentData.patientVegetarian !== undefined) docData.patientVegetarian = appointmentData.patientVegetarian ?? false
+    if (appointmentData.patientOccupation !== undefined) docData.patientOccupation = safeValue(appointmentData.patientOccupation, "")
+    if (appointmentData.patientFamilyHistory !== undefined) docData.patientFamilyHistory = safeValue(appointmentData.patientFamilyHistory, "")
+    if (appointmentData.patientPregnancyStatus !== undefined) docData.patientPregnancyStatus = safeValue(appointmentData.patientPregnancyStatus, "")
+    if (appointmentData.patientHeightCm !== undefined) docData.patientHeightCm = appointmentData.patientHeightCm ?? null
+    if (appointmentData.patientWeightKg !== undefined) docData.patientWeightKg = appointmentData.patientWeightKg ?? null
+    if (appointmentData.patientAllergies !== undefined) docData.patientAllergies = safeValue(appointmentData.patientAllergies, "")
+    if (appointmentData.patientCurrentMedications !== undefined) docData.patientCurrentMedications = safeValue(appointmentData.patientCurrentMedications, "")
+    
+    // Include appointment-specific fields
+    if (appointmentData.chiefComplaint !== undefined) docData.chiefComplaint = safeValue(appointmentData.chiefComplaint, "")
+    if (appointmentData.medicalHistory !== undefined) docData.medicalHistory = safeValue(appointmentData.medicalHistory, "")
+    if (appointmentData.patientAdditionalConcern !== undefined) docData.patientAdditionalConcern = safeValue(appointmentData.patientAdditionalConcern, "")
+    if (appointmentData.symptomOnset !== undefined) docData.symptomOnset = safeValue(appointmentData.symptomOnset, "")
+    if (appointmentData.symptomDuration !== undefined) docData.symptomDuration = safeValue(appointmentData.symptomDuration, "")
+    if (appointmentData.symptomSeverity !== undefined) docData.symptomSeverity = appointmentData.symptomSeverity ?? null
+    if (appointmentData.symptomProgression !== undefined) docData.symptomProgression = safeValue(appointmentData.symptomProgression, "")
+    if (appointmentData.symptomTriggers !== undefined) docData.symptomTriggers = safeValue(appointmentData.symptomTriggers, "")
+    if (appointmentData.associatedSymptoms !== undefined) docData.associatedSymptoms = safeValue(appointmentData.associatedSymptoms, "")
+    
+    // Remove any undefined values that might have slipped through
+    Object.keys(docData).forEach(key => {
+      if (docData[key] === undefined) {
+        delete docData[key]
+      }
+    })
 
     const ref = await admin.firestore().collection("appointments").add(docData)
     return Response.json({ success: true, id: ref.id })

@@ -23,12 +23,14 @@ interface Doctor {
     createdAt: string
     updatedAt: string
 }
-export default function DoctorManagement({ canDelete = true, canAdd = true }: { canDelete?: boolean; canAdd?: boolean } = {}) {
+export default function DoctorManagement({ canDelete = true, canAdd = true, disableAdminGuard = true }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean } = {}) {
     const [doctors, setDoctors] = useState<Doctor[]>([])
+    const [pendingDoctors, setPendingDoctors] = useState<Doctor[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([])
+    const [filteredPendingDoctors, setFilteredPendingDoctors] = useState<Doctor[]>([])
     const [sortField, setSortField] = useState<string>('')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
     const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null)
@@ -36,6 +38,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
     const [deleteModal, setDeleteModal] = useState(false)
     const [deleteDoctor, setDeleteDoctor] = useState<Doctor | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState<'active' | 'pending'>('active')
     const [showAddModal, setShowAddModal] = useState(false)
     const [newDoctor, setNewDoctor] = useState({
         firstName: '',
@@ -55,12 +58,8 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
     const [showSpecializationDropdown, setShowSpecializationDropdown] = useState(false)
     const [showQualificationDropdown, setShowQualificationDropdown] = useState(false)
 
-    // Import useAuth hook for protection
-    const { user, loading: authLoading } = useAuth("admin")
+    const { user, loading: authLoading } = useAuth()
 
-    // Protect component - only allow admins (moved below hooks to keep hook order stable)
-
-    // specializationCategories and qualifications are imported from constants
    
     const handleView = (doctor: Doctor) => {
         setSelectedDoctor(doctor)
@@ -76,6 +75,26 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
         try {
             setLoading(true)
             setError(null)
+            
+            // First, delete from Firebase Auth
+            try {
+                const authDeleteResponse = await fetch('/api/admin/delete-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uid: deleteDoctor.id, userType: 'Doctor' })
+                })
+                
+                if (!authDeleteResponse.ok) {
+                    const authError = await authDeleteResponse.json().catch(() => ({}))
+                    console.warn('Failed to delete from auth:', authError)
+                    // Continue with Firestore deletion even if auth deletion fails
+                }
+            } catch (authError) {
+                console.error('Error deleting from auth:', authError)
+                // Continue with Firestore deletion even if auth deletion fails
+            }
+            
+            // Then delete from Firestore
             const doctorRef = doc(db, 'doctors', deleteDoctor.id)
             await deleteDoc(doctorRef)
             setDoctors(prev => prev.filter(d => d.id !== deleteDoctor.id))
@@ -83,7 +102,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
             setShowViewModal(false)
             setDeleteModal(false)
             setDeleteDoctor(null)
-            setSuccessMessage('Doctor deleted successfully!')
+            setSuccessMessage('Doctor deleted successfully from database and authentication!')
             setTimeout(() => {
                 setSuccessMessage(null)
             }, 3000)
@@ -97,26 +116,129 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
         try {
             setLoading(true)
             const doctorsRef = collection(db, 'doctors')
-            const q = query(doctorsRef, where('status', '==', 'active'))
-            const snapshot = await getDocs(q)
-            const doctorsList = snapshot.docs.map((doc) => ({
+            
+            // Fetch active doctors
+            const activeQ = query(doctorsRef, where('status', '==', 'active'))
+            const activeSnapshot = await getDocs(activeQ)
+            const activeList = activeSnapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data()
             })) as Doctor[]
-            setDoctors(doctorsList)
-            setFilteredDoctors(doctorsList)
+            setDoctors(activeList)
+            setFilteredDoctors(activeList)
+            
+            // Fetch pending doctors
+            const pendingQ = query(doctorsRef, where('status', '==', 'pending'))
+            const pendingSnapshot = await getDocs(pendingQ)
+            const pendingList = pendingSnapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data()
+            })) as Doctor[]
+            setPendingDoctors(pendingList)
+            setFilteredPendingDoctors(pendingList)
         } catch (error) {
             setError((error as Error).message)  
         } finally {
             setLoading(false)
         }
     }, [])
+    
+    const handleApproveDoctor = async (doctorId: string) => {
+        // Only admins can approve doctors
+        if (user?.role !== 'admin') {
+            setError('Only admins can approve doctors')
+            return
+        }
+        
+        try {
+            setLoading(true)
+            setError(null)
+            const doctorRef = doc(db, 'doctors', doctorId)
+            await updateDoc(doctorRef, {
+                status: 'active',
+                updatedAt: new Date().toISOString(),
+                approvedAt: new Date().toISOString()
+            })
+            
+            // Update local state
+            setPendingDoctors(prev => prev.filter(d => d.id !== doctorId))
+            setFilteredPendingDoctors(prev => prev.filter(d => d.id !== doctorId))
+            
+            // Refresh active doctors list
+            await fetchDoctors()
+            
+            setSuccessMessage('Doctor approved successfully!')
+            setTimeout(() => {
+                setSuccessMessage(null)
+            }, 3000)
+        } catch (error) {
+            setError((error as Error).message)
+        } finally {
+            setLoading(false)
+        }
+    }
+    
+    const handleRejectDoctor = async (doctorId: string) => {
+        // Only admins can reject doctors
+        if (user?.role !== 'admin') {
+            setError('Only admins can reject doctors')
+            return
+        }
+        
+        if (!window.confirm('Are you sure you want to reject this doctor? This action cannot be undone.')) {
+            return
+        }
+        
+        try {
+            setLoading(true)
+            setError(null)
+            
+            // Delete from Firebase Auth first
+            try {
+                const authDeleteResponse = await fetch('/api/admin/delete-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uid: doctorId, userType: 'Doctor' })
+                })
+                
+                if (!authDeleteResponse.ok) {
+                    const authError = await authDeleteResponse.json().catch(() => ({}))
+                    console.warn('Failed to delete from auth:', authError)
+                }
+            } catch (authError) {
+                console.error('Error deleting from auth:', authError)
+            }
+            
+            // Delete from Firestore
+            const doctorRef = doc(db, 'doctors', doctorId)
+            await deleteDoc(doctorRef)
+            
+            // Update local state
+            setPendingDoctors(prev => prev.filter(d => d.id !== doctorId))
+            setFilteredPendingDoctors(prev => prev.filter(d => d.id !== doctorId))
+            
+            setSuccessMessage('Doctor rejected and removed successfully!')
+            setTimeout(() => {
+                setSuccessMessage(null)
+            }, 3000)
+        } catch (error) {
+            setError((error as Error).message)
+        } finally {
+            setLoading(false)
+        }
+    }
     useEffect(() => {
         if (!user || authLoading) return
         fetchDoctors()
     }, [fetchDoctors, user, authLoading])
+    
+    // Ensure receptionists can't access pending tab
+    useEffect(() => {
+        if (user && user.role !== 'admin' && activeTab === 'pending') {
+            setActiveTab('active')
+        }
+    }, [user, activeTab])
 
-    // After hooks: gate rendering by auth state (moved below all hooks further down)
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -278,15 +400,28 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
     useEffect(() => {
         let filtered = doctors
 
-    if (search) {
-      filtered = filtered.filter(doctor =>
-        `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-        doctor.specialization.toLowerCase().includes(search.toLowerCase())
-      )
-    }
+        if (search) {
+          filtered = filtered.filter(doctor =>
+            `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
+            doctor.specialization.toLowerCase().includes(search.toLowerCase())
+          )
+        }
 
-    setFilteredDoctors(filtered)
-  }, [search, doctors])
+        setFilteredDoctors(filtered)
+    }, [search, doctors])
+    
+    useEffect(() => {
+        let filtered = pendingDoctors
+
+        if (search) {
+          filtered = filtered.filter(doctor =>
+            `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
+            doctor.specialization.toLowerCase().includes(search.toLowerCase())
+          )
+        }
+
+        setFilteredPendingDoctors(filtered)
+    }, [search, pendingDoctors])
     // Date formatting helper functions
     const formatDate = (dateString: string) => {
         if (!dateString) return 'N/A'
@@ -325,9 +460,17 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
         return null
     }
 
-    return (
-        <AdminProtected>
-            <div className="relative">
+    // When disableAdminGuard=true, verify user is admin or receptionist
+    if (disableAdminGuard && user.role !== "admin" && user.role !== "receptionist") {
+        return (
+            <div className="text-center py-12">
+                <p className="text-red-600">Access denied. Admin or receptionist privileges required.</p>
+            </div>
+        )
+    }
+
+    const content = (
+        <div className="relative">
             {/* Success Notification */}
             {successMessage && (
                 <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 transform transition-all duration-300 ease-in-out animate-pulse"
@@ -400,13 +543,44 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                     </div>
                 </div>
 
+                {/* Tabs - Only show Pending tab to admins */}
+                <div className="px-4 sm:px-6 pt-4 border-b border-gray-200">
+                    <div className="flex space-x-1">
+                        <button
+                            onClick={() => setActiveTab('active')}
+                            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                                activeTab === 'active'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                            }`}
+                        >
+                            Active Doctors ({doctors.length})
+                        </button>
+                        {user?.role === 'admin' && (
+                            <button
+                                onClick={() => setActiveTab('pending')}
+                                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors relative ${
+                                    activeTab === 'pending'
+                                        ? 'bg-orange-600 text-white'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                }`}
+                            >
+                                Pending Approval ({pendingDoctors.length})
+                                {pendingDoctors.length > 0 && (
+                                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                                )}
+                            </button>
+                        )}
+                    </div>
+                </div>
+
                 {/* Table */}
             <div className="overflow-x-auto">
                     <table className="w-full min-w-[800px]">
                     <thead className="bg-gray-50">
                         <tr>
                                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Doctor ({filteredDoctors.length})
+                                    Doctor ({activeTab === 'active' ? filteredDoctors.length : filteredPendingDoctors.length})
                                 </th>
                                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Specialization</th>
                                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Qualification</th>
@@ -419,7 +593,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                         <tbody className="bg-white divide-y divide-gray-200">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center">
+                                    <td colSpan={7} className="px-6 py-12 text-center">
                                         <div className="flex flex-col items-center">
                                             <svg className="w-8 h-8 animate-spin text-blue-600 mb-2" fill="none" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -431,7 +605,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                                 </tr>
                             ) : error ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center">
+                                    <td colSpan={7} className="px-6 py-12 text-center">
                                         <svg className="w-12 h-12 mx-auto mb-2 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                                         </svg>
@@ -439,14 +613,18 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                                         <p className="text-xs text-gray-500">{error}</p>
                                 </td>
                                 </tr>
-                            ) : filteredDoctors.length === 0 ? (
+                            ) : (activeTab === 'active' ? filteredDoctors.length : filteredPendingDoctors.length) === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center">
+                                    <td colSpan={7} className="px-6 py-12 text-center">
                                         <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                         </svg>
                                         <p className="text-sm text-gray-500 mb-1">
-                                            {search ? 'No doctors found matching your search' : 'No doctors found'}
+                                            {search 
+                                                ? `No ${activeTab === 'active' ? 'active' : 'pending'} doctors found matching your search` 
+                                                : activeTab === 'pending' 
+                                                    ? 'No pending doctor approvals' 
+                                                    : 'No doctors found'}
                                         </p>
                                         {search && (
                                             <p className="text-xs text-gray-400">
@@ -456,7 +634,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                                     </td>
                                 </tr>
                             ) : (
-                                filteredDoctors.map((doctor) => (
+                                (activeTab === 'active' ? filteredDoctors : filteredPendingDoctors).map((doctor) => (
                             <tr className="hover:bg-gray-50 transition-colors" key={doctor.id}>
                                         {/* Doctor Info */}
                                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
@@ -490,8 +668,14 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
 
                                         {/* Status */}
                                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                                {doctor.status === 'active' ? 'Active' : 'Inactive'}
+                                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                                doctor.status === 'active' 
+                                                    ? 'bg-green-100 text-green-800' 
+                                                    : doctor.status === 'pending'
+                                                    ? 'bg-orange-100 text-orange-800'
+                                                    : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {doctor.status === 'active' ? 'Active' : doctor.status === 'pending' ? 'Pending' : 'Inactive'}
                                             </span>
                                         </td>
 
@@ -514,24 +698,50 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                                                     onClick={() => handleView(doctor)}
                                                 >
                                                     <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
+                                                    </svg>
                                                     <span className="hidden sm:inline">View</span>
-                                    </button>
+                                                </button>
                                                 
-                                                {/* Delete Button (hidden/disabled when canDelete is false) */}
-                                                {canDelete ? (
-                                                    <button 
-                                                        className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 hover:text-red-800 transition-colors"
-                                                        onClick={() => handleDelete(doctor)}
-                                                    >
-                                                        <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                        </svg>
-                                                        <span className="hidden sm:inline">Delete</span>
-                                                    </button>
-                                                ) : null}
+                                                {/* Approve/Reject buttons for pending doctors - Only admins can see and use these */}
+                                                {activeTab === 'pending' && doctor.status === 'pending' && user?.role === 'admin' ? (
+                                                    <>
+                                                        <button 
+                                                            className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-green-700 bg-green-100 border border-green-200 rounded-md hover:bg-green-200 hover:text-green-800 transition-colors"
+                                                            onClick={() => handleApproveDoctor(doctor.id)}
+                                                            disabled={loading}
+                                                        >
+                                                            <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                            <span className="hidden sm:inline">Approve</span>
+                                                        </button>
+                                                        <button 
+                                                            className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 hover:text-red-800 transition-colors"
+                                                            onClick={() => handleRejectDoctor(doctor.id)}
+                                                            disabled={loading}
+                                                        >
+                                                            <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                            <span className="hidden sm:inline">Reject</span>
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    /* Delete Button (hidden/disabled when canDelete is false) */
+                                                    canDelete && activeTab === 'active' ? (
+                                                        <button 
+                                                            className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 hover:text-red-800 transition-colors"
+                                                            onClick={() => handleDelete(doctor)}
+                                                        >
+                                                            <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                            <span className="hidden sm:inline">Delete</span>
+                                                        </button>
+                                                    ) : null
+                                                )}
                                             </div>
                                 </td>
                             </tr>
@@ -545,7 +755,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                 <div className="px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-200">
                     <div className="flex items-center justify-between">
                         <p className="text-xs sm:text-sm text-gray-700">
-                            Showing <span className="font-medium">{filteredDoctors.length}</span> doctors
+                            Showing <span className="font-medium">{activeTab === 'active' ? filteredDoctors.length : filteredPendingDoctors.length}</span> {activeTab === 'active' ? 'active' : 'pending'} doctors
                         </p>
                     </div>
                 </div>
@@ -1131,6 +1341,15 @@ export default function DoctorManagement({ canDelete = true, canAdd = true }: { 
                 </div>
             )}
         </div>
+    );
+
+    if (disableAdminGuard) {
+        return content
+    }
+
+    return (
+        <AdminProtected>
+            {content}
         </AdminProtected>
     );
 }

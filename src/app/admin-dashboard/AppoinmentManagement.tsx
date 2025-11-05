@@ -10,12 +10,12 @@ import ViewModal from '@/components/ui/ViewModal'
 import DeleteModal from '@/components/ui/DeleteModal'
 import { Appointment } from '@/types/patient'
 
-export default function AppoinmentManagement() {
+export default function AppoinmentManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
     const [appointments, setAppointments] = useState<Appointment[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
-    const { user, loading: authLoading } = useAuth("admin")
+    const { user, loading: authLoading } = useAuth()
     const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([])
     const [sortField, setSortField] = useState<string>('')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
@@ -176,8 +176,16 @@ export default function AppoinmentManagement() {
         return null
     }
 
-    return (
-            <AdminProtected>
+    // When disableAdminGuard=true, verify user is admin or receptionist
+    if (disableAdminGuard && user.role !== "admin" && user.role !== "receptionist") {
+        return (
+            <div className="text-center py-12">
+                <p className="text-red-600">Access denied. Admin or receptionist privileges required.</p>
+            </div>
+        )
+    }
+
+    const content = (
             <div className="relative">
                 {/* Success Notification */}
                 {successMessage && (
@@ -595,6 +603,15 @@ export default function AppoinmentManagement() {
                     loading={loading}
                 />
             </div>
-            </AdminProtected>
         )
+
+    if (disableAdminGuard) {
+        return content
+    }
+
+    return (
+        <AdminProtected>
+            {content}
+        </AdminProtected>
+    )
 }

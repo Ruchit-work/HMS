@@ -6,7 +6,7 @@ import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 
-type UserRole = "patient" | "doctor" | "admin" | null
+type UserRole = "patient" | "doctor" | "admin" | "receptionist" | null
 
 interface AuthUser {
   uid: string
@@ -59,6 +59,16 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
       return null
     }
 
+    if (requiredRole === "receptionist") {
+      const receptionistDoc = await getDoc(doc(db, "receptionists", uid))
+      if (receptionistDoc.exists()) {
+        const data = { role: "receptionist" as UserRole, data: receptionistDoc.data() }
+        userDataCache.set(uid, { ...data, timestamp: Date.now() })
+        return data
+      }
+      return null
+    }
+
     // No specific role required, check all collections sequentially
     const adminDoc = await getDoc(doc(db, "admins", uid))
     if (adminDoc.exists()) {
@@ -77,6 +87,13 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
     const patientDoc = await getDoc(doc(db, "patients", uid))
     if (patientDoc.exists()) {
       const data = { role: "patient" as UserRole, data: patientDoc.data() }
+      userDataCache.set(uid, { ...data, timestamp: Date.now() })
+      return data
+    }
+
+    const receptionistDoc = await getDoc(doc(db, "receptionists", uid))
+    if (receptionistDoc.exists()) {
+      const data = { role: "receptionist" as UserRole, data: receptionistDoc.data() }
       userDataCache.set(uid, { ...data, timestamp: Date.now() })
       return data
     }

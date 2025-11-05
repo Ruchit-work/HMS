@@ -10,9 +10,9 @@ import LoadingSpinner from "@/components/LoadingSpinner"
 import Notification from "@/components/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
 import PatientManagement from "./PatientManagement"
-import Link from "next/link"
 import DoctorManagement from "./DoctorManagement"
 import AppoinmentManagement from "./AppoinmentManagement"
+import CampaignManagement from "./CampaignManagement"
 import AdminProtected from "@/components/AdminProtected"
 
 interface UserData {
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "appointments" | "reports">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "reports">("overview")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
@@ -331,17 +331,23 @@ export default function AdminDashboard() {
               Doctors
             </button>
 
-            <Link
-              href="/admin-dashboard/campaigns"
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-600 hover:bg-gray-100"
-              onClick={() => setSidebarOpen(false)}
+            <button
+              onClick={() => {
+                setActiveTab("campaigns")
+                setSidebarOpen(false)
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === "campaigns" 
+                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
               </svg>
               Campaigns
-            </Link>
+            </button>
             
             <button
               onClick={() => {
@@ -391,6 +397,7 @@ export default function AdminDashboard() {
                   {activeTab === "overview" ? "Dashboard Overview" : 
                    activeTab === "patients" ? "Patient Management" :
                    activeTab === "doctors" ? "Doctor Management" :
+                   activeTab === "campaigns" ? "Campaigns" :
                    activeTab === "appointments" ? "Appointment Management" :
                    "Reports & Analytics"}
                 </h1>
@@ -398,6 +405,7 @@ export default function AdminDashboard() {
                   {activeTab === "overview" ? "Hospital management system overview" :
                    activeTab === "patients" ? "Manage patient records and information" :
                    activeTab === "doctors" ? "Manage doctor profiles and schedules" :
+                   activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
                    activeTab === "appointments" ? "Monitor and manage all appointments" :
                    "View detailed reports and analytics"}
                 </p>
@@ -863,6 +871,13 @@ export default function AdminDashboard() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Doctor Management</h2>
               <DoctorManagement />
+            </div>
+          )}
+
+          {activeTab === "campaigns" && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Campaigns</h2>
+              <CampaignManagement />
             </div>
           )}
 

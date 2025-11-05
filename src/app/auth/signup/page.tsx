@@ -14,8 +14,10 @@ import { specializationCategories, qualifications, bloodGroups } from "@/constan
 
 function SignUpContent() {
   const searchParams = useSearchParams()
-  const role = searchParams.get("role") as "patient" | "doctor" | null
+  const roleFromUrl = searchParams.get("role") as "patient" | "doctor" | null
   const router = useRouter()
+  const [selectedRole, setSelectedRole] = useState<"patient" | "doctor" | null>(roleFromUrl || null)
+  const role = selectedRole || roleFromUrl
   // Common fields
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -58,12 +60,12 @@ function SignUpContent() {
   const { loading: checking } = usePublicRoute()
 
 
-  // Redirect if no role specified or attempting admin signup (disabled)
+  // Redirect if invalid role (admin/receptionist signup disabled)
   useEffect(() => {
-    if (!role || (role !== "patient" && role !== "doctor")) {
+    if (roleFromUrl && roleFromUrl !== "patient" && roleFromUrl !== "doctor") {
       router.replace("/")
     }
-  }, [role, router])
+  }, [roleFromUrl, router])
 
   // Auto-send OTP when modal opens
   useEffect(() => {
@@ -206,6 +208,13 @@ function SignUpContent() {
     // STEP 1: VALIDATE ALL FORM FIELDS FIRST
     // ============================================
 
+    // Validate role is selected
+    if (!role || (role !== "patient" && role !== "doctor")) {
+      setError("Please select your role (Patient or Doctor)")
+      setLoading(false)
+      return
+    }
+
     // Validate required common fields
     if (!firstName || firstName.trim() === "") {
         setError("Please enter your first name")
@@ -342,7 +351,7 @@ function SignUpContent() {
 
         await setDoc(doc(db, "doctors", user.uid), {
           email: email,
-          status: "active",
+          status: "pending",
           firstName: firstName,
           lastName: lastName,
           gender: gender,
@@ -357,14 +366,14 @@ function SignUpContent() {
         // Show success notification
         setNotification({
           type: "success",
-          message: " Doctor account created successfully! Redirecting to login..."
+          message: "Doctor account created successfully! Your account is pending admin approval. You will be notified once approved. Redirecting to login..."
         })
 
         // Sign out and redirect to login page
         await signOut(auth)
         setTimeout(() => {
           router.push("/auth/login?role=doctor")
-        }, 3000)
+        }, 4000)
       } catch (err: unknown) {
         const firebaseError = err as { code?: string; message?: string }
         let errorMessage = "Failed to sign up"
@@ -493,12 +502,39 @@ function SignUpContent() {
               </div>
             </div>
             <h2 className="text-2xl font-bold text-slate-900 mb-2">
-              {role === "doctor" ? "Doctor Registration" : "Patient Registration"}
+              {role === "doctor" ? "Doctor Registration" : role === "patient" ? "Patient Registration" : "Create Account"}
             </h2>
             <p className="text-slate-600">
-              {role === "doctor" ? "Join as a healthcare provider" : "Create your patient account"}
+              {role === "doctor" ? "Join as a healthcare provider" : role === "patient" ? "Create your patient account" : "Choose your role to get started"}
             </p>
           </div>
+
+          {/* Role Selector - Only show if no role is selected */}
+          {!role && (
+            <div className="bg-white border-2 border-slate-200 rounded-2xl p-6 mb-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4 text-center">Select Your Role</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRole("patient")}
+                  className="p-6 border-2 border-blue-300 rounded-xl hover:border-blue-600 hover:bg-blue-50 transition-all duration-200 text-center group"
+                >
+                  <div className="text-4xl mb-2">👤</div>
+                  <div className="font-semibold text-slate-900 group-hover:text-blue-600">Patient</div>
+                  <div className="text-sm text-slate-600 mt-1">Create patient account</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRole("doctor")}
+                  className="p-6 border-2 border-green-300 rounded-xl hover:border-green-600 hover:bg-green-50 transition-all duration-200 text-center group"
+                >
+                  <div className="text-4xl mb-2">👨‍⚕️</div>
+                  <div className="font-semibold text-slate-900 group-hover:text-green-600">Doctor</div>
+                  <div className="text-sm text-slate-600 mt-1">Join as healthcare provider</div>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Trust Indicators */}
           <div className="flex items-center justify-center gap-6 mb-6 py-4 border-y border-slate-200">
@@ -545,9 +581,11 @@ function SignUpContent() {
             </div>
           )}
 
-          <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl max-h-[80vh] sm:max-h-[75vh] lg:max-h-[70vh] overflow-y-auto">
+          {/* Form - Only show if role is selected */}
+          {role && (
+            <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl max-h-[80vh] sm:max-h-[75vh] lg:max-h-[70vh] overflow-y-auto">
 
-            <form onSubmit={handleSignUp} className="space-y-5">
+              <form onSubmit={handleSignUp} className="space-y-5">
 
               {/* Basic Information (Common) */}
               <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4">
@@ -1100,31 +1138,32 @@ function SignUpContent() {
               </button>
             </form>
 
-            {/* Sign In Link */}
-            <div className="mt-6 text-center">
-              <p className="text-sm text-slate-600">
-                Already have an account?{" "}
-                <a  href={`/auth/login?role=${role}`}  className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
-                >  Sign in </a>
-              </p>
-            </div>
+              {/* Sign In Link */}
+              <div className="mt-6 text-center">
+                <p className="text-sm text-slate-600">
+                  Already have an account?{" "}
+                  <a  href={role ? `/auth/login?role=${role}` : "/auth/login"}  className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
+                  >  Sign in </a>
+                </p>
+              </div>
 
-            {/* Footer Trust Badges */}
-            <div className="mt-8 flex items-center justify-center gap-8 text-slate-400">
-              <div className="text-center">
-                <div className="text-2xl mb-1">🏥</div>
-                <p className="text-xs font-medium">Certified</p>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl mb-1">🔒</div>
-                <p className="text-xs font-medium">Secure</p>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl mb-1">⚡</div>
-                <p className="text-xs font-medium">Fast</p>
+              {/* Footer Trust Badges */}
+              <div className="mt-8 flex items-center justify-center gap-8 text-slate-400">
+                <div className="text-center">
+                  <div className="text-2xl mb-1">🏥</div>
+                  <p className="text-xs font-medium">Certified</p>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl mb-1">🔒</div>
+                  <p className="text-xs font-medium">Secure</p>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl mb-1">⚡</div>
+                  <p className="text-xs font-medium">Fast</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

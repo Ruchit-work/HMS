@@ -16,6 +16,7 @@ import { bloodGroups } from "@/constants/signup"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay } from "@/utils/timeSlots"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
 import PasswordRequirements, { isPasswordValid } from "@/components/PasswordRequirements"
+import OTPVerificationModal from "@/components/form/OTPVerificationModal"
 
 export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -45,6 +46,7 @@ export default function ReceptionistDashboard() {
   const [symptomCategory, setSymptomCategory] = useState<string>('')
   const [customSymptom, setCustomSymptom] = useState('')
   const [showPatientSuggestions, setShowPatientSuggestions] = useState(false)
+  const [otpModalOpen, setOtpModalOpen] = useState(false)
   const suggestedDoctors = useMemo(()=>{
     if (!symptomCategory || symptomCategory === 'custom') return doctors
     const category = SYMPTOM_CATEGORIES.find(c=>c.id===symptomCategory)
@@ -73,7 +75,7 @@ export default function ReceptionistDashboard() {
   }, [patientMode, activeTab])
 
   // Protect route - only allow receptionists
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth("receptionist")
   const router = useRouter()
 
   useEffect(() => {
@@ -275,19 +277,19 @@ export default function ReceptionistDashboard() {
           {activeTab === "patients" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Patient Management</h2>
-              <PatientManagement canDelete={true} />
+              <PatientManagement canDelete={true} disableAdminGuard={true} />
             </div>
           )}
           {activeTab === "doctors" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Doctor Management</h2>
-              <DoctorManagement canDelete={false} canAdd={false} />
+              <DoctorManagement canDelete={false} canAdd={false} disableAdminGuard={true} />
             </div>
           )}
           {activeTab === "appointments" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Appointment Management</h2>
-              <AppoinmentManagement />
+              <AppoinmentManagement disableAdminGuard={true} />
             </div>
           )}
           {activeTab === "book-appointment" && (
@@ -434,6 +436,7 @@ export default function ReceptionistDashboard() {
                       if (!newPatient.firstName || !newPatient.lastName || !newPatient.email){ setBookError('Fill first name, last name, email'); setBookLoading(false); return }
                       if (!isPasswordValid(newPatientPassword)) { setBookError('Password does not meet requirements'); setBookLoading(false); return }
                       if (newPatientPassword !== newPatientPasswordConfirm){ setBookError('Passwords do not match'); setBookLoading(false); return }
+                      if ((newPatient.phone||'').trim()) { setOtpModalOpen(true); setBookLoading(false); return }
                       const res = await fetch('/api/receptionist/create-patient', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ patientData: { ...newPatient, status:'active', createdBy:'receptionist', createdAt: new Date().toISOString() }, password: newPatientPassword }) })
                       if (!res.ok){ const d = await res.json().catch(()=>({})); throw new Error(d?.error || 'Failed to create patient') }
                       const d = await res.json(); patientId = d.id; patientPayload = { ...newPatient }
@@ -502,6 +505,72 @@ export default function ReceptionistDashboard() {
           type={notification.type}
           message={notification.message}
           onClose={() => setNotification(null)}
+        />
+      )}
+      {otpModalOpen && (
+        <OTPVerificationModal
+          isOpen={otpModalOpen}
+          onClose={() => setOtpModalOpen(false)}
+          phone={newPatient.phone || ''}
+          onVerified={async () => {
+            try {
+              setBookLoading(true); setBookError(null)
+              // Create patient after OTP and then book appointment
+              const res = await fetch('/api/receptionist/create-patient', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ patientData: { ...newPatient, status:'active', createdBy:'receptionist', createdAt: new Date().toISOString() }, password: newPatientPassword }) })
+              if (!res.ok){ const d = await res.json().catch(()=>({})); throw new Error(d?.error || 'Failed to create patient') }
+              const d = await res.json(); const patientId = d.id; const patientPayload:any = { ...newPatient }
+
+              // Prevent multiple bookings on same day
+              try {
+                const dupQ = query(
+                  collection(db, 'appointments'),
+                  where('patientId', '==', patientId),
+                  where('appointmentDate', '==', appointmentDate),
+                  where('status', '==', 'confirmed')
+                )
+                const dupSnap = await getDocs(dupQ)
+                if (!dupSnap.empty) { setBookError('This patient already has an appointment on this date'); setBookLoading(false); return }
+              } catch (_) {}
+
+              const doctor = doctors.find((x:any)=>x.id===selectedDoctorId)
+              const appointmentData = {
+                patientId,
+                patientName: `${patientPayload.firstName || ''} ${patientPayload.lastName || ''}`.trim(),
+                patientEmail: patientPayload.email || '',
+                patientPhone: patientPayload.phone || '',
+                doctorId: doctor?.id,
+                doctorName: `${doctor?.firstName || ''} ${doctor?.lastName || ''}`.trim(),
+                doctorSpecialization: doctor?.specialization || '',
+                appointmentDate,
+                appointmentTime,
+                status: 'confirmed',
+                paymentAmount: doctor?.consultationFee || 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                createdBy: 'receptionist'
+              }
+              const res2 = await fetch('/api/receptionist/create-appointment', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ appointmentData }) })
+              if (!res2.ok){ const d2 = await res2.json().catch(()=>({})); throw new Error(d2?.error || 'Failed to create appointment') }
+              setOtpModalOpen(false)
+              setNotification({ type:'success', message:'Appointment booked successfully' })
+              // Reset form
+              setPatientMode('existing')
+              setSearchPatient('')
+              setSelectedPatientId('')
+              setNewPatient({ firstName:'', lastName:'', email:'', phone:'', gender:'', bloodGroup:'', dateOfBirth:'', address:'' })
+              setNewPatientPassword('')
+              setNewPatientPasswordConfirm('')
+              setSelectedDoctorId('')
+              setAppointmentDate('')
+              setAppointmentTime('')
+              setSymptomCategory('')
+              setCustomSymptom('')
+            } catch(e:any) {
+              setBookError(e?.message || 'Failed')
+            } finally {
+              setBookLoading(false)
+            }
+          }}
         />
       )}
         </div>

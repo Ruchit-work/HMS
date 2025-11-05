@@ -11,7 +11,7 @@ import LoadingSpinner from "@/components/LoadingSpinner"
 
 function LoginContent() {
   const searchParams = useSearchParams()
-  const role = searchParams.get("role") as "patient" | "doctor" | "admin" | null
+  const role = searchParams.get("role") as "patient" | "doctor" | "admin" | "receptionist" | null
   
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -22,13 +22,6 @@ function LoginContent() {
   
   // Protect route - redirect if already authenticated
   const { loading: checking } = usePublicRoute()
-  
-  // Redirect if no role specified
-  useEffect(() => {
-    if (!role || (role !== "patient" && role !== "doctor" && role !== "admin")) {
-      router.replace("/")
-    }
-  }, [role, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +51,7 @@ function LoginContent() {
         const doctorData = doctorDoc.data()
         
         if (doctorData.status === "pending") {
-          setError("Your account is pending admin approval. Please wait for approval before logging in.")
+          setError("Your account is pending admin approval. Please wait for approval before logging in. You will be notified once your account is approved.")
           await auth.signOut()
           setLoading(false)
           return
@@ -84,7 +77,19 @@ function LoginContent() {
         return
       }
       
-      // No account found in either collection
+      // Check receptionist collection
+      const receptionistDoc = await getDoc(doc(db, "receptionists", user.uid))
+      if (receptionistDoc.exists()) {
+        setSuccess("Login successful! Redirecting to receptionist dashboard in 3 seconds...")
+        setLoading(false) // Stop loading state to show success message
+        // Delay redirect to show success message
+        setTimeout(() => {
+          router.replace("/receptionist-dashboard")
+        }, 3000)
+        return
+      }
+      
+      // No account found in any collection
       setError("Account not found. Please sign up first.")
       await auth.signOut()
       setLoading(false)
@@ -142,12 +147,18 @@ function LoginContent() {
               </div>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">
-              {role === "doctor" ? "Doctor Login" : role === "admin" ? "Admin Login" : "Patient Login"}
+              {role === "doctor" ? "Doctor Login" : 
+               role === "admin" ? "Admin Login" : 
+               role === "receptionist" ? "Receptionist Login" :
+               role === "patient" ? "Patient Login" :
+               "Login"}
             </h2>
             <p className="text-sm sm:text-base text-slate-600">
               {role === "doctor" ? "Sign in to access your doctor dashboard" : 
                role === "admin" ? "Sign in to access admin dashboard" : 
-               "Sign in to access your patient portal"}
+               role === "receptionist" ? "Sign in to access receptionist dashboard" :
+               role === "patient" ? "Sign in to access your patient portal" :
+               "Sign in to access your dashboard"}
             </p>
           </div>
 
@@ -233,7 +244,11 @@ function LoginContent() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-                  placeholder={role === "doctor" ? "doctor@hospital.com" : role === "admin" ? "admin@hospital.com" : "patient@email.com"}
+                  placeholder={role === "doctor" ? "doctor@hospital.com" : 
+                                role === "admin" ? "admin@hospital.com" : 
+                                role === "receptionist" ? "receptionist@hospital.com" :
+                                role === "patient" ? "patient@email.com" :
+                                "your@email.com"}
                   required
                 />
               </div>
@@ -278,18 +293,45 @@ function LoginContent() {
             </button>
           </form>
           
-          {/* Sign Up Link */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-slate-600">
-              Don&apos;t have an account?{" "}
-              <a 
-                href={`/auth/signup?role=${role}`} 
-                className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
-              >
-                Create {role === "doctor" ? "doctor" : role === "admin" ? "admin" : "patient"} account
-              </a>
-            </p>
-          </div>
+          {/* Sign Up Link - Only show for patient and doctor (admin and receptionist signup is disabled) */}
+          {(role === "patient" || role === "doctor" || !role) && (
+            <div className="mt-6 text-center">
+              <p className="text-sm text-slate-600">
+                Don&apos;t have an account?{" "}
+                <a 
+                  href={role ? `/auth/signup?role=${role}` : "/auth/signup?role=patient"} 
+                  className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
+                >
+                  Create {role === "doctor" ? "doctor" : 
+                          role === "patient" ? "patient" :
+                          "account"}
+                </a>
+              </p>
+            </div>
+          )}
+
+          {/* Info Box for Admin/Receptionist - No signup available */}
+          {(role === "admin" || role === "receptionist") && (
+            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-900 mb-1">
+                    Need an account?
+                  </p>
+                  <p className="text-xs text-blue-700 leading-relaxed">
+                    {role === "admin" 
+                      ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
+                      : "Receptionist accounts are created by administrators. Please contact your supervisor or system administrator for access."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Divider */}
           <div className="relative my-8">
