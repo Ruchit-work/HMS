@@ -7,6 +7,7 @@ import SymptomSelector, { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import SmartQuestions from "./SmartQuestions"
 import MedicalHistoryChecklist from "./MedicalHistoryChecklist"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, isDateBlocked, getBlockedDateInfo, generateTimeSlots, isTimeSlotAvailable, timeToMinutes, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import PaymentMethodSection, { PaymentData as PPaymentData } from "@/components/payments/PaymentMethodSection"
 import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore"
 import { db } from "@/firebase/config"
 
@@ -145,6 +146,28 @@ export default function BookAppointmentForm({
         const visitingHours = selectedDoctorData.visitingHours || DEFAULT_VISITING_HOURS
         const dayName = getDayName(selectedDate)
         const daySchedule = visitingHours[dayName]
+
+        // Respect blocked dates (normalize to YYYY-MM-DD; support string/Timestamp/object with date)
+        try {
+          const rawBlocked: any[] = Array.isArray((selectedDoctorData as any)?.blockedDates) ? (selectedDoctorData as any).blockedDates : []
+          const normalizedBlocked: string[] = rawBlocked.map((b: any) => {
+            if (!b) return ''
+            if (typeof b === 'string') return b.slice(0, 10)
+            if (typeof b === 'object' && typeof b.date === 'string') return String(b.date).slice(0, 10)
+            if (b?.toDate) { const dt = b.toDate(); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2, '0'); const d = String(dt.getDate()).padStart(2, '0'); return `${y}-${m}-${d}` }
+            if (b?.seconds) { const dt = new Date(b.seconds * 1000); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2, '0'); const d = String(dt.getDate()).padStart(2, '0'); return `${y}-${m}-${d}` }
+            return ''
+          }).filter(Boolean)
+          if (normalizedBlocked.includes(appointmentData.date)) {
+            setAllTimeSlots([])
+            setBookedTimeSlots([])
+            setPastTimeSlots([])
+            setAvailableTimeSlots([])
+            setHasDuplicateAppointment(false)
+            setDuplicateAppointmentTime("")
+            return
+          }
+        } catch { /* ignore */ }
 
         // Generate ALL possible time slots for this day
         if (daySchedule && daySchedule.isAvailable && daySchedule.slots.length > 0) {
@@ -1099,171 +1122,16 @@ export default function BookAppointmentForm({
                   </div>
                 </div>
 
-                {/* Payment Method Selection */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Select Payment Method <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("card")}
-                      className={`p-4 rounded-xl border-2 transition-all ${
-                        paymentMethod === "card"
-                          ? "border-green-600 bg-green-50 shadow-md"
-                          : "border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
-                      <div className="text-center">
-                        <span className="text-3xl mb-1 block">💳</span>
-                        <span className="text-sm font-semibold">Card</span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("upi")}
-                      className={`p-4 rounded-xl border-2 transition-all ${
-                        paymentMethod === "upi"
-                          ? "border-green-600 bg-green-50 shadow-md"
-                          : "border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
-                      <div className="text-center">
-                        <span className="text-3xl mb-1 block">📱</span>
-                        <span className="text-sm font-semibold">UPI</span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("cash")}
-                      className={`p-4 rounded-xl border-2 transition-all ${
-                        paymentMethod === "cash"
-                          ? "border-green-600 bg-green-50 shadow-md"
-                          : "border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
-                      <div className="text-center">
-                        <span className="text-3xl mb-1 block">💵</span>
-                        <span className="text-sm font-semibold">Cash</span>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Payment Method Details */}
-                <div className="mt-4">
-                  {paymentMethod === "card" && (
-                    <div className="bg-blue-50 rounded-lg p-4 space-y-3">
-                      <p className="text-sm font-semibold text-blue-800 mb-3">💳 Card Payment</p>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
-                        <input
-                          type="text"
-                          value={paymentData.cardNumber}
-                          onChange={(e) => setPaymentData({...paymentData, cardNumber: e.target.value})}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                            }
-                          }}
-                          placeholder="1234 5678 9012 3456"
-                          maxLength={19}
-                          className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Cardholder Name</label>
-                        <input
-                          type="text"
-                          value={paymentData.cardName}
-                          onChange={(e) => setPaymentData({...paymentData, cardName: e.target.value})}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                            }
-                          }}
-                          placeholder="JOHN DOE"
-                          className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                          required
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Expiry (MM/YY)</label>
-                          <input
-                            type="text"
-                            value={paymentData.expiryDate}
-                            onChange={(e) => setPaymentData({...paymentData, expiryDate: e.target.value})}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                              }
-                            }}
-                            placeholder="12/25"
-                            maxLength={5}
-                            className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">CVV</label>
-                          <input
-                            type="text"
-                            value={paymentData.cvv}
-                            onChange={(e) => setPaymentData({...paymentData, cvv: e.target.value})}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                              }
-                            }}
-                            placeholder="123"
-                            maxLength={3}
-                            className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethod === "upi" && (
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <p className="text-sm font-semibold text-purple-800 mb-3">📱 UPI Payment</p>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">UPI ID</label>
-                        <input
-                          type="text"
-                          value={paymentData.upiId}
-                          onChange={(e) => setPaymentData({...paymentData, upiId: e.target.value})}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                            }
-                          }}
-                          placeholder="yourname@upi"
-                          className="w-full px-4 py-2 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                          required
-                        />
-                        <p className="text-xs text-gray-500 mt-1">e.g., 9876543210@paytm</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethod === "cash" && (
-                    <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                      <p className="text-sm font-semibold text-amber-800 mb-2">💵 Cash Payment</p>
-                      <p className="text-sm text-gray-700">
-                        You can pay <strong>₹{CONSULTATION_FEE}</strong> in cash at the hospital reception before your appointment.
-                      </p>
-                      {paymentType === "partial" && (
-                        <p className="text-xs text-orange-600 mt-2 font-semibold">
-                          Note: With partial payment, you don't need to pay online. Pay full ₹{CONSULTATION_FEE} at hospital.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                {/* Reusable Payment Section */}
+                <PaymentMethodSection
+                  title="Payment Mode"
+                  paymentMethod={paymentMethod}
+                  setPaymentMethod={(m)=>setPaymentMethod(m)}
+                  paymentData={paymentData as PPaymentData}
+                  setPaymentData={(d)=>setPaymentData(d as any)}
+                  amountToPay={AMOUNT_TO_PAY}
+                  showPartialNote={paymentType === 'partial'}
+                />
               </div>
             </div>
           )}

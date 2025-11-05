@@ -62,7 +62,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
     const [newPatientPassword, setNewPatientPassword] = useState('')
     const [newPatientPasswordConfirm, setNewPatientPasswordConfirm] = useState('')
 
-   
+
 
 
     const handleView = (patient: Patient) => {
@@ -241,7 +241,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
 
     // When disableAdminGuard=true, verify user is admin or receptionist
     if (disableAdminGuard && user.role !== "admin" && user.role !== "receptionist") {
-        return (
+    return (
             <div className="text-center py-12">
                 <p className="text-red-600">Access denied. Admin or receptionist privileges required.</p>
             </div>
@@ -249,7 +249,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
     }
 
     const content = (
-        <div className="relative">
+            <div className="relative">
             {/* Success Notification */}
             {successMessage && (
                 <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 transform transition-all duration-300 ease-in-out animate-pulse"
@@ -279,12 +279,12 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                         <h3 className="text-lg font-semibold text-gray-900">Patient Management</h3>
                         {canAdd && (
                             <button onClick={() => setShowAddModal(true)} className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                                <span className="hidden sm:inline">Add Patient</span>
-                                <span className="sm:hidden">Add</span>
-                            </button>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span className="hidden sm:inline">Add Patient</span>
+                            <span className="sm:hidden">Add</span>
+                        </button>
                         )}
                     </div>
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -462,13 +462,13 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                                     
                                     {/* Delete Button (hidden/disabled when canDelete is false) */}
                                     {canDelete ? (
-                                        <button className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 hover:text-red-800 transition-colors"
-                                            onClick={() => handleDelete(patient)}>
-                                            <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                            <span className="hidden sm:inline">Delete</span>
-                                        </button>
+                                    <button className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium text-red-700 bg-red-100 border border-red-200 rounded-md hover:bg-red-200 hover:text-red-800 transition-colors"
+                                    onClick={() => handleDelete(patient)}>
+                                        <svg className="w-3 h-3 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        <span className="hidden sm:inline">Delete</span>
+                                    </button>
                                     ) : null}
                                 </div>
                             </td>

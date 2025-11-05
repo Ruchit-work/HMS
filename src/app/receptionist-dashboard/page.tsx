@@ -11,11 +11,13 @@ import Notification from "@/components/Notification"
 import PatientManagement from "@/app/admin-dashboard/PatientManagement"
 import DoctorManagement from "@/app/admin-dashboard/DoctorManagement"
 import AppoinmentManagement from "@/app/admin-dashboard/AppoinmentManagement"
-import { collection, getDocs, query, where } from "firebase/firestore"
+import { collection, getDocs, query, where, onSnapshot } from "firebase/firestore"
 import { bloodGroups } from "@/constants/signup"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay } from "@/utils/timeSlots"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
 import PasswordRequirements, { isPasswordValid } from "@/components/PasswordRequirements"
+import PaymentMethodSection, { PaymentData as RPaymentData } from "@/components/payments/PaymentMethodSection"
+import AppointmentSuccessModal from "@/components/patient/AppointmentSuccessModal"
 import OTPVerificationModal from "@/components/form/OTPVerificationModal"
 
 export default function ReceptionistDashboard() {
@@ -39,14 +41,47 @@ export default function ReceptionistDashboard() {
   const [newPatientPassword, setNewPatientPassword] = useState('')
   const [newPatientPasswordConfirm, setNewPatientPasswordConfirm] = useState('')
   const [selectedDoctorId, setSelectedDoctorId] = useState('')
+  const [selectedDoctorFee, setSelectedDoctorFee] = useState<number | null>(null)
   const [appointmentDate, setAppointmentDate] = useState('')
   const [appointmentTime, setAppointmentTime] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash" | null>(null)
+  const [paymentData, setPaymentData] = useState<{ cardNumber: string; cardName: string; expiryDate: string; cvv: string; upiId: string }>({ cardNumber: "", cardName: "", expiryDate: "", cvv: "", upiId: "" })
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const isSelectedDateBlocked = useMemo(() => {
+    if (!selectedDoctorId || !appointmentDate) return false
+    const docObj: any = doctors.find((d: any) => d.id === selectedDoctorId)
+    if (!docObj) return false
+    const rawBlocked: any[] = Array.isArray(docObj?.blockedDates) ? docObj.blockedDates : []
+    const normalized: string[] = rawBlocked
+      .map((b: any) => {
+        if (!b) return ""
+        if (typeof b === "string") return b.slice(0, 10)
+        if (typeof b === "object" && typeof b.date === "string") return String(b.date).slice(0, 10)
+        if (b?.toDate) {
+          const dt = b.toDate() as Date
+          const y = dt.getFullYear(); const m = String(dt.getMonth() + 1).padStart(2, "0"); const d = String(dt.getDate()).padStart(2, "0")
+          return `${y}-${m}-${d}`
+        }
+        if (b?.seconds) {
+          const dt = new Date(b.seconds * 1000)
+          const y = dt.getFullYear(); const m = String(dt.getMonth() + 1).padStart(2, "0"); const d = String(dt.getDate()).padStart(2, "0")
+          return `${y}-${m}-${d}`
+        }
+        return ""
+      })
+      .filter(Boolean)
+    return normalized.includes(appointmentDate)
+  }, [selectedDoctorId, appointmentDate, doctors])
   const todayStr = useMemo(()=> new Date().toISOString().split('T')[0], [])
   const [symptomCategory, setSymptomCategory] = useState<string>('')
   const [customSymptom, setCustomSymptom] = useState('')
   const [showPatientSuggestions, setShowPatientSuggestions] = useState(false)
   const [otpModalOpen, setOtpModalOpen] = useState(false)
+  const [selectedPatientInfo, setSelectedPatientInfo] = useState<any | null>(null)
+  const [patientInfoLoading, setPatientInfoLoading] = useState(false)
+  const [patientInfoError, setPatientInfoError] = useState<string | null>(null)
+  const [successOpen, setSuccessOpen] = useState(false)
+  const [successData, setSuccessData] = useState<any>(null)
   const suggestedDoctors = useMemo(()=>{
     if (!symptomCategory || symptomCategory === 'custom') return doctors
     const category = SYMPTOM_CATEGORIES.find(c=>c.id===symptomCategory)
@@ -74,6 +109,36 @@ export default function ReceptionistDashboard() {
     }
   }, [patientMode, activeTab])
 
+  // Load selected patient profile when an existing patient is chosen
+  useEffect(() => {
+    const load = async () => {
+      setSelectedPatientInfo(null)
+      setPatientInfoError(null)
+      if (activeTab !== 'book-appointment') return
+      if (patientMode !== 'existing') return
+      if (!selectedPatientId) return
+      try {
+        setPatientInfoLoading(true)
+        const snap = await getDoc(doc(db, 'patients', selectedPatientId))
+        if (snap.exists()) {
+          setSelectedPatientInfo({ id: snap.id, ...snap.data() })
+        } else {
+          setPatientInfoError('Patient not found')
+        }
+      } catch (e:any) {
+        setPatientInfoError(e?.message || 'Failed to load patient')
+      } finally {
+        setPatientInfoLoading(false)
+      }
+    }
+    load()
+  }, [selectedPatientId, patientMode, activeTab])
+
+  // Payment amount is always full fee for receptionist bookings
+  const paymentAmount = useMemo(() => {
+    return selectedDoctorFee || 0
+  }, [selectedDoctorFee])
+
   // Protect route - only allow receptionists
   const { user, loading: authLoading } = useAuth("receptionist")
   const router = useRouter()
@@ -96,21 +161,20 @@ export default function ReceptionistDashboard() {
     load()
   }, [user])
 
-  // Prefetch lists for booking
+  // Prefetch lists for booking (doctors realtime, patients one-time)
   useEffect(()=>{
-    const loadLists = async () => {
+    const drQ = query(collection(db,'doctors'), where('status','==','active'))
+    const unsubscribe = onSnapshot(drQ, (snap)=>{
+      setDoctors(snap.docs.map(d=>({ id:d.id, ...d.data() })))
+    })
+    ;(async ()=>{
       try {
-        const drQ = query(collection(db,'doctors'), where('status','==','active'))
-        const drSnap = await getDocs(drQ)
-        setDoctors(drSnap.docs.map(d=>({ id:d.id, ...d.data() })))
         const ptQ = query(collection(db,'patients'), where('status','in',['active','inactive']))
         const ptSnap = await getDocs(ptQ)
         setPatients(ptSnap.docs.map(d=>({ id:d.id, ...d.data() })))
-      } catch (e) {
-        // ignore
-      }
-    }
-    loadLists()
+      } catch (_) {}
+    })()
+    return () => unsubscribe()
   }, [])
 
   // Auto-fade and clear booking error after 5s
@@ -130,6 +194,23 @@ export default function ReceptionistDashboard() {
       if (!selectedDoctorId || !appointmentDate) return
       // doctor object
       const doctor = doctors.find((d:any)=>d.id===selectedDoctorId) || {}
+      // If selected date is blocked, no slots
+      const rawBlocked: any[] = Array.isArray((doctor as any)?.blockedDates) ? (doctor as any).blockedDates : []
+      const blockedNorm: string[] = rawBlocked
+        .map((b: any) => {
+          if (!b) return ""
+          if (typeof b === "string") return b.slice(0, 10)
+          if (typeof b === "object" && typeof b.date === "string") return String(b.date).slice(0, 10)
+          if (b?.toDate) { const dt = b.toDate() as Date; const y = dt.getFullYear(); const m = String(dt.getMonth() + 1).padStart(2, "0"); const d = String(dt.getDate()).padStart(2, "0"); return `${y}-${m}-${d}` }
+          if (b?.seconds) { const dt = new Date(b.seconds * 1000); const y = dt.getFullYear(); const m = String(dt.getMonth() + 1).padStart(2, "0"); const d = String(dt.getDate()).padStart(2, "0"); return `${y}-${m}-${d}` }
+          return ""
+        })
+        .filter(Boolean)
+      if (blockedNorm.includes(appointmentDate)) {
+        setAvailableSlots([])
+        return
+      }
+
       // fetch appointments for that doctor/date
       try {
         const aptQ = query(collection(db,'appointments'), where('doctorId','==', selectedDoctorId), where('appointmentDate','==', appointmentDate))
@@ -267,7 +348,7 @@ export default function ReceptionistDashboard() {
                       </div>
                     </>
                   )}
-                </div>
+                    </div>
               </div>
             </div>
           </div>
@@ -377,10 +458,47 @@ export default function ReceptionistDashboard() {
                   )}
                 </div>
 
+                {/* Selected patient summary (placed right after search box) */}
+                {patientMode === 'existing' && selectedPatientId && (
+                  <div className="mt-3">
+                    {patientInfoLoading && (
+                      <div className="text-xs text-gray-500">Loading patient details…</div>
+                    )}
+                    {patientInfoError && (
+                      <div className="text-xs text-red-600">{patientInfoError}</div>
+                    )}
+                    {selectedPatientInfo && !patientInfoLoading && !patientInfoError && (
+                      <div className="bg-white/70 backdrop-blur-sm border border-gray-200 rounded-lg p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold text-gray-900">{selectedPatientInfo.firstName} {selectedPatientInfo.lastName}</div>
+                          {selectedPatientInfo.bloodGroup && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700">{selectedPatientInfo.bloodGroup}</span>
+                          )}
+                        </div>
+                        <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">
+                          <div><span className="text-xs text-gray-500">Email:</span> {selectedPatientInfo.email || '—'}</div>
+                          <div><span className="text-xs text-gray-500">Phone:</span> {selectedPatientInfo.phone || '—'}</div>
+                          <div><span className="text-xs text-gray-500">Gender:</span> {selectedPatientInfo.gender || '—'}</div>
+                          <div><span className="text-xs text-gray-500">DOB:</span> {selectedPatientInfo.dateOfBirth || '—'}</div>
+                          {selectedPatientInfo.address && (
+                            <div className="sm:col-span-2"><span className="text-xs text-gray-500">Address:</span> {selectedPatientInfo.address}</div>
+                          )}
+                          {(selectedPatientInfo.allergies || selectedPatientInfo.currentMedications) && (
+                            <div className="sm:col-span-2 flex flex-col gap-1">
+                              {selectedPatientInfo.allergies && <div><span className="text-xs text-gray-500">Allergies:</span> {selectedPatientInfo.allergies}</div>}
+                              {selectedPatientInfo.currentMedications && <div><span className="text-xs text-gray-500">Medications:</span> {selectedPatientInfo.currentMedications}</div>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block text-sm text-gray-700 mb-1">Symptoms (suggest doctor)</label>
-                    <select value={symptomCategory} onChange={(e)=>{ setSymptomCategory(e.target.value); setSelectedDoctorId(''); if (e.target.value !== 'custom') setCustomSymptom('') }} className="w-full px-3 py-2 border rounded">
+                    <select value={symptomCategory} onChange={(e)=>{ setSymptomCategory(e.target.value); setSelectedDoctorId(''); setSelectedDoctorFee(null); if (e.target.value !== 'custom') setCustomSymptom('') }} className="w-full px-3 py-2 border rounded">
                       <option value="">Select symptoms (optional)</option>
                       {SYMPTOM_CATEGORIES.map(cat => (
                         <option key={cat.id} value={cat.id}>{cat.label}</option>
@@ -401,27 +519,60 @@ export default function ReceptionistDashboard() {
                   </div>
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">Doctor</label>
-                    <select value={selectedDoctorId} onChange={(e)=>setSelectedDoctorId(e.target.value)} className="w-full px-3 py-2 border rounded">
+                    <select 
+                      value={selectedDoctorId} 
+                      onChange={(e)=>{
+                        const doctorId = e.target.value
+                        setSelectedDoctorId(doctorId)
+                        // Fetch and set consultation fee when doctor is selected
+                        const selectedDoctor = doctors.find((d:any)=>d.id===doctorId)
+                        setSelectedDoctorFee(selectedDoctor?.consultationFee || null)
+                      }} 
+                      className="w-full px-3 py-2 border rounded"
+                    >
                       <option value="">Select doctor</option>
                       {suggestedDoctors.map((d:any)=>(
                         <option key={d.id} value={d.id}>{d.firstName} {d.lastName} — {d.specialization}</option>
                       ))}
                     </select>
+                    {selectedDoctorFee !== null && (
+                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-700">Consultation Fee:</span>
+                          <span className="text-lg font-bold text-green-700">₹{selectedDoctorFee}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">Date</label>
-                    <input type="date" min={todayStr} value={appointmentDate} onChange={(e)=>setAppointmentDate(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                    <input type="date" min={todayStr} value={appointmentDate} onChange={(e)=>setAppointmentDate(e.target.value)} className={`w-full px-3 py-2 border rounded ${isSelectedDateBlocked ? 'border-red-400 bg-red-50' : ''}`} />
+                    {isSelectedDateBlocked && (
+                      <p className="text-xs text-red-600 mt-1">Doctor is not available on this date.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">Available Time</label>
-                    <select value={appointmentTime} onChange={(e)=>setAppointmentTime(e.target.value)} className="w-full px-3 py-2 border rounded" disabled={!selectedDoctorId || !appointmentDate}>
-                      <option value="">{!selectedDoctorId || !appointmentDate ? 'Select doctor and date first' : (availableSlots.length ? 'Select time' : 'No slots available')}</option>
+                    <select value={appointmentTime} onChange={(e)=>setAppointmentTime(e.target.value)} className="w-full px-3 py-2 border rounded" disabled={!selectedDoctorId || !appointmentDate || isSelectedDateBlocked}>
+                      <option value="">{!selectedDoctorId || !appointmentDate ? 'Select doctor and date first' : isSelectedDateBlocked ? 'Doctor not available on selected date' : (availableSlots.length ? 'Select time' : 'No slots available')}</option>
                       {availableSlots.map(s => (
                         <option key={s} value={s}>{formatTimeDisplay(s)}</option>
                       ))}
                     </select>
                   </div>
                 </div>
+
+                {/* Payment Mode Selection (reusable) */}
+                {selectedDoctorFee !== null && (
+                  <PaymentMethodSection
+                    paymentMethod={paymentMethod}
+                    setPaymentMethod={(m)=>setPaymentMethod(m)}
+                    paymentData={paymentData as RPaymentData}
+                    setPaymentData={(d)=>setPaymentData(d as any)}
+                    amountToPay={paymentAmount}
+                    title="Payment Mode"
+                  />
+                )}
               </div>
               <div className="mt-6 flex justify-end gap-2">
                 <button disabled={bookLoading} onClick={async()=>{
@@ -430,6 +581,16 @@ export default function ReceptionistDashboard() {
                     if (!selectedDoctorId){ setBookError('Please select a doctor'); setBookLoading(false); return }
                     if (!appointmentDate || !appointmentTime){ setBookError('Please select date and time'); setBookLoading(false); return }
                     if (!availableSlots.includes(appointmentTime)) { setBookError('Selected time is not available'); setBookLoading(false); return }
+                    if (isSelectedDateBlocked) { setBookError('Doctor is not available on the selected date'); setBookLoading(false); return }
+                    if (!paymentMethod){ setBookError('Please select a payment method'); setBookLoading(false); return }
+                    if (paymentMethod === 'card') {
+                      if (!paymentData.cardNumber || !paymentData.cardName || !paymentData.expiryDate || !paymentData.cvv) {
+                        setBookError('Enter complete card details'); setBookLoading(false); return
+                      }
+                    }
+                    if (paymentMethod === 'upi') {
+                      if (!paymentData.upiId) { setBookError('Enter UPI ID'); setBookLoading(false); return }
+                    }
                     let patientId = selectedPatientId
                     let patientPayload:any = null
                     if (patientMode==='new'){
@@ -442,7 +603,7 @@ export default function ReceptionistDashboard() {
                       const d = await res.json(); patientId = d.id; patientPayload = { ...newPatient }
                     } else {
                       if (!patientId){ setBookError('Please select an existing patient'); setBookLoading(false); return }
-                      const p = patients.find((x:any)=>x.id===patientId); patientPayload = p
+                      const p = selectedPatientInfo || patients.find((x:any)=>x.id===patientId); patientPayload = p
                     }
                     // Prevent multiple bookings on the same day for the same patient
                     try {
@@ -472,15 +633,29 @@ export default function ReceptionistDashboard() {
                       appointmentDate,
                       appointmentTime,
                       status: 'confirmed',
-                      paymentAmount: doctor?.consultationFee || 0,
+                      paymentAmount: paymentAmount,
+                      paymentMethod: paymentMethod,
+                      paymentType: 'full',
                       createdAt: new Date().toISOString(),
                       updatedAt: new Date().toISOString(),
                       createdBy: 'receptionist'
                     }
                     const res2 = await fetch('/api/receptionist/create-appointment', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ appointmentData }) })
                     if (!res2.ok){ const d = await res2.json().catch(()=>({})); throw new Error(d?.error || 'Failed to create appointment') }
-                    setNotification({ type:'success', message:'Appointment booked successfully' })
-                    // Reset form
+                    // Show success modal
+                    const txnId = `RCPT${Date.now()}`
+                    setSuccessData({
+                      doctorName: appointmentData.doctorName,
+                      doctorSpecialization: appointmentData.doctorSpecialization,
+                      appointmentDate: appointmentDate,
+                      appointmentTime: appointmentTime,
+                      transactionId: txnId,
+                      paymentAmount: appointmentData.paymentAmount,
+                      paymentType: 'full',
+                      patientName: appointmentData.patientName
+                    })
+                    setSuccessOpen(true)
+                    // Reset form completely
                     setPatientMode('existing')
                     setSearchPatient('')
                     setSelectedPatientId('')
@@ -488,10 +663,14 @@ export default function ReceptionistDashboard() {
                     setNewPatientPassword('')
                     setNewPatientPasswordConfirm('')
                     setSelectedDoctorId('')
+                    setSelectedDoctorFee(null)
                     setAppointmentDate('')
                     setAppointmentTime('')
                     setSymptomCategory('')
                     setCustomSymptom('')
+                    setPaymentMethod(null)
+                    setPaymentData({ cardNumber:'', cardName:'', expiryDate:'', cvv:'', upiId:'' })
+                    setAvailableSlots([])
                   }catch(e:any){ setBookError(e?.message || 'Failed') } finally { setBookLoading(false) }
                 }} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{bookLoading?'Booking...':'Book Appointment'}</button>
                 </div>
@@ -507,6 +686,11 @@ export default function ReceptionistDashboard() {
           onClose={() => setNotification(null)}
         />
       )}
+      <AppointmentSuccessModal
+        isOpen={successOpen}
+        onClose={()=>setSuccessOpen(false)}
+        appointmentData={successData}
+      />
       {otpModalOpen && (
         <OTPVerificationModal
           isOpen={otpModalOpen}
@@ -544,7 +728,9 @@ export default function ReceptionistDashboard() {
                 appointmentDate,
                 appointmentTime,
                 status: 'confirmed',
-                paymentAmount: doctor?.consultationFee || 0,
+                paymentAmount: paymentAmount,
+                paymentMethod: paymentMethod,
+                paymentType: 'full',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 createdBy: 'receptionist'
@@ -552,7 +738,18 @@ export default function ReceptionistDashboard() {
               const res2 = await fetch('/api/receptionist/create-appointment', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ appointmentData }) })
               if (!res2.ok){ const d2 = await res2.json().catch(()=>({})); throw new Error(d2?.error || 'Failed to create appointment') }
               setOtpModalOpen(false)
-              setNotification({ type:'success', message:'Appointment booked successfully' })
+              const txnId = `RCPT${Date.now()}`
+              setSuccessData({
+                doctorName: appointmentData.doctorName,
+                doctorSpecialization: appointmentData.doctorSpecialization,
+                appointmentDate: appointmentDate,
+                appointmentTime: appointmentTime,
+                transactionId: txnId,
+                paymentAmount: appointmentData.paymentAmount,
+                paymentType: 'full',
+                patientName: appointmentData.patientName
+              })
+              setSuccessOpen(true)
               // Reset form
               setPatientMode('existing')
               setSearchPatient('')
@@ -561,10 +758,14 @@ export default function ReceptionistDashboard() {
               setNewPatientPassword('')
               setNewPatientPasswordConfirm('')
               setSelectedDoctorId('')
+              setSelectedDoctorFee(null)
               setAppointmentDate('')
               setAppointmentTime('')
               setSymptomCategory('')
               setCustomSymptom('')
+              setPaymentMethod(null)
+              setPaymentData({ cardNumber:'', cardName:'', expiryDate:'', cvv:'', upiId:'' })
+              setAvailableSlots([])
             } catch(e:any) {
               setBookError(e?.message || 'Failed')
             } finally {

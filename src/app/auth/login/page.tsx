@@ -295,19 +295,19 @@ function LoginContent() {
           
           {/* Sign Up Link - Only show for patient and doctor (admin and receptionist signup is disabled) */}
           {(role === "patient" || role === "doctor" || !role) && (
-            <div className="mt-6 text-center">
-              <p className="text-sm text-slate-600">
-                Don&apos;t have an account?{" "}
-                <a 
+          <div className="mt-6 text-center">
+            <p className="text-sm text-slate-600">
+              Don&apos;t have an account?{" "}
+              <a 
                   href={role ? `/auth/signup?role=${role}` : "/auth/signup?role=patient"} 
-                  className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
-                >
+                className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
+              >
                   Create {role === "doctor" ? "doctor" : 
                           role === "patient" ? "patient" :
                           "account"}
-                </a>
-              </p>
-            </div>
+              </a>
+            </p>
+          </div>
           )}
 
           {/* Info Box for Admin/Receptionist - No signup available */}

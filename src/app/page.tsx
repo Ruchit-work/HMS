@@ -31,8 +31,8 @@ export default function Home() {
               <div className="relative bg-gradient-to-br from-blue-600 to-purple-600 p-2 sm:p-2.5 rounded-xl shadow-lg">
                 <svg className="w-7 h-7 sm:w-8 sm:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
+              </svg>
+            </div>
             </div>
             <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-extrabold text-gray-900 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 break-words px-2">
               Hospital Management System
@@ -74,7 +74,7 @@ export default function Home() {
               </p>
               <p className="text-xs text-gray-500 mt-2 text-center px-2 break-words">
                 Also available for doctors, administrators, and receptionists
-              </p>
+            </p>
             </div>
             
             {/* Action Buttons */}
@@ -99,8 +99,8 @@ export default function Home() {
                 <span className="whitespace-nowrap">Sign Up</span>
               </Link>
             </div>
+            </div>
           </div>
-        </div>
 
         {/* Credentials Table Section - Moved Below Portal */}
         <div className="max-w-5xl mx-auto mb-8 sm:mb-10 px-2">
@@ -189,7 +189,7 @@ export default function Home() {
                     </tr>
                   </tbody>
                 </table>
-              </div>
+            </div>
             </div>
           </details>
         </div>
@@ -199,9 +199,9 @@ export default function Home() {
           <div className="text-center mb-8 sm:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-gray-900 mb-3 sm:mb-4 px-2 break-words">
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600">
-                Key Features
+            Key Features
               </span>
-            </h2>
+          </h2>
             <p className="text-sm sm:text-base md:text-lg text-gray-600 max-w-2xl mx-auto px-2 break-words">
               Everything you need to manage your healthcare operations efficiently
             </p>
@@ -213,8 +213,8 @@ export default function Home() {
               <div className="relative">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center mx-auto mb-4 sm:mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
                   <svg className="w-7 h-7 sm:w-8 sm:h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
                 </div>
                 <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3 text-center break-words">Appointment Management</h3>
                 <p className="text-sm sm:text-base text-gray-600 leading-relaxed text-center break-words">Schedule, reschedule, and manage appointments seamlessly with our intuitive interface</p>
@@ -226,8 +226,8 @@ export default function Home() {
               <div className="relative">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-xl flex items-center justify-center mx-auto mb-4 sm:mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
                   <svg className="w-7 h-7 sm:w-8 sm:h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
                 </div>
                 <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3 text-center break-words">Patient Records</h3>
                 <p className="text-sm sm:text-base text-gray-600 leading-relaxed text-center break-words">Maintain comprehensive patient medical histories with secure and organized documentation</p>
@@ -239,8 +239,8 @@ export default function Home() {
               <div className="relative">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-teal-100 to-teal-200 rounded-xl flex items-center justify-center mx-auto mb-4 sm:mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg">
                   <svg className="w-7 h-7 sm:w-8 sm:h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 </div>
                 <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3 text-center break-words">Real-time Updates</h3>
                 <p className="text-sm sm:text-base text-gray-600 leading-relaxed text-center break-words">Get instant notifications and schedule updates to stay informed at all times</p>

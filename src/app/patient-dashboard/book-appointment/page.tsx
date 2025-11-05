@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where, addDoc } from "firebase/firestore"
+import { doc, getDoc, getDocs, collection, query, where, addDoc, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import Notification from "@/components/Notification"
@@ -33,15 +33,20 @@ export default function BookAppointmentPage() {
       }
 
       const doctorsQuery = query(collection(db, "doctors"), where("status", "==", "active"))
-      const doctorsSnapshot = await getDocs(doctorsQuery)
-      const doctorsList = doctorsSnapshot.docs.map((doc) => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as Doctor))
-      setDoctors(doctorsList)
+      const unsub = onSnapshot(doctorsQuery, (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Doctor))
+        setDoctors(list)
+      })
+      return unsub
     }
 
-    fetchData()
+    const maybeUnsubPromise = fetchData()
+    return () => {
+      // unsubscribe doctors listener if available
+      if (maybeUnsubPromise && typeof (maybeUnsubPromise as any) === 'function') {
+        ;(maybeUnsubPromise as any)()
+      }
+    }
   }, [user])
 
   if (loading) {
@@ -86,6 +91,26 @@ export default function BookAppointmentPage() {
         setNotification({ type: "error", message: "Please enter UPI ID" })
         return
       }
+    }
+
+    // Blocked date guard (client-side)
+    const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
+    if (selectedDoctorData) {
+      try {
+        const rawBlocked: any[] = Array.isArray((selectedDoctorData as any).blockedDates) ? (selectedDoctorData as any).blockedDates : []
+        const normalized: string[] = rawBlocked.map((b: any) => {
+          if (!b) return ''
+          if (typeof b === 'string') return b.slice(0, 10)
+          if (typeof b === 'object' && typeof b.date === 'string') return String(b.date).slice(0, 10)
+          if (b?.toDate) { const dt = b.toDate(); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2,'0'); const d = String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${d}` }
+          if (b?.seconds) { const dt = new Date(b.seconds*1000); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2,'0'); const d = String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${d}` }
+          return ''
+        }).filter(Boolean)
+        if (normalized.includes(appointmentData.date)) {
+          setNotification({ type: 'error', message: 'Doctor is not available on the selected date' })
+          return
+        }
+      } catch {}
     }
 
     setSubmitting(true)

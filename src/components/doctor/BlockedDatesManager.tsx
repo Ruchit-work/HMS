@@ -2,19 +2,52 @@
 
 import { useState } from "react"
 import { BlockedDate } from "@/types/patient"
+import { db } from "@/firebase/config"
+import { doc, updateDoc } from "firebase/firestore"
 
 interface BlockedDatesManagerProps {
   blockedDates: BlockedDate[]
   onChange: (dates: BlockedDate[]) => void
+  doctorId?: string
+  autosave?: boolean
+  onSaved?: () => void
 }
 
-export default function BlockedDatesManager({ blockedDates, onChange }: BlockedDatesManagerProps) {
+export default function BlockedDatesManager({ blockedDates, onChange, doctorId, autosave = true, onSaved }: BlockedDatesManagerProps) {
   const [useRange, setUseRange] = useState(false)
   const [newDate, setNewDate] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [newReason, setNewReason] = useState("")
   const [showAddForm, setShowAddForm] = useState(false)
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [lastError, setLastError] = useState<string>("")
+
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  const persist = (next: BlockedDate[]) => {
+    if (!autosave || !doctorId) return
+    try {
+      if (debounceTimer) clearTimeout(debounceTimer)
+    } catch {}
+    setSaveState("saving")
+    setLastError("")
+    debounceTimer = setTimeout(async () => {
+      try {
+        await updateDoc(doc(db, "doctors", doctorId), {
+          blockedDates: next,
+          updatedAt: new Date().toISOString()
+        })
+        setSaveState("saved")
+        onSaved?.()
+        // Fade back to idle after short delay
+        setTimeout(() => setSaveState("idle"), 1200)
+      } catch (e: any) {
+        setSaveState("error")
+        setLastError(e?.message || "Failed to save")
+      }
+    }, 300)
+  }
 
   const handleAddBlockedDate = () => {
     if (useRange) {
@@ -43,7 +76,9 @@ export default function BlockedDatesManager({ blockedDates, onChange }: BlockedD
         }
       }
 
-      onChange([...blockedDates, ...newBlockedDates])
+      const next = [...blockedDates, ...newBlockedDates]
+      onChange(next)
+      persist(next)
       setStartDate("")
       setEndDate("")
       setNewReason("")
@@ -58,7 +93,9 @@ export default function BlockedDatesManager({ blockedDates, onChange }: BlockedD
         createdAt: new Date().toISOString()
       }
 
-      onChange([...blockedDates, blocked])
+      const next = [...blockedDates, blocked]
+      onChange(next)
+      persist(next)
       setNewDate("")
       setNewReason("")
       setShowAddForm(false)
@@ -66,7 +103,9 @@ export default function BlockedDatesManager({ blockedDates, onChange }: BlockedD
   }
 
   const handleRemoveBlockedDate = (dateToRemove: string) => {
-    onChange(blockedDates.filter(d => d.date !== dateToRemove))
+    const next = blockedDates.filter(d => d.date !== dateToRemove)
+    onChange(next)
+    persist(next)
   }
 
   // Sort blocked dates by date
@@ -81,6 +120,28 @@ export default function BlockedDatesManager({ blockedDates, onChange }: BlockedD
 
   return (
     <div className="space-y-4">
+      {/* Auto-save status */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-500">Blocked Dates (auto-save)</span>
+        {autosave && (
+          saveState === "saving" ? (
+            <span className="text-xs text-slate-500">Saving…</span>
+          ) : saveState === "saved" ? (
+            <span className="text-xs text-green-600">Saved</span>
+          ) : saveState === "error" ? (
+            <button
+              type="button"
+              className="text-xs text-red-600 hover:underline"
+              onClick={() => persist(blockedDates)}
+              title={lastError}
+            >
+              Save failed — Retry
+            </button>
+          ) : (
+            <span className="text-xs text-slate-400">Auto-save on</span>
+          )
+        )}
+      </div>
       {/* Add Button */}
       <div>
         {!showAddForm ? (
@@ -255,16 +316,7 @@ export default function BlockedDatesManager({ blockedDates, onChange }: BlockedD
                     <span>{blocked.reason}</span>
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveBlockedDate(blocked.date)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-100 p-2 rounded-lg transition-colors"
-                  title="Unblock this date"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                {/* Unblocking disabled per requirement */}
               </div>
             ))}
           </div>
