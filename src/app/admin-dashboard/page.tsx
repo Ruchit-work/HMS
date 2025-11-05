@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { db, auth } from "@/firebase/config"
-import { doc, getDoc, collection, getDocs, query, orderBy, limit } from "firebase/firestore"
+import { doc, getDoc, collection, getDocs, query, orderBy, limit, where, updateDoc } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import { useAuth } from "@/hooks/useAuth"
 import { useRouter } from "next/navigation"
@@ -59,6 +59,8 @@ export default function AdminDashboard() {
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [pendingRequests, setPendingRequests] = useState<any[]>([])
+  const [loadingRequests, setLoadingRequests] = useState(false)
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
@@ -189,6 +191,28 @@ export default function AdminDashboard() {
 
       setRecentAppointments(recent)
 
+      // Load pending doctor schedule requests
+      setLoadingRequests(true)
+      const reqQuery = query(
+        collection(db, 'doctor_schedule_requests'),
+        where('status', '==', 'pending'),
+        limit(20)
+      )
+      const reqSnap = await getDocs(reqQuery)
+      const reqsRaw = reqSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[]
+      // Enrich with doctor name for easier verification
+      const reqs = await Promise.all(reqsRaw.map(async (r) => {
+        try {
+          const dref = await getDoc(doc(db, 'doctors', String(r.doctorId)))
+          const ddata = dref.exists() ? dref.data() as any : null
+          return { ...r, doctorName: ddata ? `${ddata.firstName || ''} ${ddata.lastName || ''}`.trim() : r.doctorId }
+        } catch {
+          return { ...r, doctorName: r.doctorId }
+        }
+      }))
+      setPendingRequests(reqs)
+      setLoadingRequests(false)
+
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
       setNotification({ 
@@ -207,6 +231,46 @@ export default function AdminDashboard() {
   const handleRefresh = async () => {
     await fetchDashboardData()
     setNotification({ type: "success", message: "Dashboard data refreshed!" })
+  }
+
+  const approveRequest = async (request: any) => {
+    try {
+      // Apply to doctor doc
+      const updates: any = { updatedAt: new Date().toISOString() }
+      if (request.requestType === 'visitingHours' || request.requestType === 'both') {
+        updates.visitingHours = request.visitingHours || null
+      }
+      if (request.requestType === 'blockedDates' || request.requestType === 'both') {
+        updates.blockedDates = request.blockedDates || []
+      }
+      await updateDoc(doc(db, 'doctors', String(request.doctorId)), updates)
+
+      // Mark request approved
+      await updateDoc(doc(db, 'doctor_schedule_requests', request.id), {
+        status: 'approved',
+        approvedAt: new Date().toISOString(),
+        approvedBy: user?.uid || null,
+      })
+
+      setPendingRequests(prev => prev.filter(r => r.id !== request.id))
+      setNotification({ type: 'success', message: 'Request approved and applied.' })
+    } catch (e: any) {
+      setNotification({ type: 'error', message: e?.message || 'Failed to approve request' })
+    }
+  }
+
+  const rejectRequest = async (request: any) => {
+    try {
+      await updateDoc(doc(db, 'doctor_schedule_requests', request.id), {
+        status: 'rejected',
+        rejectedAt: new Date().toISOString(),
+        rejectedBy: user?.uid || null,
+      })
+      setPendingRequests(prev => prev.filter(r => r.id !== request.id))
+      setNotification({ type: 'success', message: 'Request rejected.' })
+    } catch (e: any) {
+      setNotification({ type: 'error', message: e?.message || 'Failed to reject request' })
+    }
   }
 
   const handleLogout = async () => {
@@ -779,6 +843,88 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Doctor Schedule Requests (Approval) */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">Doctor Leave Requests</h3>
+                  <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">{pendingRequests.length} pending</span>
+                </div>
+                {loadingRequests ? (
+                  <div className="text-sm text-gray-500">Loading requests…</div>
+                ) : pendingRequests.length === 0 ? (
+                  <div className="text-sm text-gray-500">No pending requests</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[700px] text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Doctor</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Submitted at</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Date(s)</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Reason(s)</th>
+                          <th className="px-3 py-2" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {pendingRequests.map((req) => (
+                          <tr key={req.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-sm">
+                              <div className="font-semibold text-gray-900">{req.doctorName || 'Unknown'}</div>
+                              <div className="text-xs text-gray-500 font-mono">{req.doctorId}</div>
+                            </td>
+                            <td className="px-3 py-2 capitalize">{req.requestType}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600">{new Date(req.createdAt).toLocaleString()}</td>
+                            <td className="px-3 py-2 align-top">
+                              {Array.isArray(req.blockedDates) && req.blockedDates.length > 0 ? (
+                                <div className="space-y-1">
+                                  {req.blockedDates.map((bd: any, idx: number) => (
+                                    <div key={idx} className="text-xs text-gray-800">
+                                      {(bd?.date || '').toString()}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              {Array.isArray(req.blockedDates) && req.blockedDates.length > 0 ? (
+                                <div className="space-y-1">
+                                  {req.blockedDates.map((bd: any, idx: number) => (
+                                    <div key={idx} className="text-xs text-gray-800">
+                                      {(bd?.reason || '').toString() || '—'}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => approveRequest(req)}
+                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => rejectRequest(req)}
+                                  className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Recent Appointments */}

@@ -120,71 +120,58 @@ export default function DoctorProfilePage() {
           gradient="from-teal-600 to-cyan-700"
         />
 
-        {/* Profile Information */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Profile Card */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
-              <div className="text-center">
-                <div className="w-24 h-24 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 shadow-lg">
-                  {userData.firstName?.[0]}{userData.lastName?.[0]}
-                </div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-1">
+        {/* Profile Header - full width to avoid empty side */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
+            <div className="flex items-center gap-5 flex-wrap">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold shadow-lg">
+                {userData.firstName?.[0]}{userData.lastName?.[0]}
+              </div>
+              <div className="flex-1 min-w-[220px]">
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
                   Dr. {userData.firstName} {userData.lastName}
                 </h2>
-                <p className="text-slate-600 mb-2">{userData.specialization}</p>
-                <p className="text-sm text-slate-500 mb-4">Doctor</p>
-                <div className="flex gap-3 justify-center">
-                  <button
-                    onClick={() => setIsEditing(!isEditing)}
-                    className="px-6 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors"
-                  >
-                    {isEditing ? "Cancel" : "Edit Profile"}
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Logout
-                  </button>
-                </div>
+                <p className="text-slate-600">{userData.specialization}</p>
+              </div>
+              <div className="flex gap-3 ml-auto">
+                <button
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="px-5 py-2 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors"
+                >
+                  {isEditing ? "Cancel" : "Edit Profile"}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="px-5 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Logout
+                </button>
               </div>
             </div>
+          </div>
 
-            {/* Government Leaves Card */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md mt-6">
-              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <span>🏖️</span>
-                <span>Government Leaves</span>
-              </h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-4xl font-bold text-slate-800">12</p>
-                  <p className="text-sm text-slate-500 mt-1">Days per year</p>
-                </div>
-                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center text-3xl">
-                  📅
-                </div>
+          {/* Government Leaves - optional small card under header */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <span>🏖️</span>
+              <span>Government Leaves</span>
+            </h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-slate-800">12</p>
+                <p className="text-sm text-slate-500 mt-1">Days per year</p>
               </div>
-              <div className="mt-4 pt-4 border-t border-slate-200">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Available</span>
-                  <span className="font-semibold text-green-600">12 days</span>
-                </div>
-                <div className="flex justify-between text-sm mt-2">
-                  <span className="text-slate-600">Used</span>
-                  <span className="font-semibold text-red-600">0 days</span>
-                </div>
+              <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center text-2xl">
+                📅
               </div>
             </div>
           </div>
 
           {/* Profile Details */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
               <h3 className="text-xl font-bold text-slate-800 mb-6">Professional Information</h3>
               
               {isEditing ? (
@@ -195,66 +182,69 @@ export default function DoctorProfilePage() {
                   updating={updating}
                 />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">First Name</label>
-                    <p className="text-slate-900">{userData.firstName}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>🧾</span> First Name</p>
+                    <p className="text-slate-900 font-medium">{userData.firstName}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Last Name</label>
-                    <p className="text-slate-900">{userData.lastName}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>🧾</span> Last Name</p>
+                    <p className="text-slate-900 font-medium">{userData.lastName}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Email</label>
-                    <p className="text-slate-900">{userData.email}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>📧</span> Email</p>
+                    <p className="text-slate-900 font-medium break-all">{userData.email}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
-                    <p className="text-slate-900">{userData.phoneNumber || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>📱</span> Phone</p>
+                    <p className="text-slate-900 font-medium">{userData.phoneNumber || <span className="text-slate-500">Not provided</span>}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Specialization</label>
-                    <p className="text-slate-900">{userData.specialization || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>🩺</span> Specialization</p>
+                    <p className="text-slate-900 font-medium">{userData.specialization || <span className="text-slate-500">Not provided</span>}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Qualification</label>
-                    <p className="text-slate-900">{userData.qualification || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>🎓</span> Qualification</p>
+                    <p className="text-slate-900 font-medium">{userData.qualification || <span className="text-slate-500">Not provided</span>}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Experience</label>
-                    <p className="text-slate-900">{userData.experience || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>⏱️</span> Experience</p>
+                    <p className="text-slate-900 font-medium">{userData.experience || <span className="text-slate-500">Not provided</span>}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Consultation Fee</label>
-                    <p className="text-green-600 font-bold text-lg">₹{userData.consultationFee || "Not set"}</p>
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-green-700 mb-1 flex items-center gap-2"><span>💰</span> Consultation Fee</p>
+                    <p className="text-green-700 font-bold text-lg">{userData.consultationFee ? `₹${userData.consultationFee}` : <span className="text-slate-500 font-medium">Not set</span>}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Gender</label>
-                    <p className="text-slate-900">{userData.gender || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>⚧️</span> Gender</p>
+                    <p className="text-slate-900 font-medium">{userData.gender || <span className="text-slate-500">Not provided</span>}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Date of Birth</label>
-                    <p className="text-slate-900">{userData.dateOfBirth || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>🎂</span> Date of Birth</p>
+                    <p className="text-slate-900 font-medium">{userData.dateOfBirth || <span className="text-slate-500">Not provided</span>}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Blood Group</label>
-                    <p className="text-slate-900">{userData.bloodGroup || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-2"><span>🩸</span> Blood Group</p>
+                    {userData.bloodGroup ? (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">{userData.bloodGroup}</span>
+                    ) : (
+                      <span className="text-slate-500">Not provided</span>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Address</label>
-                    <p className="text-slate-900">{userData.address || "Not provided"}</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:col-span-2">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>🏠</span> Address</p>
+                    <p className="text-slate-900 font-medium">{userData.address || <span className="text-slate-500">Not provided</span>}</p>
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Security - Change Password */}
-            <ChangePasswordSection 
-              userEmail={user.email!}
-              accent="teal"
-              notify={(type, message) => setNotification({ type, message })}
-            />
           </div>
+
+          {/* Security - full width below */}
+          <ChangePasswordSection 
+            userEmail={user.email!}
+            accent="teal"
+            notify={(type, message) => setNotification({ type, message })}
+          />
         </div>
       </main>
 

@@ -43,6 +43,7 @@ export default function DoctorDashboard() {
   })
   const [visitingHours, setVisitingHours] = useState<VisitingHours>(DEFAULT_VISITING_HOURS)
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
+  const [blockedDrafts, setBlockedDrafts] = useState<BlockedDate[]>([])
   const [savingSchedule, setSavingSchedule] = useState(false)
 
   // Protect route - only allow doctors
@@ -96,28 +97,59 @@ export default function DoctorDashboard() {
     }
   }
 
-  // Save visiting hours and blocked dates
+  // Save visiting hours and blocked dates -> submit for admin approval
   const handleSaveSchedule = async () => {
     if (!user?.uid) return
 
     setSavingSchedule(true)
     try {
-      await updateDoc(doc(db, "doctors", user.uid), {
-        visitingHours: visitingHours,
-        blockedDates: blockedDates,
-        updatedAt: new Date().toISOString()
+      const res = await fetch('/api/doctor/schedule-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctorId: user.uid,
+          requestType: 'both',
+          visitingHours,
+          blockedDates: blockedDrafts,
+        })
       })
-
-      setNotification({ 
-        type: "success", 
-        message: "Schedule and blocked dates saved successfully!" 
-      })
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}))
+        throw new Error(j?.error || 'Failed to submit request')
+      }
+      setNotification({ type: 'success', message: 'Sent to admin for approval. Changes will apply after approval.' })
+      setBlockedDrafts([])
     } catch (error: unknown) {
-      console.error("Error saving schedule:", error)
-      setNotification({ 
-        type: "error", 
-        message: (error as Error).message || "Failed to save schedule" 
+      console.error('Error submitting schedule request:', error)
+      setNotification({ type: 'error', message: (error as Error).message || 'Failed to submit request' })
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  // Submit only blocked date drafts for approval
+  const handleSubmitBlockedDrafts = async () => {
+    if (!user?.uid || blockedDrafts.length === 0) return
+
+    setSavingSchedule(true)
+    try {
+      const res = await fetch('/api/doctor/schedule-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctorId: user.uid,
+          requestType: 'blockedDates',
+          blockedDates: blockedDrafts,
+        })
       })
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}))
+        throw new Error(j?.error || 'Failed to submit request')
+      }
+      setNotification({ type: 'success', message: 'Blocked dates sent to admin for approval.' })
+      setBlockedDrafts([])
+    } catch (e: any) {
+      setNotification({ type: 'error', message: e?.message || 'Failed to submit request' })
     } finally {
       setSavingSchedule(false)
     }
@@ -470,7 +502,23 @@ export default function DoctorDashboard() {
             <BlockedDatesManager 
               blockedDates={blockedDates}
               onChange={setBlockedDates}
+              autosave={false}
+              draftDates={blockedDrafts}
+              onDraftChange={setBlockedDrafts}
             />
+
+            {blockedDrafts.length > 0 && (
+              <div className="mt-4 flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-xs text-yellow-800 font-medium">{blockedDrafts.length} draft date(s) pending approval</p>
+                <button
+                  onClick={handleSubmitBlockedDrafts}
+                  disabled={savingSchedule}
+                  className="px-3 py-1.5 bg-yellow-600 text-white rounded-md text-xs hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  Submit for Approval
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

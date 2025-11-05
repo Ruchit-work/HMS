@@ -11,9 +11,11 @@ interface BlockedDatesManagerProps {
   doctorId?: string
   autosave?: boolean
   onSaved?: () => void
+  draftDates?: BlockedDate[]
+  onDraftChange?: (dates: BlockedDate[]) => void
 }
 
-export default function BlockedDatesManager({ blockedDates, onChange, doctorId, autosave = true, onSaved }: BlockedDatesManagerProps) {
+export default function BlockedDatesManager({ blockedDates, onChange, doctorId, autosave = false, onSaved, draftDates = [], onDraftChange }: BlockedDatesManagerProps) {
   const [useRange, setUseRange] = useState(false)
   const [newDate, setNewDate] = useState("")
   const [startDate, setStartDate] = useState("")
@@ -76,9 +78,14 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
         }
       }
 
-      const next = [...blockedDates, ...newBlockedDates]
-      onChange(next)
-      persist(next)
+      if (!autosave && onDraftChange) {
+        const nextDrafts = [...draftDates, ...newBlockedDates]
+        onDraftChange(nextDrafts)
+      } else {
+        const next = [...blockedDates, ...newBlockedDates]
+        onChange(next)
+        persist(next)
+      }
       setStartDate("")
       setEndDate("")
       setNewReason("")
@@ -93,9 +100,14 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
         createdAt: new Date().toISOString()
       }
 
-      const next = [...blockedDates, blocked]
-      onChange(next)
-      persist(next)
+      if (!autosave && onDraftChange) {
+        const nextDrafts = [...draftDates, blocked]
+        onDraftChange(nextDrafts)
+      } else {
+        const next = [...blockedDates, blocked]
+        onChange(next)
+        persist(next)
+      }
       setNewDate("")
       setNewReason("")
       setShowAddForm(false)
@@ -106,6 +118,13 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
     const next = blockedDates.filter(d => d.date !== dateToRemove)
     onChange(next)
     persist(next)
+  }
+
+  const handleRemoveDraftDate = (dateToRemove: string) => {
+    if (onDraftChange) {
+      const next = (draftDates || []).filter(d => d.date !== dateToRemove)
+      onDraftChange(next)
+    }
   }
 
   // Sort blocked dates by date
@@ -122,8 +141,8 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
     <div className="space-y-4">
       {/* Auto-save status */}
       <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-500">Blocked Dates (auto-save)</span>
-        {autosave && (
+        <span className="text-xs text-slate-500">Blocked Dates {autosave ? '(auto-save)' : '(draft mode)'}</span>
+        {autosave ? (
           saveState === "saving" ? (
             <span className="text-xs text-slate-500">Saving…</span>
           ) : saveState === "saved" ? (
@@ -140,6 +159,8 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
           ) : (
             <span className="text-xs text-slate-400">Auto-save on</span>
           )
+        ) : (
+          <span className="text-xs text-slate-400">Use Save on dashboard to submit for approval</span>
         )}
       </div>
       {/* Add Button */}
@@ -291,7 +312,7 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
         )}
       </div>
 
-      {/* Upcoming Blocked Dates */}
+      {/* Upcoming Blocked Dates (Approved) */}
       {upcomingBlocked.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
@@ -317,6 +338,31 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
                   </p>
                 </div>
                 {/* Unblocking disabled per requirement */}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Draft Blocked Dates (Pending submission) */}
+      {!autosave && draftDates && draftDates.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h4 className="font-semibold text-yellow-800 mb-2 flex items-center gap-2">
+            <span>📝</span>
+            <span>Pending Drafts (not applied yet)</span>
+          </h4>
+          <div className="space-y-2">
+            {draftDates.map(d => (
+              <div key={d.date} className="flex items-center justify-between p-2 bg-white rounded border border-yellow-200">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+                  <p className="text-xs text-slate-600 mt-0.5">{d.reason}</p>
+                </div>
+                <button onClick={() => handleRemoveDraftDate(d.date)} className="text-xs text-red-600 hover:text-red-800 px-2 py-1 border border-red-200 rounded">
+                  Remove
+                </button>
               </div>
             ))}
           </div>
