@@ -60,7 +60,7 @@ export default function MedicalHistoryChecklist({
         <label className="block text-xs font-medium text-slate-700 mb-1">
           Any existing conditions?
         </label>
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {COMMON_CONDITIONS.map(condition => (
             <button
               key={condition.id}
@@ -73,7 +73,7 @@ export default function MedicalHistoryChecklist({
               }`}
             >
               <div className="text-base">{condition.icon}</div>
-              <div className="text-xs leading-tight mt-0.5">
+              <div className="text-[11px] sm:text-xs leading-tight mt-0.5 break-words hyphens-auto">
                 {selectedConditions.includes(condition.id) ? '✓ ' : ''}{condition.label}
               </div>
             </button>

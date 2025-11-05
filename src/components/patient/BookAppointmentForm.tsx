@@ -480,15 +480,27 @@ export default function BookAppointmentForm({
               📋
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-white">Book New Appointment</h2>
-              <p className="text-slate-100 text-sm mt-0.5">Step {currentStep} of {totalSteps}: {steps[currentStep - 1].title}</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">Book New Appointment</h2>
+              <p className="text-slate-100 text-xs sm:text-sm mt-0.5">Step {currentStep} of {totalSteps}: {steps[currentStep - 1].title}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Progress Stepper */}
-      <div className="bg-white px-6 py-4 border-b border-slate-200">
+      {/* Mobile compact stepper */}
+      <div className="bg-white px-4 py-3 border-b border-slate-200 sm:hidden">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-700">{steps[currentStep - 1].title}</span>
+          <span className="text-xs text-slate-500">Step {currentStep} of {totalSteps}</span>
+        </div>
+        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div className="h-2 bg-slate-700 rounded-full" style={{ width: `${(currentStep / totalSteps) * 100}%` }} />
+        </div>
+      </div>
+
+      {/* Desktop/tablet full stepper */}
+      <div className="bg-white px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 hidden sm:block">
         <div className="flex items-center justify-between">
           {steps.map((step, index) => (
             <div key={step.number} className="flex items-center flex-1">
@@ -519,7 +531,7 @@ export default function BookAppointmentForm({
       </div>
 
       {/* Form Container */}
-      <div className="p-6 overflow-hidden">
+      <div className="p-4 sm:p-6 overflow-hidden">
         <form onSubmit={handleSubmit} onKeyDown={(e) => {
           // Prevent Enter key from submitting form automatically
           // Only allow submission via explicit button click
@@ -678,9 +690,9 @@ export default function BookAppointmentForm({
                 <textarea
                   value={appointmentData.problem}
                   onChange={(e) => setAppointmentData({ ...appointmentData, problem: e.target.value })}
-                  rows={3}
+                  rows={4}
                   placeholder="Describe your main concern in your own words"
-                  className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 whitespace-pre-wrap break-words resize-y min-h-[110px] sm:min-h-[130px]"
                   required
                 />
                 <p className="text-xs text-slate-500 mt-1">Short is fine. Examples: “Fever and body pain since 2 days”, “Cough and cold”, “Stomach ache”.</p>
@@ -777,12 +789,12 @@ export default function BookAppointmentForm({
                     <span>✓</span>
                     <span>Summary:</span>
                   </p>
-                  <p className="text-xs font-semibold text-slate-800">{appointmentData.problem}</p>
+                  <p className="text-xs font-semibold text-slate-800 break-words whitespace-pre-wrap">{appointmentData.problem}</p>
                   {appointmentData.medicalHistory && (
-                    <p className="text-xs text-slate-600 mt-1">{appointmentData.medicalHistory}</p>
+                    <p className="text-xs text-slate-600 mt-1 break-words whitespace-pre-wrap">{appointmentData.medicalHistory}</p>
                   )}
                   {appointmentData.additionalConcern && (
-                    <p className="text-xs text-slate-700 mt-1"><span className="font-semibold">Additional:</span> {appointmentData.additionalConcern}</p>
+                    <p className="text-xs text-slate-700 mt-1 break-words whitespace-pre-wrap"><span className="font-semibold">Additional:</span> {appointmentData.additionalConcern}</p>
                   )}
                 </div>
               )}
@@ -792,18 +804,19 @@ export default function BookAppointmentForm({
           {/* Step 3: Doctor Selection (moved from step 2) */}
           {currentStep === 3 && (
             <div className={`space-y-4 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
-              <div className="bg-white border-2 border-teal-200 rounded-xl p-6">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                  <span className="text-2xl">👨‍⚕️</span>
-                  <span>Select Your Doctor</span>
+              <div className="bg-white border-2 border-teal-200 rounded-xl p-4 sm:p-6">
+                <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <span className="text-xl sm:text-2xl">👨‍⚕️</span>
+                    <span>Select Your Doctor</span>
+                  </h3>
                   {filteredDoctors.length < doctors.length && (
-                    <span className="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded-full font-medium">
-                      Recommended for your symptoms
-                    </span>
+                    <span className="text-[10px] sm:text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Recommended</span>
                   )}
-                </h3>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-5">
+                </div>
+
+                {/* Cards grid */}
+                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                   {filteredDoctors.map((doctor) => (
                     <DoctorCard
                       key={doctor.id}
@@ -815,15 +828,15 @@ export default function BookAppointmentForm({
                 </div>
 
                 {filteredDoctors.length === 0 && (
-                  <div className="text-center py-12 text-slate-500">
-                    <span className="text-5xl block mb-3">👨‍⚕️</span>
+                  <div className="text-center py-10 sm:py-12 text-slate-500">
+                    <span className="text-4xl sm:text-5xl block mb-2 sm:mb-3">👨‍⚕️</span>
                     <p className="font-medium">No matching doctors found for your symptoms</p>
-                    <p className="text-sm mt-1">Showing all doctors...</p>
+                    <p className="text-xs sm:text-sm mt-1">Showing all doctors…</p>
                   </div>
                 )}
-                
+
                 {filteredDoctors.length === 0 && doctors.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-4">
                     {doctors.map((doctor) => (
                       <DoctorCard
                         key={doctor.id}
@@ -832,6 +845,14 @@ export default function BookAppointmentForm({
                         onSelect={() => setSelectedDoctor(doctor.id)}
                       />
                     ))}
+                  </div>
+                )}
+
+                {/* Selection summary pill */}
+                {selectedDoctor && (
+                  <div className="mt-4 bg-teal-50 border border-teal-200 rounded-lg p-3 flex items-center justify-between">
+                    <p className="text-xs sm:text-sm text-teal-800 font-semibold">Selected: {selectedDoctorData?.firstName} {selectedDoctorData?.lastName} • {selectedDoctorData?.specialization}</p>
+                    <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 border border-teal-200">Fee ₹{selectedDoctorData?.consultationFee || 500}</span>
                   </div>
                 )}
               </div>
@@ -861,7 +882,7 @@ export default function BookAppointmentForm({
                       setAvailableTimeSlots([])
                     }}
                     min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     required
                   />
                   
@@ -959,26 +980,26 @@ export default function BookAppointmentForm({
                     ) : allTimeSlots.length > 0 ? (
                       <>
                         {/* Availability Legend */}
-                        <div className="flex items-center gap-4 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded bg-emerald-200 border border-emerald-300"></div>
-                            <span className="text-xs text-slate-600">Available ({availableTimeSlots.length})</span>
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 p-2 sm:p-3 bg-slate-50 rounded-lg border border-slate-200">
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-emerald-200 border border-emerald-300"></div>
+                            <span className="text-[11px] sm:text-xs text-slate-600">Available ({availableTimeSlots.length})</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded bg-rose-200 border border-rose-300"></div>
-                            <span className="text-xs text-slate-600">Booked ({bookedTimeSlots.length})</span>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-rose-200 border border-rose-300"></div>
+                            <span className="text-[11px] sm:text-xs text-slate-600">Booked ({bookedTimeSlots.length})</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded bg-gray-200 border border-gray-300"></div>
-                            <span className="text-xs text-slate-600">Past ({pastTimeSlots.length})</span>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-gray-200 border border-gray-300"></div>
+                            <span className="text-[11px] sm:text-xs text-slate-600">Past ({pastTimeSlots.length})</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded bg-purple-500 border border-purple-600"></div>
-                            <span className="text-xs text-slate-600">Your Selection</span>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-purple-500 border border-purple-600"></div>
+                            <span className="text-[11px] sm:text-xs text-slate-600">Your Selection</span>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 xs:grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                           {allTimeSlots.map((slot) => {
                             const isBooked = bookedTimeSlots.includes(slot)
                             const isAvailable = availableTimeSlots.includes(slot)

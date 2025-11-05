@@ -232,7 +232,7 @@ export default function SymptomSelector({ selectedCategory, onSelect }: SymptomS
             `}
           >
             <div className="text-lg sm:text-xl mb-1">{category.icon}</div>
-            <p className="text-xs sm:text-sm font-medium text-slate-800 leading-tight">
+            <p className="text-[11px] sm:text-sm font-medium text-slate-800 leading-snug break-words hyphens-auto">
               {category.label}
             </p>
           </button>
