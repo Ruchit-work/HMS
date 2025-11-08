@@ -13,6 +13,10 @@ export default function GlobalHeader() {
   const [loading, setLoading] = useState(true)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [showAddFunds, setShowAddFunds] = useState(false)
+  const [topupAmount, setTopupAmount] = useState<string>("")
+  const [topupLoading, setTopupLoading] = useState(false)
+  const [topupMessage, setTopupMessage] = useState<string>("")
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -135,6 +139,7 @@ export default function GlobalHeader() {
   const navLinks = isPatient ? patientLinks : doctorLinks
 
   return (
+    <>
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 backdrop-blur-sm bg-white/95 shadow-md">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3">
         <div className="flex items-center justify-between">
@@ -232,6 +237,20 @@ export default function GlobalHeader() {
                     </p>
                     <p className="text-xs text-slate-500 truncate">{user.email}</p>
                   </div>
+                  {userData?.role === 'patient' && (
+                    <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-slate-500">Wallet Balance</p>
+                        <p className="text-base font-bold text-emerald-600">₹{Number((userData as any)?.walletBalance || 0).toLocaleString()}</p>
+                      </div>
+                      <button
+                        className="text-xs px-2 py-1 bg-emerald-600 text-white rounded-md hover:bg-emerald-700"
+                        onClick={() => { setShowAddFunds(true); setShowUserDropdown(false) }}
+                      >
+                        Add Funds
+                      </button>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={handleEditProfile}
@@ -293,6 +312,69 @@ export default function GlobalHeader() {
         </div>
       )}
     </header>
+
+    {/* Add Funds Modal */}
+    {showAddFunds && (
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-slate-800">Add Wallet Funds</h3>
+            <button onClick={() => setShowAddFunds(false)} className="p-2 rounded-lg hover:bg-slate-100">✕</button>
+          </div>
+          <div className="p-5 space-y-3">
+            <label className="block text-sm text-slate-700 mb-1">Amount (₹)</label>
+            <input
+              type="number"
+              min={1}
+              value={topupAmount}
+              onChange={(e)=>setTopupAmount(e.target.value)}
+              className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              placeholder="e.g., 500"
+            />
+            <p className="text-xs text-slate-500">This is a demo top-up. No real payment is processed.</p>
+          </div>
+          <div className="px-5 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
+            <button onClick={()=>setShowAddFunds(false)} className="px-4 py-2 border-2 border-slate-300 rounded-lg text-slate-700">Cancel</button>
+            <button
+              disabled={topupLoading || !topupAmount || Number(topupAmount) <= 0}
+              onClick={async ()=>{
+                try {
+                  setTopupLoading(true)
+                  const res = await fetch('/api/patient/wallet/topup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patientId: user?.uid, amount: Number(topupAmount) })
+                  })
+                  if (!res.ok) {
+                    const j = await res.json().catch(()=>({}))
+                    throw new Error(j?.error || 'Top-up failed')
+                  }
+                  // Reflect locally
+                  setUserData((prev:any)=> prev ? ({ ...prev, walletBalance: Number(prev.walletBalance || 0) + Number(topupAmount) }) : prev)
+                  setShowAddFunds(false)
+                  setTopupAmount("")
+                  setTopupMessage(`₹${Number(topupAmount).toLocaleString()} added to wallet`)
+                  setTimeout(()=> setTopupMessage(""), 3000)
+                } catch (e) {
+                  // Optionally handle error UI
+                } finally {
+                  setTopupLoading(false)
+                }
+              }}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {topupLoading ? 'Adding…' : 'Add Funds'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {topupMessage && (
+      <div className="fixed top-4 right-4 z-[120] bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg">
+        {topupMessage}
+      </div>
+    )}
+    </>
   )
 }
 

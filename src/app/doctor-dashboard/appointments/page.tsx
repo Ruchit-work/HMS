@@ -1071,15 +1071,26 @@ export default function DoctorAppointments() {
                                     >
                                       <span>🔄</span> Regenerate
                                     </button>
-                              {appointment.status === "confirmed" && (
+                              {appointment.status === "confirmed" && (()=>{
+                                const isTodayAppt = isToday(appointment.appointmentDate)
+                                const earlierPendingExists = appointments.some(a => {
+                                  if (a.status !== 'confirmed') return false
+                                  if (!isToday(a.appointmentDate)) return false
+                                  const tA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
+                                  const tThis = new Date(`${appointment.appointmentDate} ${appointment.appointmentTime}`).getTime()
+                                  return tA < tThis
+                                })
+                                const disabled = !isTodayAppt || earlierPendingExists || updating
+                                return (
                                       <button
                                         onClick={() => openCompletionModal(appointment.id)}
-                                        disabled={updating}
+                                    disabled={disabled}
                                         className="px-4 py-2.5 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-sm flex items-center justify-center gap-2"
                                       >
                                         <span>✓</span> Complete Checkup
                                       </button>
-                                    )}
+                                )
+                              })()}
                                   </div>
                                 </div>
                               </div>
@@ -1087,17 +1098,28 @@ export default function DoctorAppointments() {
                           })()}
 
                           {/* Complete Checkup Button - Show at bottom if AI not shown yet */}
-                          {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (
+                          {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (()=>{
+                            const isTodayAppt = isToday(appointment.appointmentDate)
+                            const earlierPendingExists = appointments.some(a => {
+                              if (a.status !== 'confirmed') return false
+                              if (!isToday(a.appointmentDate)) return false
+                              const tA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
+                              const tThis = new Date(`${appointment.appointmentDate} ${appointment.appointmentTime}`).getTime()
+                              return tA < tThis
+                            })
+                            const disabled = !isTodayAppt || earlierPendingExists || updating
+                            return (
                             <div className="mt-4">
                                 <button
                                   onClick={() => openCompletionModal(appointment.id)}
-                                  disabled={updating}
+                                  disabled={disabled}
                                   className="w-full px-5 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-base flex items-center justify-center gap-2"
                                 >
                                   <span>✓</span> Complete Checkup
                                 </button>
                             </div>
-                              )}
+                            )
+                          })()}
 
                           {/* Completed Status with Prescription */}
                               {appointment.status === "completed" && (

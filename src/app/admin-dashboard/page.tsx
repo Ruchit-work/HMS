@@ -61,6 +61,8 @@ export default function AdminDashboard() {
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
+  const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
+  const [loadingRefunds, setLoadingRefunds] = useState(false)
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
@@ -96,7 +98,7 @@ export default function AdminDashboard() {
 
       const totalAppointments = allAppointments.length
       const completedAppointments = allAppointments.filter(apt => apt.status === "completed").length
-      const pendingAppointments = allAppointments.filter(apt => apt.status === "confirmed").length
+      const pendingAppointments = allAppointments.filter(apt => apt.status === "confirmed" || (apt as any).status === 'resrescheduled').length
 
       // Today's appointments
       const today = new Date().toDateString()
@@ -213,6 +215,38 @@ export default function AdminDashboard() {
       setPendingRequests(reqs)
       setLoadingRequests(false)
 
+      // Load pending refund requests
+      setLoadingRefunds(true)
+      const refundQ = query(
+        collection(db, 'refund_requests'),
+        where('status', '==', 'pending'),
+        limit(50)
+      )
+      const refundSnap = await getDocs(refundQ)
+      const refunds = refundSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[]
+      // enrich with patient and doctor names
+      const refundsEnriched = await Promise.all(refunds.map(async (r) => {
+        let patientName = r.patientId
+        let doctorName = r.doctorId
+        try {
+          const p = await getDoc(doc(db, 'patients', String(r.patientId)))
+          if (p.exists()) {
+            const pd = p.data() as any
+            patientName = `${pd.firstName || ''} ${pd.lastName || ''}`.trim() || r.patientId
+          }
+        } catch {}
+        try {
+          const dref = await getDoc(doc(db, 'doctors', String(r.doctorId)))
+          if (dref.exists()) {
+            const dd = dref.data() as any
+            doctorName = `${dd.firstName || ''} ${dd.lastName || ''}`.trim() || r.doctorId
+          }
+        } catch {}
+        return { ...r, patientName, doctorName }
+      }))
+      setPendingRefunds(refundsEnriched)
+      setLoadingRefunds(false)
+
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
       setNotification({ 
@@ -228,32 +262,27 @@ export default function AdminDashboard() {
     fetchDashboardData()
   }, [user])
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
     await fetchDashboardData()
     setNotification({ type: "success", message: "Dashboard data refreshed!" })
   }
 
   const approveRequest = async (request: any) => {
     try {
-      // Apply to doctor doc
-      const updates: any = { updatedAt: new Date().toISOString() }
-      if (request.requestType === 'visitingHours' || request.requestType === 'both') {
-        updates.visitingHours = request.visitingHours || null
-      }
-      if (request.requestType === 'blockedDates' || request.requestType === 'both') {
-        updates.blockedDates = request.blockedDates || []
-      }
-      await updateDoc(doc(db, 'doctors', String(request.doctorId)), updates)
-
-      // Mark request approved
-      await updateDoc(doc(db, 'doctor_schedule_requests', request.id), {
-        status: 'approved',
-        approvedAt: new Date().toISOString(),
-        approvedBy: user?.uid || null,
+      const res = await fetch('/api/admin/approve-schedule-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: request.id })
       })
-
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}))
+        throw new Error(j?.error || 'Approval failed')
+      }
+      const data = await res.json()
       setPendingRequests(prev => prev.filter(r => r.id !== request.id))
-      setNotification({ type: 'success', message: 'Request approved and applied.' })
+      setNotification({ type: 'success', message: `Approved. Conflicts: ${data.conflicts}, awaiting: ${data.awaitingCount}, cancelled: ${data.cancelledCount}` })
     } catch (e: any) {
       setNotification({ type: 'error', message: e?.message || 'Failed to approve request' })
     }
@@ -270,6 +299,25 @@ export default function AdminDashboard() {
       setNotification({ type: 'success', message: 'Request rejected.' })
     } catch (e: any) {
       setNotification({ type: 'error', message: e?.message || 'Failed to reject request' })
+    }
+  }
+
+  const approveRefund = async (refund: any) => {
+    try {
+      const res = await fetch('/api/admin/approve-refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refundRequestId: refund.id })
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}))
+        throw new Error(j?.error || 'Failed to approve refund')
+      }
+      const data = await res.json()
+      setPendingRefunds(prev => prev.filter(r => r.id !== refund.id))
+      setNotification({ type: 'success', message: `Refund approved. Amount: ₹${data.amountRefunded || 0}` })
+    } catch (e: any) {
+      setNotification({ type: 'error', message: e?.message || 'Failed to approve refund' })
     }
   }
 
@@ -477,6 +525,7 @@ export default function AdminDashboard() {
               
               <div className="flex items-center gap-2 sm:gap-4">
                 <button
+                  type="button"
                   onClick={handleRefresh}
                   className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
                 >
@@ -927,6 +976,61 @@ export default function AdminDashboard() {
                 )}
               </div>
 
+              {/* Refund Requests (Approval) */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">Refund Requests</h3>
+                  <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">{pendingRefunds.length} pending</span>
+                </div>
+                {loadingRefunds ? (
+                  <div className="text-sm text-gray-500">Loading refund requests…</div>
+                ) : pendingRefunds.length === 0 ? (
+                  <div className="text-sm text-gray-500">No pending refund requests</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[700px] text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Patient</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Doctor</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Amount</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Payment Method</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Requested At</th>
+                          <th className="px-3 py-2" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {pendingRefunds.map((r) => (
+                          <tr key={r.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">
+                              <div className="font-semibold text-gray-900">{r.patientName || r.patientId}</div>
+                              <div className="text-xs text-gray-500 font-mono">{r.patientId}</div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="font-semibold text-gray-900">{r.doctorName || r.doctorId}</div>
+                              <div className="text-xs text-gray-500 font-mono">{r.doctorId}</div>
+                            </td>
+                            <td className="px-3 py-2">₹{Number(r.paymentAmount || 0)}</td>
+                            <td className="px-3 py-2 capitalize">{String(r.paymentMethod || '—')}</td>
+                            <td className="px-3 py-2 text-xs text-gray-600">{new Date(r.createdAt).toLocaleString()}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => approveRefund(r)}
+                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                >
+                                  Approve
+                                </button>
+                              </div>
+                            </td>
+                          </tr>)
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               {/* Recent Appointments */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
@@ -988,9 +1092,10 @@ export default function AdminDashboard() {
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                                 appointment.status === "completed" ? "bg-green-100 text-green-800" :
                                 appointment.status === "confirmed" ? "bg-blue-100 text-blue-800" :
+                                (appointment as any).status === 'resrescheduled' ? "bg-purple-100 text-purple-800" :
                                 "bg-red-100 text-red-800"
                               }`}>
-                                {appointment.status}
+                                {(appointment as any).status === 'resrescheduled' ? 'rescheduled' : appointment.status}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -1008,14 +1113,14 @@ export default function AdminDashboard() {
 
           {activeTab === "patients" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Patient Management</h2>
+              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Patient Management</h2> */}
               <PatientManagement />
             </div>
           )}
 
           {activeTab === "doctors" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Doctor Management</h2>
+              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Doctor Management</h2> */}
               <DoctorManagement />
             </div>
           )}
@@ -1029,7 +1134,7 @@ export default function AdminDashboard() {
 
           {activeTab === "appointments" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Appointment Management</h2>
+              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Appointment Management</h2> */}
               <AppoinmentManagement />
             </div>
           )}

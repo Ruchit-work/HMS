@@ -276,7 +276,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
             <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                        <h3 className="text-lg font-semibold text-gray-900">Patient Management</h3>
+                        {/* <h3 className="text-lg font-semibold text-gray-900">Patient Management</h3> */}
                         {canAdd && (
                             <button onClick={() => setShowAddModal(true)} className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,5 +1,5 @@
 import { db } from "@/firebase/config"
-import { doc, updateDoc } from "firebase/firestore"
+import { doc, updateDoc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { Appointment } from "@/types/patient"
 
 // Calculate hours until appointment
@@ -61,7 +61,45 @@ export const completeAppointment = async (
   medicine: string,
   notes: string
 ) => {
-  await updateDoc(doc(db, "appointments", appointmentId), {
+  // Load appointment to validate rules
+  const aptRef = doc(db, "appointments", appointmentId)
+  const aptSnap = await getDoc(aptRef)
+  if (!aptSnap.exists()) {
+    throw new Error("Appointment not found")
+  }
+  const apt = aptSnap.data() as any
+
+  // Rule 1: Only today's appointments may be completed
+  const isToday = new Date(String(apt.appointmentDate)).toDateString() === new Date().toDateString()
+  if (!isToday) {
+    throw new Error("Only today's appointments can be completed")
+  }
+
+  // Rule 2: Must complete earliest pending first
+  const doctorId = String(apt.doctorId || "")
+  if (!doctorId) {
+    throw new Error("Invalid doctor for this appointment")
+  }
+  const todayStr = new Date().toISOString().slice(0,10)
+  const qConfirmedToday = query(
+    collection(db, "appointments"),
+    where("doctorId", "==", doctorId),
+    where("appointmentDate", "==", todayStr),
+    where("status", "==", "confirmed")
+  )
+  const qs = await getDocs(qConfirmedToday)
+  const pendingToday = qs.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
+  const toMinutes = (t: string) => {
+    const [h, m] = String(t||"0:0").split(":").map(Number)
+    return h * 60 + m
+  }
+  const targetTime = toMinutes(String(apt.appointmentTime))
+  const earlierPending = pendingToday.filter(p => toMinutes(String(p.appointmentTime)) < targetTime)
+  if (earlierPending.length > 0) {
+    throw new Error("Please complete earlier appointments first")
+  }
+
+  await updateDoc(aptRef, {
     status: "completed",
     medicine: medicine,
     doctorNotes: notes,

@@ -24,6 +24,10 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     const [deleteModal, setDeleteModal] = useState(false)
     const [deleteAppointment, setDeleteAppointment] = useState<Appointment | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
+    // New filters
+    const [doctors, setDoctors] = useState<Array<{ id: string; firstName?: string; lastName?: string }>>([])
+    const [selectedDoctorId, setSelectedDoctorId] = useState<string>('all')
+    const [timeRange, setTimeRange] = useState<'all' | 'today' | 'last10' | 'month' | 'year'>('all')
 
     const handleView = (appointment: Appointment) => {
         setSelectedAppointment(appointment)
@@ -76,6 +80,17 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     }
     useEffect(() => {
         fetchAppointments()
+        // Fetch limited doctors list for dropdown (active doctors)
+        ;(async () => {
+            try {
+                const snap = await getDocs(collection(db, 'doctors'))
+                const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as any[]
+                const mapped = list.map(d => ({ id: d.id, firstName: d.firstName, lastName: d.lastName }))
+                setDoctors(mapped)
+            } catch {
+                setDoctors([])
+            }
+        })()
     }, [])
 
     const handleSort = (field: string) => {
@@ -89,6 +104,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
 
     useEffect(() => {   
         let filtered = appointments
+        // Text search (by name/email/spec)
         if (search) {
             filtered = filtered.filter(appointment =>
                 appointment.patientName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -96,6 +112,33 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                 appointment.patientEmail?.toLowerCase().includes(search.toLowerCase()) ||
                 appointment.doctorSpecialization?.toLowerCase().includes(search.toLowerCase())
             )
+        }
+        // Doctor filter
+        if (selectedDoctorId !== 'all') {
+            filtered = filtered.filter(a => a.doctorId === selectedDoctorId)
+        }
+        // Time range filter
+        if (timeRange !== 'all') {
+            const now = new Date()
+            filtered = filtered.filter(a => {
+                if (!a.appointmentDate) return false
+                const d = new Date(a.appointmentDate)
+                if (timeRange === 'today') {
+                    return d.toDateString() === now.toDateString()
+                }
+                if (timeRange === 'last10') {
+                    const past = new Date(now)
+                    past.setDate(past.getDate() - 10)
+                    return d >= past && d <= now
+                }
+                if (timeRange === 'month') {
+                    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+                }
+                if (timeRange === 'year') {
+                    return d.getFullYear() === now.getFullYear()
+                }
+                return true
+            })
         }
         
         // Apply sorting
@@ -136,7 +179,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
         }
         
         setFilteredAppointments(filtered)
-    }, [search, appointments, sortField, sortOrder])
+    }, [search, appointments, sortField, sortOrder, selectedDoctorId, timeRange])
 
     // Date formatting helper functions
     const formatDate = (dateString: string) => {
@@ -208,28 +251,57 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                     </div>
                 )}
                 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                     {/* Header */}
-                    <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+                    <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-white rounded-t-xl">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                <h3 className="text-lg font-semibold text-gray-900">Appointment Management</h3>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                                <div className="relative flex-1 sm:flex-none">
+                          
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-start justify-between gap-4">
+                                {/* Doctor Dropdown */}
+                                <div>
+                                    <label className="block text-[11px] text-gray-500 mb-1">Doctor</label>
+                                    <select
+                                        value={selectedDoctorId}
+                                        onChange={(e)=>setSelectedDoctorId(e.target.value)}
+                                        className="w-full sm:w-56 pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                    >
+                                        <option value="all">All</option>
+                                        {doctors.map(d => (
+                                            <option key={d.id} value={d.id}>
+                                                {`${d.firstName || ''} ${d.lastName || ''}`.trim() || d.id}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {/* Time Range Dropdown */}
+                                <div>
+                                    <label className="block text-[11px] text-gray-500 mb-1">Time Range</label>
+                                    <select
+                                        value={timeRange}
+                                        onChange={(e)=>setTimeRange(e.target.value as any)}
+                                        className="w-full sm:w-48 pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                    >
+                                        <option value="all">All</option>
+                                        <option value="today">Today</option>
+                                        <option value="last10">Last 10 days</option>
+                                        <option value="month">This Month</option>
+                                        <option value="year">This Year</option>
+                                    </select>
+                                </div>
+                                <div className="relative flex-1 sm:flex-none mt-auto">
                                     <input
                                         type="text"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         placeholder="Search appointments..."
-                                        className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                                     />
                                     <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
                                 </div>
                                 <button 
-                                    className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                                    className="px-3 py-2 sm:px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base mt-auto"
                                     onClick={fetchAppointments}
                                     disabled={loading}
                                 >
@@ -253,7 +325,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                     {/* Table */}
                     <div className="overflow-x-auto">
                         <table className="w-full min-w-[1000px]">
-                            <thead className="bg-gray-50">
+                            <thead className="bg-gray-50 sticky top-0 z-10">
                                 <tr>
                                     <th 
                                         className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -295,7 +367,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-white divide-y divide-gray-100">
                                 {loading ? (
                                     <tr>
                                         <td colSpan={6} className="px-3 sm:px-6 py-12 text-center">
@@ -336,7 +408,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                     </tr>
                                 ) : (
                                     filteredAppointments.map((appointment) => (
-                                        <tr className="hover:bg-gray-50 transition-colors" key={appointment.id}>
+                                        <tr className="hover:bg-slate-50 transition-colors" key={appointment.id}>
                                             {/* Patient Info */}
                                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center">
@@ -370,19 +442,29 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
 
                                             {/* Status */}
                                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                                    appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                                    appointment.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                                                    appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                                    'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    {appointment.status || 'N/A'}
-                                                </span>
+                                                {(() => {
+                                                    const s = (appointment as any).status || 'N/A'
+                                                    const label = s === 'resrescheduled' ? 'rescheduled' : s
+                                                    const cls = s === 'completed'
+                                                      ? 'bg-green-100 text-green-800'
+                                                      : s === 'confirmed'
+                                                      ? 'bg-blue-100 text-blue-800'
+                                                      : s === 'cancelled' || s === 'doctor_cancelled'
+                                                      ? 'bg-red-100 text-red-800'
+                                                      : s === 'resrescheduled'
+                                                      ? 'bg-purple-100 text-purple-800'
+                                                      : 'bg-gray-100 text-gray-800'
+                                                    return (
+                                                        <span className={`inline-flex px-2.5 py-1 text-xs font-semibold rounded-full ${cls}`}>
+                                                            {label}
+                                                        </span>
+                                                    )
+                                                })()}
                                             </td>
 
                                             {/* Amount */}
                                             <td className="px-3 sm:px-6 py-4 whitespace-nowrap hidden md:table-cell">
-                                                <div className="text-sm text-gray-900">₹{appointment.paymentAmount || 0}</div>
+                                                <div className="text-sm text-gray-900 font-semibold">₹{Number(appointment.paymentAmount || 0).toLocaleString()}</div>
                                             </td>
 
                                             {/* Actions */}

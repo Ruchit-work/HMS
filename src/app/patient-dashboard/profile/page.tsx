@@ -104,11 +104,11 @@ export default function PatientProfilePage() {
 
         {/* Profile Card - full width for balanced layout */}
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
             <div className="flex items-center gap-5 flex-wrap">
               <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold shadow-lg">
-                {userData.firstName?.[0]}{userData.lastName?.[0]}
-              </div>
+                  {userData.firstName?.[0]}{userData.lastName?.[0]}
+                </div>
               <div className="flex-1 min-w-[220px]">
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
                   {userData.firstName} {userData.lastName}
@@ -116,15 +116,15 @@ export default function PatientProfilePage() {
                 <p className="text-slate-600">Patient</p>
               </div>
               <div className="flex gap-3 ml-auto">
-                <button
-                  onClick={handleLogout}
+                  <button
+                    onClick={handleLogout}
                   className="px-5 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  Logout
-                </button>
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Logout
+                  </button>
               </div>
             </div>
           </div>
@@ -245,14 +245,14 @@ export default function PatientProfilePage() {
                   </div>
                 </div>
               </div>
-          </div>
+            </div>
 
           {/* Security - stays full width below content */}
-          <ChangePasswordSection 
-            userEmail={user.email!}
-            accent="purple"
-            notify={(type, message) => setNotification({ type, message })}
-          />
+            <ChangePasswordSection 
+              userEmail={user.email!}
+              accent="purple"
+              notify={(type, message) => setNotification({ type, message })}
+            />
         </div>
       </main>
 

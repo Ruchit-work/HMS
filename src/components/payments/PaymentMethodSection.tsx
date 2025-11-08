@@ -2,7 +2,7 @@
 
 import React from "react"
 
-type PaymentMethod = "card" | "upi" | "cash" | null
+type PaymentMethod = "card" | "upi" | "cash" | "wallet" | null
 
 export interface PaymentData {
   cardNumber: string
@@ -20,6 +20,7 @@ interface PaymentMethodSectionProps {
   setPaymentData: (d: PaymentData) => void
   amountToPay: number
   showPartialNote?: boolean
+  walletBalance?: number
 }
 
 export default function PaymentMethodSection({
@@ -30,6 +31,7 @@ export default function PaymentMethodSection({
   setPaymentData,
   amountToPay,
   showPartialNote = false,
+  walletBalance = 0,
 }: PaymentMethodSectionProps) {
   const preventEnter: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
     if (e.key === "Enter") {
@@ -45,7 +47,7 @@ export default function PaymentMethodSection({
         {/* Payment Method */}
         <div>
           <label className="block text-sm text-gray-700 mb-2">Payment Method</label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <button
               type="button"
               onClick={() => setPaymentMethod("card")}
@@ -86,6 +88,21 @@ export default function PaymentMethodSection({
               <div className="text-center">
                 <span className="text-2xl mb-1 block">💵</span>
                 <span className="text-sm font-semibold">Cash</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod("wallet")}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                paymentMethod === "wallet"
+                  ? "border-green-600 bg-green-50 shadow-md"
+                  : "border-gray-300 hover:border-gray-400"
+              }`}
+            >
+              <div className="text-center">
+                <span className="text-2xl mb-1 block">🪙</span>
+                <span className="text-sm font-semibold">Wallet</span>
+                <div className="text-[11px] text-gray-500 mt-1">₹{Number(walletBalance || 0).toLocaleString()}</div>
               </div>
             </button>
           </div>
@@ -171,6 +188,9 @@ export default function PaymentMethodSection({
               <span className="text-sm font-medium text-gray-700">Amount to Pay:</span>
               <span className="text-xl font-bold text-blue-700">₹{amountToPay}</span>
             </div>
+            {paymentMethod === 'wallet' && amountToPay > (walletBalance || 0) && (
+              <p className="text-xs text-red-600 mt-1">Insufficient wallet balance</p>
+            )}
             {showPartialNote && (
               <p className="text-xs text-gray-500 mt-1">Online amount and remaining will be shown on the confirmation.</p>
             )}

@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where, addDoc, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, getDocs, collection, query, where, addDoc, onSnapshot, updateDoc, increment } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
@@ -11,6 +11,7 @@ import AppointmentSuccessModal from "@/components/patient/AppointmentSuccessModa
 import PageHeader from "@/components/ui/PageHeader"
 import { UserData, Doctor, NotificationData } from "@/types/patient"
 import Footer from "@/components/ui/Footer"
+import { useSearchParams, useRouter } from "next/navigation"
 
 export default function BookAppointmentPage() {
   const [userData, setUserData] = useState<UserData | null>(null)
@@ -21,6 +22,12 @@ export default function BookAppointmentPage() {
   const [successAppointmentData, setSuccessAppointmentData] = useState<any>(null)
 
   const { user, loading } = useAuth("patient")
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const rescheduleMode = useMemo(() => searchParams?.get('reschedule') === '1', [searchParams])
+  const rescheduleAppointmentId = useMemo(() => searchParams?.get('aptId') || '', [searchParams])
+  const initialDoctorId = useMemo(() => searchParams?.get('doctorId') || '', [searchParams])
 
   useEffect(() => {
     if (!user) return
@@ -65,7 +72,7 @@ export default function BookAppointmentPage() {
       vitalTemperatureC?: number; vitalBloodPressure?: string; vitalHeartRate?: number; vitalRespiratoryRate?: number; vitalSpO2?: number;
       additionalConcern?: string;
     }
-    paymentMethod: "card" | "upi" | "cash"
+    paymentMethod: "card" | "upi" | "cash" | "wallet"
     paymentType: "full" | "partial"
     paymentData: { cardNumber: string; cardName: string; expiryDate: string; cvv: string; upiId: string }
   }) => {
@@ -76,19 +83,29 @@ export default function BookAppointmentPage() {
       return
     }
 
-    if (!appointmentData.date || !appointmentData.time || !appointmentData.problem) {
+    if (!appointmentData.date || !appointmentData.time || (!rescheduleMode && !appointmentData.problem)) {
       setNotification({ type: "error", message: "Please fill all required fields" })
       return
     }
 
-    if (paymentMethod === "card") {
+    if (!rescheduleMode && paymentMethod === "card") {
       if (!paymentData.cardNumber || !paymentData.cardName || !paymentData.expiryDate || !paymentData.cvv) {
         setNotification({ type: "error", message: "Please fill all card details" })
         return
       }
-    } else if (paymentMethod === "upi") {
+    } else if (!rescheduleMode && paymentMethod === "upi") {
       if (!paymentData.upiId) {
         setNotification({ type: "error", message: "Please enter UPI ID" })
+        return
+      }
+    } else if (!rescheduleMode && paymentMethod === "wallet") {
+      const balance = Number((userData as any)?.walletBalance || 0)
+      const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
+      const CONSULTATION_FEE = selectedDoctorData?.consultationFee || 500
+      const PARTIAL_PAYMENT_AMOUNT = Math.ceil(CONSULTATION_FEE * 0.1)
+      const AMOUNT_TO_PAY = (formData.paymentType === 'partial') ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
+      if (balance < AMOUNT_TO_PAY) {
+        setNotification({ type: 'error', message: 'Insufficient wallet balance' })
         return
       }
     }
@@ -117,6 +134,20 @@ export default function BookAppointmentPage() {
     
     try {
       // await new Promise(resolve => setTimeout(resolve, 2000))
+
+      // RESCHEDULE: only update date/time and status
+      if (rescheduleMode && rescheduleAppointmentId) {
+        await updateDoc(doc(db, 'appointments', rescheduleAppointmentId), {
+          appointmentDate: appointmentData.date,
+          appointmentTime: appointmentData.time,
+          status: 'resrescheduled',
+          updatedAt: new Date().toISOString()
+        })
+        setNotification({ type: 'success', message: 'Appointment rescheduled successfully' })
+        // Remove query params and optionally redirect back to dashboard
+        router.push('/patient-dashboard')
+        return
+      }
       
       const transactionId = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`
       
@@ -133,6 +164,15 @@ export default function BookAppointmentPage() {
       // Fetch latest patient profile to reflect any inline edits done during booking
       const latestPatientDoc = await getDoc(doc(db, "patients", user.uid))
       const latestUserData = latestPatientDoc.exists() ? (latestPatientDoc.data() as UserData) : userData
+      
+      // If paying by wallet, deduct from wallet first
+      if (!rescheduleMode && formData.paymentMethod === 'wallet') {
+        await updateDoc(doc(db, 'patients', user.uid), {
+          walletBalance: increment(-AMOUNT_TO_PAY)
+        })
+        // reflect locally
+        setUserData(prev => prev ? ({ ...prev, walletBalance: Number((prev as any).walletBalance || 0) - AMOUNT_TO_PAY } as any) : prev)
+      }
       
       await addDoc(collection(db, "appointments"), {
         patientId: user?.uid,
@@ -231,6 +271,8 @@ export default function BookAppointmentPage() {
           doctors={doctors}
           onSubmit={handleAppointmentSubmit}
           submitting={submitting}
+          rescheduleMode={rescheduleMode}
+          initialDoctorId={initialDoctorId}
         />
       </main>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where } from "firebase/firestore"
+import { doc, getDoc, getDocs, collection, query, where, addDoc, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
@@ -124,6 +124,33 @@ export default function PatientDashboard() {
   const upcomingAppointments = activeAppointments
     .filter(apt => new Date(`${apt.appointmentDate} ${apt.appointmentTime}`).getTime() > Date.now())
     .length
+  const awaitingReschedule = appointments.filter(apt => String((apt as any)?.status) === 'awaiting_reschedule')
+
+  const handleRequestRefund = async (apt: Appointment) => {
+    try {
+      await addDoc(collection(db, 'refund_requests'), {
+        appointmentId: apt.id,
+        patientId: apt.patientId,
+        doctorId: apt.doctorId,
+        paymentAmount: apt.paymentAmount || apt.totalConsultationFee || 0,
+        paymentMethod: apt.paymentMethod || 'cash',
+        paymentType: apt.paymentType || 'full',
+        reason: 'doctor_unavailable',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      })
+      await updateDoc(doc(db, 'appointments', apt.id), {
+        status: 'refund_requested',
+        refundRequested: true,
+        updatedAt: new Date().toISOString(),
+      })
+      setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: 'refund_requested' as any, refundRequested: true } : a))
+      setNotification({ type: 'success', message: 'Refund request submitted. We will process it shortly.' })
+    } catch (e) {
+      console.error('Refund request failed', e)
+      setNotification({ type: 'error', message: 'Failed to submit refund request. Please try again.' })
+    }
+  }
 
   return (
 
@@ -162,6 +189,8 @@ export default function PatientDashboard() {
           icon="🏥"
           gradient="from-teal-600 to-cyan-700"
         />
+
+        
 
 
         {/* Quick Actions */}
@@ -391,6 +420,43 @@ export default function PatientDashboard() {
           </div> */}
         </div>
 
+
+        {/* Affected Appointments (Doctor Leave) */}
+        {awaitingReschedule.length > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 sm:p-5 shadow-sm mb-6">
+            <h3 className="text-base sm:text-lg font-bold text-yellow-900 mb-2 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Action needed: Reschedule your appointment(s)</span>
+            </h3>
+            <div className="space-y-2">
+              {awaitingReschedule.slice(0,3).map(apt => (
+                <div key={apt.id} className="flex items-center justify-between bg-white rounded-lg p-3 border border-yellow-200">
+                  <div className="text-sm text-slate-800">
+                    <span className="font-semibold">Dr. {apt.doctorName}</span> • {new Date(apt.appointmentDate).toLocaleDateString()} at {apt.appointmentTime}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link href={{ pathname: "/patient-dashboard/book-appointment", query: { reschedule: '1', aptId: apt.id, doctorId: apt.doctorId } }} className="text-xs px-3 py-1.5 bg-yellow-600 text-white rounded-md hover:bg-yellow-700">
+                      Reschedule
+                    </Link>
+                    {String((apt as any)?.paymentStatus) === 'paid' && !Boolean((apt as any)?.refundRequested) && (
+                      <button onClick={() => handleRequestRefund(apt)} className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700">
+                        Request Refund
+                      </button>
+                    )}
+                    {Boolean((apt as any)?.refundRequested) && (
+                      <span className="text-[11px] px-2 py-1 bg-red-50 text-red-700 border border-red-200 rounded">
+                        Refund requested
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {awaitingReschedule.length > 3 && (
+                <p className="text-xs text-yellow-800">And {awaitingReschedule.length - 3} more…</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Recent Appointments Preview */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md">

@@ -18,11 +18,14 @@ interface BookAppointmentFormProps {
   onSubmit: (data: {
     selectedDoctor: string
     appointmentData: AppointmentFormData
-    paymentMethod: "card" | "upi" | "cash"
+    paymentMethod: "card" | "upi" | "cash" | "wallet"
     paymentType: "full" | "partial"
     paymentData: PaymentData
   }) => Promise<void>
   submitting: boolean
+  // Reschedule mode: preselect doctor and jump to date/time only
+  rescheduleMode?: boolean
+  initialDoctorId?: string
 }
 
 export default function BookAppointmentForm({
@@ -30,17 +33,19 @@ export default function BookAppointmentForm({
   userData,
   doctors,
   onSubmit,
-  submitting
+  submitting,
+  rescheduleMode = false,
+  initialDoctorId
 }: BookAppointmentFormProps) {
-  const [currentStep, setCurrentStep] = useState(1)
-  const [selectedDoctor, setSelectedDoctor] = useState("")
+  const [currentStep, setCurrentStep] = useState(rescheduleMode ? 4 : 1)
+  const [selectedDoctor, setSelectedDoctor] = useState(initialDoctorId || "")
   const [appointmentData, setAppointmentData] = useState<AppointmentFormData>({
     date: "",
     time: "",
     problem: "",
     medicalHistory: ""
   })
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash" | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash" | "wallet" | null>(null)
   const [paymentType, setPaymentType] = useState<"full" | "partial">("full")
   const [paymentData, setPaymentData] = useState<PaymentData>({
     cardNumber: "",
@@ -69,11 +74,18 @@ export default function BookAppointmentForm({
 
   // Animation direction state
   const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right')
-  
+
   // Confirmation modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
-  const totalSteps = 5
+  const totalSteps = rescheduleMode ? 4 : 5
+
+  // Ensure doctor stays preselected if provided later (doctors load async)
+  useEffect(() => {
+    if (initialDoctorId && !selectedDoctor) {
+      setSelectedDoctor(initialDoctorId)
+    }
+  }, [initialDoctorId])
 
   // Keep local view in sync if parent sends fresh data
   useEffect(() => {
@@ -223,7 +235,7 @@ export default function BookAppointmentForm({
       const newStep = currentStep + 1
       setCurrentStep(newStep)
       // Reset payment method when entering step 5 to require explicit selection
-      if (newStep === 5) {
+      if (!rescheduleMode && newStep === 5) {
         setPaymentMethod(null)
         setPaymentData({
           cardNumber: "",
@@ -342,7 +354,7 @@ export default function BookAppointmentForm({
 
   // Reset payment method to null whenever step 5 becomes active
   useEffect(() => {
-    if (currentStep === 5) {
+    if (!rescheduleMode && currentStep === 5) {
       setPaymentMethod(null)
       setPaymentData({
         cardNumber: "",
@@ -381,6 +393,7 @@ export default function BookAppointmentForm({
         if (paymentMethod === "upi") {
           return !!paymentData.upiId
         }
+        // If wallet, ensure sufficient balance will be validated upstream, allow proceed here
         // Cash payment is always valid (no additional fields needed)
         return true
       default: return false
@@ -394,21 +407,29 @@ export default function BookAppointmentForm({
     if (currentStep !== totalSteps) {
       return
     }
-    
+    if (rescheduleMode) {
+      // Directly submit without payment flow
+      await onSubmit({
+        selectedDoctor,
+        appointmentData,
+        paymentMethod: "cash",
+        paymentType: "full",
+        paymentData: { cardNumber: "", cardName: "", expiryDate: "", cvv: "", upiId: "" }
+      })
+      return
+    }
+
+    // Normal flow shows confirmation modal
     // Validate payment method is selected
     if (!paymentMethod || paymentMethod === null) {
       return
     }
-    
-    // For card/UPI payments, validate payment data is filled
     if (paymentMethod === "card" && (!paymentData.cardNumber || !paymentData.cardName || !paymentData.expiryDate || !paymentData.cvv)) {
       return
     }
     if (paymentMethod === "upi" && !paymentData.upiId) {
       return
     }
-    
-    // Show confirmation modal instead of directly submitting
     setShowConfirmModal(true)
   }
 
@@ -502,7 +523,7 @@ export default function BookAppointmentForm({
       {/* Desktop/tablet full stepper */}
       <div className="bg-white px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 hidden sm:block">
         <div className="flex items-center justify-between">
-          {steps.map((step, index) => (
+          {steps.filter(s => rescheduleMode ? s.number <= 4 : true).map((step, index, arr) => (
             <div key={step.number} className="flex items-center flex-1">
               <div className="flex flex-col items-center">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold transition-all ${
@@ -520,7 +541,7 @@ export default function BookAppointmentForm({
                   {step.title}
                 </p>
               </div>
-              {index < steps.length - 1 && (
+              {index < arr.length - 1 && (
                 <div className={`flex-1 h-1 mx-2 rounded transition-all ${
                   currentStep > step.number ? "bg-green-500" : "bg-slate-200"
                 }`} />
@@ -680,7 +701,7 @@ export default function BookAppointmentForm({
           )}
 
           {/* Step 2: Symptoms & Medical Information */}
-          {currentStep === 2 && (
+          {!rescheduleMode && currentStep === 2 && (
             <div className={`space-y-3 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
               {/* Required Free-text */}
               <div className="bg-white border-2 border-slate-200 rounded-xl p-4">
@@ -802,19 +823,19 @@ export default function BookAppointmentForm({
           )}
 
           {/* Step 3: Doctor Selection (moved from step 2) */}
-          {currentStep === 3 && (
+          {!rescheduleMode && currentStep === 3 && (
             <div className={`space-y-4 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
               <div className="bg-white border-2 border-teal-200 rounded-xl p-4 sm:p-6">
                 <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4">
                   <h3 className="text-base sm:text-lg font-semibold text-slate-800 flex items-center gap-2">
                     <span className="text-xl sm:text-2xl">👨‍⚕️</span>
-                    <span>Select Your Doctor</span>
+                  <span>Select Your Doctor</span>
                   </h3>
                   {filteredDoctors.length < doctors.length && (
                     <span className="text-[10px] sm:text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Recommended</span>
                   )}
                 </div>
-
+                
                 {/* Cards grid */}
                 <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                   {filteredDoctors.map((doctor) => (
@@ -834,7 +855,7 @@ export default function BookAppointmentForm({
                     <p className="text-xs sm:text-sm mt-1">Showing all doctors…</p>
                   </div>
                 )}
-
+                
                 {filteredDoctors.length === 0 && doctors.length > 0 && (
                   <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-4">
                     {doctors.map((doctor) => (
@@ -1069,7 +1090,7 @@ export default function BookAppointmentForm({
           )}
 
           {/* Step 5: Payment */}
-          {currentStep === 5 && (
+          {!rescheduleMode && currentStep === 5 && (
             <div className={`space-y-4 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
               <div className="bg-white border-2 border-green-200 rounded-xl p-6">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -1152,6 +1173,7 @@ export default function BookAppointmentForm({
                   setPaymentData={(d)=>setPaymentData(d as any)}
                   amountToPay={AMOUNT_TO_PAY}
                   showPartialNote={paymentType === 'partial'}
+                  walletBalance={Number((userData as any)?.walletBalance || 0)}
                 />
               </div>
             </div>
@@ -1194,13 +1216,15 @@ export default function BookAppointmentForm({
                       Processing...
                     </span>
                   )
-                  : !paymentMethod
+                  : rescheduleMode
+                    ? "Confirm Reschedule"
+                    : !paymentMethod
                     ? "Select Payment Method"
-                    : paymentMethod === "cash" 
-                      ? `Confirm Appointment` 
-                      : paymentType === "partial"
-                        ? `Pay ₹${AMOUNT_TO_PAY} & Book`
-                        : `Book & Pay ₹${AMOUNT_TO_PAY}`}
+                  : paymentMethod === "cash" 
+                    ? `Confirm Appointment` 
+                    : paymentType === "partial"
+                      ? `Pay ₹${AMOUNT_TO_PAY} & Book`
+                      : `Book & Pay ₹${AMOUNT_TO_PAY}`}
               </button>
             )}
 
