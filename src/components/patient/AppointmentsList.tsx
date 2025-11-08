@@ -7,11 +7,13 @@ import AppointmentCard from "./AppointmentCard"
 interface AppointmentsListProps {
   appointments: Appointment[]
   onCancelAppointment: (appointment: Appointment) => void
+  onPayBill?: (appointment: Appointment) => void
 }
 
 export default function AppointmentsList({
   appointments,
-  onCancelAppointment
+  onCancelAppointment,
+  onPayBill
 }: AppointmentsListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -34,6 +36,7 @@ export default function AppointmentsList({
           isExpanded={expandedId === appointment.id}
           onToggle={() => setExpandedId(expandedId === appointment.id ? null : appointment.id)}
           onCancel={() => onCancelAppointment(appointment)}
+          onPayBill={onPayBill ? () => onPayBill(appointment) : undefined}
         />
       ))}
     </div>

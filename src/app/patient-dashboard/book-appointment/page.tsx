@@ -174,8 +174,11 @@ export default function BookAppointmentPage() {
         setUserData(prev => prev ? ({ ...prev, walletBalance: Number((prev as any).walletBalance || 0) - AMOUNT_TO_PAY } as any) : prev)
       }
       
+      const patientSixDigitId = latestUserData?.patientId || user.uid
+
       await addDoc(collection(db, "appointments"), {
-        patientId: user?.uid,
+        patientUid: user.uid,
+        patientId: patientSixDigitId,
         patientName: `${latestUserData.firstName} ${latestUserData.lastName}`,
         patientEmail: latestUserData.email,
         patientPhone: latestUserData.phoneNumber || "",

@@ -9,7 +9,11 @@ import Notification from "@/components/ui/Notification"
 import AppointmentsList from "@/components/patient/AppointmentsList"
 import CancelAppointmentModal from "@/components/patient/CancelAppointmentModal"
 import PageHeader from "@/components/ui/PageHeader"
-import { UserData, Appointment, NotificationData } from "@/types/patient"
+import PaymentMethodSection, {
+  PaymentData as PaymentMethodData,
+  PaymentMethodOption,
+} from "@/components/payments/PaymentMethodSection"
+import { UserData, Appointment, NotificationData, BillingRecord } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
 import Footer from "@/components/ui/Footer"
 import Link from "next/link"
@@ -22,6 +26,17 @@ export default function PatientAppointments() {
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [activeTab, setActiveTab] = useState<"confirmed" | "completed" | "cancelled">("confirmed")
+  const [billingPaymentModalOpen, setBillingPaymentModalOpen] = useState(false)
+  const [selectedBilling, setSelectedBilling] = useState<{ appointment: Appointment; billing: BillingRecord } | null>(null)
+  const [billingPaymentMethod, setBillingPaymentMethod] = useState<PaymentMethodOption>("card")
+  const [billingPaymentData, setBillingPaymentData] = useState<PaymentMethodData>({
+    cardNumber: "",
+    cardName: "",
+    expiryDate: "",
+    cvv: "",
+    upiId: "",
+  })
+  const [payingBill, setPayingBill] = useState(false)
 
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
@@ -30,20 +45,112 @@ export default function PatientAppointments() {
     if (!user) return
 
     const fetchData = async () => {
-      const patientDoc = await getDoc(doc(db, "patients", user.uid))
-      if (patientDoc.exists()) {
-        const data = patientDoc.data() as UserData
-        setUserData(data)
-      }
+      try {
+        const patientDocRef = doc(db, "patients", user.uid)
+        const patientDocSnap = await getDoc(patientDocRef)
 
-      // Fetch patient appointments
-      const appointmentsQuery = query(collection(db, "appointments"), where("patientId", "==", user.uid))
-      const appointmentsSnapshot = await getDocs(appointmentsQuery)
-      const appointmentsList = appointmentsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data()
-      } as Appointment))
-      setAppointments(appointmentsList)
+        let patientData: UserData | null = null
+        if (patientDocSnap.exists()) {
+          patientData = patientDocSnap.data() as UserData
+          setUserData(patientData)
+        }
+
+        const appointmentsCollection = collection(db, "appointments")
+        const appointmentQueries: Promise<any>[] = [
+          getDocs(query(appointmentsCollection, where("patientUid", "==", user.uid)))
+        ]
+
+        if (patientData?.patientId) {
+          appointmentQueries.push(
+            getDocs(query(appointmentsCollection, where("patientId", "==", patientData.patientId)))
+          )
+        }
+
+        appointmentQueries.push(
+          getDocs(query(appointmentsCollection, where("patientId", "==", user.uid)))
+        )
+
+        const appointmentSnapshots = await Promise.all(appointmentQueries)
+
+        const appointmentMap = new Map<string, Appointment>()
+        appointmentSnapshots.forEach((snapshot) => {
+          if (!snapshot) return
+          snapshot.docs.forEach((docSnap: any) => {
+            const data = docSnap.data()
+            appointmentMap.set(
+              docSnap.id,
+              { id: docSnap.id, ...data } as Appointment
+            )
+          })
+        })
+
+        let appointmentList = Array.from(appointmentMap.values())
+
+        const billingSnapshots: any[] = []
+        if (patientData?.patientId) {
+          billingSnapshots.push(
+            getDocs(query(collection(db, "billing_records"), where("patientId", "==", patientData.patientId)))
+          )
+        }
+        billingSnapshots.push(
+          getDocs(query(collection(db, "billing_records"), where("patientId", "==", user.uid)))
+        )
+
+        const resolvedBillingSnapshots = await Promise.all(billingSnapshots)
+
+        const billingByAppointment = new Map<string, BillingRecord>()
+        const billingByAdmission = new Map<string, BillingRecord>()
+
+        resolvedBillingSnapshots.forEach((snapshot) => {
+          snapshot?.docs.forEach((docSnap: any) => {
+            const data = docSnap.data()
+            const record: BillingRecord = {
+              id: docSnap.id,
+              admissionId: String(data.admissionId || ""),
+              appointmentId: data.appointmentId ? String(data.appointmentId) : undefined,
+              patientId: String(data.patientId || ""),
+              patientUid: data.patientUid || null,
+              patientName: data.patientName || null,
+              doctorId: String(data.doctorId || ""),
+              doctorName: data.doctorName || null,
+              doctorFee: data.doctorFee !== undefined ? Number(data.doctorFee) : undefined,
+              otherServices: Array.isArray(data.otherServices) ? data.otherServices : [],
+              roomCharges: Number(data.roomCharges || 0),
+              totalAmount: Number(data.totalAmount || 0),
+              generatedAt: data.generatedAt || new Date().toISOString(),
+              status: data.status || "pending",
+              paymentMethod: data.paymentMethod || undefined,
+              paidAt: data.paidAt || null,
+              paymentReference: data.paymentReference || null,
+              paidAtFrontDesk: data.paidAtFrontDesk ?? false,
+              handledBy: data.handledBy || null,
+              settlementMode: data.settlementMode || null
+            }
+            if (record.appointmentId) {
+              billingByAppointment.set(record.appointmentId, record)
+            }
+            if (record.admissionId) {
+              billingByAdmission.set(record.admissionId, record)
+            }
+          })
+        })
+
+        appointmentList = appointmentList.map((appointment) => {
+          const billingRecord =
+            (appointment.id && billingByAppointment.get(appointment.id)) ||
+            (appointment.admissionId && billingByAdmission.get(appointment.admissionId))
+
+          return billingRecord ? { ...appointment, billingRecord } : appointment
+        })
+
+        setAppointments(appointmentList)
+      } catch (error) {
+        console.error("Error loading patient appointments:", error)
+        setNotification({
+          type: "error",
+          message: "Failed to load appointments. Please try again."
+        })
+      }
     }
 
     fetchData()
@@ -55,6 +162,110 @@ export default function PatientAppointments() {
 
   if (!user || !userData) {
     return null
+  }
+
+  const TAB_STATUS_MAP: Record<typeof activeTab, string[]> = {
+    confirmed: ["confirmed", "resrescheduled", "awaiting_reschedule", "awaiting_admission", "admitted"],
+    completed: ["completed"],
+    cancelled: ["cancelled", "doctor_cancelled", "refund_requested"]
+  }
+
+  const filterAppointmentsByTab = (tab: typeof activeTab) => {
+    const allowed = TAB_STATUS_MAP[tab]
+    return appointments.filter((apt) => allowed.includes(String(apt.status || "").toLowerCase()))
+  }
+
+  const confirmedAppointments = filterAppointmentsByTab("confirmed")
+  const completedAppointments = filterAppointmentsByTab("completed")
+  const cancelledAppointments = filterAppointmentsByTab("cancelled")
+
+  const handleOpenBillingPayment = (appointment: Appointment) => {
+    if (!appointment.billingRecord || appointment.billingRecord.status === "paid") return
+    setSelectedBilling({ appointment, billing: appointment.billingRecord })
+    setBillingPaymentMethod(
+      appointment.billingRecord.paymentMethod && appointment.billingRecord.paymentMethod !== "cash"
+        ? (appointment.billingRecord.paymentMethod as PaymentMethodOption)
+        : "card"
+    )
+    setBillingPaymentData({
+      cardNumber: "",
+      cardName: "",
+      expiryDate: "",
+      cvv: "",
+      upiId: "",
+    })
+    setBillingPaymentModalOpen(true)
+  }
+
+  const handleCloseBillingPayment = () => {
+    setBillingPaymentModalOpen(false)
+    setSelectedBilling(null)
+    setBillingPaymentMethod("card")
+    setBillingPaymentData({
+      cardNumber: "",
+      cardName: "",
+      expiryDate: "",
+      cvv: "",
+      upiId: "",
+    })
+  }
+
+  const handleConfirmBillingPayment = async () => {
+    if (!selectedBilling) return
+    setPayingBill(true)
+    try {
+      const res = await fetch("/api/patient/billing/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          billingId: selectedBilling.billing.id,
+          paymentMethod: billingPaymentMethod
+        })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Failed to process payment")
+      }
+      const data = await res.json().catch(() => ({}))
+      setAppointments(prev =>
+        prev.map((apt) => {
+          if (apt.id !== selectedBilling.appointment.id || !apt.billingRecord) return apt
+          return {
+            ...apt,
+            billingRecord: {
+              ...apt.billingRecord,
+              status: "paid",
+              paymentMethod: data?.paymentMethod || billingPaymentMethod,
+              paidAt: data?.paidAt || new Date().toISOString(),
+              paymentReference: data?.paymentReference || apt.billingRecord.paymentReference || null
+            }
+          }
+        })
+      )
+      if (data?.walletBalance !== undefined && data.walletBalance !== null) {
+        setUserData(prev =>
+          prev
+            ? ({
+                ...prev,
+                walletBalance: data.walletBalance
+              } as UserData)
+            : prev
+        )
+      }
+      setNotification({
+        type: "success",
+        message: "Payment successful. Thank you!"
+      })
+      handleCloseBillingPayment()
+    } catch (error: any) {
+      console.error("Bill payment error", error)
+      setNotification({
+        type: "error",
+        message: error?.message || "Failed to pay bill. Please try again."
+      })
+    } finally {
+      setPayingBill(false)
+    }
   }
 
   // Open cancel confirmation modal
@@ -131,7 +342,7 @@ export default function PatientAppointments() {
                 <div>
                   <p className="text-sm font-medium text-slate-600 mb-1">Confirmed</p>
                   <p className="text-3xl font-bold text-blue-600">
-                    {appointments.filter(apt => apt.status === "confirmed").length}
+                    {confirmedAppointments.length}
                   </p>
                 </div>
                 <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -145,7 +356,7 @@ export default function PatientAppointments() {
                 <div>
                   <p className="text-sm font-medium text-slate-600 mb-1">Completed</p>
                   <p className="text-3xl font-bold text-green-600">
-                    {appointments.filter(apt => apt.status === "completed").length}
+                    {completedAppointments.length}
                   </p>
                 </div>
                 <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center">
@@ -159,7 +370,7 @@ export default function PatientAppointments() {
                 <div>
                   <p className="text-sm font-medium text-slate-600 mb-1">Cancelled</p>
                   <p className="text-3xl font-bold text-red-600">
-                    {appointments.filter(apt => apt.status === "cancelled").length}
+                    {cancelledAppointments.length}
                   </p>
                 </div>
                 <div className="w-14 h-14 bg-red-100 rounded-xl flex items-center justify-center">
@@ -174,38 +385,40 @@ export default function PatientAppointments() {
             <div className="flex border-b border-slate-200">
               <button
                 onClick={() => setActiveTab("confirmed")}
-                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${activeTab === "confirmed"
+                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
+                  activeTab === "confirmed"
                     ? "bg-blue-50 text-blue-600 border-b-2 border-blue-600"
                     : "text-slate-600 hover:bg-slate-50"
-                  }`}
+                }`}
               >
-                📅 Confirmed ({appointments.filter(apt => apt.status === "confirmed").length})
+                📅 Confirmed ({confirmedAppointments.length})
               </button>
               <button
                 onClick={() => setActiveTab("completed")}
-                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${activeTab === "completed"
+                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
+                  activeTab === "completed"
                     ? "bg-green-50 text-green-600 border-b-2 border-green-600"
                     : "text-slate-600 hover:bg-slate-50"
-                  }`}
+                }`}
               >
-                ✅ Completed ({appointments.filter(apt => apt.status === "completed").length})
+                ✅ Completed ({completedAppointments.length})
               </button>
               <button
                 onClick={() => setActiveTab("cancelled")}
-                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${activeTab === "cancelled"
+                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
+                  activeTab === "cancelled"
                     ? "bg-red-50 text-red-600 border-b-2 border-red-600"
                     : "text-slate-600 hover:bg-slate-50"
-                  }`}
+                }`}
               >
-                ❌ Cancelled ({appointments.filter(apt => apt.status === "cancelled").length})
+                ❌ Cancelled ({cancelledAppointments.length})
               </button>
             </div>
           </div>
 
           {/* Appointments List */}
           <AppointmentsList
-            appointments={appointments
-              .filter(apt => apt.status === activeTab)
+            appointments={filterAppointmentsByTab(activeTab)
               .sort((a, b) => {
                 const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
                 const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
@@ -213,6 +426,7 @@ export default function PatientAppointments() {
               })
             }
             onCancelAppointment={openCancelModal}
+            onPayBill={handleOpenBillingPayment}
           />
         </main>
 
@@ -236,6 +450,82 @@ export default function PatientAppointments() {
             message={notification.message}
             onClose={() => setNotification(null)}
           />
+        )}
+        {billingPaymentModalOpen && selectedBilling && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg">
+              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900">Settle Hospital Bill</h3>
+                  <p className="text-sm text-slate-500">
+                    Appointment with Dr. {selectedBilling.appointment.doctorName}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseBillingPayment}
+                  className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="px-6 py-5 space-y-5">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs uppercase text-slate-500 font-semibold tracking-wide mb-2">
+                    Bill Summary
+                  </p>
+                  <div className="flex items-center justify-between text-slate-800">
+                    <span className="text-sm">Total amount due</span>
+                    <span className="text-2xl font-bold text-slate-900">
+                      ₹{selectedBilling.billing.totalAmount}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Generated on{" "}
+                    {selectedBilling.billing.generatedAt
+                      ? new Date(selectedBilling.billing.generatedAt).toLocaleString()
+                      : "N/A"}
+                  </p>
+                </div>
+
+                <PaymentMethodSection
+                  title="Choose payment method"
+                  paymentMethod={billingPaymentMethod}
+                  setPaymentMethod={(method) => setBillingPaymentMethod(method)}
+                  paymentData={billingPaymentData}
+                  setPaymentData={setBillingPaymentData}
+                  amountToPay={selectedBilling.billing.totalAmount}
+                  walletBalance={Number((userData as any)?.walletBalance || 0)}
+                  methods={["card", "upi", "wallet"]}
+                />
+                {billingPaymentMethod === "wallet" && (
+                  <p className="text-xs text-slate-500">
+                    Wallet balance: ₹{Number((userData as any)?.walletBalance || 0).toFixed(2)}
+                  </p>
+                )}
+              </div>
+              <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button
+                  onClick={handleCloseBillingPayment}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all"
+                  disabled={payingBill}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmBillingPayment}
+                  disabled={
+                    payingBill ||
+                    (billingPaymentMethod === "wallet" &&
+                      Number((userData as any)?.walletBalance || 0) <
+                        Number(selectedBilling.billing.totalAmount || 0))
+                  }
+                  className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-60"
+                >
+                  {payingBill ? "Processing..." : `Pay ₹${selectedBilling.billing.totalAmount}`}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
       <Footer />

@@ -9,7 +9,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import OTPVerificationModal from "@/components/form/OTPVerificationModal"
 import PasswordRequirements, { isPasswordValid } from "@/components/form/PasswordRequirements"
 import Notification from "@/components/ui/Notification"
-import { sendOTP, verifyOTP } from "@/utils/twilioOTP"
+import { verifyOTP } from "@/utils/twilioOTP"
 import { specializationCategories, qualifications, bloodGroups } from "@/constants/signup"
 
 function SignUpContent() {
@@ -42,7 +42,7 @@ function SignUpContent() {
   // UI state
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
+  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string; countdownSeconds?: number } | null>(null)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showBloodGroupDropdown, setShowBloodGroupDropdown] = useState(false)
   const [showSpecializationDropdown, setShowSpecializationDropdown] = useState(false)
@@ -50,14 +50,26 @@ function SignUpContent() {
   const [validating, setValidating] = useState(false)
   // OTP state (for patients only)
   const [otp, setOtp] = useState("")
-  const [otpSent, setOtpSent] = useState(false)
   const [otpVerified, setOtpVerified] = useState(false)
-  const [sendingOTP, setSendingOTP] = useState(false)
   const [verifyingOTP, setVerifyingOTP] = useState(false)
   const [showOTPModal, setShowOTPModal] = useState(false)
   const [modalError, setModalError] = useState("")
   // Protect route - redirect if already authenticated
   const { loading: checking } = usePublicRoute()
+
+  const dispatchCountdownNotification = (message: string, onComplete: () => void, seconds = 3) => {
+    setNotification({ type: "success", message, countdownSeconds: seconds })
+    let remaining = seconds
+    const interval = setInterval(() => {
+      remaining -= 1
+      if (remaining > 0) {
+        setNotification({ type: "success", message, countdownSeconds: remaining })
+      } else {
+        clearInterval(interval)
+        onComplete()
+      }
+    }, 1000)
+  }
 
 
   // Redirect if invalid role (admin/receptionist signup disabled)
@@ -66,17 +78,6 @@ function SignUpContent() {
       router.replace("/")
     }
   }, [roleFromUrl, router])
-
-  // Auto-send OTP when modal opens
-  useEffect(() => {
-    if (showOTPModal && role === "patient" && !otpSent && !sendingOTP && phone) {
-      const sendOTPOnModalOpen = async () => {
-        await handleSendOTP(false)
-      }
-      sendOTPOnModalOpen()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showOTPModal])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -124,58 +125,6 @@ function SignUpContent() {
 
       return nextNumber.toString().padStart(6, "0")
     })
-  }
-
-  // Send OTP function (for patients only)
-  const handleSendOTP = async (showSuccess = true) => {
-    if (role !== "patient") return
-
-    // Validate phone number first
-    if (!phone) {
-      setError("Please enter your phone number")
-      return false
-    }
-
-    // Clean phone number and country code
-    const cleanedPhone = phone.replace(/\D/g, "")
-    const cleanedCountryCode = countryCode.replace(/\D/g, "")
-    const totalDigits = cleanedCountryCode + cleanedPhone
-
-    if (totalDigits.length < 7 || totalDigits.length > 15) {
-      setError(`Phone number should contain 7-15 digits total (including country code). Current: ${totalDigits.length} digits.`)
-      return false
-    }
-
-    setError("")
-    setSendingOTP(true)
-
-    try {
-      const fullPhoneNumber = `${countryCode}${phone}`.replace(/\s+/g, "")
-      const result = await sendOTP(fullPhoneNumber)
-
-      if (result.success) {
-        setOtpSent(true)
-        if (showSuccess) {
-          setNotification({
-            type: "success",
-            message: "OTP sent successfully! Please check your phone."
-          })
-        }
-        return true
-      } else {
-        const errorMsg = result.error || "Failed to send OTP. Please try again."
-        setError(errorMsg)
-        setModalError(errorMsg)
-        return false
-      }
-    } catch (error) {
-      const errorMsg = "Failed to send OTP. Please try again."
-      setError(errorMsg)
-      setModalError(errorMsg)
-      return false
-    } finally {
-      setSendingOTP(false)
-    }
   }
 
   // Verify OTP function (for patients only)
@@ -319,7 +268,6 @@ function SignUpContent() {
 
       // All validations passed for patient - now open OTP modal
       setOtp("")
-      setOtpSent(false)
       setOtpVerified(false)
       setError("")
       setModalError("")
@@ -459,20 +407,11 @@ function SignUpContent() {
         createdBy: "self"
       })
 
-      // Show success notification
-      setNotification({
-        type: "success",
-        message: `Patient account created successfully! Your Patient ID is ${patientId}. Redirecting to login...`
-      })
-
-      // Close modal
+      // Show success notification & countdown
+      const redirectMessage = `Patient account created successfully! Your Patient ID is ${patientId}. Redirecting to login...`
       setShowOTPModal(false)
-
-      // Sign out and redirect to login page
       await signOut(auth)
-      setTimeout(() => {
-        router.push("/auth/login?role=patient")
-      }, 3000)
+      dispatchCountdownNotification(redirectMessage, () => router.push("/auth/login?role=patient"))
     } catch (err: unknown) {
       const firebaseError = err as { code?: string; message?: string }
       let errorMessage = "Failed to sign up"
@@ -496,7 +435,6 @@ function SignUpContent() {
       setTimeout(() => {
         setShowOTPModal(false)
         setOtp("")
-        setOtpSent(false)
         setOtpVerified(false)
       }, 3000)
     } finally {
@@ -1206,7 +1144,6 @@ function SignUpContent() {
             if (!otpVerified && !verifyingOTP) {
               setShowOTPModal(false)
               setOtp("")
-              setOtpSent(false)
               setOtpVerified(false)
               setError("")
               setModalError("")
@@ -1215,6 +1152,14 @@ function SignUpContent() {
           phone={phone}
           countryCode={countryCode}
           onVerified={async ()=>{ setOtpVerified(true); await createAccountAfterOTP() }}
+          onChangePhone={() => {
+            if (verifyingOTP) return
+            setShowOTPModal(false)
+            setOtp("")
+            setOtpVerified(false)
+            setError("")
+            setModalError("")
+          }}
         />
       )}
     </>

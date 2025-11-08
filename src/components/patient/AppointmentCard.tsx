@@ -9,13 +9,15 @@ interface AppointmentCardProps {
   isExpanded: boolean
   onToggle: () => void
   onCancel: () => void
+  onPayBill?: () => void
 }
 
 export default function AppointmentCard({
   appointment,
   isExpanded,
   onToggle,
-  onCancel
+  onCancel,
+  onPayBill
 }: AppointmentCardProps) {
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-all">
@@ -337,6 +339,108 @@ export default function AppointmentCard({
                       </p>
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Billing Summary (Completed hospitalizations) */}
+            {appointment.status === "completed" && appointment.billingRecord && (
+              <div className="md:col-span-2 bg-amber-50 rounded-lg p-4 border border-amber-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-amber-900 flex items-center gap-2">
+                    <span>🧾</span>
+                    <span>Hospital Stay Billing</span>
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${appointment.billingRecord.status === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>
+                      {appointment.billingRecord.status === "paid" ? "Paid" : "Pending Payment"}
+                    </span>
+                    <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
+                      Bill #{appointment.billingRecord.id.slice(0, 6).toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-amber-900">
+                  <div className="flex justify-between items-center bg-white/60 px-3 py-2 rounded-lg border border-amber-100">
+                    <span>Room Charges</span>
+                    <span className="font-semibold">₹{appointment.billingRecord.roomCharges}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-white/60 px-3 py-2 rounded-lg border border-amber-100">
+                    <span>Doctor Fee</span>
+                    <span className="font-semibold">
+                      ₹{appointment.billingRecord.doctorFee !== undefined ? appointment.billingRecord.doctorFee : 0}
+                    </span>
+                  </div>
+                  <div className="sm:col-span-2 bg-white/60 px-3 py-2 rounded-lg border border-amber-100">
+                    <span className="block text-xs uppercase text-amber-600 tracking-wide mb-1">Other Services</span>
+                    {appointment.billingRecord.otherServices && appointment.billingRecord.otherServices.length > 0 ? (
+                      <ul className="space-y-1">
+                        {appointment.billingRecord.otherServices.map((service, idx) => (
+                          <li key={idx} className="flex justify-between">
+                            <span>{service.description}</span>
+                            <span className="font-semibold">₹{service.amount}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="text-amber-700">No additional services charged</span>
+                    )}
+                  </div>
+                  <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between bg-amber-100 px-3 py-3 rounded-lg border border-amber-200">
+                    <div>
+                      <p className="text-xs uppercase text-amber-700 tracking-wide mb-1">Total Amount</p>
+                      <p className="text-2xl font-bold text-amber-900">₹{appointment.billingRecord.totalAmount}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 text-sm text-amber-700 mt-2 sm:mt-0">
+                      <p>
+                        Generated on{" "}
+                        {appointment.billingRecord.generatedAt
+                          ? new Date(appointment.billingRecord.generatedAt).toLocaleString()
+                          : "N/A"}
+                      </p>
+                      {appointment.billingRecord.status === "paid" ? (
+                        <>
+                          <p>
+                            Paid on{" "}
+                            {appointment.billingRecord.paidAt
+                              ? new Date(appointment.billingRecord.paidAt).toLocaleString()
+                              : "N/A"}
+                          </p>
+                          {appointment.billingRecord.paymentMethod && (
+                            <p className="capitalize">
+                              Method: {appointment.billingRecord.paymentMethod}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="capitalize">
+                          Awaiting payment{appointment.billingRecord.paymentMethod ? ` (${appointment.billingRecord.paymentMethod})` : ""}
+                        </p>
+                      )}
+                      {appointment.billingRecord.paidAtFrontDesk && (
+                        <p className="text-xs text-amber-600">
+                          Settled at reception desk
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {appointment.billingRecord.status !== "paid" && onPayBill && (
+                    <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white/70 px-3 py-3 rounded-lg border border-amber-200">
+                      <p className="text-sm text-amber-800 flex items-center gap-2">
+                        <span>💡</span>
+                        <span>Your hospitalization bill is pending. Please complete the payment.</span>
+                      </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onPayBill()
+                        }}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                      >
+                        Pay Now
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

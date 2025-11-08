@@ -36,12 +36,8 @@ function LoginContent() {
       // Check admin collection first
       const adminDoc = await getDoc(doc(db, "admins", user.uid))
       if (adminDoc.exists()) {
-        setSuccess("Login successful! Redirecting to admin dashboard in 3 seconds...")
-        setLoading(false) // Stop loading state to show success message
-        // Delay redirect to show success message
-        setTimeout(() => {
-          router.replace("/admin-dashboard")
-        }, 3000)
+        setLoading(false)
+        dispatchCountdownMessage("Login successful!", () => router.replace("/admin-dashboard"))
         return
       }
 
@@ -56,36 +52,24 @@ function LoginContent() {
           setLoading(false)
           return
         }
-        setSuccess("Login successful! Redirecting to doctor dashboard in 3 seconds...")
-        setLoading(false) // Stop loading state to show success message
-        // Delay redirect to show success message
-        setTimeout(() => {
-          router.replace("/doctor-dashboard")
-        }, 3000)
+        setLoading(false)
+        dispatchCountdownMessage("Login successful!", () => router.replace("/doctor-dashboard"))
         return
       }
       
       // Check patient collection
       const patientDoc = await getDoc(doc(db, "patients", user.uid))
       if (patientDoc.exists()) {
-        setSuccess("Login successful! Redirecting to patient dashboard in 3 seconds...")
-        setLoading(false) // Stop loading state to show success message
-        // Delay redirect to show success message
-        setTimeout(() => {
-          router.replace("/patient-dashboard")
-        }, 3000)
+        setLoading(false)
+        dispatchCountdownMessage("Login successful!", () => router.replace("/patient-dashboard"))
         return
       }
       
       // Check receptionist collection
       const receptionistDoc = await getDoc(doc(db, "receptionists", user.uid))
       if (receptionistDoc.exists()) {
-        setSuccess("Login successful! Redirecting to receptionist dashboard in 3 seconds...")
-        setLoading(false) // Stop loading state to show success message
-        // Delay redirect to show success message
-        setTimeout(() => {
-          router.replace("/receptionist-dashboard")
-        }, 3000)
+        setLoading(false)
+        dispatchCountdownMessage("Login successful!", () => router.replace("/receptionist-dashboard"))
         return
       }
       
@@ -125,6 +109,20 @@ function LoginContent() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const dispatchCountdownMessage = (message: string, onComplete: () => void, seconds = 3) => {
+    setSuccess(`${message} Redirecting in ${seconds}...`)
+    let remaining = seconds
+    const interval = setInterval(() => {
+      remaining -= 1
+      if (remaining > 0) {
+        setSuccess(`${message} Redirecting in ${remaining}...`)
+      } else {
+        clearInterval(interval)
+        onComplete()
+      }
+    }, 1000)
   }
 
   if (checking) {

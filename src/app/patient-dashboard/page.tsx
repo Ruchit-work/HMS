@@ -33,33 +33,50 @@ export default function PatientDashboard() {
     if (!user) return
 
     const fetchData = async () => {
-      // Fetch patient data
-      const patientDoc = await getDoc(doc(db, "patients", user.uid))
+      const patientDocRef = doc(db, "patients", user.uid)
+      const patientDoc = await getDoc(patientDocRef)
+      let patientRecord: UserData | null = null
       if (patientDoc.exists()) {
-        const data = patientDoc.data() as UserData
-        setUserData(data)
+        patientRecord = patientDoc.data() as UserData
+        setUserData(patientRecord)
       }
 
-      // Fetch all active doctors from doctors collection
       const doctorsQuery = query(collection(db, "doctors"), where("status", "==", "active"))
       const doctorsSnapshot = await getDocs(doctorsQuery)
-      const doctorsList = doctorsSnapshot.docs.map((doc) => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const doctorsList = doctorsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data()
       } as Doctor))
       setDoctors(doctorsList)
 
-      // Fetch patient appointments
-      const appointmentsQuery = query(collection(db, "appointments"), where("patientId", "==", user.uid))
-      const appointmentsSnapshot = await getDocs(appointmentsQuery)
-      const appointmentsList = appointmentsSnapshot.docs.map((doc) => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as Appointment))
-      setAppointments(appointmentsList)
+      const appointmentsCollection = collection(db, "appointments")
+      const appointmentQueries: Promise<any>[] = [
+        getDocs(query(appointmentsCollection, where("patientUid", "==", user.uid)))
+      ]
 
-      // Fetch campaigns for patients
-      const published = await fetchPublishedCampaignsForAudience('patients')
+      if (patientRecord?.patientId) {
+        appointmentQueries.push(
+          getDocs(query(appointmentsCollection, where("patientId", "==", patientRecord.patientId)))
+        )
+      }
+
+      appointmentQueries.push(
+        getDocs(query(appointmentsCollection, where("patientId", "==", user.uid)))
+      )
+
+      const appointmentSnapshots = await Promise.all(appointmentQueries)
+      const appointmentMap = new Map<string, Appointment>()
+      appointmentSnapshots.forEach((snapshot) => {
+        snapshot?.docs.forEach((docSnap: any) => {
+          appointmentMap.set(
+            docSnap.id,
+            { id: docSnap.id, ...docSnap.data() } as Appointment
+          )
+        })
+      })
+      setAppointments(Array.from(appointmentMap.values()))
+
+      const published = await fetchPublishedCampaignsForAudience("patients")
       setCampaigns(published)
     }
 
@@ -112,19 +129,29 @@ export default function PatientDashboard() {
     }
   }
   // Calculate stats and sort by appointment date/time
+  const ACTIVE_STATUSES = new Set([
+    "confirmed",
+    "resrescheduled",
+    "awaiting_reschedule",
+    "awaiting_admission",
+    "admitted"
+  ])
+
   const activeAppointments = appointments
-    .filter(apt => apt.status === "confirmed")
+    .filter(apt => ACTIVE_STATUSES.has(String(apt.status || "").toLowerCase()))
     .sort((a, b) => {
       const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
       const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
       return dateA - dateB // Earlier appointments first
     })
   
-  const completedAppointments = appointments.filter(apt => apt.status === "completed")
+  const completedAppointments = appointments.filter(apt => String(apt.status || "").toLowerCase() === "completed")
   const upcomingAppointments = activeAppointments
     .filter(apt => new Date(`${apt.appointmentDate} ${apt.appointmentTime}`).getTime() > Date.now())
     .length
-  const awaitingReschedule = appointments.filter(apt => String((apt as any)?.status) === 'awaiting_reschedule')
+  const awaitingReschedule = appointments.filter(
+    apt => String(apt.status || "").toLowerCase() === "awaiting_reschedule"
+  )
 
   const handleRequestRefund = async (apt: Appointment) => {
     try {

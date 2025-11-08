@@ -66,6 +66,7 @@ export interface Doctor {
 export interface Appointment {
   id: string
   patientId: string
+  patientUid?: string
   patientName: string
   patientEmail: string
   patientPhone?: string
@@ -127,6 +128,9 @@ export interface Appointment {
   cancellationFee?: number
   refundTransactionId?: string
   refundProcessedAt?: string
+  admissionId?: string
+  admissionRequestId?: string
+  billingRecord?: BillingRecord
 }
 
 export interface AppointmentFormData {
@@ -160,5 +164,84 @@ export interface PaymentData {
 export interface NotificationData {
   type: "success" | "error"
   message: string
+}
+
+export type RoomType = "general" | "simple" | "deluxe" | "vip"
+
+export interface Room {
+  id: string
+  roomNumber: string
+  roomType: RoomType
+  ratePerDay: number
+  status: "available" | "occupied" | "maintenance"
+  attributes?: Record<string, unknown>
+  updatedAt?: string
+}
+
+export interface AdmissionRequest {
+  id: string
+  appointmentId: string
+  patientUid: string
+  patientId?: string
+  patientName?: string | null
+  doctorId: string
+  doctorName?: string
+  notes?: string | null
+  status: "pending" | "accepted" | "cancelled"
+  createdAt: string
+  updatedAt?: string
+  cancelledAt?: string
+  cancelledBy?: string
+  appointmentDetails?: {
+    appointmentDate?: string | null
+    appointmentTime?: string | null
+    patientPhone?: string | null
+    doctorSpecialization?: string | null
+  } | null
+}
+
+export interface Admission {
+  id: string
+  appointmentId: string
+  patientUid: string
+  patientId?: string
+  doctorId: string
+  doctorName?: string
+  roomId: string
+  roomNumber: string
+  roomType: RoomType
+  roomRatePerDay: number
+  status: "admitted" | "discharged" | "completed"
+  checkInAt: string
+  checkOutAt?: string | null
+  notes?: string | null
+  createdBy: string
+  createdAt: string
+  updatedAt?: string
+  billingId?: string | null
+  patientName?: string | null
+}
+
+export interface BillingRecord {
+  id: string
+  admissionId: string
+  appointmentId?: string
+  patientId: string
+  patientUid?: string | null
+  patientName?: string | null
+  doctorId: string
+  doctorName?: string | null
+  roomCharges: number
+  doctorFee?: number
+  otherServices?: Array<{ description: string; amount: number }>
+  totalAmount: number
+  generatedAt: string
+  status: "pending" | "paid" | "void"
+  paymentMethod?: "card" | "upi" | "cash" | "wallet" | "demo"
+  paidAt?: string | null
+  paymentReference?: string | null
+  paidAtFrontDesk?: boolean
+  handledBy?: string | null
+  settlementMode?: string | null
 }
 

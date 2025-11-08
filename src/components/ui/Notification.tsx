@@ -1,22 +1,46 @@
 "use client"
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 interface NotificationProps {
   type: 'success' | 'error' | 'info'
   message: string
   onClose: () => void
+  durationMs?: number
+  countdownSeconds?: number
+  onCountdownComplete?: () => void
 }
 
-export default function Notification({ type, message, onClose }: NotificationProps) {
-  // Auto-close after 10 seconds
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose()
-    }, 10000) // 10 seconds
+export default function Notification({
+  type,
+  message,
+  onClose,
+  durationMs = 10000,
+  countdownSeconds,
+  onCountdownComplete,
+}: NotificationProps) {
+  const [remaining, setRemaining] = useState<number | null>(
+    countdownSeconds !== undefined ? countdownSeconds : null
+  )
 
+  useEffect(() => {
+    const timer = setTimeout(onClose, durationMs)
     return () => clearTimeout(timer)
-  }, [onClose])
+  }, [onClose, durationMs])
+
+  useEffect(() => {
+    if (remaining === null) return
+    if (remaining <= 0) {
+      onCountdownComplete?.()
+      return
+    }
+
+    const interval = setInterval(() => {
+      setRemaining(prev => (prev !== null ? prev - 1 : prev))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [remaining, onCountdownComplete])
 
   return (
     <div className="fixed top-4 right-4 z-50 animate-slide-in">
@@ -37,6 +61,15 @@ export default function Notification({ type, message, onClose }: NotificationPro
             }`}>
               {message}
             </p>
+            {remaining !== null && remaining > 0 && (
+              <p className={`text-xs mt-1 font-semibold ${
+                type === 'success' ? 'text-green-700' :
+                type === 'error' ? 'text-red-700' :
+                'text-blue-700'
+              }`}>
+                Redirecting in {remaining}…
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -54,7 +87,7 @@ export default function Notification({ type, message, onClose }: NotificationPro
               type === 'error' ? 'bg-red-500' :
               'bg-blue-500'
             }`}
-            style={{ animation: 'shrink 10s linear forwards' }}
+            style={{ animation: `shrink ${durationMs / 1000}s linear forwards` }}
           />
         </div>
       </div>

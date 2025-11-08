@@ -7,7 +7,7 @@ import SymptomSelector, { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import SmartQuestions from "./SmartQuestions"
 import MedicalHistoryChecklist from "./MedicalHistoryChecklist"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, isDateBlocked, getBlockedDateInfo, generateTimeSlots, isTimeSlotAvailable, timeToMinutes, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import PaymentMethodSection, { PaymentData as PPaymentData } from "@/components/payments/PaymentMethodSection"
+import PaymentMethodSection, { PaymentData as PPaymentData, PaymentMethodOption } from "@/components/payments/PaymentMethodSection"
 import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore"
 import { db } from "@/firebase/config"
 
@@ -45,7 +45,7 @@ export default function BookAppointmentForm({
     problem: "",
     medicalHistory: ""
   })
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash" | "wallet" | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption | null>(null)
   const [paymentType, setPaymentType] = useState<"full" | "partial">("full")
   const [paymentData, setPaymentData] = useState<PaymentData>({
     cardNumber: "",
@@ -131,18 +131,35 @@ export default function BookAppointmentForm({
         } as Appointment))
 
         // Fetch all confirmed appointments for this patient on this date   
-        const  patientAppointmentsQuery = query(
-          collection(db, "appointments"),
+        const baseCollection = collection(db, "appointments")
+        const patientAppointmentsByUidQuery = query(
+          baseCollection,
+          where("patientUid", "==", user.uid),
+          where("doctorId", "==", selectedDoctor),
+          where("appointmentDate", "==", appointmentData.date),
+          where("status", "==", "confirmed")
+        )
+        const patientAppointmentsLegacyQuery = query(
+          baseCollection,
           where("patientId", "==", user.uid),
           where("doctorId", "==", selectedDoctor),
           where("appointmentDate", "==", appointmentData.date),
           where("status", "==", "confirmed")
         )
-        const patientAppointments = await getDocs(patientAppointmentsQuery)
-        const patientAppointmentsList = patientAppointments.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Appointment))
+
+        const [patientAppointmentsByUid, patientAppointmentsLegacy] = await Promise.all([
+          getDocs(patientAppointmentsByUidQuery),
+          getDocs(patientAppointmentsLegacyQuery)
+        ])
+
+        const patientAppointmentsMap = new Map<string, Appointment>()
+        ;[...patientAppointmentsByUid.docs, ...patientAppointmentsLegacy.docs].forEach(docSnap => {
+          patientAppointmentsMap.set(
+            docSnap.id,
+            { id: docSnap.id, ...docSnap.data() } as Appointment
+          )
+        })
+        const patientAppointmentsList = Array.from(patientAppointmentsMap.values())
 
         if (patientAppointmentsList.length > 0) {
           setHasDuplicateAppointment(true)
@@ -394,7 +411,6 @@ export default function BookAppointmentForm({
           return !!paymentData.upiId
         }
         // If wallet, ensure sufficient balance will be validated upstream, allow proceed here
-        // Cash payment is always valid (no additional fields needed)
         return true
       default: return false
     }
@@ -441,7 +457,7 @@ export default function BookAppointmentForm({
     await onSubmit({
       selectedDoctor,
       appointmentData,
-      paymentMethod: paymentMethod as "card" | "upi" | "cash",
+      paymentMethod: paymentMethod as "card" | "upi" | "wallet",
       paymentType,
       paymentData
     })
@@ -1173,7 +1189,8 @@ export default function BookAppointmentForm({
                   setPaymentData={(d)=>setPaymentData(d as any)}
                   amountToPay={AMOUNT_TO_PAY}
                   showPartialNote={paymentType === 'partial'}
-                  walletBalance={Number((userData as any)?.walletBalance || 0)}
+                  walletBalance={Number((userData as any)?.walletBalance ?? 0)}
+                  methods={["card", "upi", "wallet"]}
                 />
               </div>
             </div>
@@ -1220,11 +1237,9 @@ export default function BookAppointmentForm({
                     ? "Confirm Reschedule"
                     : !paymentMethod
                     ? "Select Payment Method"
-                  : paymentMethod === "cash" 
-                    ? `Confirm Appointment` 
-                    : paymentType === "partial"
+                  : paymentType === "partial"
                       ? `Pay ₹${AMOUNT_TO_PAY} & Book`
-                      : `Book & Pay ₹${AMOUNT_TO_PAY}`}
+                      : `Pay ₹${AMOUNT_TO_PAY} & Book`}
               </button>
             )}
 

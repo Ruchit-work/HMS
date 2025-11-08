@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { sendOTP, verifyOTP } from "@/utils/twilioOTP"
 
 interface OTPVerificationModalProps {
@@ -11,6 +11,7 @@ interface OTPVerificationModalProps {
   title?: string
   subtitle?: string
   onVerified?: () => void
+  onChangePhone?: () => void
 }
 
 export default function OTPVerificationModal({
@@ -20,7 +21,8 @@ export default function OTPVerificationModal({
   countryCode = "+91",
   title = "Verify Your Phone Number",
   subtitle = "We've sent a 6-digit verification code to",
-  onVerified
+  onVerified,
+  onChangePhone
 }: OTPVerificationModalProps) {
   const [otp, setOtp] = useState("")
   const [otpSent, setOtpSent] = useState(false)
@@ -28,19 +30,35 @@ export default function OTPVerificationModal({
   const [sendingOTP, setSendingOTP] = useState(false)
   const [verifyingOTP, setVerifyingOTP] = useState(false)
   const [error, setError] = useState("")
+  const [resendSeconds, setResendSeconds] = useState(30)
+  const hasAutoRequestedRef = useRef(false)
 
   const fullPhone = `${countryCode}${phone}`.replace(/\s+/g, "")
 
   useEffect(() => {
-    if (!isOpen) return
-    if (!otpSent && phone && !sendingOTP) {
+    if (!isOpen) {
+      setOtp("")
+      setOtpSent(false)
+      setOtpVerified(false)
+      setError("")
+      setResendSeconds(30)
+      hasAutoRequestedRef.current = false
+      return
+    }
+
+    if (!hasAutoRequestedRef.current && phone && !sendingOTP) {
+      hasAutoRequestedRef.current = true
       ;(async () => {
         setError("")
         setSendingOTP(true)
         try {
           const res = await sendOTP(fullPhone)
-          if (res.success) setOtpSent(true)
-          else setError(res.error || "Failed to send OTP")
+          if (res.success) {
+            setOtpSent(true)
+            setResendSeconds(30)
+          } else {
+            setError(res.error || "Failed to send OTP")
+          }
         } finally {
           setSendingOTP(false)
         }
@@ -48,6 +66,17 @@ export default function OTPVerificationModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, phone])
+
+  useEffect(() => {
+    if (!isOpen || !otpSent) return
+    if (resendSeconds <= 0) return
+
+    const interval = setInterval(() => {
+      setResendSeconds(prev => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isOpen, otpSent, resendSeconds])
 
   const handleVerify = async () => {
     if (otp.length !== 6) { setError("OTP must be 6 digits"); return }
@@ -68,20 +97,27 @@ export default function OTPVerificationModal({
   }
 
   const handleResend = async () => {
+    if (sendingOTP || resendSeconds > 0) return
     setOtp("")
-    setOtpSent(false)
     setError("")
+    hasAutoRequestedRef.current = true
     setSendingOTP(true)
     try {
       const res = await sendOTP(fullPhone)
-      if (res.success) setOtpSent(true)
-      else setError(res.error || "Failed to send OTP")
+      if (res.success) {
+        setOtpSent(true)
+        setResendSeconds(30)
+      } else {
+        setError(res.error || "Failed to send OTP")
+      }
     } finally {
       setSendingOTP(false)
     }
   }
 
   if (!isOpen) return null
+
+  const formattedCountdown = `00:${resendSeconds.toString().padStart(2, "0")}`
 
   return (
     <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -130,14 +166,36 @@ export default function OTPVerificationModal({
               {verifyingOTP ? "Verifying..." : "Verify & Continue"}
             </button>
 
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={sendingOTP}
-              className="w-full text-sm text-teal-600 hover:text-teal-700 font-medium disabled:opacity-50"
-            >
-              {sendingOTP ? "Resending..." : "Resend OTP"}
-            </button>
+            <div className="text-center text-sm text-slate-600">
+              {!sendingOTP && resendSeconds > 0 ? (
+                <p>Didn't receive the code? Resend in <span className="font-semibold">{formattedCountdown}</span></p>
+              ) : (
+                <p>
+                  Didn’t receive the code?{" "}
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    className="text-teal-600 hover:text-teal-700 font-semibold"
+                    disabled={sendingOTP}
+                  >
+                    {sendingOTP ? "Resending..." : "Resend"}
+                  </button>
+                </p>
+              )}
+            </div>
+
+            {onChangePhone && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (verifyingOTP) return
+                  onChangePhone()
+                }}
+                className="w-full text-xs text-slate-500 hover:text-slate-700 font-medium"
+              >
+                Change phone number
+              </button>
+            )}
           </div>
         ) : (
           <div className="text-center py-4">

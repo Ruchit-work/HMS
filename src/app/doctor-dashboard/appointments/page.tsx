@@ -40,6 +40,7 @@ export default function DoctorAppointments() {
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{[key: string]: boolean}>({})
   const [showHistory, setShowHistory] = useState<{[key: string]: boolean}>({})
   const [refreshing, setRefreshing] = useState(false)
+  const [admitting, setAdmitting] = useState<{ [key: string]: boolean }>({})
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
@@ -315,6 +316,56 @@ export default function DoctorAppointments() {
       })
     } finally {
       setUpdating(false)
+    }
+  }
+
+  const handleAdmitPatient = async (appointment: AppointmentType) => {
+    if (!appointment?.id) return
+    const appointmentId = appointment.id
+    if (admitting[appointmentId]) return
+
+    const reason = window.prompt("Optional: add a note for the receptionist (leave blank if none).") || undefined
+
+    setAdmitting(prev => ({ ...prev, [appointmentId]: true }))
+    try {
+      const res = await fetch("/api/doctor/admission-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId,
+          notes: reason && reason.trim() ? reason.trim() : undefined
+        })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Failed to submit admission request")
+      }
+
+      const data = await res.json().catch(() => ({}))
+      setAppointments(prev =>
+        prev.map(apt =>
+          apt.id === appointmentId
+            ? {
+                ...apt,
+                status: "awaiting_admission" as any,
+                admissionRequestId: data?.requestId || (apt as any)?.admissionRequestId || null,
+                updatedAt: new Date().toISOString()
+              }
+            : apt
+        )
+      )
+      setNotification({
+        type: "success",
+        message: "Admission request sent to receptionist."
+      })
+    } catch (error: any) {
+      console.error("Admit patient error", error)
+      setNotification({
+        type: "error",
+        message: error?.message || "Failed to submit admission request"
+      })
+    } finally {
+      setAdmitting(prev => ({ ...prev, [appointmentId]: false }))
     }
   }
 
@@ -1092,15 +1143,7 @@ export default function DoctorAppointments() {
 
                           {/* Complete Checkup Button - Show at bottom if AI not shown yet */}
                           {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (()=>{
-                            const isTodayAppt = isToday(appointment.appointmentDate)
-                            const earlierPendingExists = appointments.some(a => {
-                              if (a.status !== 'confirmed') return false
-                              if (!isToday(a.appointmentDate)) return false
-                              const tA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
-                              const tThis = new Date(`${appointment.appointmentDate} ${appointment.appointmentTime}`).getTime()
-                              return tA < tThis
-                            })
-                            const disabled = !isTodayAppt || earlierPendingExists || updating
+                            const disabled = updating
                             return (
                             <div className="mt-4">
                                 <button
@@ -1109,6 +1152,26 @@ export default function DoctorAppointments() {
                                   className="w-full px-5 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-base flex items-center justify-center gap-2"
                                 >
                                   <span>✓</span> Complete Checkup
+                                </button>
+                                <button
+                                  onClick={() => handleAdmitPatient(appointment)}
+                                  disabled={Boolean(admitting[appointment.id])}
+                                  className="mt-2 w-full px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-base flex items-center justify-center gap-2"
+                                >
+                                  {admitting[appointment.id] ? (
+                                    <>
+                                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                      <span>Sending request...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span>🏥</span>
+                                      <span>Admit Patient</span>
+                                    </>
+                                  )}
                                 </button>
                             </div>
                             )
