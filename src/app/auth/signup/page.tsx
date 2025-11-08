@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { auth, db } from "@/firebase/config"
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth"
-import { doc, setDoc } from "firebase/firestore"
+import { doc, runTransaction, serverTimestamp, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
@@ -97,6 +97,34 @@ function SignUpContent() {
 
 
   const passwordValid = isPasswordValid(password)
+
+  const getNextPatientId = async () => {
+    const START_NUMBER = 12906
+    return runTransaction(db, async (transaction) => {
+      const counterRef = doc(db, "meta", "patientIdCounter")
+      const counterSnap = await transaction.get(counterRef)
+
+      let lastNumber = START_NUMBER - 1
+      if (counterSnap.exists()) {
+        const data = counterSnap.data() as { lastNumber?: number }
+        if (typeof data?.lastNumber === "number" && data.lastNumber >= START_NUMBER - 1) {
+          lastNumber = data.lastNumber
+        }
+      }
+
+      const nextNumber = lastNumber + 1
+      transaction.set(
+        counterRef,
+        {
+          lastNumber: nextNumber,
+          updatedAt: serverTimestamp()
+        },
+        { merge: true }
+      )
+
+      return nextNumber.toString().padStart(6, "0")
+    })
+  }
 
   // Send OTP function (for patients only)
   const handleSendOTP = async (showSuccess = true) => {
@@ -411,6 +439,8 @@ function SignUpContent() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
 
+      const patientId = await getNextPatientId()
+
       // Save user info to Firestore
       await setDoc(doc(db, "patients", user.uid), {
         email: email,
@@ -424,6 +454,7 @@ function SignUpContent() {
         gender: gender,
         bloodGroup: bloodGroup,
         address: address,
+        patientId,
         createdAt: new Date().toISOString(),
         createdBy: "self"
       })
@@ -431,7 +462,7 @@ function SignUpContent() {
       // Show success notification
       setNotification({
         type: "success",
-        message: "Patient account created successfully! Redirecting to login..."
+        message: `Patient account created successfully! Your Patient ID is ${patientId}. Redirecting to login...`
       })
 
       // Close modal

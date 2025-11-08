@@ -3,6 +3,7 @@ export interface UserData {
   lastName: string
   email: string
   role: string
+  patientId?: string
   gender?: string
   phoneNumber?: string
   dateOfBirth?: string

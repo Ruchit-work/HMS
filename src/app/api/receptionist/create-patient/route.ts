@@ -64,6 +64,34 @@ export async function POST(request: Request) {
       authUid = created.uid
     }
 
+    const db = admin.firestore()
+    const START_NUMBER = 12906
+    const patientId = await db.runTransaction(async (transaction) => {
+      const counterRef = db.collection("meta").doc("patientIdCounter")
+      const counterSnap = await transaction.get(counterRef)
+
+      let lastNumber = START_NUMBER - 1
+      if (counterSnap.exists) {
+        const data = counterSnap.data()
+        const stored = typeof data?.lastNumber === "number" ? data.lastNumber : undefined
+        if (stored && stored >= START_NUMBER - 1) {
+          lastNumber = stored
+        }
+      }
+
+      const nextNumber = lastNumber + 1
+      transaction.set(
+        counterRef,
+        {
+          lastNumber: nextNumber,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      )
+
+      return nextNumber.toString().padStart(6, "0")
+    })
+
     const nowIso = new Date().toISOString()
     const docData = {
       status: patientData.status || "active",
@@ -77,13 +105,14 @@ export async function POST(request: Request) {
       dateOfBirth: patientData.dateOfBirth || "",
       createdAt: patientData.createdAt || nowIso,
       updatedAt: nowIso,
-      createdBy: patientData.createdBy || "receptionist"
+      createdBy: patientData.createdBy || "receptionist",
+      patientId
     }
 
     // Store patient doc with ID = authUid (so patient dashboard can load by user.uid)
-    await admin.firestore().collection("patients").doc(authUid).set(docData, { merge: true })
+    await db.collection("patients").doc(authUid).set(docData, { merge: true })
 
-    return Response.json({ success: true, id: authUid, authUid })
+    return Response.json({ success: true, id: authUid, authUid, patientId })
   } catch (error: any) {
     console.error("receptionist create-patient error:", error)
     return Response.json({ error: error?.message || "Failed to create patient" }, { status: 500 })

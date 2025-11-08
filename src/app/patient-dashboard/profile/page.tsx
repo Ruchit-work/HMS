@@ -98,7 +98,7 @@ export default function PatientProfilePage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
-          title="My Profile"
+          title="Patient Profile"
           subtitle="View and manage your personal information and appointment statistics"
           icon="👤"
           gradient="from-purple-600 to-pink-600"
@@ -116,7 +116,14 @@ export default function PatientProfilePage() {
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
                   {userData.firstName} {userData.lastName}
                 </h2>
-                <p className="text-slate-600">Patient</p>
+                {userData.patientId && (
+                  <div className="mt-2">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-teal-50 border border-teal-200 px-3 py-1 text-xs font-semibold text-teal-700">
+                      Patient ID
+                      <span className="font-mono text-sm text-teal-900">{userData.patientId}</span>
+                    </span>
+                  </div>
+                )}
                 {patientAge !== null && (
                   <p className="text-sm text-slate-500 font-semibold mt-1">
                     Age: <span className="text-slate-800">{patientAge} years</span>

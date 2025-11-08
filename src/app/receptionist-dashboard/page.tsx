@@ -44,7 +44,7 @@ export default function ReceptionistDashboard() {
   const [selectedDoctorFee, setSelectedDoctorFee] = useState<number | null>(null)
   const [appointmentDate, setAppointmentDate] = useState('')
   const [appointmentTime, setAppointmentTime] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash" | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cash" | "wallet" | null>(null)
   const [paymentData, setPaymentData] = useState<{ cardNumber: string; cardName: string; expiryDate: string; cvv: string; upiId: string }>({ cardNumber: "", cardName: "", expiryDate: "", cvv: "", upiId: "" })
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const isSelectedDateBlocked = useMemo(() => {
@@ -93,7 +93,12 @@ export default function ReceptionistDashboard() {
   const filteredPatients = useMemo(()=>{
     if (!searchPatient) return patients
     const s = searchPatient.toLowerCase()
-    return patients.filter((p:any)=>`${p.firstName} ${p.lastName}`.toLowerCase().includes(s) || p.email?.toLowerCase().includes(s) || p.phone?.toLowerCase().includes(s))
+    return patients.filter((p:any)=>
+      `${p.firstName} ${p.lastName}`.toLowerCase().includes(s) ||
+      p.email?.toLowerCase().includes(s) ||
+      p.phone?.toLowerCase().includes(s) ||
+      (p.patientId ? String(p.patientId).toLowerCase().includes(s) : false)
+    )
   }, [patients, searchPatient])
 
   // Reset relevant form fields when switching between Existing/New patient modes
@@ -389,12 +394,18 @@ export default function ReceptionistDashboard() {
                         value={searchPatient}
                         onChange={(e)=>{
                           const val = e.target.value
+                          const valLower = val.toLowerCase()
                           setSearchPatient(val)
                           setShowPatientSuggestions(val.trim().length > 0)
-                          const match = patients.find((p:any)=>`${p.firstName} ${p.lastName} — ${p.email}`.toLowerCase() === val.toLowerCase())
+                          const match = patients.find((p:any)=>{
+                            const label = `${p.firstName} ${p.lastName} — ${p.email}`
+                            if (label.toLowerCase() === valLower) return true
+                            if (p.patientId && String(p.patientId).toLowerCase() === valLower) return true
+                            return false
+                          })
                           setSelectedPatientId(match ? match.id : '')
                         }}
-                        placeholder="Search patient by name, email or phone"
+                        placeholder="Search patient by name, email, phone, or patient ID"
                         className="w-full px-3 py-2 border rounded"
                       />
                       {showPatientSuggestions && searchPatient.trim().length > 0 && (
@@ -421,6 +432,9 @@ export default function ReceptionistDashboard() {
                                 >
                                   <div className="font-medium text-gray-900">{p.firstName} {p.lastName}</div>
                                   <div className="text-xs text-gray-600">{p.email}{p.phone ? ` • ${p.phone}` : ''}</div>
+                                  {p.patientId && (
+                                    <div className="text-[11px] text-gray-500 font-mono">ID: {p.patientId}</div>
+                                  )}
                                 </button>
                               )
                             })
@@ -478,6 +492,7 @@ export default function ReceptionistDashboard() {
                         <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">
                           <div><span className="text-xs text-gray-500">Email:</span> {selectedPatientInfo.email || '—'}</div>
                           <div><span className="text-xs text-gray-500">Phone:</span> {selectedPatientInfo.phone || '—'}</div>
+                          <div><span className="text-xs text-gray-500">Patient ID:</span> {selectedPatientInfo.patientId || '—'}</div>
                           <div><span className="text-xs text-gray-500">Gender:</span> {selectedPatientInfo.gender || '—'}</div>
                           <div><span className="text-xs text-gray-500">DOB:</span> {selectedPatientInfo.dateOfBirth || '—'}</div>
                           {selectedPatientInfo.address && (

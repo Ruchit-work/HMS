@@ -6,246 +6,306 @@
 
 import jsPDF from 'jspdf'
 import { Appointment } from '@/types/patient'
+import { calculateAge } from '@/utils/date'
 
-export function generatePrescriptionPDF(appointment: Appointment) {
-  // Create new PDF document (A4 size)
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
+type PrescriptionRenderOptions = {
+  forPreview?: boolean
+}
+
+function safeText(value?: string | number | null, fallback = 'Not provided') {
+  if (value === null || value === undefined) return fallback
+  const str = typeof value === 'string' ? value.trim() : String(value)
+  return str.length ? str : fallback
+}
+
+function formatDate(value?: string, locale: string = 'en-US') {
+  if (!value) return 'Not provided'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString(locale, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   })
+}
 
+function createPrescriptionDocument(appointment: Appointment, options: PrescriptionRenderOptions = {}) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 20
 
-  // Colors
-  const primaryColor = '#14b8a6' // Teal
-  const darkGray = '#1e293b'
-  const mediumGray = '#64748b'
-  const lightGray = '#f1f5f9'
+  const createdDate = appointment.updatedAt || appointment.createdAt
+  const formattedCreatedDate = formatDate(createdDate)
+  const consultationDate = `${formatDate(appointment.appointmentDate)} at ${safeText(appointment.appointmentTime, 'Not set')}`
+  const patientAge = appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) : null
 
-  // Header - HMS Logo and Title
-  doc.setFillColor(20, 184, 166) // Teal
+  // Header banner
+  doc.setFillColor(20, 184, 166)
   doc.rect(0, 0, pageWidth, 40, 'F')
-  
-  // HMS Logo Box
-  doc.setFillColor(255, 255, 255)
+
   doc.setFontSize(24)
   doc.setTextColor(255, 255, 255)
-  doc.text('HMS', margin, 15)
-  
+  doc.setFont('helvetica', 'bold')
+  doc.text('HMS', margin, 16)
+
   doc.setFontSize(10)
-  doc.text('Hospital Management System', margin, 22)
-  doc.text('Medical Prescription', margin, 28)
-  
-  // Right side - Date
+  doc.setFont('helvetica', 'normal')
+  doc.text('Hospital Management System', margin, 23)
+  doc.text('Medical Prescription', margin, 29)
+
   doc.setFontSize(9)
-  doc.text(
-    `Date: ${new Date(appointment.createdAt).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })}`,
-    pageWidth - margin - 50,
-    15,
-    { align: 'right' }
-  )
-  
-  doc.text(`Prescription ID: ${appointment.id.substring(0, 12).toUpperCase()}`, pageWidth - margin - 50, 21, { align: 'right' })
+  doc.text(`Prescription Date: ${formattedCreatedDate}`, pageWidth - margin, 14, { align: 'right' })
+  doc.text(`Prescription ID: ${safeText(appointment.id?.substring(0, 12)?.toUpperCase(), 'N/A')}`, pageWidth - margin, 20, { align: 'right' })
+  doc.text(`Patient ID: ${safeText(appointment.patientId, 'N/A')}`, pageWidth - margin, 26, { align: 'right' })
 
   let yPos = 50
 
-  // Doctor Information Section
-  doc.setFillColor(241, 245, 249) // Light gray
-  doc.rect(margin, yPos, pageWidth - 2 * margin, 30, 'F')
-  
-  doc.setFontSize(12)
-  doc.setTextColor(30, 41, 59)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Doctor Information', margin + 5, yPos + 7)
-  
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(100, 116, 139)
-  doc.text(`Dr. ${appointment.doctorName}`, margin + 5, yPos + 14)
-  doc.text(`Specialization: ${appointment.doctorSpecialization}`, margin + 5, yPos + 20)
-  doc.text(`Consultation Date: ${new Date(appointment.appointmentDate).toLocaleDateString()} at ${appointment.appointmentTime}`, margin + 5, yPos + 26)
-
-  yPos += 40
-
-  // Patient Information Section
+  // Doctor Details
   doc.setFillColor(241, 245, 249)
-  doc.rect(margin, yPos, pageWidth - 2 * margin, 25, 'F')
-  
+  doc.rect(margin, yPos, pageWidth - 2 * margin, 32, 'F')
+  doc.setTextColor(30, 41, 59)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.text('Doctor Information', margin + 5, yPos + 8)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(71, 85, 105)
+  doc.setFontSize(10)
+  doc.text(`Doctor Name: Dr. ${safeText(appointment.doctorName)}`, margin + 5, yPos + 16)
+  doc.text(`Specialization: ${safeText(appointment.doctorSpecialization)}`, margin + 5, yPos + 22)
+  doc.text(`Consultation Date: ${consultationDate}`, margin + 5, yPos + 28)
+
+  yPos += 42
+
+  // Patient details
+  doc.setFillColor(241, 245, 249)
+  doc.rect(margin, yPos, pageWidth - 2 * margin, 42, 'F')
+
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(30, 41, 59)
-  doc.text('Patient Information', margin + 5, yPos + 7)
-  
+  doc.text('Patient Information', margin + 5, yPos + 8)
+
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
-  doc.setTextColor(100, 116, 139)
-  doc.text(`Name: ${appointment.patientName}`, margin + 5, yPos + 14)
-  doc.text(`Email: ${appointment.patientEmail}`, margin + 5, yPos + 20)
+  doc.setTextColor(71, 85, 105)
 
-  yPos += 35
+  const patientDetailsLeft = [
+    `Name: ${safeText(appointment.patientName)}`,
+    `Age: ${patientAge ?? 'Not available'}`,
+    `Gender: ${safeText(appointment.patientGender, 'Not specified')}`,
+    `Blood Group: ${safeText(appointment.patientBloodGroup, 'Not specified')}`
+  ]
+  const patientDetailsRight = [
+    `Email: ${safeText(appointment.patientEmail)}`,
+    `Phone: ${safeText(appointment.patientPhone)}`,
+    `Address: ${safeText((appointment as any).patientAddress)}`,
+    `Occupation: ${safeText(appointment.patientOccupation)}`
+  ]
 
-  // Chief Complaint Section
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(30, 41, 59)
-  doc.text('Chief Complaint', margin, yPos)
-  
-  yPos += 7
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(100, 116, 139)
-  
-  const complaintLines = doc.splitTextToSize(appointment.chiefComplaint, pageWidth - 2 * margin)
-  doc.text(complaintLines, margin, yPos)
-  yPos += complaintLines.length * 5 + 5
-
-  // Medical History (if available)
-  if (appointment.medicalHistory) {
-    yPos += 5
-    doc.setFontSize(11)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(30, 41, 59)
-    doc.text('Medical History', margin, yPos)
-    
-    yPos += 7
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(100, 116, 139)
-    
-    const historyLines = doc.splitTextToSize(appointment.medicalHistory, pageWidth - 2 * margin)
-    doc.text(historyLines, margin, yPos)
-    yPos += historyLines.length * 5 + 5
-  }
-
-  yPos += 10
-
-  // Prescription Section - Highlighted
-  doc.setFillColor(16, 185, 129) // Green
-  doc.rect(margin, yPos, pageWidth - 2 * margin, 8, 'F')
-  
-  doc.setFontSize(12)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
-  doc.text('💊 PRESCRIBED MEDICINES', margin + 5, yPos + 6)
-  
-  yPos += 15
-  
-  if (appointment.medicine) {
-    doc.setFillColor(240, 253, 244) // Light green
-    doc.rect(margin, yPos, pageWidth - 2 * margin, 5, 'F')
-    yPos += 7
-    
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(30, 41, 59)
-    
-    const medicineLines = doc.splitTextToSize(appointment.medicine, pageWidth - 2 * margin - 10)
-    doc.text(medicineLines, margin + 5, yPos)
-    yPos += medicineLines.length * 5 + 10
-  } else {
-    doc.setFontSize(10)
-    doc.setTextColor(148, 163, 184)
-    doc.text('No medicines prescribed', margin + 5, yPos + 5)
-    yPos += 15
-  }
-
-  // Doctor's Notes Section
-  if (appointment.doctorNotes) {
-    doc.setFillColor(59, 130, 246) // Blue
-    doc.rect(margin, yPos, pageWidth - 2 * margin, 8, 'F')
-    
-    doc.setFontSize(12)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
-    doc.text('📝 DOCTOR\'S NOTES', margin + 5, yPos + 6)
-    
-    yPos += 15
-    
-    doc.setFillColor(239, 246, 255) // Light blue
-    doc.rect(margin, yPos, pageWidth - 2 * margin, 5, 'F')
-    yPos += 7
-    
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(30, 41, 59)
-    
-    const notesLines = doc.splitTextToSize(appointment.doctorNotes, pageWidth - 2 * margin - 10)
-    doc.text(notesLines, margin + 5, yPos)
-    yPos += notesLines.length * 5 + 10
-  }
-
-  // Footer - Important Notes
-  yPos = doc.internal.pageSize.getHeight() - 40
-  
-  doc.setDrawColor(203, 213, 225)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 7
-  
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(100, 116, 139)
-  doc.text('Important Instructions:', margin, yPos)
-  yPos += 5
-  
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8)
-  doc.text('• Follow the prescribed dosage and duration strictly', margin + 5, yPos)
-  yPos += 4
-  doc.text('• Complete the full course of antibiotics (if prescribed)', margin + 5, yPos)
-  yPos += 4
-  doc.text('• Contact doctor immediately if you experience any adverse reactions', margin + 5, yPos)
-  yPos += 4
-  doc.text('• Follow-up as advised by your doctor', margin + 5, yPos)
-
-  // Bottom Footer
-  yPos += 10
-  doc.setDrawColor(203, 213, 225)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 5
-  
-  doc.setFontSize(8)
-  doc.setTextColor(148, 163, 184)
-  doc.text('HMS - Hospital Management System | Professional Healthcare Solutions', pageWidth / 2, yPos, { align: 'center' })
-  yPos += 4
-  doc.text('This is an official medical prescription. Keep it safe for your records.', pageWidth / 2, yPos, { align: 'center' })
-
-  // Doctor Signature Section
-  yPos -= 15
-  doc.setFontSize(9)
-  doc.setTextColor(30, 41, 59)
-  doc.setFont('helvetica', 'italic')
-  doc.text('_____________________', pageWidth - margin - 40, yPos - 5)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Dr. ${appointment.doctorName}`, pageWidth - margin - 40, yPos + 1)
-  doc.setFontSize(8)
-  doc.setTextColor(100, 116, 139)
-  doc.text(appointment.doctorSpecialization, pageWidth - margin - 40, yPos + 5)
-
-  // Generate filename
-  const fileName = `Prescription_${appointment.patientName.replace(/\s+/g, '_')}_${new Date(appointment.appointmentDate).toISOString().split('T')[0]}.pdf`
-
-  // Save the PDF
-  doc.save(fileName)
-}
-
-// Preview prescription (opens in new tab instead of downloading)
-export function previewPrescriptionPDF(appointment: Appointment) {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
+  patientDetailsLeft.forEach((line, index) => {
+    doc.text(line, margin + 5, yPos + 16 + index * 6)
+  })
+  patientDetailsRight.forEach((line, index) => {
+    doc.text(line, margin + (pageWidth - 2 * margin) / 2 + 5, yPos + 16 + index * 6)
   })
 
-  // Use same generation logic as above
-  generatePrescriptionPDF(appointment)
-  
-  // Open in new window instead of downloading
+  yPos += 52
+
+  // Vitals & Lifestyle info if available
+  const vitals = [
+    appointment.vitalTemperatureC !== undefined && appointment.vitalTemperatureC !== null ? `Temperature: ${appointment.vitalTemperatureC} °C` : null,
+    appointment.vitalBloodPressure ? `Blood Pressure: ${appointment.vitalBloodPressure}` : null,
+    appointment.vitalHeartRate !== undefined && appointment.vitalHeartRate !== null ? `Heart Rate: ${appointment.vitalHeartRate} bpm` : null,
+    appointment.vitalRespiratoryRate !== undefined && appointment.vitalRespiratoryRate !== null ? `Respiratory Rate: ${appointment.vitalRespiratoryRate} breaths/min` : null,
+    appointment.vitalSpO2 !== undefined && appointment.vitalSpO2 !== null ? `SpO₂: ${appointment.vitalSpO2}%` : null,
+    appointment.patientWeightKg !== undefined && appointment.patientWeightKg !== null ? `Weight: ${appointment.patientWeightKg} kg` : null,
+    appointment.patientHeightCm !== undefined && appointment.patientHeightCm !== null ? `Height: ${appointment.patientHeightCm} cm` : null
+  ].filter(Boolean) as string[]
+
+  const lifestyle = [
+    appointment.patientSmokingHabits ? `Smoking: ${appointment.patientSmokingHabits}` : null,
+    appointment.patientDrinkingHabits ? `Alcohol: ${appointment.patientDrinkingHabits}` : null,
+    appointment.patientVegetarian !== undefined ? `Diet: ${appointment.patientVegetarian ? 'Vegetarian' : 'Non-Vegetarian'}` : null,
+    appointment.patientPregnancyStatus ? `Pregnancy Status: ${appointment.patientPregnancyStatus}` : null,
+    appointment.patientFamilyHistory ? `Family History: ${appointment.patientFamilyHistory}` : null
+  ].filter(Boolean) as string[]
+
+  if (vitals.length || lifestyle.length) {
+    doc.setFillColor(236, 254, 255)
+    doc.rect(margin, yPos, pageWidth - 2 * margin, 10 + (Math.max(vitals.length, lifestyle.length) || 1) * 6, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(14, 116, 144)
+    doc.setFontSize(11)
+    doc.text('Clinical Snapshot', margin + 5, yPos + 7)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(71, 85, 105)
+    doc.setFontSize(9.5)
+
+    vitals.forEach((line, index) => {
+      doc.text(line, margin + 5, yPos + 14 + index * 6)
+    })
+    lifestyle.forEach((line, index) => {
+      doc.text(line, margin + (pageWidth - 2 * margin) / 2 + 5, yPos + 14 + index * 6)
+    })
+
+    yPos += 18 + Math.max(vitals.length, lifestyle.length) * 6
+  }
+
+  // Clinical summary
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(30, 41, 59)
+  doc.text('Chief Complaint', margin, yPos + 6)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(71, 85, 105)
+  doc.setFontSize(10)
+  const complaint = safeText(appointment.chiefComplaint, 'No chief complaint recorded.')
+  const complaintLines = doc.splitTextToSize(complaint, pageWidth - 2 * margin)
+  doc.text(complaintLines, margin, yPos + 13)
+  yPos += 13 + complaintLines.length * 5
+
+  if (appointment.medicalHistory) {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(11)
+    doc.text('Relevant Medical History', margin, yPos + 6)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(71, 85, 105)
+    doc.setFontSize(10)
+    const historyLines = doc.splitTextToSize(appointment.medicalHistory, pageWidth - 2 * margin)
+    doc.text(historyLines, margin, yPos + 13)
+    yPos += 13 + historyLines.length * 5
+  }
+
+  if (appointment.patientAllergies || appointment.patientCurrentMedications) {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(11)
+    doc.text('Allergies & Current Medications', margin, yPos + 6)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(71, 85, 105)
+    doc.setFontSize(10)
+
+    const allergyText = safeText(appointment.patientAllergies, 'No allergies recorded.')
+    const medicationText = safeText(appointment.patientCurrentMedications, 'No current medications recorded.')
+
+    const allergyLines = doc.splitTextToSize(`Allergies: ${allergyText}`, pageWidth - 2 * margin)
+    doc.text(allergyLines, margin, yPos + 13)
+    yPos += allergyLines.length * 5 + 3
+
+    const medicationLines = doc.splitTextToSize(`Current Medications: ${medicationText}`, pageWidth - 2 * margin)
+    doc.text(medicationLines, margin, yPos + 13)
+    yPos += medicationLines.length * 5 + 5
+  }
+
+  // Prescriptions
+  doc.setFillColor(16, 185, 129)
+  doc.rect(margin, yPos + 5, pageWidth - 2 * margin, 8, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(255, 255, 255)
+  doc.text('Prescription Plan', margin + 5, yPos + 11)
+
+  yPos += 20
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(30, 41, 59)
+
+  if (appointment.medicine) {
+    const medicineLines = doc.splitTextToSize(appointment.medicine, pageWidth - 2 * margin)
+    doc.text(medicineLines, margin, yPos)
+    yPos += medicineLines.length * 5 + 5
+  } else {
+    doc.setTextColor(148, 163, 184)
+    doc.text('No medicines prescribed in this consultation.', margin, yPos)
+    yPos += 5
+  }
+
+  if (appointment.doctorNotes) {
+    doc.setFillColor(59, 130, 246)
+    doc.rect(margin, yPos + 5, pageWidth - 2 * margin, 8, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(255, 255, 255)
+    doc.text('Doctor Instructions', margin + 5, yPos + 11)
+
+    yPos += 20
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.setTextColor(30, 41, 59)
+    const notesLines = doc.splitTextToSize(appointment.doctorNotes, pageWidth - 2 * margin)
+    doc.text(notesLines, margin, yPos)
+    yPos += notesLines.length * 5 + 5
+  }
+
+  const followUp = safeText((appointment as any).followUpAdvice, '')
+  if (followUp && followUp !== 'Not provided') {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(11)
+    doc.text('Follow-up Advice', margin, yPos + 6)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(71, 85, 105)
+    doc.setFontSize(10)
+    const followUpLines = doc.splitTextToSize(followUp, pageWidth - 2 * margin)
+    doc.text(followUpLines, margin, yPos + 13)
+    yPos += 13 + followUpLines.length * 5
+  }
+
+  // Payment summary
+  doc.setFillColor(248, 250, 252)
+  doc.rect(margin, pageHeight - 68, pageWidth - 2 * margin, 30, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(30, 41, 59)
+  doc.text('Payment Summary', margin + 5, pageHeight - 62)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(71, 85, 105)
+  doc.setFontSize(9.5)
+
+  doc.text(`Method: ${safeText(appointment.paymentMethod)}`, margin + 5, pageHeight - 56)
+  doc.text(`Payment Status: ${safeText(appointment.paymentStatus)}`, margin + 5, pageHeight - 50)
+  doc.text(`Total Fee: ₹${appointment.totalConsultationFee ?? 0}`, margin + 5, pageHeight - 44)
+  doc.text(`Amount Paid: ₹${appointment.paymentAmount ?? 0}`, margin + (pageWidth - 2 * margin) / 2 + 5, pageHeight - 50)
+  doc.text(`Transaction ID: ${safeText(appointment.transactionId)}`, margin + (pageWidth - 2 * margin) / 2 + 5, pageHeight - 44)
+
+  // Footer & signature
+  doc.setDrawColor(203, 213, 225)
+  doc.line(margin, pageHeight - 30, pageWidth - margin, pageHeight - 30)
+
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(10)
+  doc.setTextColor(30, 41, 59)
+  doc.text('___________________________', pageWidth - margin - 55, pageHeight - 24)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Dr. ${safeText(appointment.doctorName)}`, pageWidth - margin - 55, pageHeight - 18)
+  doc.setFontSize(8)
+  doc.setTextColor(100, 116, 139)
+  doc.text(safeText(appointment.doctorSpecialization), pageWidth - margin - 55, pageHeight - 14)
+
+  doc.setFontSize(7.5)
+  doc.setTextColor(148, 163, 184)
+  doc.text('HMS - Hospital Management System | Professional Healthcare Solutions', pageWidth / 2, pageHeight - 18, { align: 'center' })
+  doc.text('This is a computer generated prescription. No signature is required.', pageWidth / 2, pageHeight - 12, { align: 'center' })
+
+  if (!options.forPreview) {
+    const fileName = `Prescription_${safeText(appointment.patientName, 'Patient')}_${new Date(appointment.appointmentDate).toISOString().split('T')[0]}.pdf`.replace(/\s+/g, '_')
+    doc.save(fileName)
+  }
+
+  return doc
+}
+
+export function generatePrescriptionPDF(appointment: Appointment) {
+  createPrescriptionDocument(appointment, { forPreview: false })
+}
+
+export function previewPrescriptionPDF(appointment: Appointment) {
+  const doc = createPrescriptionDocument(appointment, { forPreview: true })
   const pdfBlob = doc.output('blob')
   const url = URL.createObjectURL(pdfBlob)
   window.open(url, '_blank')

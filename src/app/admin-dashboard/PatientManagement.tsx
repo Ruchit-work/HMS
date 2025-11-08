@@ -18,6 +18,7 @@ import { calculateAge } from '@/utils/date'
 interface Patient {
     status: string
     id: string
+    patientId?: string
     firstName: string
     lastName: string
     email: string
@@ -190,10 +191,12 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
     useEffect(() => {   
         let filtered = patients
         if (search){
+            const searchLower = search.toLowerCase()
             filtered = filtered.filter(patient =>
-                `${patient.firstName} ${patient.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-                patient.email.toLowerCase().includes(search.toLowerCase()) ||
-                patient.phone.toLowerCase().includes(search.toLowerCase())
+                `${patient.firstName} ${patient.lastName}`.toLowerCase().includes(searchLower) ||
+                patient.email.toLowerCase().includes(searchLower) ||
+                patient.phone.toLowerCase().includes(searchLower) ||
+                (patient.patientId ? patient.patientId.toLowerCase().includes(searchLower) : false)
             )
         }
         
@@ -584,7 +587,9 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                         <div className="space-y-4">
                             <div className="flex flex-col space-y-1">
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Patient ID</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md font-mono">{selectedPatient?.id}</p>
+                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md font-mono">
+                                    {selectedPatient?.patientId || 'Not assigned'}
+                                </p>
                             </div>
                             <div className="flex flex-col space-y-1">
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</label>
