@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
     }
 
     const nowIso = new Date().toISOString()
-    let awaitingCount = 0
     let cancelledCount = 0
+    let awaitingCount = 0
 
     for (const docSnap of conflicts) {
       const apt = docSnap.data() as any
