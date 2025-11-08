@@ -11,6 +11,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
 import PageHeader from "@/components/ui/PageHeader"
 import { UserData, NotificationData } from "@/types/patient"
+import { calculateAge } from "@/utils/date"
 
 export default function PatientProfilePage() {
   const { user, loading: authLoading } = useAuth("patient")
@@ -49,6 +50,8 @@ export default function PatientProfilePage() {
   if (!user || !userData) {
     return null
   }
+
+  const patientAge = calculateAge(userData.dateOfBirth)
 
   const handleEditProfile = async (formData: Record<string, unknown>) => {
     if (!user) return
@@ -114,6 +117,11 @@ export default function PatientProfilePage() {
                   {userData.firstName} {userData.lastName}
                 </h2>
                 <p className="text-slate-600">Patient</p>
+                {patientAge !== null && (
+                  <p className="text-sm text-slate-500 font-semibold mt-1">
+                    Age: <span className="text-slate-800">{patientAge} years</span>
+                  </p>
+                )}
               </div>
               <div className="flex gap-3 ml-auto">
                   <button
@@ -168,7 +176,18 @@ export default function PatientProfilePage() {
                   </div>
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2">
                     <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>🎂</span> Date of Birth</p>
-                    <p className="text-slate-900 font-medium">{userData.dateOfBirth || <span className="text-slate-500">Not provided</span>}</p>
+                    {userData.dateOfBirth ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-slate-900 font-medium">{userData.dateOfBirth}</span>
+                        {patientAge !== null && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                            {patientAge} years
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500">Not provided</span>
+                    )}
                   </div>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                     <p className="text-xs font-semibold text-slate-500 mb-1 flex items-center gap-2"><span>⚧️</span> Gender</p>

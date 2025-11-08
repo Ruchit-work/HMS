@@ -8,6 +8,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
 import { generatePrescriptionPDF } from "@/utils/prescriptionPDF"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
+import { calculateAge } from "@/utils/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
 
@@ -162,18 +163,6 @@ export default function DoctorAppointments() {
     setShowCompletionModal(true)
   }
 
-  // Helper function to calculate age from date of birth
-  const calculateAge = (dob: string) => {
-    const birthDate = new Date(dob)
-    const today = new Date()
-    let age = today.getFullYear() - birthDate.getFullYear()
-    const monthDiff = today.getMonth() - birthDate.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--
-    }
-    return age
-  }
-
   // Parse AI diagnosis into structured format for better display
   const parseAIDiagnosis = (text: string) => {
     const sections: {
@@ -217,7 +206,8 @@ export default function DoctorAppointments() {
     
     try {
       // Automatically build comprehensive patient info from appointment data
-      const age = appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) : 'Unknown'
+      const ageValue = calculateAge(appointment.patientDateOfBirth)
+      const age = ageValue !== null ? `${ageValue}` : 'Unknown'
       let patientInfo = `Age: ${age}, Gender: ${appointment.patientGender || 'Unknown'}, Blood Group: ${appointment.patientBloodGroup || 'Unknown'}, Drinking Habits: ${appointment.patientDrinkingHabits || 'None'}, Smoking Habits: ${appointment.patientSmokingHabits || 'None'}, Diet: ${appointment.patientVegetarian || 'Unknown'}`
 
       if (appointment.patientHeightCm != null) {
@@ -726,7 +716,10 @@ export default function DoctorAppointments() {
                                   <p className="text-slate-900 mt-1 font-semibold">
                                     {new Date(appointment.patientDateOfBirth).toLocaleDateString()}
                                     <span className="text-slate-500 text-xs ml-2">
-                                      (Age: {calculateAge(appointment.patientDateOfBirth)} years)
+                                      {(() => {
+                                        const age = calculateAge(appointment.patientDateOfBirth)
+                                        return age !== null ? `(Age: ${age} years)` : '(Age: N/A)'
+                                      })()}
                                     </span>
                                   </p>
                                 </div>

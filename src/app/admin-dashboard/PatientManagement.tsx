@@ -12,6 +12,7 @@ import ViewModal from '@/components/ui/ViewModal'
 import DeleteModal from '@/components/ui/DeleteModal'
 import OTPVerificationModal from '@/components/form/OTPVerificationModal'
 import PasswordRequirements, { isPasswordValid } from '@/components/form/PasswordRequirements'
+import { calculateAge } from '@/utils/date'
 // import toast from 'react-hot-toast'
 
 interface Patient {
@@ -547,7 +548,21 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                             </div>
                             <div className="flex flex-col space-y-1">
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date of Birth</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{formatDate(selectedPatient?.dateOfBirth || '')}</p>
+                                {selectedPatient?.dateOfBirth ? (
+                                    <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">
+                                        {formatDate(selectedPatient.dateOfBirth)}
+                                        {(() => {
+                                            const age = calculateAge(selectedPatient.dateOfBirth)
+                                            return age !== null ? (
+                                                <span className="ml-2 text-xs text-teal-700 font-semibold bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
+                                                    {age} years
+                                                </span>
+                                            ) : null
+                                        })()}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm font-medium text-gray-500 bg-gray-50 px-3 py-2 rounded-md">Not provided</p>
+                                )}
                             </div>
                             <div className="flex flex-col space-y-1">
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Created By</label>
