@@ -1,4 +1,5 @@
 import admin from "firebase-admin"
+import type { NextRequest } from "next/server"
 
 interface Params {
   admissionId: string
@@ -30,8 +31,8 @@ function initAdmin() {
 }
 
 export async function POST(
-  req: Request,
-  { params }: { params: Params }
+  req: NextRequest,
+  context: { params: Promise<Params> }
 ) {
   try {
     const ok = initAdmin()
@@ -41,7 +42,7 @@ export async function POST(
 
     const { doctorFee, otherCharges, otherDescription, notes } = await req.json().catch(() => ({}))
 
-    const admissionId = params.admissionId
+    const { admissionId } = await context.params
     if (!admissionId) {
       return Response.json({ error: "Missing admissionId" }, { status: 400 })
     }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, addDoc, onSnapshot, updateDoc, increment } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
@@ -14,6 +14,14 @@ import Footer from "@/components/ui/Footer"
 import { useSearchParams, useRouter } from "next/navigation"
 
 export default function BookAppointmentPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner message="Loading Booking Form..." />}>
+      <BookAppointmentContent />
+    </Suspense>
+  )
+}
+
+function BookAppointmentContent() {
   const [userData, setUserData] = useState<UserData | null>(null)
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [submitting, setSubmitting] = useState(false)

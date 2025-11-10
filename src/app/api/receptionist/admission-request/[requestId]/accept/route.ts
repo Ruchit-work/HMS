@@ -1,4 +1,5 @@
 import admin from "firebase-admin"
+import type { NextRequest } from "next/server"
 
 interface Params {
   requestId: string
@@ -30,8 +31,8 @@ function initAdmin() {
 }
 
 export async function POST(
-  req: Request,
-  { params }: { params: Params }
+  req: NextRequest,
+  context: { params: Promise<Params> }
 ) {
   try {
     const ok = initAdmin()
@@ -44,7 +45,7 @@ export async function POST(
       return Response.json({ error: "Missing roomId" }, { status: 400 })
     }
 
-    const requestId = params.requestId
+    const { requestId } = await context.params
     if (!requestId) {
       return Response.json({ error: "Missing requestId" }, { status: 400 })
     }
