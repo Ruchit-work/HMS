@@ -9,10 +9,10 @@ import { useRouter } from "next/navigation"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
-import PatientManagement from "./PatientManagement"
-import DoctorManagement from "./DoctorManagement"
-import AppoinmentManagement from "./AppoinmentManagement"
-import CampaignManagement from "./CampaignManagement"
+import PatientManagement from "./Tabs/PatientManagement"
+import DoctorManagement from "./Tabs/DoctorManagement"
+import AppoinmentManagement from "./Tabs/AppoinmentManagement"
+import CampaignManagement from "./Tabs/CampaignManagement"
 import AdminProtected from "@/components/AdminProtected"
 
 interface UserData {
@@ -33,8 +33,23 @@ interface DashboardStats {
   totalRevenue: number;
   monthlyRevenue: number;
   weeklyRevenue: number;
-  appointmentsByDay: { date: string; count: number }[];
+  appointmentTrends: {
+    weekly: TrendPoint[];
+    monthly: TrendPoint[];
+    yearly: TrendPoint[];
+  };
+  appointmentTotals: {
+    weekly: number;
+    monthly: number;
+    yearly: number;
+  };
   commonConditions: { condition: string; count: number }[];
+}
+
+interface TrendPoint {
+  label: string;
+  fullLabel: string;
+  count: number;
 }
 
 export default function AdminDashboard() {
@@ -49,7 +64,16 @@ export default function AdminDashboard() {
     totalRevenue: 0,
     monthlyRevenue: 0,
     weeklyRevenue: 0,
-    appointmentsByDay: [],
+    appointmentTrends: {
+      weekly: [],
+      monthly: [],
+      yearly: []
+    },
+    appointmentTotals: {
+      weekly: 0,
+      monthly: 0,
+      yearly: 0
+    },
     commonConditions: []
   })
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
@@ -63,6 +87,17 @@ export default function AdminDashboard() {
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
   const [loadingRefunds, setLoadingRefunds] = useState(false)
+  const [trendView, setTrendView] = useState<"weekly" | "monthly" | "yearly">("weekly")
+
+  const trendData = stats.appointmentTrends[trendView] || []
+  const trendTotal = stats.appointmentTotals[trendView] || 0
+  const maxTrendCount = trendData.reduce((max, point) => Math.max(max, point.count), 0)
+  const safeTrendCount = Math.max(maxTrendCount, 1)
+  const chartPadding = { left: 60, right: 40, top: 20, bottom: 20 }
+  const chartSize = { width: 400, height: 200 }
+  const innerWidth = chartSize.width - chartPadding.left - chartPadding.right
+  const innerHeight = chartSize.height - chartPadding.top - chartPadding.bottom
+  const xStep = trendData.length > 1 ? innerWidth / (trendData.length - 1) : 0
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
@@ -137,17 +172,85 @@ export default function AdminDashboard() {
         ...doc.data() 
       } as AppointmentType))
 
-      // Calculate appointments by day (last 7 days)
-      const appointmentsByDay = []
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date()
-        date.setDate(date.getDate() - i)
-        const dateStr = date.toISOString().split('T')[0]
-        const count = allAppointments.filter(apt => 
-          apt.appointmentDate === dateStr
-        ).length
-        appointmentsByDay.push({
-          date: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      // Aggregate appointments for trend views
+      const parsedAppointments = allAppointments
+        .map((apt) => {
+          if (!apt.appointmentDate) return null
+          const dt = new Date(apt.appointmentDate)
+          if (Number.isNaN(dt.getTime())) return null
+          dt.setHours(0, 0, 0, 0)
+          return dt
+        })
+        .filter((value): value is Date => Boolean(value))
+
+      const now = new Date()
+      now.setHours(0, 0, 0, 0)
+
+      // Weekly: current week (Mon-Sun)
+      const weeklyTrend: TrendPoint[] = []
+      let weeklyTotal = 0
+      const startOfWeek = new Date(now)
+      const dayOfWeek = startOfWeek.getDay() // Sun=0
+      const distanceToMonday = (dayOfWeek + 6) % 7
+      startOfWeek.setDate(startOfWeek.getDate() - distanceToMonday)
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(endOfWeek.getDate() + 6)
+
+      for (let offset = 0; offset < 7; offset++) {
+        const currentDay = new Date(startOfWeek)
+        currentDay.setDate(startOfWeek.getDate() + offset)
+        const nextDay = new Date(currentDay)
+        nextDay.setDate(currentDay.getDate() + 1)
+        const label = currentDay.toLocaleDateString("en-US", { weekday: "short" })
+        const fullLabel = currentDay.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+        const count = parsedAppointments.filter((dt) => dt >= currentDay && dt < nextDay).length
+        weeklyTotal += count
+        weeklyTrend.push({ label, fullLabel, count })
+      }
+
+      // Monthly: current month segmented into buckets
+      const monthlyTrend: TrendPoint[] = []
+      let monthlyTotal = 0
+      const currentYear = now.getFullYear()
+      const currentMonth = now.getMonth()
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+      const bucketRanges: Array<[number, number]> = [
+        [1, 5],
+        [6, 10],
+        [11, 15],
+        [16, 20],
+        [21, 25],
+        [26, daysInMonth]
+      ]
+
+      bucketRanges.forEach(([startDay, endDay]) => {
+        if (startDay > daysInMonth) {
+          return
+        }
+        const adjustedEndDay = Math.min(endDay, daysInMonth)
+        const bucketLabel = `${startDay}-${adjustedEndDay}`
+        const startDate = new Date(currentYear, currentMonth, startDay)
+        const endDate = new Date(currentYear, currentMonth, adjustedEndDay + 1)
+        const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
+        monthlyTotal += count
+        monthlyTrend.push({
+          label: bucketLabel,
+          fullLabel: `${bucketLabel} ${startDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`,
+          count
+        })
+      })
+
+      // Yearly: each month of current year
+      const yearlyTrend: TrendPoint[] = []
+      let yearlyTotal = 0
+      for (let month = 0; month < 12; month++) {
+        const startDate = new Date(currentYear, month, 1)
+        const endDate = new Date(currentYear, month + 1, 1)
+        const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
+        yearlyTotal += count
+        yearlyTrend.push({
+          label: startDate.toLocaleDateString("en-US", { month: "short" }),
+          fullLabel: startDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
           count
         })
       }
@@ -187,7 +290,16 @@ export default function AdminDashboard() {
         totalRevenue,
         monthlyRevenue,
         weeklyRevenue,
-        appointmentsByDay,
+        appointmentTrends: {
+          weekly: weeklyTrend,
+          monthly: monthlyTrend,
+          yearly: yearlyTrend
+        },
+        appointmentTotals: {
+          weekly: weeklyTotal,
+          monthly: monthlyTotal,
+          yearly: yearlyTotal
+        },
         commonConditions
       })
 
@@ -662,145 +774,247 @@ export default function AdminDashboard() {
 
               {/* Charts Section */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* Appointments by Day - Line Chart */}
+                {/* Appointments Trend - Line Chart */}
                 <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Appointments Trend (Last 7 Days)</h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                    <div>
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900">Appointments Trend</h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {trendView === "weekly" && "Current week's appointments by day"}
+                        {trendView === "monthly" && "Current month's appointments grouped by date ranges"}
+                        {trendView === "yearly" && "This year's appointments by month"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="trend-view" className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                          View
+                        </label>
+                        <select
+                          id="trend-view"
+                          value={trendView}
+                          onChange={(event) => setTrendView(event.target.value as "weekly" | "monthly" | "yearly")}
+                          className="text-sm border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="weekly">This Week</option>
+                          <option value="monthly">This Month</option>
+                          <option value="yearly">This Year</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                   <div className="h-48 sm:h-64 relative">
-                    <svg className="w-full h-full" viewBox="0 0 400 200">
-                      {/* Grid lines */}
-                      <defs>
-                        <pattern id="grid" width="40" height="20" patternUnits="userSpaceOnUse">
-                          <path d="M 40 0 L 0 0 0 20" fill="none" stroke="#f3f4f6" strokeWidth="1"/>
-                        </pattern>
-                      </defs>
-                      <rect width="100%" height="100%" fill="url(#grid)" />
-                      
-                      {/* Y-axis labels */}
-                      {(() => {
-                        const maxCount = Math.max(...stats.appointmentsByDay.map(d => d.count), 1)
-                        const yLabels = []
-                        for (let i = 0; i <= 4; i++) {
-                          const value = Math.round((maxCount * i) / 4)
-                          yLabels.push(
-                            <text key={i} x="10" y={180 - (i * 40)} className="text-xs fill-gray-500" textAnchor="start">
+                    {trendData.length > 0 && (
+                      <div className="absolute right-6 top-4 bg-white/80 backdrop-blur-sm border border-blue-100 text-blue-600 rounded-md px-3 py-1 text-xs font-semibold z-10">
+                        Total: {trendTotal}
+                      </div>
+                    )}
+                    {trendData.length > 0 ? (
+                      <svg className="w-full h-full" viewBox={`0 0 ${chartSize.width} ${chartSize.height}`}>
+                        {/* Grid lines */}
+                        <defs>
+                          <pattern id="appointmentsGrid" width="40" height="20" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 20" fill="none" stroke="#f3f4f6" strokeWidth="1"/>
+                          </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill="url(#appointmentsGrid)" />
+                        
+                        {/* Y-axis labels */}
+                        {Array.from({ length: 5 }).map((_, index) => {
+                          const value = Math.round((safeTrendCount * index) / 4)
+                          const y = chartSize.height - chartPadding.bottom - (innerHeight * index) / 4
+                          return (
+                            <text key={index} x="10" y={y} className="text-xs fill-gray-500" textAnchor="start">
                               {value}
                             </text>
                           )
-                        }
-                        return yLabels
-                      })()}
-                      
-                      {/* Line chart */}
-                      {stats.appointmentsByDay.length > 0 && (() => {
-                        const maxCount = Math.max(...stats.appointmentsByDay.map(d => d.count), 1)
-                        const points = stats.appointmentsByDay.map((day, index) => {
-                          const x = 60 + (index * 50)
-                          const y = 180 - ((day.count / maxCount) * 160)
-                          return `${x},${y}`
-                        }).join(' ')
+                        })}
                         
-                        return (
-                          <>
-                            {/* Line */}
-                            <polyline
-                              points={points}
-                              fill="none"
-                              stroke="#3b82f6"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            {/* Data points */}
-                            {stats.appointmentsByDay.map((day, index) => {
-                              const x = 60 + (index * 50)
-                              const y = 180 - ((day.count / maxCount) * 160)
-                              return (
-                                <g key={index}>
-                                  <circle cx={x} cy={y} r="4" fill="#3b82f6" />
-                                  <circle cx={x} cy={y} r="8" fill="#3b82f6" fillOpacity="0.2" />
-                                  {/* Tooltip */}
-                                  <text x={x} y={y - 15} className="text-xs fill-gray-700" textAnchor="middle">
-                                    {day.count}
-                                  </text>
-                                </g>
-                              )
-                            })}
-                          </>
-                        )
-                      })()}
-                      
-                      {/* X-axis labels */}
-                      {stats.appointmentsByDay.map((day, index) => (
-                        <text key={index} x={60 + (index * 50)} y="195" className="text-xs fill-gray-500" textAnchor="middle">
-                          {day.date.split(' ')[0]}
-                        </text>
-                      ))}
-                    </svg>
+                        {/* Line and points */}
+                        {(() => {
+                          const points = trendData.map((point, index) => {
+                            const x = chartPadding.left + index * xStep
+                            const y = chartSize.height - chartPadding.bottom - ((point.count / safeTrendCount) * innerHeight)
+                            return `${x},${y}`
+                          }).join(" ")
+
+                          return (
+                            <>
+                              <polyline
+                                points={points}
+                                fill="none"
+                                stroke="#3b82f6"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              {trendData.map((point, index) => {
+                                const x = chartPadding.left + index * xStep
+                                const y = chartSize.height - chartPadding.bottom - ((point.count / safeTrendCount) * innerHeight)
+                                return (
+                                  <g key={`${point.fullLabel}-${index}`}>
+                                    <circle cx={x} cy={y} r="4" fill="#3b82f6" />
+                                    <circle cx={x} cy={y} r="8" fill="#3b82f6" fillOpacity="0.2" />
+                                    <text x={x} y={y - 15} className="text-xs fill-gray-700" textAnchor="middle">
+                                      {point.count}
+                                    </text>
+                                    <title>{`${point.fullLabel}: ${point.count} appointments`}</title>
+                                  </g>
+                                )
+                              })}
+                            </>
+                          )
+                        })()}
+                        
+                        {/* X-axis labels */}
+                        {trendData.map((point, index) => {
+                          const x = chartPadding.left + index * xStep
+                          return (
+                            <text key={`${point.label}-${index}`} x={x} y={chartSize.height - 5} className="text-xs fill-gray-500" textAnchor="middle">
+                              {point.label}
+                            </text>
+                          )
+                        })}
+                      </svg>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                        No appointment data to display.
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Common Conditions - Bar Chart */}
                 <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Common Patient Conditions</h3>
-                  <div className="h-48 sm:h-64 relative">
-                    {stats.commonConditions.length > 0 ? (
-                      <svg className="w-full h-full" viewBox="0 0 400 200">
-                        {/* Grid lines */}
-                        <defs>
-                          <pattern id="barGrid" width="40" height="20" patternUnits="userSpaceOnUse">
-                            <path d="M 40 0 L 0 0 0 20" fill="none" stroke="#f3f4f4" strokeWidth="1"/>
-                          </pattern>
-                        </defs>
-                        <rect width="100%" height="100%" fill="url(#barGrid)" />
-                        
-                        {/* Y-axis labels */}
-                        {(() => {
-                          const maxCount = Math.max(...stats.commonConditions.map(c => c.count), 1)
-                          const yLabels = []
-                          for (let i = 0; i <= 4; i++) {
-                            const value = Math.round((maxCount * i) / 4)
-                            yLabels.push(
-                              <text key={i} x="10" y={180 - (i * 40)} className="text-xs fill-gray-500" textAnchor="start">
-                                {value}
-                              </text>
-                            )
-                          }
-                          return yLabels
-                        })()}
-                        
-                        {/* Bars */}
-                        {stats.commonConditions.map((condition, index) => {
-                          const maxCount = Math.max(...stats.commonConditions.map(c => c.count), 1)
-                          const barHeight = (condition.count / maxCount) * 160
-                          const barWidth = 30
-                          const x = 50 + (index * 45)
-                          const y = 180 - barHeight
-                          
-                          return (
-                            <g key={index}>
-                              {/* Bar */}
-                              <rect
-                                x={x}
-                                y={y}
-                                width={barWidth}
-                                height={barHeight}
-                                fill="#10b981"
-                                rx="2"
-                                className="transition-all duration-500 ease-out"
-                              />
-                              {/* Bar value */}
-                              <text x={x + barWidth/2} y={y - 5} className="text-xs fill-gray-700" textAnchor="middle">
-                                {condition.count}
-                              </text>
-                              {/* X-axis label */}
-                              <text x={x + barWidth/2} y="195" className="text-xs fill-gray-500" textAnchor="middle">
-                                {condition.condition.length > 8 ? condition.condition.substring(0, 8) + '...' : condition.condition}
-                              </text>
-                            </g>
-                          )
-                        })}
-                      </svg>
-                    ) : (
+                  <div className="h-72 sm:h-80">
+                    {stats.commonConditions.length > 0 ? (() => {
+                      const chartConditions = [...stats.commonConditions]
+
+                      const sortedConditions = [...chartConditions].sort((a, b) => b.count - a.count)
+                      const MAX_SLICES = 6
+                      const primaryConditions = sortedConditions.slice(0, MAX_SLICES)
+                      const remainingConditions = sortedConditions.slice(MAX_SLICES)
+
+                      const displayConditions: (typeof chartConditions[number] & { isOther?: boolean; mergedConditions?: string[] })[] = [...primaryConditions]
+                      if (remainingConditions.length > 0) {
+                        const otherCount = remainingConditions.reduce((sum, condition) => sum + condition.count, 0)
+                        if (otherCount > 0) {
+                          displayConditions.push({
+                            condition: "Other",
+                            count: otherCount,
+                            isOther: true,
+                            mergedConditions: remainingConditions.map(c => c.condition)
+                          })
+                        }
+                      }
+
+                      const totalCount = displayConditions.reduce((sum, condition) => sum + condition.count, 0)
+                      if (totalCount === 0) {
+                        return (
+                          <div className="flex items-center justify-center h-full text-gray-500">
+                            <div className="text-center">
+                              <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                              <p className="text-sm">No condition data available</p>
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      const pieColors = ["#2563eb", "#10b981", "#f97316", "#8b5cf6", "#ef4444", "#14b8a6", "#f59e0b", "#6366f1", "#ec4899", "#6b7280"]
+                      const center = 110
+                      const radius = 100
+
+                      const polarToCartesian = (cx: number, cy: number, r: number, angleInDegrees: number) => {
+                        const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180
+                        return {
+                          x: cx + r * Math.cos(angleInRadians),
+                          y: cy + r * Math.sin(angleInRadians)
+                        }
+                      }
+
+                      const describeArc = (cx: number, cy: number, r: number, startAngle: number, endAngle: number) => {
+                        const start = polarToCartesian(cx, cy, r, endAngle)
+                        const end = polarToCartesian(cx, cy, r, startAngle)
+                        const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1"
+
+                        return [
+                          "M", cx, cy,
+                          "L", start.x, start.y,
+                          "A", r, r, 0, largeArcFlag, 0, end.x, end.y,
+                          "Z"
+                        ].join(" ")
+                      }
+
+                      let currentAngle = 0
+
+                      return (
+                        <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-between gap-6 lg:gap-8 h-full">
+                          <svg className="w-72 h-72 sm:w-80 sm:h-80" viewBox="0 0 220 220">
+                            <circle cx={center} cy={center} r={radius} fill="#f1f5f9" />
+                            {displayConditions.map((condition, index) => {
+                              const value = condition.count
+                              const sliceAngle = (value / totalCount) * 360
+                              if (sliceAngle === 0) {
+                                return null
+                              }
+                              const startAngle = currentAngle
+                              const endAngle = currentAngle + sliceAngle
+                              currentAngle = endAngle
+
+                              const path = describeArc(center, center, radius, startAngle, endAngle)
+                              const midAngle = startAngle + sliceAngle / 2
+                              const labelPosition = polarToCartesian(center, center, radius * 0.6, midAngle)
+                              const percentage = (value / totalCount) * 100
+
+                              return (
+                                <g key={condition.condition}>
+                                  <path d={path} fill={pieColors[index % pieColors.length]} className="transition-transform duration-300 hover:scale-[1.02]" />
+                                  <text
+                                    x={labelPosition.x}
+                                    y={labelPosition.y}
+                                    className="text-[10px] fill-gray-800 font-semibold"
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                  >
+                                    {`${Math.round(percentage)}%`}
+                                  </text>
+                                </g>
+                              )
+                            })}
+                          </svg>
+
+                          <div className="w-full lg:w-56 space-y-1">
+                            {displayConditions.map((condition, index) => {
+                              const percentage = (condition.count / totalCount) * 100
+                              return (
+                                <div key={condition.condition} className="flex items-center gap-2">
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: pieColors[index % pieColors.length] }}
+                                  />
+                                  <p className="text-[11px] leading-tight text-slate-600">
+                                    <span className="font-semibold text-slate-700">
+                                      {condition.isOther
+                                        ? `Other (${condition.mergedConditions?.length || 0} conditions)`
+                                        : condition.condition.replace(/_/g, " ")}
+                                    </span>{" "}
+                                    {condition.count} {condition.count === 1 ? "patient" : "patients"} • {percentage.toFixed(1)}%
+                                    {condition.isOther && condition.mergedConditions && condition.mergedConditions.length > 0 && (
+                                      <span className="block text-[10px] text-slate-400 mt-0.5">
+                                        {condition.mergedConditions.map(label => label.replace(/_/g, " ")).join(", ")}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })() : (
                       <div className="flex items-center justify-center h-full text-gray-500">
                         <div className="text-center">
                           <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1127,7 +1341,7 @@ export default function AdminDashboard() {
 
           {activeTab === "campaigns" && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Campaigns</h2>
+              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Campaigns</h2> */}
               <CampaignManagement />
             </div>
           )}
@@ -1147,7 +1361,6 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
-
       {/* Notification Toast */}
       {notification && (
         <Notification 

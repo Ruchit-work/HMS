@@ -16,9 +16,9 @@ export interface PaymentData {
 interface PaymentMethodSectionProps {
   title?: string
   paymentMethod: PaymentMethod
-  setPaymentMethod: (m: Exclude<PaymentMethod, null>) => void
+  setPaymentMethod: (_method: Exclude<PaymentMethod, null>) => void
   paymentData: PaymentData
-  setPaymentData: (d: PaymentData) => void
+  setPaymentData: (_data: PaymentData) => void
   amountToPay: number
   showPartialNote?: boolean
   walletBalance?: number

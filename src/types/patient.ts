@@ -166,7 +166,7 @@ export interface NotificationData {
   message: string
 }
 
-export type RoomType = "general" | "simple" | "deluxe" | "vip"
+export type RoomType = "general" | "semi_private" | "private" | "deluxe" | "vip"
 
 export interface Room {
   id: string

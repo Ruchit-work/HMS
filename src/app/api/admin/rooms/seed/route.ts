@@ -1,4 +1,6 @@
 import admin from "firebase-admin"
+import { ROOM_TYPES } from "@/constants/roomTypes"
+import type { RoomType } from "@/types/patient"
 
 function initAdmin() {
   if (!admin.apps.length) {
@@ -38,15 +40,24 @@ export async function POST() {
       return Response.json({ success: true, seeded: false, message: "Rooms already exist" })
     }
 
-    const sampleRooms = [
-      { roomNumber: "101", roomType: "general", ratePerDay: 1500, status: "available" },
-      { roomNumber: "102", roomType: "general", ratePerDay: 1500, status: "available" },
-      { roomNumber: "201", roomType: "simple", ratePerDay: 2500, status: "available" },
-      { roomNumber: "202", roomType: "simple", ratePerDay: 2500, status: "available" },
-      { roomNumber: "301", roomType: "deluxe", ratePerDay: 4000, status: "available" },
-      { roomNumber: "302", roomType: "deluxe", ratePerDay: 4000, status: "available" },
-      { roomNumber: "401", roomType: "vip", ratePerDay: 6500, status: "available" },
-    ]
+    const defaultRoomNumbers: Record<RoomType, string[]> = {
+      general: ["101", "102"],
+      semi_private: ["201", "202"],
+      private: ["301"],
+      deluxe: ["401"],
+      vip: ["501"],
+    }
+
+    const sampleRooms = Object.entries(defaultRoomNumbers).flatMap(([type, numbers]) => {
+      const roomTypeId = type as RoomType
+      const roomDetails = ROOM_TYPES.find((roomType) => roomType.id === roomTypeId)
+      return numbers.map((roomNumber) => ({
+        roomNumber,
+        roomType: roomTypeId,
+        ratePerDay: roomDetails?.dailyRate ?? 0,
+        status: "available" as const,
+      }))
+    })
 
     const batch = firestore.batch()
     const roomsCollection = firestore.collection("rooms")

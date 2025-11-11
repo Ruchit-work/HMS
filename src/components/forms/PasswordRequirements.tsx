@@ -13,16 +13,6 @@ interface Requirements {
 }
 
 export default function PasswordRequirements({ password }: PasswordRequirementsProps) {
-  const validatePassword = (pass: string): Requirements => {
-    return {
-      length: pass.length >= 8,
-      uppercase: /[A-Z]/.test(pass),
-      lowercase: /[a-z]/.test(pass),
-      digit: /[0-9]/.test(pass),
-      special: /[!@#$%^&*(),.?":{}|<>]/.test(pass)
-    }
-  }
-
   const requirements = validatePassword(password)
 
   if (!password) return null
@@ -76,6 +66,4 @@ export const isPasswordValid = (pass: string): boolean => {
   const requirements = validatePassword(pass)
   return Object.values(requirements).every(Boolean)
 }
-
-
 
