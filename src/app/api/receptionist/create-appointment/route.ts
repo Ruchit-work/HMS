@@ -1,4 +1,43 @@
 import admin from "firebase-admin"
+import { sendWhatsAppNotification } from "@/server/whatsapp"
+
+const formatAppointmentDateTime = (date: string, time: string) => {
+  if (!date) return "the scheduled time"
+  const iso = `${date}T${time || "00:00"}`
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) {
+    return time ? `${date} at ${time}` : date
+  }
+
+  const formattedDate = dt.toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+
+  if (!time) return formattedDate
+
+  const formattedTime = dt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+
+  return `${formattedDate} at ${formattedTime}`
+}
+
+const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
+  const patientName: string = appointmentData.patientName || "there"
+  const friendlyName = patientName.trim().split(" ")[0] || "there"
+  const doctorName: string = appointmentData.doctorName || "our doctor"
+  const schedule = formatAppointmentDateTime(appointmentData.appointmentDate, appointmentData.appointmentTime)
+  const message = `Hi ${friendlyName}, your appointment with ${doctorName} on ${schedule} is confirmed. Reply here if you need any help.`
+
+  await sendWhatsAppNotification({
+    to: appointmentData.patientPhone || appointmentData.patientPhoneNumber,
+    fallbackRecipients: [appointmentData.patientContact],
+    message,
+  })
+}
 
 function initAdmin() {
   if (!admin.apps.length) {
@@ -103,6 +142,16 @@ export async function POST(request: Request) {
     })
 
     const ref = await admin.firestore().collection("appointments").add(docData)
+
+    sendAppointmentWhatsApp({
+      ...appointmentData,
+      patientPhone: docData.patientPhone || appointmentData.patientPhone,
+      patientName: docData.patientName,
+      doctorName: docData.doctorName,
+    }).catch(() => {
+      /* handled in helper */
+    })
+
     return Response.json({ success: true, id: ref.id })
   } catch (error: any) {
     console.error("create-appointment error:", error)

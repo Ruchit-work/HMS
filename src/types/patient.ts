@@ -131,6 +131,11 @@ export interface Appointment {
   admissionId?: string
   admissionRequestId?: string
   billingRecord?: BillingRecord
+  reminderSentAt?: string | null
+  reminderMeta?: {
+    sentAt: string
+    timeZone?: string
+  }
 }
 
 export interface AppointmentFormData {

@@ -1,4 +1,11 @@
 import admin from "firebase-admin"
+import { sendWhatsAppNotification } from "@/server/whatsapp"
+
+const buildWelcomeMessage = (firstName?: string, patientId?: string) => {
+  const friendlyName = firstName?.trim() || "there"
+  const idCopy = patientId ? ` Your patient ID is ${patientId}.` : ""
+  return `Hi ${friendlyName}, welcome to Harmony Medical Services.${idCopy} We'll share appointment updates here on WhatsApp.`
+}
 
 function initAdmin() {
   if (!admin.apps.length) {
@@ -111,6 +118,16 @@ export async function POST(request: Request) {
 
     // Store patient doc with ID = authUid (so patient dashboard can load by user.uid)
     await db.collection("patients").doc(authUid).set(docData, { merge: true })
+
+    const phoneCandidates = [patientData.phone, `${patientData.phoneCountryCode || ""}${patientData.phoneNumber || ""}`]
+
+    sendWhatsAppNotification({
+      to: phoneCandidates[0],
+      fallbackRecipients: phoneCandidates.slice(1),
+      message: buildWelcomeMessage(docData.firstName, patientId),
+    }).catch(() => {
+      /* handled within helper */
+    })
 
     return Response.json({ success: true, id: authUid, authUid, patientId })
   } catch (error: any) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, addDoc, onSnapshot, updateDoc, increment } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
@@ -12,6 +12,7 @@ import PageHeader from "@/components/ui/PageHeader"
 import { UserData, Doctor, NotificationData } from "@/types/patient"
 import Footer from "@/components/ui/Footer"
 import { useSearchParams, useRouter } from "next/navigation"
+import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/whatsapp"
 
 export default function BookAppointmentPage() {
   return (
@@ -32,11 +33,83 @@ function BookAppointmentContent() {
   const { user, loading } = useAuth("patient")
   const searchParams = useSearchParams()
   const router = useRouter()
-
+ 
   const rescheduleMode = useMemo(() => searchParams?.get('reschedule') === '1', [searchParams])
   const rescheduleAppointmentId = useMemo(() => searchParams?.get('aptId') || '', [searchParams])
   const initialDoctorId = useMemo(() => searchParams?.get('doctorId') || '', [searchParams])
 
+  const formatAppointmentDateTime = useCallback((date: string, time: string) => {
+    if (!date) return "the scheduled time"
+
+    const isoString = `${date}T${time || "00:00"}`
+    const dt = new Date(isoString)
+    if (Number.isNaN(dt.getTime())) {
+      return time ? `${date} at ${time}` : date
+    }
+
+    const formattedDate = dt.toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+
+    if (!time) return formattedDate
+
+    const formattedTime = dt.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+
+    return `${formattedDate} at ${formattedTime}`
+  }, [])
+
+  const sendWhatsAppSafely = useCallback(async (rawRecipient: string | null | undefined, message: string) => {
+    const to = formatWhatsAppRecipient(rawRecipient ?? null)
+    if (!to) return
+
+    try {
+      const response = await sendWhatsAppMessage({ to, message })
+      if (!response.success) {
+        console.warn("Patient booking WhatsApp failed", response.error)
+      }
+    } catch (error) {
+      console.warn("Patient booking WhatsApp error", error)
+    }
+  }, [])
+
+  const sendAppointmentConfirmationMessage = useCallback(
+    async (opts: {
+      patientFirstName?: string
+      patientLastName?: string
+      patientPhone?: string | null
+      doctorName?: string
+      appointmentDate: string
+      appointmentTime: string
+      transactionId: string
+      paymentAmount: number
+    }) => {
+      const friendlyName = [opts.patientFirstName, opts.patientLastName].filter(Boolean).join(" ") || "there"
+
+      let doctorLabel = opts.doctorName?.trim() || ""
+      if (doctorLabel) {
+        const lower = doctorLabel.toLowerCase()
+        doctorLabel = lower.startsWith("dr") ? opts.doctorName!.trim() : `Dr. ${doctorLabel}`
+      } else {
+        doctorLabel = "our doctor"
+      }
+
+      const whenText = formatAppointmentDateTime(opts.appointmentDate, opts.appointmentTime)
+      const amountCopy = opts.paymentAmount
+        ? ` Payment received: ₹${new Intl.NumberFormat("en-IN").format(opts.paymentAmount)}.`
+        : ""
+      const txnCopy = opts.transactionId ? ` Transaction ID: ${opts.transactionId}.` : ""
+      const message = `Hi ${friendlyName}, your appointment with ${doctorLabel} on ${whenText} is confirmed.${amountCopy}${txnCopy}`
+
+      await sendWhatsAppSafely(opts.patientPhone ?? null, message)
+    },
+    [formatAppointmentDateTime, sendWhatsAppSafely]
+  )
+ 
   useEffect(() => {
     if (!user) return
 
@@ -238,6 +311,17 @@ function BookAppointmentContent() {
         status: "confirmed",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      })
+
+      await sendAppointmentConfirmationMessage({
+        patientFirstName: latestUserData.firstName,
+        patientLastName: latestUserData.lastName,
+        patientPhone: (latestUserData as any).phoneNumber || (latestUserData as any).phone || null,
+        doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
+        appointmentDate: appointmentData.date,
+        appointmentTime: appointmentData.time,
+        transactionId,
+        paymentAmount: AMOUNT_TO_PAY,
       })
 
       // Show success modal with appointment details

@@ -88,6 +88,25 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], [])
   const paymentAmount = useMemo(() => selectedDoctorFee || 0, [selectedDoctorFee])
 
+  const formatAppointmentDateTime = useCallback((date: string, time: string) => {
+    if (!date) return "the scheduled time"
+
+    const isoString = `${date}T${time || "00:00"}`
+    const dt = new Date(isoString)
+    if (Number.isNaN(dt.getTime())) {
+      return time ? `${date} at ${time}` : date
+    }
+
+    const formattedDate = dt.toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+
+    if (!time) return formattedDate
+    return `${formattedDate} at ${formatTimeDisplay(time)}`
+  }, [])
+
   const selectedDoctor = useMemo(() => {
     if (!selectedDoctorId) return null
     return doctors.find((d: any) => d.id === selectedDoctorId) || null
@@ -594,7 +613,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         }
         const result = await createPatientForBooking()
         patientId = result.id
-        patientPayload = { ...newPatient }
+        patientPayload = { ...newPatient, patientId: result.patientId }
       } else {
         if (!patientId) {
           throw new Error("Please select an existing patient")
@@ -635,7 +654,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       setBookError(null)
       const result = await createPatientForBooking()
       const patientId = result.id
-      const patientPayload: any = { ...newPatient }
+      const patientPayload: any = { ...newPatient, patientId: result.patientId }
 
       await preventDuplicateAppointment(patientId)
       const appointmentData = await createAppointment(patientId, patientPayload)

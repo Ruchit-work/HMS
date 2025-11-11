@@ -276,6 +276,6 @@ export default function ReceptionistDashboard() {
         onCancel={() => setLogoutConfirmOpen(false)}
         confirmLoading={logoutLoading}
       />
-               </div>
-     )
- }
+              </div>
+    )
+}
