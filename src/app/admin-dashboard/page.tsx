@@ -1,12 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { db, auth } from "@/firebase/config"
-import { doc, getDoc, collection, getDocs, query, orderBy, limit, where, updateDoc } from "firebase/firestore"
+import { useEffect, useMemo, useState, useCallback } from "react"
+import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, updateDoc, where } from "firebase/firestore"
 import { signOut } from "firebase/auth"
+import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
-import { useRouter } from "next/navigation"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import { useRouter } from "next/navigation"
+import { formatDateTime } from "@/utils/date"
+import ConfirmDialog from "@/components/ui/ConfirmDialog"
 import Notification from "@/components/ui/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
 import PatientManagement from "./Tabs/PatientManagement"
@@ -88,6 +90,8 @@ export default function AdminDashboard() {
   const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
   const [loadingRefunds, setLoadingRefunds] = useState(false)
   const [trendView, setTrendView] = useState<"weekly" | "monthly" | "yearly">("weekly")
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
 
   const trendData = stats.appointmentTrends[trendView] || []
   const trendTotal = stats.appointmentTotals[trendView] || 0
@@ -435,6 +439,7 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     try {
+      setLogoutLoading(true)
       await signOut(auth)
       router.replace("/auth/login?role=admin")
     } catch (error) {
@@ -443,6 +448,9 @@ export default function AdminDashboard() {
         type: "error", 
         message: "Failed to logout. Please try again." 
       })
+    } finally {
+      setLogoutLoading(false)
+      setLogoutConfirmOpen(false)
     }
   }
 
@@ -688,8 +696,8 @@ export default function AdminDashboard() {
                           <p className="text-xs text-gray-500">{userData.email}</p>
                         </div>
                         <button
-                          onClick={handleLogout}
-                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                          onClick={() => setLogoutConfirmOpen(true)}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-100/70 active:bg-red-100 rounded-md transition-colors"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1369,6 +1377,16 @@ export default function AdminDashboard() {
           onClose={() => setNotification(null)}
         />
       )}
+      <ConfirmDialog
+        isOpen={logoutConfirmOpen}
+        title="Sign out?"
+        message="You'll be redirected to the login screen."
+        confirmText="Logout"
+        cancelText="Stay signed in"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutConfirmOpen(false)}
+        confirmLoading={logoutLoading}
+      />
       </div>
     </AdminProtected>
   )

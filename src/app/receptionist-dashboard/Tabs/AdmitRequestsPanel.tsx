@@ -72,6 +72,74 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
     })
   }, [rooms, assignRoomType])
 
+  const pendingCount = admitRequests.length
+
+  const { totalRooms, availableRoomsCount, occupiedRoomsCount } = useMemo(() => {
+    const total = rooms.length
+    let available = 0
+    let occupied = 0
+    rooms.forEach((room) => {
+      if (room.status === "available") available += 1
+      if (room.status === "occupied") occupied += 1
+    })
+    return {
+      totalRooms: total,
+      availableRoomsCount: available,
+      occupiedRoomsCount: occupied,
+    }
+  }, [rooms])
+
+  const admissionsCount = admissions.length
+  const roomOccupancyRate = totalRooms ? Math.round((occupiedRoomsCount / totalRooms) * 100) : 0
+
+  const roomAvailabilityByType = useMemo(() => {
+    return ROOM_TYPES.map((type) => {
+      const typeRooms = rooms.filter((room) => room.roomType === type.id)
+      const available = typeRooms.filter((room) => room.status === "available").length
+      const occupied = typeRooms.filter((room) => room.status === "occupied").length
+      return {
+        id: type.id,
+        name: type.name,
+        available,
+        occupied,
+        total: typeRooms.length || available + occupied,
+      }
+    })
+  }, [rooms])
+
+  const summaryCards = useMemo(() => {
+    return [
+      {
+        label: "Pending Requests",
+        value: pendingCount,
+        caption: "Awaiting admission review",
+        tone: "from-purple-500 to-purple-600",
+        icon: "📥",
+      },
+      {
+        label: "Occupied Beds",
+        value: occupiedRoomsCount,
+        caption: `${roomOccupancyRate}% of total capacity`,
+        tone: "from-rose-500 to-rose-600",
+        icon: "🛏️",
+      },
+      {
+        label: "Available Rooms",
+        value: availableRoomsCount,
+        caption: totalRooms ? `${availableRoomsCount}/${totalRooms} ready for assignment` : "No rooms synced yet",
+        tone: "from-emerald-500 to-emerald-600",
+        icon: "✅",
+      },
+      {
+        label: "Admitted Patients",
+        value: admissionsCount,
+        caption: "Under inpatient supervision",
+        tone: "from-sky-500 to-sky-600",
+        icon: "🩺",
+      },
+    ]
+  }, [pendingCount, occupiedRoomsCount, roomOccupancyRate, availableRoomsCount, totalRooms, admissionsCount])
+
   const notify = useCallback(
     (payload: { type: "success" | "error"; message: string } | null) => {
       onNotification?.(payload)
@@ -319,216 +387,381 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Pending Admit Requests</h2>
-          <p className="text-sm text-gray-500">Review hospitalization requests sent by doctors</p>
+    <div className="space-y-8">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-800 text-white shadow-lg">
+        <div className="relative px-6 py-10 sm:px-10">
+          <div className="absolute inset-y-0 right-0 hidden w-48 translate-x-16 rotate-12 rounded-full bg-white/10 blur-3xl sm:block" />
+          <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-200/80">Admissions Desk</p>
+              <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
+                Keep inpatient operations flowing smoothly.
+              </h2>
+              <p className="text-sm text-indigo-100/90 sm:text-base">
+                Track new admission requests, monitor bed utilization, and coordinate discharges from a single
+                streamlined workspace.
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs text-indigo-100/90">
+                <span className="rounded-full border border-indigo-300/40 px-3 py-1 font-semibold uppercase tracking-wide">
+                  Real-time room status
+                </span>
+                <span className="rounded-full border border-indigo-300/40 px-3 py-1 font-semibold uppercase tracking-wide">
+                  Admission pipeline
+                </span>
+              </div>
+            </div>
+            <div className="grid w-full max-w-md grid-cols-1 gap-4 sm:grid-cols-2">
+              {summaryCards.map((card) => (
+                <div
+                  key={card.label}
+                  className="relative overflow-hidden rounded-2xl border border-white/20 bg-white/15 p-4 shadow-md backdrop-blur"
+                >
+                  <div className="absolute right-3 top-3 text-lg">{card.icon}</div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-100/90">{card.label}</p>
+                  <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
+                  <p className="mt-2 text-[12px] text-indigo-100/80">{card.caption}</p>
+                  <div className={`absolute inset-0 -z-10 bg-gradient-to-br ${card.tone} opacity-20`} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={fetchAdmitRequests}
-            disabled={admitRequestsLoading}
-            className="flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50 text-sm"
-          >
-            {admitRequestsLoading ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[1.8fr_1fr]">
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-slate-900">Pending Admission Requests</h3>
+              <p className="text-sm text-slate-500">
+                Review doctor-submitted requests and allocate rooms with a single action.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchAdmitRequests}
+                disabled={admitRequestsLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-semibold text-purple-700 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {admitRequestsLoading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Refreshing…
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    Refresh
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="px-6 py-5">
+            {admitRequestsError && (
+              <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {admitRequestsError}
+              </div>
+            )}
+
+            {admitRequestsLoading && admitRequests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-sm text-slate-500">
+                <svg className="mb-3 h-7 w-7 animate-spin text-purple-500" viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
-                Refreshing...
+                Loading admission requests…
+              </div>
+            ) : admitRequests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">
+                <span className="mb-2 text-4xl">🏥</span>
+                <p className="text-sm font-medium">No new admission requests right now.</p>
+                <p className="text-xs text-slate-400">You'll be notified as new requests arrive from doctors.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {admitRequests.map((request) => {
+                  const createdAt = request.createdAt ? new Date(request.createdAt) : null
+                  return (
+                    <article
+                      key={request.id}
+                      className="group rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex-1 space-y-4">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              Patient
+                            </span>
+                            <p className="text-lg font-semibold text-slate-900">
+                              {request.patientName || "Unknown"}
+                              {request.patientId && (
+                                <span className="ml-2 inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-mono text-purple-700">
+                                  {request.patientId}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Doctor</p>
+                              <p className="font-semibold text-slate-800">{request.doctorName || "Unknown Doctor"}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Created</p>
+                              <p>{createdAt ? createdAt.toLocaleString() : "—"}</p>
+                            </div>
+                            {request.notes && (
+                              <div className="sm:col-span-2">
+                                <p className="text-xs uppercase tracking-wide text-slate-400">Doctor notes</p>
+                                <p className="text-slate-700">{request.notes}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {request.appointmentDetails && (
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <div>
+                                  <p className="font-semibold uppercase tracking-wide text-slate-500">Appointment</p>
+                                  <p>
+                                    {request.appointmentDetails.appointmentDate || "—"}{" "}
+                                    {request.appointmentDetails.appointmentTime || ""}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="font-semibold uppercase tracking-wide text-slate-500">Contact</p>
+                                  <p>{request.appointmentDetails.patientPhone || "—"}</p>
+                                </div>
+                                <div>
+                                  <p className="font-semibold uppercase tracking-wide text-slate-500">Specialization</p>
+                                  <p>{request.appointmentDetails.doctorSpecialization || "—"}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex w-full flex-col gap-2 sm:max-w-[180px]">
+                          <button
+                            onClick={() => handleOpenAssignModal(request)}
+                            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                          >
+                            Assign Room
+                          </button>
+                          <button
+                            onClick={() => handleCancelAdmitRequest(request)}
+                            disabled={cancelLoadingId === request.id}
+                            className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {cancelLoadingId === request.id ? "Cancelling…" : "Cancel Request"}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <aside className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Capacity Snapshot</h4>
+            <p className="mt-1 text-2xl font-bold text-slate-900">{occupiedRoomsCount} occupied beds</p>
+            <p className="text-xs text-slate-500">{availableRoomsCount} rooms available across all types</p>
+            <div className="mt-4 h-2 w-full rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-teal-500"
+                style={{ width: `${roomOccupancyRate}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs font-semibold text-slate-500">Occupancy {roomOccupancyRate}% of total capacity</p>
+          </div>
+
+          <div className="space-y-2">
+            <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Room availability by type</h5>
+            <div className="space-y-2">
+              {roomAvailabilityByType.map((type) => (
+                <div
+                  key={type.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-800">{type.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {type.available} available · {type.occupied} occupied
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold text-slate-500">
+                    {type.available + type.occupied > 0
+                      ? `${type.available}/${type.total || type.available + type.occupied}`
+                      : "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-auto rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs text-indigo-700">
+            <p className="font-semibold">Tip</p>
+            <p className="mt-1">
+              Seed rooms from the admin console if you haven’t synchronized floor data yet. The panel will automatically
+              populate with fallback room numbers otherwise.
+            </p>
+          </div>
+        </aside>
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-900">Currently Admitted Patients</h3>
+            <p className="text-sm text-slate-500">Monitor active inpatients and wrap up their discharge paperwork.</p>
+          </div>
+          <button
+            onClick={fetchAdmissions}
+            disabled={admissionsLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {admissionsLoading ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Refreshing…
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
                 Refresh
               </>
             )}
           </button>
         </div>
-      </div>
 
-      {admitRequestsError && (
-        <div className="p-3 border border-red-200 rounded-lg bg-red-50 text-sm text-red-700">
-          {admitRequestsError}
-        </div>
-      )}
-
-      {admitRequestsLoading && admitRequests.length === 0 ? (
-        <div className="py-12 text-center text-gray-500">
-          <svg className="w-8 h-8 mx-auto mb-3 animate-spin text-purple-600" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Loading admit requests...
-        </div>
-      ) : admitRequests.length === 0 ? (
-        <div className="py-12 text-center text-gray-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-          <span className="text-4xl mb-2 block">🏥</span>
-          No pending admit requests right now.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {admitRequests.map((request) => (
-            <div key={request.id} className="border border-gray-200 rounded-xl p-4 sm:p-5 bg-white hover:shadow-md transition-shadow">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Patient</p>
-                    <p className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                      {request.patientName || "Unknown"}
-                      {request.patientId && (
-                        <span className="text-[11px] font-mono px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full border border-purple-200">
-                          {request.patientId}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700">
-                    <div>
-                      <span className="text-xs uppercase text-gray-500 block">Doctor</span>
-                      <span className="font-medium">{request.doctorName || "Unknown Doctor"}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs uppercase text-gray-500 block">Created</span>
-                      <span>{request.createdAt ? new Date(request.createdAt).toLocaleString() : "—"}</span>
-                    </div>
-                    {request.notes && (
-                      <div className="sm:col-span-2">
-                        <span className="text-xs uppercase text-gray-500 block">Doctor Notes</span>
-                        <span>{request.notes}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 sm:w-40">
-                  <button
-                    onClick={() => handleOpenAssignModal(request)}
-                    className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
-                  >
-                    Assign Room
-                  </button>
-                  <button
-                    onClick={() => handleCancelAdmitRequest(request)}
-                    disabled={cancelLoadingId === request.id}
-                    className="px-3 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-200 transition-colors disabled:opacity-50"
-                  >
-                    {cancelLoadingId === request.id ? "Cancelling..." : "Cancel Request"}
-                  </button>
-                </div>
-              </div>
-              {request.appointmentDetails && (
-                <div className="mt-4 border-t border-dashed border-gray-200 pt-3 text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div>
-                    <span className="block font-semibold text-gray-500 uppercase text-[10px] tracking-wide">Appointment</span>
-                    <span>{request.appointmentDetails.appointmentDate || "—"} {request.appointmentDetails.appointmentTime || ""}</span>
-                  </div>
-                  <div>
-                    <span className="block font-semibold text-gray-500 uppercase text-[10px] tracking-wide">Patient Phone</span>
-                    <span>{request.appointmentDetails.patientPhone || "—"}</span>
-                  </div>
-                  <div>
-                    <span className="block font-semibold text-gray-500 uppercase text-[10px] tracking-wide">Doctor Specialization</span>
-                    <span>{request.appointmentDetails.doctorSpecialization || "—"}</span>
-                  </div>
-                </div>
-              )}
+        <div className="px-6 py-5">
+          {admissionsError && (
+            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {admissionsError}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      <div className="pt-6 border-t border-gray-100">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Currently Admitted Patients</h3>
-            <p className="text-sm text-gray-500">Manage inpatients and discharge when ready</p>
-          </div>
-          <button
-            onClick={fetchAdmissions}
-            disabled={admissionsLoading}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 text-sm"
-          >
-            {admissionsLoading ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-
-        {admissionsError && (
-          <div className="p-3 border border-red-200 rounded-lg bg-red-50 text-sm text-red-700 mb-4">
-            {admissionsError}
-          </div>
-        )}
-
-        {admissionsLoading && admissions.length === 0 ? (
-          <div className="py-10 text-center text-gray-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-            Loading admitted patients...
-          </div>
-        ) : admissions.length === 0 ? (
-          <div className="py-10 text-center text-gray-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-            <span className="text-4xl mb-2 block">🛏️</span>
-            No patients are currently admitted.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {admissions.map((admission) => {
-              return (
-                <div key={admission.id} className="border border-gray-200 rounded-xl p-4 sm:p-5 bg-white hover:shadow-md transition-shadow">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-xs uppercase text-gray-500">Patient</p>
-                        <p className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                          {admission.patientName || "Unknown"}
-                          {admission.patientId && (
-                            <span className="text-[11px] font-mono px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
-                              {admission.patientId}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700">
-                        <div>
-                          <span className="text-xs uppercase text-gray-500 block">Doctor</span>
-                          <span className="font-medium">{admission.doctorName || "Unknown"}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs uppercase text-gray-500 block">Room</span>
-                          <span className="font-medium">
-                            {admission.roomNumber} — {roomTypeLabelMap[admission.roomType] || admission.roomType}
+          {admissionsLoading && admissions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 text-sm text-slate-500">
+              Loading admitted patients…
+            </div>
+          ) : admissions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 text-center text-slate-500">
+              <span className="mb-2 text-4xl">🛏️</span>
+              <p className="text-sm font-medium">No patients are currently admitted.</p>
+              <p className="text-xs text-slate-400">All inpatients have been discharged for now.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {admissions.map((admission) => {
+                const stayDays = admission.checkInAt
+                  ? Math.max(
+                      1,
+                      Math.ceil((Date.now() - new Date(admission.checkInAt).getTime()) / (1000 * 60 * 60 * 24))
+                    )
+                  : 1
+                return (
+                  <article
+                    key={admission.id}
+                    className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex-1 space-y-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            Inpatient
                           </span>
+                          <p className="text-lg font-semibold text-slate-900">
+                            {admission.patientName || "Unknown"}
+                            {admission.patientId && (
+                              <span className="ml-2 inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-mono text-indigo-700">
+                                {admission.patientId}
+                              </span>
+                            )}
+                          </p>
                         </div>
-                        <div>
-                          <span className="text-xs uppercase text-gray-500 block">Rate / Day</span>
-                          <span>₹{admission.roomRatePerDay}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs uppercase text-gray-500 block">Check-in</span>
-                          <span>{admission.checkInAt ? new Date(admission.checkInAt).toLocaleString() : "—"}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs uppercase text-gray-500 block">Stay Duration</span>
-                          <span>{admission.checkInAt ? Math.max(1, Math.ceil((Date.now() - new Date(admission.checkInAt).getTime()) / (1000 * 60 * 60 * 24))) : 1} day(s)</span>
+
+                        <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Doctor</p>
+                            <p className="font-semibold text-slate-800">{admission.doctorName || "Unknown"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Room</p>
+                            <p className="font-semibold text-slate-800">
+                              {admission.roomNumber} — {roomTypeLabelMap[admission.roomType] || admission.roomType}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Rate / Day</p>
+                            <p className="font-semibold text-slate-800">₹{admission.roomRatePerDay}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Check-in</p>
+                            <p>{admission.checkInAt ? new Date(admission.checkInAt).toLocaleString() : "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Stay duration</p>
+                            <p>{stayDays} day(s)</p>
+                          </div>
                         </div>
                       </div>
+
+                      <div className="flex w-full flex-col gap-2 sm:max-w-[180px]">
+                        <button
+                          onClick={() => handleOpenDischargeModal(admission)}
+                          className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                        >
+                          Discharge
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-2 sm:w-40">
-                      <button
-                        onClick={() => handleOpenDischargeModal(admission)}
-                        className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
-                      >
-                        Discharge
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
 
       {assignModalOpen && selectedAdmitRequest && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">

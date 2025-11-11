@@ -12,6 +12,7 @@ import Notification from "@/components/ui/Notification"
 import PageHeader from "@/components/ui/PageHeader"
 import { UserData, NotificationData } from "@/types/patient"
 import { calculateAge } from "@/utils/date"
+import ConfirmDialog from "@/components/ui/ConfirmDialog"
 
 export default function PatientProfilePage() {
   const { user, loading: authLoading } = useAuth("patient")
@@ -21,6 +22,8 @@ export default function PatientProfilePage() {
   const [notification, setNotification] = useState<NotificationData | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -82,6 +85,7 @@ export default function PatientProfilePage() {
 
   const handleLogout = async () => {
     try {
+      setLogoutLoading(true)
       await signOut(auth)
       router.replace("/auth/login?role=patient")
     } catch (error) {
@@ -90,6 +94,9 @@ export default function PatientProfilePage() {
         type: "error", 
         message: "Failed to logout. Please try again." 
       })
+    } finally {
+      setLogoutLoading(false)
+      setLogoutConfirmOpen(false)
     }
   }
 
@@ -132,7 +139,7 @@ export default function PatientProfilePage() {
               </div>
               <div className="flex gap-3 ml-auto">
                   <button
-                    onClick={handleLogout}
+                    onClick={() => setLogoutConfirmOpen(true)}
                   className="px-5 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -289,6 +296,16 @@ export default function PatientProfilePage() {
           onClose={() => setNotification(null)}
         />
       )}
+      <ConfirmDialog
+        isOpen={logoutConfirmOpen}
+        title="Sign out?"
+        message="You will need to log in again to access your patient dashboard."
+        confirmText="Logout"
+        cancelText="Stay signed in"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutConfirmOpen(false)}
+        confirmLoading={logoutLoading}
+      />
     </div>
   )
 }

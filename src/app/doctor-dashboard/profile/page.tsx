@@ -11,6 +11,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
 import PageHeader from "@/components/ui/PageHeader"
 import { NotificationData } from "@/types/patient"
+import ConfirmDialog from "@/components/ui/ConfirmDialog"
 
 interface DoctorData {
   firstName: string
@@ -39,6 +40,8 @@ export default function DoctorProfilePage() {
   const [notification, setNotification] = useState<NotificationData | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -98,6 +101,7 @@ export default function DoctorProfilePage() {
 
   const handleLogout = async () => {
     try {
+      setLogoutLoading(true)
       await signOut(auth)
       router.replace("/auth/login?role=doctor")
     } catch (error) {
@@ -106,6 +110,9 @@ export default function DoctorProfilePage() {
         type: "error", 
         message: "Failed to logout. Please try again." 
       })
+    } finally {
+      setLogoutLoading(false)
+      setLogoutConfirmOpen(false)
     }
   }
 
@@ -141,7 +148,7 @@ export default function DoctorProfilePage() {
                     {isEditing ? "Cancel" : "Edit Profile"}
                   </button>
                   <button
-                    onClick={handleLogout}
+                    onClick={() => setLogoutConfirmOpen(true)}
                   className="px-5 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -255,6 +262,16 @@ export default function DoctorProfilePage() {
           onClose={() => setNotification(null)}
         />
       )}
+      <ConfirmDialog
+        isOpen={logoutConfirmOpen}
+        title="Sign out?"
+        message="You'll be signed out of the doctor dashboard."
+        confirmText="Logout"
+        cancelText="Stay signed in"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutConfirmOpen(false)}
+        confirmLoading={logoutLoading}
+      />
     </div>
   )
 }

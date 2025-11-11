@@ -6,6 +6,7 @@ import { auth } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { useRouter, usePathname } from "next/navigation"
 import { getUserData } from "@/utils/userHelpers"
+import ConfirmDialog from "./ConfirmDialog"
 
 export default function GlobalHeader() {
   const [user, setUser] = useState<any>(null)
@@ -17,6 +18,8 @@ export default function GlobalHeader() {
   const [topupAmount, setTopupAmount] = useState<string>("")
   const [topupLoading, setTopupLoading] = useState(false)
   const [topupMessage, setTopupMessage] = useState<string>("")
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -107,6 +110,25 @@ export default function GlobalHeader() {
 
   const handleNavClick = () => {
     setShowMobileMenu(false)
+  }
+
+  const handleLogoutConfirm = async () => {
+    try {
+      setLogoutLoading(true)
+      await signOut(auth)
+      setShowUserDropdown(false)
+      const role = userData?.role
+      if (role) {
+        router.replace(`/auth/login?role=${role}`)
+      } else {
+        router.replace("/auth/login")
+      }
+    } catch (e) {
+      // optional: surface error feedback later
+    } finally {
+      setLogoutLoading(false)
+      setShowLogoutConfirm(false)
+    }
   }
 
   if (!shouldShowHeader) {
@@ -263,14 +285,9 @@ export default function GlobalHeader() {
                   </button>
                   <button
                     type="button"
-                    onClick={async () => {
-                      try {
-                        await signOut(auth)
-                        setShowUserDropdown(false)
-                        router.replace(`/auth/login?role=${userData.role}`)
-                      } catch (e) {
-                        // no-op
-                      }
+                    onClick={() => {
+                      setShowUserDropdown(false)
+                      setShowLogoutConfirm(true)
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-100/70 active:bg-red-100 rounded-md transition-colors"
                   >
@@ -374,6 +391,16 @@ export default function GlobalHeader() {
         {topupMessage}
       </div>
     )}
+    <ConfirmDialog
+      isOpen={showLogoutConfirm}
+      title="Sign out?"
+      message="You'll need to log in again to access the dashboard."
+      confirmText="Logout"
+      cancelText="Stay signed in"
+      onConfirm={handleLogoutConfirm}
+      onCancel={() => setShowLogoutConfirm(false)}
+      confirmLoading={logoutLoading}
+    />
     </>
   )
 }

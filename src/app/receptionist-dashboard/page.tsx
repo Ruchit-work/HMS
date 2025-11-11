@@ -14,6 +14,7 @@ import AppoinmentManagement from "@/app/admin-dashboard/Tabs/AppoinmentManagemen
 import AdmitRequestsPanel from "@/app/receptionist-dashboard/Tabs/AdmitRequestsPanel"
 import BillingHistoryPanel from "@/app/receptionist-dashboard/Tabs/BillingHistoryPanel"
 import BookAppointmentPanel from "@/app/receptionist-dashboard/Tabs/BookAppointmentPanel"
+import ConfirmDialog from "@/components/ui/ConfirmDialog"
 
 export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -25,6 +26,8 @@ export default function ReceptionistDashboard() {
   // Booking state
   const [bookSubOpen, setBookSubOpen] = useState(false)
   const [patientMode, setPatientMode] = useState<'existing'|'new'>('existing')
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [logoutLoading, setLogoutLoading] = useState(false)
 
   const router = useRouter()
   const { user, loading: authLoading } = useAuth("receptionist")
@@ -59,10 +62,14 @@ export default function ReceptionistDashboard() {
 
   const handleLogout = async () => {
     try {
+      setLogoutLoading(true)
       await signOut(auth)
       router.replace("/auth/login?role=receptionist")
     } catch {
       setNotification({ type: "error", message: "Failed to logout. Please try again." })
+    } finally {
+      setLogoutLoading(false)
+      setLogoutConfirmOpen(false)
     }
   }
 
@@ -199,7 +206,7 @@ export default function ReceptionistDashboard() {
                         <div className="px-4 py-2 border-b border-gray-200">
                           <p className="text-sm font-medium text-gray-900">{userName}</p>
                 </div>
-                        <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                        <button onClick={() => setLogoutConfirmOpen(true)} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                           <span>Logout</span>
                         </button>
@@ -259,6 +266,16 @@ export default function ReceptionistDashboard() {
           onClose={() => setNotification(null)}
         />
       )}
-              </div>
-    )
-}
+      <ConfirmDialog
+        isOpen={logoutConfirmOpen}
+        title="Sign out?"
+        message="Logging out will return you to the receptionist login screen."
+        confirmText="Logout"
+        cancelText="Stay signed in"
+        onConfirm={handleLogout}
+        onCancel={() => setLogoutConfirmOpen(false)}
+        confirmLoading={logoutLoading}
+      />
+               </div>
+     )
+ }

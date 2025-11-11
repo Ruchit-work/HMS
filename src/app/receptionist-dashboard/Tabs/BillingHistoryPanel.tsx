@@ -7,6 +7,8 @@ import PaymentMethodSection, {
 } from "@/components/payments/PaymentMethodSection"
 import { BillingRecord } from "@/types/patient"
 
+const BILLING_PAGE_SIZE = 6
+
 interface BillingHistoryPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
 }
@@ -24,11 +26,14 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
   const [billingSearchTerm, setBillingSearchTerm] = useState("")
+  const [billingDateFilter, setBillingDateFilter] = useState("")
   const [billingPaymentModalOpen, setBillingPaymentModalOpen] = useState(false)
   const [selectedBillingRecord, setSelectedBillingRecord] = useState<BillingRecord | null>(null)
   const [billingPaymentMethod, setBillingPaymentMethod] = useState<BillingPaymentMethod>("cash")
   const [billingPaymentData, setBillingPaymentData] = useState<BillingPaymentData>(emptyPaymentData)
   const [processingBillingPayment, setProcessingBillingPayment] = useState(false)
+  const [billingStatusFilter, setBillingStatusFilter] = useState<"all" | "pending" | "paid" | "void">("all")
+  const [currentPage, setCurrentPage] = useState(1)
 
   const notify = useCallback(
     (payload: { type: "success" | "error"; message: string } | null) => {
@@ -82,15 +87,148 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
   }, [fetchBillingRecords])
 
   const billingSearchValue = billingSearchTerm.trim().toLowerCase()
-  const filteredBillingRecords = useMemo(() => {
-    if (!billingSearchValue) return billingRecords
+  const statusFilteredRecords = useMemo(() => {
+    if (billingStatusFilter === "all") return billingRecords
     return billingRecords.filter((record) => {
+      if (billingStatusFilter === "pending") {
+        return record.status !== "paid" && record.status !== "void"
+      }
+      return record.status === billingStatusFilter
+    })
+  }, [billingRecords, billingStatusFilter])
+
+  const filteredBillingRecords = useMemo(() => {
+    let filtered = statusFilteredRecords
+
+    if (billingDateFilter) {
+      filtered = filtered.filter((record) => {
+        if (!record.generatedAt) return false
+        const formattedDate = new Date(record.generatedAt).toISOString().slice(0, 10)
+        return formattedDate === billingDateFilter
+      })
+    }
+
+    if (!billingSearchValue) return filtered
+
+    return filtered.filter((record) => {
       const idMatch = record.patientId?.toLowerCase().includes(billingSearchValue)
       const nameMatch = record.patientName ? record.patientName.toLowerCase().includes(billingSearchValue) : false
       const billingIdMatch = record.id.toLowerCase().includes(billingSearchValue)
       return idMatch || nameMatch || billingIdMatch
     })
-  }, [billingRecords, billingSearchValue])
+  }, [statusFilteredRecords, billingSearchValue, billingDateFilter])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [billingStatusFilter, billingSearchValue, billingDateFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredBillingRecords.length / BILLING_PAGE_SIZE))
+
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages))
+  }, [totalPages])
+
+  const paginatedBillingRecords = useMemo(() => {
+    const startIndex = (currentPage - 1) * BILLING_PAGE_SIZE
+    return filteredBillingRecords.slice(startIndex, startIndex + BILLING_PAGE_SIZE)
+  }, [filteredBillingRecords, currentPage])
+
+  const pageStart = filteredBillingRecords.length === 0 ? 0 : (currentPage - 1) * BILLING_PAGE_SIZE + 1
+  const pageEnd = filteredBillingRecords.length === 0 ? 0 : Math.min(filteredBillingRecords.length, currentPage * BILLING_PAGE_SIZE)
+
+  const billingMetrics = useMemo(() => {
+    let totalBilled = 0
+    let totalCollected = 0
+    let pendingAmount = 0
+    let paidCount = 0
+    let pendingCount = 0
+    let voidCount = 0
+    let lastPaymentAt: string | null = null
+
+    billingRecords.forEach((record) => {
+      const amount = record.totalAmount || 0
+      totalBilled += amount
+
+      if (record.status === "paid") {
+        totalCollected += amount
+        paidCount += 1
+        if (record.paidAt) {
+          if (!lastPaymentAt || new Date(record.paidAt) > new Date(lastPaymentAt)) {
+            lastPaymentAt = record.paidAt
+          }
+        }
+      } else if (record.status === "void") {
+        voidCount += 1
+      } else {
+        pendingAmount += amount
+        pendingCount += 1
+      }
+    })
+
+    return {
+      totalBilled,
+      totalCollected,
+      pendingAmount,
+      paidCount,
+      pendingCount,
+      voidCount,
+      totalCount: billingRecords.length,
+      lastPaymentAt,
+    }
+  }, [billingRecords])
+
+  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`
+
+  const summaryCards = useMemo(() => {
+    return [
+      {
+        label: "Total Billed",
+        value: formatCurrency(billingMetrics.totalBilled),
+        caption: `${billingMetrics.totalCount} invoices issued`,
+        icon: "🧾",
+        tone: "from-slate-500 to-slate-700",
+      },
+      {
+        label: "Revenue Collected",
+        value: formatCurrency(billingMetrics.totalCollected),
+        caption: `${billingMetrics.paidCount} invoices settled`,
+        icon: "💰",
+        tone: "from-emerald-500 to-teal-500",
+      },
+      {
+        label: "Outstanding Dues",
+        value: formatCurrency(billingMetrics.pendingAmount),
+        caption: billingMetrics.pendingCount ? `${billingMetrics.pendingCount} unsettled bills` : "All clear",
+        icon: "⏳",
+        tone: "from-amber-500 to-orange-500",
+      },
+      {
+        label: "Average Bill Size",
+        value:
+          billingMetrics.totalCount > 0
+            ? formatCurrency(Math.round(billingMetrics.totalBilled / billingMetrics.totalCount))
+            : "₹0",
+        caption: billingMetrics.lastPaymentAt
+          ? `Last payment ${new Date(billingMetrics.lastPaymentAt).toLocaleDateString("en-IN", {
+              month: "short",
+              day: "2-digit",
+            })}`
+          : "No payments yet",
+        icon: "📊",
+        tone: "from-sky-500 to-cyan-500",
+      },
+    ]
+  }, [billingMetrics])
+
+  const statusTabs = useMemo(
+    () => [
+      { value: "all" as const, label: "All", count: billingMetrics.totalCount },
+      { value: "pending" as const, label: "Pending", count: billingMetrics.pendingCount },
+      { value: "paid" as const, label: "Paid", count: billingMetrics.paidCount },
+      { value: "void" as const, label: "Voided", count: billingMetrics.voidCount },
+    ],
+    [billingMetrics]
+  )
 
   const handleOpenBillingPayment = useCallback(
     (record: BillingRecord) => {
@@ -159,138 +297,329 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
   }, [billingPaymentMethod, notify, resetPaymentState, selectedBillingRecord])
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Recent Billing History</h2>
-          <p className="text-sm text-gray-500">Latest hospitalization bills generated during discharge</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <div className="relative sm:w-72">
-            <input
-              type="text"
-              value={billingSearchTerm}
-              onChange={(e) => setBillingSearchTerm(e.target.value)}
-              placeholder="Search bills by patient name or ID"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-            />
-            {billingSearchTerm && (
-              <button
-                type="button"
-                onClick={() => setBillingSearchTerm("")}
-                className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 text-sm"
-              >
-                ✕
-              </button>
-            )}
+    <div className="space-y-8">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-800 text-white shadow-lg">
+        <div className="relative px-6 py-10 sm:px-10">
+          <div className="absolute inset-y-0 right-0 hidden w-48 translate-x-16 rotate-12 rounded-full bg-white/10 blur-3xl sm:block" />
+          <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-200/80">
+                Billing Desk
+              </p>
+              <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
+                Track revenue and outstanding dues instantly.
+              </h2>
+              <p className="text-sm text-emerald-100/90 sm:text-base">
+                Keep tabs on discharge billing, record front-desk payments, and spot outstanding balances before patients
+                leave the hospital.
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs text-emerald-100/90">
+                <span className="rounded-full border border-emerald-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
+                  Front-desk settlement
+                </span>
+                <span className="rounded-full border border-emerald-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
+                  Outstanding insights
+                </span>
+              </div>
+            </div>
+            <div className="grid w-full max-w-md grid-cols-1 gap-4 sm:grid-cols-2">
+              {summaryCards.map((card) => (
+                <div
+                  key={card.label}
+                  className="relative overflow-hidden rounded-2xl border border-white/20 bg-white/15 p-4 shadow-md backdrop-blur"
+                >
+                  <div className="absolute right-3 top-3 text-lg">{card.icon}</div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-100/90">{card.label}</p>
+                  <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
+                  <p className="mt-2 text-[12px] text-emerald-100/80">{card.caption}</p>
+                  <div className={`absolute inset-0 -z-10 bg-gradient-to-br ${card.tone} opacity-20`} />
+                </div>
+              ))}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={fetchBillingRecords}
-            disabled={billingLoading}
-            className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 text-sm"
-          >
-            {billingLoading ? "Refreshing..." : "Refresh"}
-          </button>
         </div>
-      </div>
+      </section>
 
-      {billingError && (
-        <div className="p-3 border border-red-200 rounded-lg bg-red-50 text-sm text-red-700 mb-4">
-          {billingError}
+      <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-900">Recent Billing History</h3>
+            <p className="text-sm text-slate-500">Latest invoices generated during patient discharge.</p>
+          </div>
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+            <div className="relative sm:w-48">
+              <input
+                type="date"
+                value={billingDateFilter}
+                onChange={(e) => setBillingDateFilter(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              />
+              {billingDateFilter && (
+                <button
+                  type="button"
+                  onClick={() => setBillingDateFilter("")}
+                  className="absolute inset-y-0 right-2 flex items-center rounded-full bg-white px-2 text-slate-400 shadow-sm hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <div className="relative sm:w-72">
+              <input
+                type="text"
+                value={billingSearchTerm}
+                onChange={(e) => setBillingSearchTerm(e.target.value)}
+                placeholder="Search bills by patient name or ID"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              />
+              {billingSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setBillingSearchTerm("")}
+                  className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 text-sm"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={fetchBillingRecords}
+              disabled={billingLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {billingLoading ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Refreshing…
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Refresh
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      )}
 
-      {billingLoading && billingRecords.length === 0 ? (
-        <div className="py-8 text-center text-gray-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-          Loading billing history...
+        <div className="flex flex-wrap gap-2">
+          {statusTabs.map((tab) => {
+            const isActive = billingStatusFilter === tab.value
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setBillingStatusFilter(tab.value)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  isActive
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] ${
+                    isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            )
+          })}
         </div>
-      ) : billingRecords.length === 0 ? (
-        <div className="py-8 text-center text-gray-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-          Billing records will appear after discharges are completed.
-        </div>
-      ) : filteredBillingRecords.length === 0 ? (
-        <div className="py-8 text-center text-gray-500 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-          No billing records match your search.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Generated</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Admission</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Patient</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Room Charges</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Doctor Fee</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Other Services</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Total</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {filteredBillingRecords.map((record) => (
-                <tr key={record.id}>
-                  <td className="px-3 py-2 text-sm text-gray-700">
-                    {record.generatedAt ? new Date(record.generatedAt).toLocaleString() : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-sm text-gray-700 font-mono">{record.admissionId}</td>
-                  <td className="px-3 py-2 text-sm text-gray-700">
-                    <div className="flex flex-col">
-                      <span className="font-medium text-gray-900">{record.patientName || "Unknown"}</span>
-                      <span className="text-xs font-mono text-slate-500">ID: {record.patientId || "—"}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-sm text-gray-700">₹{record.roomCharges}</td>
-                  <td className="px-3 py-2 text-sm text-gray-700">₹{record.doctorFee || 0}</td>
-                  <td className="px-3 py-2 text-sm text-gray-700">
-                    {record.otherServices && record.otherServices.length > 0
-                      ? record.otherServices.map((service, idx) => (
-                          <div key={idx}>₹{service.amount} — {service.description}</div>
-                        ))
-                      : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-sm text-gray-900 font-semibold">₹{record.totalAmount}</td>
-                  <td className="px-3 py-2 text-sm">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full ${
-                            record.status === "paid"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : record.status === "void"
-                              ? "bg-rose-100 text-rose-700"
-                              : "bg-amber-100 text-amber-700"
-                          }`}
-                        >
-                          {record.status === "paid" ? "Paid" : record.status === "void" ? "Voided" : "Pending"}
-                          {record.paymentMethod && record.status === "paid" && (
-                            <span className="capitalize text-[11px]">· {record.paymentMethod}</span>
+
+        {billingError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {billingError}
+          </div>
+        )}
+
+        {billingLoading && billingRecords.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-sm text-slate-500">
+            Loading billing history…
+          </div>
+        ) : billingRecords.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">
+            <span className="mb-2 text-4xl">📄</span>
+            <p className="text-sm font-medium">No invoices yet</p>
+            <p className="text-xs text-slate-400">Bills appear once patients are discharged.</p>
+          </div>
+        ) : filteredBillingRecords.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">
+            <span className="mb-2 text-4xl">🔍</span>
+            <p className="text-sm font-medium">No records match your filters.</p>
+            <p className="text-xs text-slate-400">Try adjusting the search or status filter.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="space-y-4">
+              {paginatedBillingRecords.map((record) => {
+                const generatedAt = record.generatedAt ? new Date(record.generatedAt) : null
+                const paidAt = record.paidAt ? new Date(record.paidAt) : null
+                const statusStyle =
+                  record.status === "paid"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : record.status === "void"
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-amber-100 text-amber-700"
+                const statusLabel =
+                  record.status === "paid" ? "Paid" : record.status === "void" ? "Voided" : "Pending Settlement"
+                return (
+                  <article
+                    key={record.id}
+                    className="group rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex-1 space-y-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            Bill #{record.id.slice(0, 8).toUpperCase()}
+                          </span>
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono text-slate-500">
+                            Admission {record.admissionId}
+                          </span>
+                          {record.appointmentId && (
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono text-slate-500">
+                              Appointment {record.appointmentId}
+                            </span>
                           )}
-                        </span>
-                        {record.status !== "paid" && (
+                        </div>
+
+                        <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Generated</p>
+                            <p className="font-semibold text-slate-800">{generatedAt ? generatedAt.toLocaleString() : "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Patient</p>
+                            <p className="font-semibold text-slate-800">
+                              {record.patientName || "Unknown"}{" "}
+                              <span className="ml-1 text-xs font-mono text-slate-500">
+                                (ID {record.patientId || "N/A"})
+                              </span>
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Doctor</p>
+                            <p className="font-semibold text-slate-800">{record.doctorName || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Room Charges</p>
+                            <p className="font-semibold text-slate-800">{formatCurrency(record.roomCharges)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Doctor Fee</p>
+                            <p className="font-semibold text-slate-800">{formatCurrency(record.doctorFee || 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">Total Amount</p>
+                            <p className="text-lg font-bold text-slate-900">{formatCurrency(record.totalAmount)}</p>
+                          </div>
+                        </div>
+
+                        {record.otherServices && record.otherServices.length > 0 && (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Additional services
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {record.otherServices.map((service, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600"
+                                >
+                                  {service.description || "Service"} · {formatCurrency(Number(service.amount) || 0)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex w-full flex-col gap-3 sm:max-w-[200px]">
+                        <div className="flex flex-col gap-2">
+                          <span className={`inline-flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${statusStyle}`}>
+                            <span>{statusLabel}</span>
+                            {record.paymentMethod && record.status === "paid" && (
+                              <span className="capitalize text-[11px] opacity-80">via {record.paymentMethod}</span>
+                            )}
+                          </span>
+                          {paidAt && (
+                            <span className="text-[11px] text-emerald-600">
+                              Settled on {paidAt.toLocaleDateString()} at {paidAt.toLocaleTimeString()}
+                            </span>
+                          )}
+                          {record.paidAtFrontDesk && record.status === "paid" && (
+                            <span className="text-[11px] text-emerald-600">Collected at front desk</span>
+                          )}
+                        </div>
+
+                        {record.status !== "paid" && record.status !== "void" && (
                           <button
                             onClick={() => handleOpenBillingPayment(record)}
-                            className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                           >
                             Record Payment
                           </button>
                         )}
                       </div>
-                      {record.paidAt && (
-                        <span className="text-[11px] text-slate-400">{new Date(record.paidAt).toLocaleString()}</span>
-                      )}
-                      {record.paidAtFrontDesk && record.status === "paid" && (
-                        <span className="text-[11px] text-emerald-600">Settled at front desk</span>
-                      )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                  </article>
+                )
+              })}
+              <div className="flex flex-col gap-2 border-t border-slate-200 pt-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  Showing {pageStart.toLocaleString("en-IN")}–{pageEnd.toLocaleString("en-IN")} of {filteredBillingRecords.length.toLocaleString("en-IN")} bills
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
+                      currentPage === 1
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                    }`}
+                  >
+                    Previous
+                  </button>
+                  <span className="text-slate-600">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
+                      currentPage === totalPages
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                    }`}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
 
       {billingPaymentModalOpen && selectedBillingRecord && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center p-4">
@@ -314,7 +643,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                 <p className="text-xs uppercase text-slate-500 font-semibold tracking-wide mb-2">Bill Summary</p>
                 <div className="flex items-center justify-between text-slate-800">
                   <span className="text-sm">Total amount due</span>
-                  <span className="text-2xl font-bold text-slate-900">₹{selectedBillingRecord.totalAmount}</span>
+                  <span className="text-2xl font-bold text-slate-900">{formatCurrency(selectedBillingRecord.totalAmount)}</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-2">
                   Generated on {selectedBillingRecord.generatedAt ? new Date(selectedBillingRecord.generatedAt).toLocaleString() : "N/A"}
@@ -351,7 +680,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                 disabled={processingBillingPayment}
                 className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-60"
               >
-                {processingBillingPayment ? "Recording..." : `Record ₹${selectedBillingRecord.totalAmount}`}
+                {processingBillingPayment ? "Recording..." : `Record ${formatCurrency(selectedBillingRecord.totalAmount)}`}
               </button>
             </div>
           </div>
