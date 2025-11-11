@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import PasswordRequirements, { isPasswordValid } from '@/components/forms/PasswordRequirements'
-import { qualifications, specializationCategories } from '@/constants/signup'
+import { qualifications, specializationCategories, qualificationSpecializationMap } from '@/constants/signup'
 
 export interface DoctorProfileFormValues {
   firstName: string
@@ -88,6 +88,68 @@ export default function DoctorProfileForm({
   const [showSpecializationDropdown, setShowSpecializationDropdown] = useState(false)
   const [showQualificationDropdown, setShowQualificationDropdown] = useState(false)
 
+  const allSpecializations = useMemo(
+    () => specializationCategories.flatMap((cat) => cat.specializations),
+    []
+  )
+
+  const specializationQualificationMap = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    Object.entries(qualificationSpecializationMap).forEach(([qual, specs]) => {
+      specs.forEach((spec) => {
+        if (!map.has(spec)) {
+          map.set(spec, new Set())
+        }
+        map.get(spec)!.add(qual)
+      })
+    })
+    return map
+  }, [])
+
+  const allowedSpecializationSet = useMemo(() => {
+    if (!qualification || qualification === 'Other') {
+      return null
+    }
+    const allowed = qualificationSpecializationMap[qualification]
+    if (!allowed || allowed.length === 0) {
+      return null
+    }
+    return new Set(allowed)
+  }, [qualification])
+
+  const availableSpecializationCategories = useMemo(() => {
+    if (!allowedSpecializationSet) {
+      return specializationCategories
+    }
+    return specializationCategories
+      .map((cat) => {
+        if (cat.id === 'other') {
+          return cat
+        }
+        const filtered = cat.specializations.filter((spec) => allowedSpecializationSet.has(spec))
+        return { ...cat, specializations: filtered }
+      })
+      .filter((cat) => cat.id === 'other' || cat.specializations.length > 0)
+  }, [allowedSpecializationSet])
+
+  const hasSpecializationOptions = useMemo(
+    () => availableSpecializationCategories.some((cat) => cat.id !== 'other' && cat.specializations.length > 0),
+    [availableSpecializationCategories]
+  )
+
+  const availableQualifications = useMemo(() => {
+    if (!specialization || specializationCategory === 'other') {
+      return qualifications
+    }
+    const allowed = specializationQualificationMap.get(specialization)
+    if (!allowed || allowed.size === 0) {
+      return qualifications
+    }
+    const allowedArray = qualifications.filter((qual) => allowed.has(qual))
+    const merged = Array.from(new Set([...allowedArray, 'Other']))
+    return merged.filter((qual) => qualifications.includes(qual))
+  }, [specialization, specializationCategory, specializationQualificationMap])
+
   useEffect(() => {
     setFormError(null)
   }, [externalError])
@@ -114,6 +176,36 @@ export default function DoctorProfileForm({
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showSpecializationDropdown, showQualificationDropdown])
+
+  useEffect(() => {
+    if (!qualification || qualification === 'Other') return
+    const allowed = qualificationSpecializationMap[qualification]
+    if (!allowed || allowed.length === 0) return
+    if (specializationCategory !== 'other' && specialization && !allowed.includes(specialization)) {
+      setSpecialization('')
+      setSpecializationCategory('')
+      setCustomSpecialization('')
+    }
+    if (specializationCategory && specializationCategory !== 'other') {
+      const category = specializationCategories.find((cat) => cat.id === specializationCategory)
+      const hasAny = category?.specializations.some((spec) => allowed.includes(spec))
+      if (!hasAny) {
+        setSpecializationCategory('')
+        setSpecialization('')
+        setCustomSpecialization('')
+      }
+    }
+  }, [qualification, specialization, specializationCategory, specializationCategories])
+
+  useEffect(() => {
+    if (!specialization || specializationCategory === 'other') return
+    const allowed = specializationQualificationMap.get(specialization)
+    if (!allowed || allowed.size === 0) return
+    if (qualification && qualification !== 'Other' && !allowed.has(qualification)) {
+      setQualification('')
+      setCustomQualification('')
+    }
+  }, [specialization, specializationCategory, qualification, specializationQualificationMap])
 
   const finalSpecializationLabel = useMemo(() => {
     if (specializationCategory === 'other') {
@@ -291,7 +383,9 @@ export default function DoctorProfileForm({
                       Select Medical Field
                     </button>
                   </li>
-                  {specializationCategories.map((cat) => (
+                  {availableSpecializationCategories
+                    .filter((cat) => cat.id !== 'other')
+                    .map((cat) => (
                     <li key={cat.id}>
                       <button
                         type="button"
@@ -323,6 +417,12 @@ export default function DoctorProfileForm({
                 </ul>
               </div>
             </div>
+            {allowedSpecializationSet && !hasSpecializationOptions && (
+              <p className="mt-2 text-xs text-amber-600">
+                No predefined specializations match this qualification. Choose a different qualification or use the
+                custom option.
+              </p>
+            )}
           </div>
         )}
 
@@ -338,9 +438,14 @@ export default function DoctorProfileForm({
                 ← Change field
               </button>
             </div>
+            {!hasSpecializationOptions && allowedSpecializationSet && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                No specializations match this qualification. Choose a different qualification or use a custom specialization.
+              </div>
+            )}
             <div className="border-2 border-teal-200 bg-teal-50/30 rounded-lg p-3">
               <div className="grid grid-cols-1 gap-2">
-                {specializationCategories
+                {availableSpecializationCategories
                   .find((cat) => cat.id === specializationCategory)
                   ?.specializations.map((spec) => (
                     <button
@@ -441,7 +546,7 @@ export default function DoctorProfileForm({
                 Select Qualification
               </button>
             </li>
-            {qualifications.map((qual) => (
+            {availableQualifications.map((qual) => (
               <li key={qual}>
                 <button
                   type="button"
