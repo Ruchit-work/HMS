@@ -40,7 +40,8 @@ export function getContentPreview(html: string, maxLength: number = 150): string
   if (!html) return ""
   
   // Try to extract first paragraph
-  const firstParagraphMatch = html.match(/<p[^>]*>(.*?)<\/p>/is)
+  // Use [\s\S] instead of . with s flag to match any character including newlines (ES2017 compatible)
+  const firstParagraphMatch = html.match(/<p[^>]*>([\s\S]*?)<\/p>/i)
   if (firstParagraphMatch) {
     const firstPara = firstParagraphMatch[1]
     const plainText = getPlainText(firstPara)
