@@ -5,13 +5,15 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
     const dryRun = url.searchParams.get("dryRun") === "1"
+    const debug = url.searchParams.get("debug") === "1"
     const timezoneParam = url.searchParams.get("tz") || undefined
 
-    console.log(`[API] Appointment reminder job triggered - dryRun: ${dryRun}, timezone: ${timezoneParam || "default"}`)
+    console.log(`[API] Appointment reminder job triggered - dryRun: ${dryRun}, debug: ${debug}, timezone: ${timezoneParam || "default"}`)
 
     const result = await sendDailyAppointmentReminders({
       dryRun,
       timezone: timezoneParam,
+      debug,
     })
 
     console.log(`[API] Appointment reminder job completed - ${JSON.stringify(result)}`)
