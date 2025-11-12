@@ -102,19 +102,20 @@ export async function GET() {
       // Continue without recent campaigns if query fails (e.g., missing index)
     }
 
-    // Calculate next cron execution (3:55 PM IST = 10:25 UTC)
+    // Calculate next cron execution (4:10 PM IST = 10:40 AM UTC)
+    // IST is UTC+5:30, so 4:10 PM IST (16:10 IST) = 10:40 AM UTC (16:10 - 5:30 = 10:40)
     const now = new Date()
     const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     
     // Get current time in UTC
     const utcNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000))
     
-    // Calculate target time: 3:55 PM IST = 10:25 UTC (15:55 - 5:30 = 10:25)
-    // Create a date for today at 10:25 UTC
+    // Calculate target time: 4:10 PM IST = 10:40 AM UTC
+    // Create a date for today at 10:40 AM UTC (hour 10, minute 40)
     const nextCronUTC = new Date(utcNow)
-    nextCronUTC.setUTCHours(10, 25, 0, 0) // Set to 10:25 UTC (which is 3:55 PM IST)
+    nextCronUTC.setUTCHours(10, 40, 0, 0) // Set to 10:40 AM UTC (which is 4:10 PM IST)
     
-    // If today's 10:25 UTC has already passed, set for tomorrow
+    // If today's 10:40 AM UTC has already passed, set for tomorrow
     if (nextCronUTC.getTime() <= utcNow.getTime()) {
       nextCronUTC.setUTCDate(nextCronUTC.getUTCDate() + 1)
     }
@@ -143,8 +144,9 @@ export async function GET() {
       success: true,
       cron: {
         configured: cronConfigured,
-        schedule: "25 10 * * *", // Daily at 10:25 UTC (3:55 PM IST)
-        scheduleIST: "55 15 * * *", // Daily at 3:55 PM IST (display only)
+        schedule: "40 10 * * *", // Daily at 10:40 AM UTC (4:10 PM IST)
+        scheduleUTC: "40 10 * * *", // Actual cron schedule (UTC) - 10:40 AM UTC = 4:10 PM IST
+        scheduleDisplay: "4:10 PM IST (10:40 AM UTC)", // Human-readable display
         nextExecution: nextCronUTC.toISOString(),
         nextExecutionFormatted: new Date(nextCronUTC).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",
