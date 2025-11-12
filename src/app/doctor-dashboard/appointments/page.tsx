@@ -903,7 +903,7 @@ export default function DoctorAppointments() {
                               <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                 <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Chief Complaint</span>
                                 <p className="text-slate-900 font-medium leading-relaxed">
-                                  {appointment.chiefComplaint}
+                                  {appointment.chiefComplaint || "No chief complaint provided"}
                                 </p>
                               </div>
                               {appointment.patientAdditionalConcern && (

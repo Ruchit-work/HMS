@@ -490,37 +490,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
               >
                 {loadingCronStatus ? "Checking..." : "Check Cron Status"}
               </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    setSuccessMessage("Generating test campaign...")
-                    const response = await fetch("/api/auto-campaigns/test-generate", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        healthDayName: "World Heart Day",
-                      }),
-                    })
-                    const data = await response.json()
-                    if (data.success) {
-                      setSuccessMessage("Test campaign generated successfully! Refreshing...")
-                      setTimeout(async () => {
-                        await reloadCampaigns()
-                        setSuccessMessage("Campaigns refreshed!")
-                      }, 1000)
-                    } else {
-                      setSuccessMessage(`Error: ${data.error || "Failed to generate test campaign"}`)
-                    }
-                  } catch (error: any) {
-                    console.error("Error generating test campaign:", error)
-                    setSuccessMessage(`Error: ${error?.message || "Failed to generate test campaign"}`)
-                  }
-                }}
-                className="rounded-lg border border-teal-600 bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-700"
-              >
-                Generate Test Campaign
-              </button>
               <div className="flex flex-col gap-1">
                 <button
                   type="button"

@@ -531,6 +531,31 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                           patientPayload.mobile ||
                           ""
       
+      // Generate chiefComplaint from symptomCategory or customSymptom
+      let chiefComplaint = ""
+      if (customSymptom && customSymptom.trim().length > 0) {
+        // Use custom symptom if provided
+        chiefComplaint = customSymptom.trim()
+      } else if (symptomCategory && symptomCategory !== "custom" && symptomCategory.trim().length > 0) {
+        // Find the symptom category label
+        const category = SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)
+        if (category) {
+          chiefComplaint = category.label
+        }
+      }
+      // If neither is provided, chiefComplaint will be empty string (API will handle it)
+      
+      // Generate medical history from patient data
+      let medicalHistory = ""
+      const historyParts: string[] = []
+      if (patientPayload.allergies && patientPayload.allergies.trim().length > 0) {
+        historyParts.push(`Allergies: ${patientPayload.allergies.trim()}`)
+      }
+      if (patientPayload.currentMedications && patientPayload.currentMedications.trim().length > 0) {
+        historyParts.push(`Current medications: ${patientPayload.currentMedications.trim()}`)
+      }
+      medicalHistory = historyParts.join(". ")
+      
       const appointmentData = {
         patientId,
         patientName: `${patientPayload.firstName || ""} ${patientPayload.lastName || ""}`.trim(),
@@ -544,6 +569,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         doctorSpecialization: doctor?.specialization || "",
         appointmentDate,
         appointmentTime,
+        chiefComplaint: chiefComplaint || "General consultation",
+        medicalHistory: medicalHistory || "",
         status: "confirmed",
         paymentAmount: paymentAmount,
         paymentMethod: paymentMethod,
@@ -563,7 +590,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       }
       return appointmentData
     },
-    [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId]
+    [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId, symptomCategory, customSymptom]
   )
 
   const preventDuplicateAppointment = useCallback(

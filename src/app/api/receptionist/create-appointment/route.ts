@@ -132,8 +132,9 @@ export async function POST(request: Request) {
     if (appointmentData.patientCurrentMedications !== undefined) docData.patientCurrentMedications = safeValue(appointmentData.patientCurrentMedications, "")
     
     // Include appointment-specific fields
-    if (appointmentData.chiefComplaint !== undefined) docData.chiefComplaint = safeValue(appointmentData.chiefComplaint, "")
-    if (appointmentData.medicalHistory !== undefined) docData.medicalHistory = safeValue(appointmentData.medicalHistory, "")
+    // Always include chiefComplaint and medicalHistory (required fields) - use defaults if not provided
+    docData.chiefComplaint = safeValue(appointmentData.chiefComplaint, "General consultation")
+    docData.medicalHistory = safeValue(appointmentData.medicalHistory, "")
     if (appointmentData.patientAdditionalConcern !== undefined) docData.patientAdditionalConcern = safeValue(appointmentData.patientAdditionalConcern, "")
     if (appointmentData.symptomOnset !== undefined) docData.symptomOnset = safeValue(appointmentData.symptomOnset, "")
     if (appointmentData.symptomDuration !== undefined) docData.symptomDuration = safeValue(appointmentData.symptomDuration, "")
