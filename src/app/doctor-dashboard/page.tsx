@@ -252,25 +252,93 @@ export default function DoctorDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {campaigns.length > 0 && (
-          <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {campaigns.map(c => (
-              <div key={c.id} className="bg-white border border-teal-200 rounded-xl p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800">{c.title}</h3>
-                    <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: c.content }} />
-                    {c.ctaText && c.ctaHref && (
-                      <Link href={c.ctaHref} className="inline-block mt-3 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm hover:bg-teal-700">
-                        {c.ctaText}
-                      </Link>
-                    )}
-                  </div>
+        {campaigns.length > 0 && (() => {
+          const doctorGradients = [
+            "from-indigo-600 via-indigo-500 to-sky-500",
+            "from-cyan-600 via-teal-500 to-emerald-500",
+            "from-slate-700 via-slate-600 to-indigo-600",
+          ]
+
+          return (
+            <section className="relative mb-12 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
+              <div className="absolute inset-y-0 left-[-25%] w-1/2 rounded-full bg-indigo-600/40 blur-3xl" />
+              <div className="absolute inset-y-0 right-[-30%] w-1/2 rounded-full bg-teal-500/40 blur-3xl" />
+
+              <div className="relative flex flex-col gap-10 px-6 py-10 sm:px-10 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-3xl text-white">
+                  <p className="text-xs uppercase tracking-[0.6em] text-white/60">Clinical pulse</p>
+                  <h2 className="mt-4 text-3xl font-bold leading-tight sm:text-4xl">
+                    Strategic highlights to engage and inform your patients
+                  </h2>
+                  <p className="mt-3 max-w-lg text-sm text-white/75 sm:text-base">
+                    Campaigns crafted by the admin team to align with today’s health priorities. Share them across your channels or use them during consultations.
+                  </p>
+                </div>
+
+                <div className="w-full space-y-4 lg:w-[520px]">
+                  {campaigns.map((campaign, idx) => {
+                    const gradient = doctorGradients[idx % doctorGradients.length]
+                    const isExternal = campaign.ctaHref?.startsWith("http")
+                    const CTAContent = campaign.ctaText || "View details"
+
+                    const CTAElement = campaign.ctaHref ? (
+                      isExternal ? (
+                        <a
+                          href={campaign.ctaHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white hover:bg-white/30"
+                        >
+                          {CTAContent}
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
+                          </svg>
+                        </a>
+                      ) : (
+                        <Link
+                          href={campaign.ctaHref}
+                          className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white hover:bg-white/30"
+                        >
+                          {CTAContent}
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      )
+                    ) : null
+
+                    return (
+                      <article
+                        key={campaign.id}
+                        className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br ${gradient} p-5 shadow-lg transition hover:-translate-y-1 hover:shadow-2xl`}
+                      >
+                        <div className="absolute inset-0 opacity-25">
+                          <div className="absolute -top-12 -right-14 h-44 w-44 rounded-full bg-white blur-3xl" />
+                          <div className="absolute -bottom-14 left-12 h-40 w-40 rounded-full bg-white/80 blur-2xl" />
+                        </div>
+
+                        <div className="relative space-y-3 text-white">
+                          <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide">
+                            Priority broadcast
+                          </span>
+                          <h3 className="text-xl font-semibold leading-snug">
+                            {campaign.title}
+                          </h3>
+                          <div
+                            className="prose prose-sm prose-invert max-w-none text-white/90"
+                            dangerouslySetInnerHTML={{ __html: campaign.content }}
+                          />
+                          {CTAElement && <div className="pt-2">{CTAElement}</div>}
+                        </div>
+                      </article>
+                    )
+                  })}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            </section>
+          )
+        })()}
         
         {/* Welcome Banner */}
         <PageHeader

@@ -7,20 +7,31 @@ export async function GET(request: Request) {
     const dryRun = url.searchParams.get("dryRun") === "1"
     const timezoneParam = url.searchParams.get("tz") || undefined
 
+    console.log(`[API] Appointment reminder job triggered - dryRun: ${dryRun}, timezone: ${timezoneParam || "default"}`)
+
     const result = await sendDailyAppointmentReminders({
       dryRun,
       timezone: timezoneParam,
     })
 
+    console.log(`[API] Appointment reminder job completed - ${JSON.stringify(result)}`)
+
     return NextResponse.json({
       success: true,
       ...result,
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("appointment reminder job failed", error)
+    console.error("[API] Appointment reminder job failed", error)
     const message = error instanceof Error ? error.message : "Unknown error"
+    const stack = error instanceof Error ? error.stack : undefined
     return NextResponse.json(
-      { success: false, error: message },
+      { 
+        success: false, 
+        error: message,
+        stack: process.env.NODE_ENV === "development" ? stack : undefined,
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     )
   }

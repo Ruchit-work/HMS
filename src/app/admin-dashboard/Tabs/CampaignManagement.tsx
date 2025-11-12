@@ -28,6 +28,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   })
 
   const [form, setForm] = useState<Campaign>(() => createInitialFormState())
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [filter, setFilter] = useState<{status: CampaignStatus|"all"}>({ status: "all" })
@@ -113,28 +114,49 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
     setForm(prev => ({ ...prev, title, slug: prev.slug || slugify(title) }))
   }
 
-  const handleCreate = async (event?: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event?: React.FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
     if (!form.title || !form.slug) return
     setSaving(true)
     try {
-      await createCampaign({
-        title: form.title,
-        slug: slugify(form.slug),
-        content: form.content,
-        imageUrl: form.imageUrl,
-        ctaText: form.ctaText,
-        ctaHref: form.ctaHref,
-        audience: form.audience,
-        status: form.status,
-        priority: form.priority ?? 0,
-      })
-      // reload
-      const q = query(collection(db, 'campaigns'), orderBy('updatedAt', 'desc'))
-      const snap = await getDocs(q)
-      setCampaigns(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Campaign[])
-      resetForm()
-      setSuccessMessage("Campaign created successfully!")
+      if (editingId) {
+        await updateCampaign(editingId, {
+          title: form.title,
+          slug: slugify(form.slug),
+          content: form.content,
+          imageUrl: form.imageUrl || undefined,
+          ctaText: form.ctaText || undefined,
+          ctaHref: form.ctaHref || undefined,
+          audience: form.audience,
+          status: form.status,
+          priority: form.priority ?? 0,
+        })
+        const q = query(collection(db, 'campaigns'), orderBy('updatedAt', 'desc'))
+        const snap = await getDocs(q)
+        const updated = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Campaign[]
+        setCampaigns(updated)
+        setSelectedCampaignId(editingId)
+        setSuccessMessage("Campaign updated successfully!")
+      } else {
+        await createCampaign({
+          title: form.title,
+          slug: slugify(form.slug),
+          content: form.content,
+          imageUrl: form.imageUrl,
+          ctaText: form.ctaText,
+          ctaHref: form.ctaHref,
+          audience: form.audience,
+          status: form.status,
+          priority: form.priority ?? 0,
+        })
+        const q = query(collection(db, 'campaigns'), orderBy('updatedAt', 'desc'))
+        const snap = await getDocs(q)
+        const refreshed = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Campaign[]
+        setCampaigns(refreshed)
+        resetForm()
+        setSuccessMessage("Campaign created successfully!")
+      }
+      setEditingId(null)
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error) {
       console.error("Error creating campaign:", error)
@@ -164,11 +186,33 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       await deleteCampaign(id)
       setCampaigns(prev => prev.filter(c => c.id !== id))
       setSelectedCampaignId(prev => (prev === id ? null : prev))
+      if (editingId === id) {
+        resetForm()
+        setEditingId(null)
+      }
       setSuccessMessage("Campaign deleted successfully!")
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error) {
       console.error("Error deleting campaign:", error)
     }
+  }
+
+  const startEditing = (campaign: Campaign) => {
+    setEditingId(campaign.id ?? null)
+    setForm({
+      ...createInitialFormState(),
+      ...campaign,
+      ctaText: campaign.ctaText ?? "",
+      ctaHref: campaign.ctaHref ?? "",
+      imageUrl: campaign.imageUrl ?? "",
+      priority: campaign.priority ?? 0,
+    })
+    setSelectedCampaignId(campaign.id ?? null)
+  }
+
+  const cancelEditing = () => {
+    setEditingId(null)
+    resetForm()
   }
 
   const content = (
@@ -300,7 +344,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2 self-end sm:self-start">
+                  <div className="flex flex-wrap gap-2 self-end sm:self-start">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -310,6 +354,16 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                       className="rounded-lg border border-teal-600 bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-teal-700"
                     >
                       {campaign.status === "published" ? "Unpublish" : "Publish"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        startEditing(campaign)
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Edit
                     </button>
                     <button
                       type="button"
@@ -340,14 +394,16 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-semibold text-slate-900">Create Campaign</h3>
+              <h3 className="text-xl font-semibold text-slate-900">
+                {editingId ? "Edit Campaign" : "Create Campaign"}
+              </h3>
               <p className="text-sm text-slate-500">
-                Craft a targeted announcement and publish it instantly.
+                {editingId ? "Update the content and republish when ready." : "Craft a targeted announcement and publish it instantly."}
               </p>
             </div>
           </div>
 
-          <form onSubmit={handleCreate} className="mt-6 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
             <div className="space-y-1">
               <label className="text-sm font-semibold text-slate-700">Title *</label>
               <input
@@ -458,14 +514,14 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                 disabled={saving || !form.title}
                 className="flex-1 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-teal-700 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? "Saving..." : "Create campaign"}
+                {saving ? "Saving..." : editingId ? "Save changes" : "Create campaign"}
               </button>
               <button
                 type="button"
-                onClick={resetForm}
+                onClick={editingId ? cancelEditing : resetForm}
                 className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                Reset
+                {editingId ? "Cancel" : "Reset"}
               </button>
             </div>
           </form>
