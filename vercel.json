@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=false",
+      "schedule": "25 9 * * *"
+    }
+  ]
+}
+

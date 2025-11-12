@@ -15,6 +15,7 @@ import Link from "next/link"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns"
 import { UserData, Doctor, Appointment, NotificationData } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
+import CampaignCarousel from "@/components/patient/CampaignCarousel"
 
 export default function PatientDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
@@ -190,95 +191,36 @@ export default function PatientDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Campaigns Section */}
-          {campaigns.length > 0 && (() => {
-            const gradients = [
-              "from-sky-600 via-sky-500 to-cyan-500",
-              "from-emerald-600 via-teal-500 to-emerald-400",
-              "from-purple-600 via-fuchsia-500 to-rose-500",
-            ]
+          {campaigns.length > 0 && (
+            <section className="relative mb-12 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+              <div className="absolute inset-y-0 right-0 hidden w-1/2 translate-x-16 transform bg-gradient-to-br from-teal-400/60 via-transparent to-transparent blur-3xl lg:block" />
 
-            return (
-              <section className="relative mb-12 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-                <div className="absolute inset-y-0 right-0 hidden w-1/2 translate-x-16 transform bg-gradient-to-br from-teal-400/60 via-transparent to-transparent blur-3xl lg:block" />
-
-                <div className="relative flex flex-col gap-10 px-6 py-10 sm:px-10 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="max-w-3xl text-white">
-                    <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.4em]"/>
-                    <p className="text-xs uppercase tracking-[0.6em] text-white/70">
-                      Stories of care
+              <div className="relative flex flex-col gap-10 px-6 py-10 sm:px-10 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-3xl text-white">
+                  <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.4em]"/>
+                  <p className="text-xs uppercase tracking-[0.6em] text-white/70">
+                    Stories of care
+                  </p>
+                  <h2 className="mt-4 text-3xl font-bold leading-tight sm:text-4xl">
+                    Featured wellness campaigns curated for you
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm text-white/75 sm:text-base">
+                    Daily inspiration on preventive care, screenings, and healthier living. Stay on top of seasonal guidance from your care team.
+                  </p>
+                  {campaigns.length > 1 && (
+                    <p className="mt-2 text-xs text-white/60 sm:text-sm">
+                      Swipe or use arrows to view all {campaigns.length} campaigns
                     </p>
-                    <h2 className="mt-4 text-3xl font-bold leading-tight sm:text-4xl">
-                      Featured wellness campaigns curated for you
-                    </h2>
-                    <p className="mt-3 max-w-xl text-sm text-white/75 sm:text-base">
-                      Daily inspiration on preventive care, screenings, and healthier living. Stay on top of seasonal guidance from your care team.
-                    </p>
-                  </div>
-
-                  <div className="w-full space-y-4 lg:w-[480px]">
-                    {campaigns.map((campaign, idx) => {
-                      const gradient = gradients[idx % gradients.length]
-                      const isExternal = campaign.ctaHref?.startsWith("http")
-                      const CTAContent = campaign.ctaText || "Learn more"
-
-                      const CTAElement = campaign.ctaHref ? (
-                        isExternal ? (
-                          <a
-                            href={campaign.ctaHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white hover:bg-white/25"
-                          >
-                            {CTAContent}
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
-                            </svg>
-                          </a>
-                        ) : (
-                          <Link
-                            href={campaign.ctaHref}
-                            className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white hover:bg-white/25"
-                          >
-                            {CTAContent}
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7" />
-                            </svg>
-                          </Link>
-                        )
-                      ) : null
-
-                      return (
-                        <article
-                          key={campaign.id}
-                          className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br ${gradient} p-5 shadow-lg transition hover:-translate-y-1 hover:shadow-2xl`}
-                        >
-                          <div className="absolute inset-0 opacity-20">
-                            <div className="absolute -top-12 -right-12 h-40 w-40 rounded-full bg-white blur-3xl" />
-                            <div className="absolute -bottom-16 left-16 h-44 w-44 rounded-full bg-white/80 blur-2xl" />
-                          </div>
-
-                          <div className="relative space-y-3 text-white">
-                            <span className="inline-flex items-center rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide">
-                              Featured campaign
-                            </span>
-                            <h3 className="text-xl font-semibold leading-snug">
-                              {campaign.title}
-                            </h3>
-                            <div
-                              className="prose prose-sm prose-invert max-w-none text-white/90"
-                              dangerouslySetInnerHTML={{ __html: campaign.content }}
-                            />
-                            {CTAElement && <div className="pt-2">{CTAElement}</div>}
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
+                  )}
                 </div>
-              </section>
-            )
-          })()}
+
+                <div className="w-full lg:w-[480px]">
+                  <CampaignCarousel campaigns={campaigns} />
+                </div>
+              </div>
+            </section>
+          )}
           {/* Welcome Banner */}
         <PageHeader
           title={`Welcome back, ${userData.firstName}!`}
