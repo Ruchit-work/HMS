@@ -119,15 +119,22 @@ export async function POST(request: Request) {
     // Store patient doc with ID = authUid (so patient dashboard can load by user.uid)
     await db.collection("patients").doc(authUid).set(docData, { merge: true })
 
-    const phoneCandidates = [patientData.phone, `${patientData.phoneCountryCode || ""}${patientData.phoneNumber || ""}`]
+    const phoneCandidates = [
+      patientData.phone,
+      `${patientData.phoneCountryCode || ""}${patientData.phoneNumber || ""}`,
+      patientData.phoneNumber,
+    ].filter((phone) => phone && phone.trim() !== "")
 
-    sendWhatsAppNotification({
-      to: phoneCandidates[0],
-      fallbackRecipients: phoneCandidates.slice(1),
-      message: buildWelcomeMessage(docData.firstName, patientId),
-    }).catch(() => {
-      /* handled within helper */
-    })
+    // Send WhatsApp notification only if we have a phone number (don't block on this)
+    if (phoneCandidates.length > 0) {
+      sendWhatsAppNotification({
+        to: phoneCandidates[0],
+        fallbackRecipients: phoneCandidates.slice(1),
+        message: buildWelcomeMessage(docData.firstName, patientId),
+      }).catch((error) => {
+        console.error("[create-patient] WhatsApp notification failed:", error)
+      })
+    }
 
     return Response.json({ success: true, id: authUid, authUid, patientId })
   } catch (error: any) {

@@ -32,9 +32,17 @@ const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => 
   const schedule = formatAppointmentDateTime(appointmentData.appointmentDate, appointmentData.appointmentTime)
   const message = `Hi ${friendlyName}, your appointment with ${doctorName} on ${schedule} is confirmed. Reply here if you need any help.`
 
+  // Try multiple phone number fields
+  const phoneCandidates = [
+    appointmentData.patientPhone,
+    appointmentData.patientPhoneNumber,
+    appointmentData.patientContact,
+    appointmentData.phone,
+  ].filter(Boolean)
+
   await sendWhatsAppNotification({
-    to: appointmentData.patientPhone || appointmentData.patientPhoneNumber,
-    fallbackRecipients: [appointmentData.patientContact],
+    to: phoneCandidates[0] || null,
+    fallbackRecipients: phoneCandidates.slice(1),
     message,
   })
 }
@@ -143,14 +151,33 @@ export async function POST(request: Request) {
 
     const ref = await admin.firestore().collection("appointments").add(docData)
 
-    sendAppointmentWhatsApp({
-      ...appointmentData,
-      patientPhone: docData.patientPhone || appointmentData.patientPhone,
-      patientName: docData.patientName,
-      doctorName: docData.doctorName,
-    }).catch(() => {
-      /* handled in helper */
-    })
+    // If patient phone is missing, try to fetch it from the patient record
+    let patientPhone = docData.patientPhone || appointmentData.patientPhone
+    if (!patientPhone || patientPhone.trim() === "") {
+      try {
+        const patientDoc = await admin.firestore().collection("patients").doc(appointmentData.patientId).get()
+        if (patientDoc.exists) {
+          const patientData = patientDoc.data()
+          patientPhone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || patientData?.mobile || ""
+        }
+      } catch (error) {
+        console.error("[create-appointment] Error fetching patient phone:", error)
+      }
+    }
+
+    // Send WhatsApp notification only if we have a phone number (don't block on this)
+    if (patientPhone && patientPhone.trim() !== "") {
+      sendAppointmentWhatsApp({
+        ...appointmentData,
+        patientPhone: patientPhone,
+        patientName: docData.patientName,
+        doctorName: docData.doctorName,
+        appointmentDate: docData.appointmentDate,
+        appointmentTime: docData.appointmentTime,
+      }).catch((error) => {
+        console.error("[create-appointment] WhatsApp notification failed:", error)
+      })
+    }
 
     return Response.json({ success: true, id: ref.id })
   } catch (error: any) {

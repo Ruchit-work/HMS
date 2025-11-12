@@ -523,11 +523,22 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   const createAppointment = useCallback(
     async (patientId: string, patientPayload: any) => {
       const doctor = doctors.find((x: any) => x.id === selectedDoctorId)
+      
+      // Try multiple phone number fields from patient data
+      const patientPhone = patientPayload.phone || 
+                          patientPayload.phoneNumber || 
+                          patientPayload.contact ||
+                          patientPayload.mobile ||
+                          ""
+      
       const appointmentData = {
         patientId,
         patientName: `${patientPayload.firstName || ""} ${patientPayload.lastName || ""}`.trim(),
         patientEmail: patientPayload.email || "",
-        patientPhone: patientPayload.phone || "",
+        patientPhone: patientPhone,
+        // Also include alternative phone fields for fallback
+        patientPhoneNumber: patientPayload.phoneNumber || patientPayload.phone || "",
+        patientContact: patientPayload.contact || patientPayload.mobile || "",
         doctorId: doctor?.id,
         doctorName: `${doctor?.firstName || ""} ${doctor?.lastName || ""}`.trim(),
         doctorSpecialization: doctor?.specialization || "",
