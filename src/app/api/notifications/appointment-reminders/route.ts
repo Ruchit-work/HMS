@@ -6,14 +6,16 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const dryRun = url.searchParams.get("dryRun") === "1"
     const debug = url.searchParams.get("debug") === "1"
+    const force = url.searchParams.get("force") === "1" // Force send even if already sent
     const timezoneParam = url.searchParams.get("tz") || undefined
 
-    console.log(`[API] Appointment reminder job triggered - dryRun: ${dryRun}, debug: ${debug}, timezone: ${timezoneParam || "default"}`)
+    console.log(`[API] Appointment reminder job triggered - dryRun: ${dryRun}, debug: ${debug}, force: ${force}, timezone: ${timezoneParam || "default"}`)
 
     const result = await sendDailyAppointmentReminders({
       dryRun,
       timezone: timezoneParam,
       debug,
+      force,
     })
 
     console.log(`[API] Appointment reminder job completed - ${JSON.stringify(result)}`)
@@ -22,6 +24,9 @@ export async function GET(request: Request) {
       success: true,
       ...result,
       timestamp: new Date().toISOString(),
+      message: dryRun 
+        ? "Dry run completed - no reminders were sent" 
+        : `Processed ${result.processed} appointments, sent ${result.sent} reminders, skipped ${result.skipped}, failed ${result.failed}`,
     })
   } catch (error) {
     console.error("[API] Appointment reminder job failed", error)

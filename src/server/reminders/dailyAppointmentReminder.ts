@@ -7,6 +7,7 @@ interface ReminderOptions {
   now?: Date
   dryRun?: boolean
   debug?: boolean
+  force?: boolean // Force send even if reminder was already sent
 }
 
 const DEFAULT_TIMEZONE = "Asia/Kolkata"
@@ -79,6 +80,7 @@ export const sendDailyAppointmentReminders = async (options: ReminderOptions = {
   const timeZone = options.timezone ?? DEFAULT_TIMEZONE
   const dryRun = Boolean(options.dryRun)
   const debug = Boolean(options.debug)
+  const force = Boolean(options.force)
 
   await ensureFirebaseAdmin()
   const firestore = admin.firestore()
@@ -135,20 +137,55 @@ export const sendDailyAppointmentReminders = async (options: ReminderOptions = {
   }
 
   if (todayAppointments.length === 0) {
-    return { processed: 0, sent: 0, skipped: 0, failed: 0, dryRun, dateKey: todayDateKey, timeZone, found: 0 }
+    return { processed: 0, sent: 0, skipped: 0, failed: 0, dryRun, dateKey: todayDateKey, timeZone, found: 0, skipReasons: debug ? [] : undefined }
   }
 
   let processed = 0
   let sent = 0
   let skipped = 0
   let failed = 0
+  const skipReasons: Array<{ appointmentId: string; reason: string; details?: any }> = []
 
   for (const document of todayAppointments) {
     const appointmentData = document.data() as Record<string, any>
     const appointmentId = document.id
+    const patientName = appointmentData.patientName ?? "Unknown"
+    const patientPhone = appointmentData.patientPhone || appointmentData.patientPhoneNumber || appointmentData.patientContact
 
-    if (appointmentData.reminderSentAt) {
-      console.log(`[Reminder] Skipping appointment ${appointmentId} - reminder already sent at ${appointmentData.reminderSentAt}`)
+    // Check if reminder was already sent
+    if (appointmentData.reminderSentAt && !force) {
+      const reason = `Reminder already sent at ${appointmentData.reminderSentAt}`
+      console.log(`[Reminder] Skipping appointment ${appointmentId} - ${reason}`)
+      skipReasons.push({
+        appointmentId,
+        reason: "already_sent",
+        details: {
+          reminderSentAt: appointmentData.reminderSentAt,
+          patientName,
+        },
+      })
+      skipped += 1
+      continue
+    }
+
+    if (appointmentData.reminderSentAt && force) {
+      console.log(`[Reminder] FORCE MODE: Sending reminder again for appointment ${appointmentId} (previously sent at ${appointmentData.reminderSentAt})`)
+    }
+
+    // Check for phone number
+    if (!patientPhone) {
+      const reason = `No phone number found for patient ${patientName}`
+      console.warn(`[Reminder] Skipping appointment ${appointmentId} - ${reason}`)
+      skipReasons.push({
+        appointmentId,
+        reason: "missing_phone",
+        details: {
+          patientName,
+          patientPhone: null,
+          patientPhoneNumber: appointmentData.patientPhoneNumber || null,
+          patientContact: appointmentData.patientContact || null,
+        },
+      })
       skipped += 1
       continue
     }
@@ -156,14 +193,6 @@ export const sendDailyAppointmentReminders = async (options: ReminderOptions = {
     const appointmentTime = appointmentData.appointmentTime ?? ""
     const appointmentDate = appointmentData.appointmentDate
     const doctorName = appointmentData.doctorName ?? "our doctor"
-    const patientName = appointmentData.patientName ?? ""
-    const patientPhone = appointmentData.patientPhone || appointmentData.patientPhoneNumber || appointmentData.patientContact
-
-    if (!patientPhone) {
-      console.warn(`[Reminder] Skipping appointment ${appointmentId} - no phone number for patient ${patientName}`)
-      skipped += 1
-      continue
-    }
 
     processed += 1
     const timeLabel = appointmentTime ? ` at ${appointmentTime}` : ""
@@ -211,9 +240,18 @@ export const sendDailyAppointmentReminders = async (options: ReminderOptions = {
     timeZone, 
     found: todayAppointments.length,
     totalChecked: snapshot.size,
+    skipReasons: debug ? skipReasons : undefined, // Only include skip reasons in debug mode
   }
 
   console.log(`[Reminder] Summary: ${JSON.stringify(summary)}`)
+
+  // Log detailed skip reasons if in debug mode
+  if (debug && skipReasons.length > 0) {
+    console.log(`[Reminder DEBUG] Skip reasons:`)
+    skipReasons.forEach(({ appointmentId, reason, details }) => {
+      console.log(`  - Appointment ${appointmentId}: ${reason}`, details || "")
+    })
+  }
 
   return summary
 }
