@@ -102,20 +102,20 @@ export async function GET() {
       // Continue without recent campaigns if query fails (e.g., missing index)
     }
 
-    // Calculate next cron execution (4:10 PM IST = 10:40 AM UTC)
-    // IST is UTC+5:30, so 4:10 PM IST (16:10 IST) = 10:40 AM UTC (16:10 - 5:30 = 10:40)
+    // Calculate next cron execution (4:35 PM IST = 11:05 AM UTC)
+    // IST is UTC+5:30, so 4:35 PM IST (16:35 IST) = 11:05 AM UTC (16:35 - 5:30 = 11:05)
     const now = new Date()
     const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     
     // Get current time in UTC
     const utcNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000))
     
-    // Calculate target time: 4:10 PM IST = 10:40 AM UTC
-    // Create a date for today at 10:40 AM UTC (hour 10, minute 40)
+    // Calculate target time: 4:35 PM IST = 11:05 AM UTC
+    // Create a date for today at 11:05 AM UTC (hour 11, minute 5)
     const nextCronUTC = new Date(utcNow)
-    nextCronUTC.setUTCHours(10, 40, 0, 0) // Set to 10:40 AM UTC (which is 4:10 PM IST)
+    nextCronUTC.setUTCHours(11, 5, 0, 0) // Set to 11:05 AM UTC (which is 4:35 PM IST)
     
-    // If today's 10:40 AM UTC has already passed, set for tomorrow
+    // If today's 11:05 AM UTC has already passed, set for tomorrow
     if (nextCronUTC.getTime() <= utcNow.getTime()) {
       nextCronUTC.setUTCDate(nextCronUTC.getUTCDate() + 1)
     }
@@ -144,9 +144,9 @@ export async function GET() {
       success: true,
       cron: {
         configured: cronConfigured,
-        schedule: "40 10 * * *", // Daily at 10:40 AM UTC (4:10 PM IST)
-        scheduleUTC: "40 10 * * *", // Actual cron schedule (UTC) - 10:40 AM UTC = 4:10 PM IST
-        scheduleDisplay: "4:10 PM IST (10:40 AM UTC)", // Human-readable display
+        schedule: "5 11 * * *", // Daily at 11:05 AM UTC (4:35 PM IST)
+        scheduleUTC: "5 11 * * *", // Actual cron schedule (UTC) - 11:05 AM UTC = 4:35 PM IST
+        scheduleDisplay: "4:35 PM IST (11:05 AM UTC)", // Human-readable display
         nextExecution: nextCronUTC.toISOString(),
         nextExecutionFormatted: new Date(nextCronUTC).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",

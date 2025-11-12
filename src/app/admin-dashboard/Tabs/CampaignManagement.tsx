@@ -397,10 +397,10 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                   <div>
                     <p className="text-slate-600 font-medium">Schedule</p>
                     <p className="text-slate-900">
-                      {cronStatus.cron.scheduleDisplay || cronStatus.cron.schedule || "4:10 PM IST (10:40 AM UTC)"}
+                      {cronStatus.cron.scheduleDisplay || cronStatus.cron.schedule || "4:35 PM IST (11:05 AM UTC)"}
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      Cron format: {cronStatus.cron.scheduleUTC || cronStatus.cron.schedule || "40 10 * * *"} (10:40 AM UTC)
+                      Cron format: {cronStatus.cron.scheduleUTC || cronStatus.cron.schedule || "5 11 * * *"} (11:05 AM UTC)
                     </p>
                   </div>
                   <div>
@@ -534,12 +534,12 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                     }
                   }}
                   className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                  title="Manually generate campaigns for today (useful for testing/local development). In production, campaigns are generated automatically via cron job at 4:10 PM IST (10:40 AM UTC)."
+                  title="Manually generate campaigns for today (useful for testing/local development). In production, campaigns are generated automatically via cron job at 4:35 PM IST (11:05 AM UTC)."
                 >
                   Generate Auto Campaigns (Today) - Manual Test
                 </button>
                 <p className="text-xs text-slate-500 italic">
-                  Note: In production, campaigns are automatically generated daily at 4:10 PM IST (10:40 AM UTC) via cron job. This button is for testing/local development only.
+                  Note: In production, campaigns are automatically generated daily at 4:35 PM IST (11:05 AM UTC) via cron job. This button is for testing/local development only.
                 </p>
               </div>
             </div>
