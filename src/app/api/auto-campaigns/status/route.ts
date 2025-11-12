@@ -102,27 +102,35 @@ export async function GET() {
       // Continue without recent campaigns if query fails (e.g., missing index)
     }
 
-    // Calculate next cron execution (midnight IST = 18:30 UTC)
+    // Calculate next cron execution (3:35 PM IST = 10:05 UTC)
     const now = new Date()
-    const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds
+    const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     
-    // Get current time in IST
+    // Get current time in UTC
+    const utcNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000))
+    
+    // Calculate target time: 3:35 PM IST = 10:05 UTC (15:35 - 5:30 = 10:05)
+    // Create a date for today at 10:05 UTC
+    const nextCronUTC = new Date(utcNow)
+    nextCronUTC.setUTCHours(10, 5, 0, 0) // Set to 10:05 UTC (which is 3:35 PM IST)
+    
+    // If today's 10:05 UTC has already passed, set for tomorrow
+    if (nextCronUTC.getTime() <= utcNow.getTime()) {
+      nextCronUTC.setUTCDate(nextCronUTC.getUTCDate() + 1)
+    }
+
+    // Get today's date in IST for health awareness day lookup
+    // IST is UTC+5:30, so we add the offset to get IST time
     const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
     const istTime = new Date(utcTime + istOffset)
+    // Get date components in IST (month and day)
+    const istMonth = istTime.getUTCMonth() + 1 // getUTCMonth returns 0-11
+    const istDay = istTime.getUTCDate()
+    const todayDateString = `${String(istMonth).padStart(2, '0')}-${String(istDay).padStart(2, '0')}`
     
-    // Calculate next midnight IST
-    const nextCronIST = new Date(istTime)
-    nextCronIST.setUTCHours(0, 0, 0, 0)
-    nextCronIST.setUTCDate(nextCronIST.getUTCDate() + 1) // Next midnight IST
-    
-    // Convert IST midnight to UTC for cron schedule
-    // IST midnight = 18:30 UTC previous day
-    const nextCronUTC = new Date(nextCronIST.getTime() - istOffset)
-
-    // Get today's date in IST
+    // For display purposes, also create a date object for today at midnight IST
     const todayIST = new Date(istTime)
     todayIST.setUTCHours(0, 0, 0, 0)
-    const todayDateString = `${String(todayIST.getUTCMonth() + 1).padStart(2, '0')}-${String(todayIST.getUTCDate()).padStart(2, '0')}`
 
     // Check if cron is configured (check vercel.json by checking if endpoint exists)
     const cronConfigured = true // Assume configured if endpoint exists
@@ -135,8 +143,8 @@ export async function GET() {
       success: true,
       cron: {
         configured: cronConfigured,
-        schedule: "30 18 * * *", // Daily at 18:30 UTC (midnight IST)
-        scheduleIST: "0 0 * * *", // Daily at midnight IST (display only)
+        schedule: "5 10 * * *", // Daily at 10:05 UTC (3:35 PM IST)
+        scheduleIST: "35 15 * * *", // Daily at 3:35 PM IST (display only)
         nextExecution: nextCronUTC.toISOString(),
         nextExecutionFormatted: new Date(nextCronUTC).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",
