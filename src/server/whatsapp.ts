@@ -75,7 +75,9 @@ export async function sendWhatsAppNotification(options: {
   message: string
   mediaUrl?: string | string[]
   buttons?: WhatsAppButton[]
-}): Promise<{ success: boolean; sid?: string; status?: string; error?: string }> {
+  contentSid?: string // Content SID for approved WhatsApp template
+  contentVariables?: Record<string, string> // Variables for template (e.g., {{variable_name}} or numbered "1", "2", etc.)
+}): Promise<{ success: boolean; sid?: string; status?: string; error?: string; errorCode?: number; rateLimitReached?: boolean }> {
   const client = getClient()
   const sender = normalizeSender()
 
@@ -103,53 +105,46 @@ export async function sendWhatsAppNotification(options: {
   }
 
   try {
-    // Format message with buttons if provided
-    let messageBody = options.message
-    
-    // Add buttons as clickable links in the message
-    // WhatsApp automatically makes URLs and phone numbers clickable
-    // Format them to look like buttons (they'll appear as clickable in WhatsApp)
-    if (options.buttons && Array.isArray(options.buttons) && options.buttons.length > 0) {
-      const buttons = options.buttons // Store in const so TypeScript knows it's defined
-      messageBody += "\n\n"
-      buttons.forEach((button, index) => {
-        if (button.type === "url" && button.url) {
-          // Format as clickable link button (WhatsApp will make URL clickable)
-          messageBody += `🔗 *${button.title}*\n${button.url}\n`
-        } else if (button.type === "phone" && button.phone) {
-          // Format phone number as clickable call button
-          // WhatsApp automatically detects phone numbers and makes them clickable
-          const cleanPhone = button.phone.replace(/[^\d+]/g, "")
-          messageBody += `📞 *${button.title}*\n${cleanPhone}\n`
-        } else if (button.type === "text") {
-          messageBody += `📋 *${button.title}*\n`
-        }
-        // Add separator between buttons (except last one)
-        if (index < buttons.length - 1) {
-          messageBody += "\n"
-        }
-      })
-    }
-    
-    // Add footer
-    messageBody += "\n\n_This is an automated message from Harmony Medical Services._"
-
     const payload: MessageListInstanceCreateOptions = {
       from: sender,
       to: recipient,
-      body: messageBody,
+    }
+
+    // Use approved WhatsApp template with Content SID if provided
+    if (options.contentSid && options.contentVariables) {
+      console.log(`[WhatsApp] Using approved template with Content SID: ${options.contentSid}`)
+      payload.contentSid = options.contentSid
+      payload.contentVariables = JSON.stringify(options.contentVariables)
+    } else {
+      // Fallback to plain text with formatted buttons
+      let messageBody = options.message
+      
+      // Add buttons as clickable links in the message
+      if (options.buttons && Array.isArray(options.buttons) && options.buttons.length > 0) {
+        const buttons = options.buttons
+        messageBody += "\n\n"
+        buttons.forEach((button, index) => {
+          if (button.type === "url" && button.url) {
+            messageBody += `🔗 *${button.title}*\n${button.url}\n`
+          } else if (button.type === "phone" && button.phone) {
+            const cleanPhone = button.phone.replace(/[^\d+]/g, "")
+            messageBody += `📞 *${button.title}*\n${cleanPhone}\n`
+          } else if (button.type === "text") {
+            messageBody += `📋 *${button.title}*\n`
+          }
+          if (index < buttons.length - 1) {
+            messageBody += "\n"
+          }
+        })
+      }
+      
+      messageBody += "\n\n_This is an automated message from Harmony Medical Services._"
+      payload.body = messageBody
     }
 
     if (options.mediaUrl) {
       payload.mediaUrl = Array.isArray(options.mediaUrl) ? options.mediaUrl : [options.mediaUrl]
     }
-
-    // Note: Interactive buttons require WhatsApp Business API approval and message templates
-    // For now, we use clickable links which work immediately without approval
-    // To use interactive buttons, you need to:
-    // 1. Register message templates with WhatsApp
-    // 2. Use Twilio's Content API
-    // 3. Get WhatsApp Business API approval
 
     const response = await client.messages.create(payload)
     
@@ -165,6 +160,23 @@ export async function sendWhatsAppNotification(options: {
   } catch (error: any) {
     const err = error instanceof Error ? error.message : "Unknown Twilio error"
     console.error("[WhatsApp] Failed to send WhatsApp message:", err)
-    return { success: false, error: err }
+    
+    // Check for rate limit errors
+    if (
+      error.code === 63038 ||
+      error.status === 429 ||
+      error.message?.includes("daily messages limit") ||
+      error.message?.includes("exceeded the 50 daily") ||
+      error.message?.includes("Too Many Requests")
+    ) {
+      return {
+        success: false,
+        error: "Daily message limit reached (50 messages/day). Limit resets at midnight UTC (5:30 AM IST).",
+        errorCode: error.code || 63038,
+        rateLimitReached: true,
+      }
+    }
+    
+    return { success: false, error: err, errorCode: error.code }
   }
 }

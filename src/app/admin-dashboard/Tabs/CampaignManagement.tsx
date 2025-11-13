@@ -34,7 +34,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const [filter, setFilter] = useState<{status: CampaignStatus|"all"}>({ status: "all" })
   const [cronStatus, setCronStatus] = useState<any>(null)
   const [loadingCronStatus, setLoadingCronStatus] = useState(false)
-  const [sendWhatsAppOnManualGenerate, setSendWhatsAppOnManualGenerate] = useState(false)
+  const [sendWhatsAppOnManualGenerate, setSendWhatsAppOnManualGenerate] = useState(true)
 
   // Reload campaigns function - reusable and safe (doesn't clear on error)
   // This function loads ALL campaigns from Firestore without any filtering
@@ -557,8 +557,46 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                   >
                     Generate Auto Campaigns (Today) - Manual Test
                   </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    setSuccessMessage("Generating random awareness day campaign...")
+
+                    const sendWhatsApp = sendWhatsAppOnManualGenerate ? "true" : "false"
+                    const response = await fetch(
+                      `/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=${sendWhatsApp}&random=true`
+                    )
+                    const data = await response.json()
+                    if (data.success) {
+                      if (data.campaignsGenerated === 0) {
+                        setSuccessMessage(`No new campaigns generated. ${data.message || "Campaigns may already exist for today."}`)
+                      } else {
+                        const whatsAppMsg = sendWhatsAppOnManualGenerate
+                          ? "✅ Generated random campaign and sent WhatsApp messages with the booking link!"
+                          : "✅ Generated random campaign successfully!"
+                        setSuccessMessage(whatsAppMsg)
+                        setTimeout(async () => {
+                          await reloadCampaigns()
+                          await checkCronStatus()
+                          setSuccessMessage("Campaigns refreshed!")
+                        }, 1000)
+                      }
+                    } else {
+                      setSuccessMessage(`❌ Error: ${data.error || "Failed to generate random campaign"}`)
+                    }
+                  } catch (error: any) {
+                    console.error("Error generating random campaign:", error)
+                    setSuccessMessage(`❌ Error: ${error?.message || "Failed to generate random campaign"}`)
+                  }
+                }}
+                className="rounded-lg border border-purple-600 bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-purple-700"
+                title="Generate a random awareness day campaign for quick WhatsApp testing."
+              >
+                🎲 Generate Random Campaign (Test)
+              </button>
                   <p className="text-xs text-slate-500 italic">
-                    Note: In production, campaigns are automatically generated daily at midnight IST (6:30 PM UTC) via cron job with WhatsApp notifications enabled. This button is for testing/local development. Enable the checkbox above to also send WhatsApp messages to patients.
+                Note: In production, campaigns are automatically generated daily at midnight IST (6:30 PM UTC) via cron job with WhatsApp notifications enabled. These manual buttons are for testing/local development. Enable the checkbox above to send WhatsApp messages to patients.
                   </p>
                 </div>
               </div>

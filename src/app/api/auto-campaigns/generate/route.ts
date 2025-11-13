@@ -4,12 +4,12 @@
  * Can be called manually or via cron job
  * 
  * CRON SCHEDULE:
- * - Schedule: "20 06 * * *" (6:20 AM UTC daily)
- * - IST Time: 11:50 AM IST
- * - UTC Time: 6:20 AM UTC (06:20 UTC)
- * - Time Conversion: IST = UTC + 5:30, so 11:50 AM IST = 6:20 AM UTC
- * - Example: 11:50 AM IST on Jan 2 = 6:20 AM UTC on Jan 2
- * - Cron runs daily at 6:20 AM UTC, which is 11:50 AM IST
+ * - Schedule: "50 09 * * *" (9:50 AM UTC daily)
+ * - IST Time: 3:20 PM IST
+ * - UTC Time: 9:50 AM UTC (09:50 UTC)
+ * - Time Conversion: IST = UTC + 5:30, so 3:20 PM IST = 9:50 AM UTC
+ * - Example: 3:20 PM IST on Jan 2 = 9:50 AM UTC on Jan 2
+ * - Cron runs daily at 9:50 AM UTC, which is 3:20 PM IST
  */
 
 export const dynamic = 'force-dynamic' // Prevent caching for cron jobs
@@ -32,10 +32,11 @@ import { slugify } from "@/utils/campaigns"
  * - publish: "true" | "false" (default: "true")
  * - sendWhatsApp: "true" | "false" (default: "false")
  * - test: "true" | "false" (default: "false") - Create fake awareness day for testing
+ * - random: "true" | "false" (default: "false") - Create random awareness day for testing
  * 
  * CRON CONFIGURATION (vercel.json):
  * - Path: "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true"
- * - Schedule: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
+ * - Schedule: "50 09 * * *" (9:50 AM UTC = 3:20 PM IST)
  */
 export async function GET(request: Request) {
   const startTime = Date.now()
@@ -63,8 +64,10 @@ export async function GET(request: Request) {
                              (url.searchParams.get("sendWhatsApp") !== "false" && isCronTrigger)
     // Test mode: Create a fake awareness day for today (for testing purposes only)
     const testMode = url.searchParams.get("test") === "true"
+    // Random mode: Create a random awareness day (for testing with variety)
+    const randomMode = url.searchParams.get("random") === "true"
 
-    console.log(`[auto-campaigns-generate] Parameters: check=${checkParam}, publish=${publishParam}, sendWhatsApp=${sendWhatsAppParam}, test=${testMode} (trigger: ${triggerSource})`)
+    console.log(`[auto-campaigns-generate] Parameters: check=${checkParam}, publish=${publishParam}, sendWhatsApp=${sendWhatsAppParam}, test=${testMode}, random=${randomMode} (trigger: ${triggerSource})`)
 
     // Get health awareness days based on check parameter
     let healthDays =
@@ -72,8 +75,46 @@ export async function GET(request: Request) {
         ? getHealthAwarenessDaysForTomorrow()
         : getHealthAwarenessDaysForToday()
 
+    // RANDOM MODE: Create a random awareness day with random health topics
+    if (randomMode && checkParam === "today") {
+      console.log(`[auto-campaigns-generate] RANDOM MODE: Creating random awareness day`)
+      const now = new Date()
+      const istOffset = 5.5 * 60 * 60 * 1000
+      const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
+      const istTime = new Date(utcTime + istOffset)
+      const month = String(istTime.getUTCMonth() + 1).padStart(2, '0')
+      const day = String(istTime.getUTCDate()).padStart(2, '0')
+      const randomDate = `${month}-${day}`
+      
+      // Random health topics for variety
+      const randomTopics = [
+        { name: "Heart Health Awareness Day", keywords: ["heart", "cardiac", "cardiovascular", "bp"], specialization: ["Cardiology"] },
+        { name: "Mental Wellness Day", keywords: ["mental", "wellness", "stress", "anxiety"], specialization: ["Psychiatry"] },
+        { name: "Diabetes Prevention Day", keywords: ["diabetes", "sugar", "blood glucose", "prevention"], specialization: ["Endocrinology"] },
+        { name: "Women's Health Day", keywords: ["women", "gynecology", "reproductive", "health"], specialization: ["Gynecology"] },
+        { name: "Child Health Day", keywords: ["children", "pediatrics", "vaccination", "growth"], specialization: ["Pediatrics"] },
+        { name: "Eye Care Awareness Day", keywords: ["eye", "vision", "ophthalmology", "sight"], specialization: ["Ophthalmology"] },
+        { name: "Bone Health Day", keywords: ["bone", "orthopedic", "fracture", "calcium"], specialization: ["Orthopedics"] },
+        { name: "Skin Health Day", keywords: ["skin", "dermatology", "acne", "dermatitis"], specialization: ["Dermatology"] },
+        { name: "Digestive Health Day", keywords: ["digestive", "gastroenterology", "stomach", "gut"], specialization: ["Gastroenterology"] },
+        { name: "Respiratory Health Day", keywords: ["respiratory", "lungs", "breathing", "asthma"], specialization: ["Pulmonology"] },
+      ]
+      
+      const randomTopic = randomTopics[Math.floor(Math.random() * randomTopics.length)]
+      
+      healthDays = [{
+        name: randomTopic.name,
+        date: randomDate,
+        description: `A special awareness day focused on ${randomTopic.name.toLowerCase()}. Take care of your health and schedule a checkup today.`,
+        keywords: randomTopic.keywords,
+        targetAudience: "all",
+        priority: Math.floor(Math.random() * 3) + 3, // Priority 3-5
+        specialization: randomTopic.specialization,
+      }]
+      console.log(`[auto-campaigns-generate] RANDOM MODE: Created random awareness day: ${healthDays[0].name} (${randomDate})`)
+    }
     // TEST MODE: If test mode is enabled and no awareness days found, create a fake one for today
-    if (testMode && healthDays.length === 0 && checkParam === "today") {
+    else if (testMode && healthDays.length === 0 && checkParam === "today") {
       console.log(`[auto-campaigns-generate] TEST MODE: Creating fake awareness day for testing`)
       const now = new Date()
       const istOffset = 5.5 * 60 * 60 * 1000
@@ -333,8 +374,7 @@ export async function GET(request: Request) {
           })
         }
 
-        // Send WhatsApp notifications if enabled
-        // Send WhatsApp even if campaign already exists (when user explicitly requests it)
+
         // Only send notifications if the campaign is for today (not tomorrow)
         if (sendWhatsAppParam && whatsAppAdvertisement.shortMessage && checkParam === "today") {
           try {
@@ -348,48 +388,45 @@ export async function GET(request: Request) {
                 ? process.env.NEXT_PUBLIC_BASE_URL
                 : requestUrl.origin || request.headers.get("origin") || "https://your-domain.com"
             
-            // Build the book appointment URL
-            // Use the campaign's ctaHref if available, otherwise default to book appointment page
-            const appointmentPath = whatsAppAdvertisement.ctaHref || "/patient-dashboard/book-appointment"
-            const appointmentUrl = appointmentPath.startsWith("http") 
-              ? appointmentPath 
-              : `${baseUrl}${appointmentPath.startsWith("/") ? appointmentPath : `/${appointmentPath}`}`
+            let appointmentUrl = whatsAppAdvertisement.ctaHref || "/patient-dashboard/book-appointment"
+            if (!appointmentUrl.startsWith("http")) {
+              const normalizedPath = (appointmentUrl.startsWith("/") ? appointmentUrl : `/${appointmentUrl}`)
+                .replace(/\/{2,}/g, "/")
+                .replace("/patient-dashboard/patient-dashboard/", "/patient-dashboard/")
+
+              let origin = baseUrl
+              try {
+                origin = new URL(baseUrl).origin
+              } catch {
+                // baseUrl might already be an origin string; leave as-is
+              }
+
+              appointmentUrl = `${origin}${normalizedPath}`
+            }
             
-            // Get hospital phone number from environment or use default
-            const hospitalPhone = process.env.HOSPITAL_PHONE || process.env.CONTACT_PHONE || "+91-1234567890"
-            const phoneNumber = hospitalPhone.replace(/[^\d+]/g, "") // Clean phone number for tel: link
-            const phoneDisplay = hospitalPhone // Keep formatted phone for display
+            // Use approved WhatsApp template with Content SID
+            // Content SID: HX21c0a92f2073af6a3102564e0e7c1141
+            const whatsAppContentSid = process.env.WHATSAPP_CONTENT_SID || "HX42269b25d07c88206e6f00f2bfdddbd4"
             
-            // Format WhatsApp message with campaign info and buttons
-            // WhatsApp automatically makes URLs and phone numbers clickable (no approval needed)
-            // For interactive buttons like in the image, you need WhatsApp Business API approval
+            // Prepare content variables for the template
+            // Using numbered variables as per Twilio Content Template format
+            // Variable mapping: "1" = name, "2" = campaignTitle, "3" = campaignMessage, "4" = appointmentUrl, "6" = appointmentUrl (for button)
+            // Note: Variables will be populated per patient in the loop below
+            const baseContentVariables: Record<string, string> = {
+              "2": whatsAppCampaignTitle,
+              "3": whatsAppAdvertisement.shortMessage,
+              "4": appointmentUrl,
+              "6": appointmentUrl, // For button URL
+            }
+            
+            // Fallback message (used if template fails)
             const whatsAppMessage = `🏥 *${whatsAppCampaignTitle}*
 
 ${whatsAppAdvertisement.shortMessage}
 
 To book an appointment or learn more, please use the options below:`
 
-            // Create buttons array for WhatsApp
-            // These will appear as clickable links/buttons in the message
-            // WhatsApp automatically formats URLs and phone numbers as clickable buttons
-            const buttons = [
-              {
-                type: "url" as const,
-                title: "Book Appointment",
-                url: appointmentUrl,
-              },
-              {
-                type: "phone" as const,
-                title: "Call Us",
-                phone: phoneDisplay, // Use formatted phone for display
-              },
-            ]
-            
-            // Note: True interactive buttons (like in the image) require:
-            // 1. WhatsApp Business API approval
-            // 2. Message template registration
-            // 3. Using Twilio's Content API
-            // For now, we use clickable links which work immediately
+            const messageWithLink = `${whatsAppMessage}\n\nBook Appointment: ${appointmentUrl}`
 
             // Get all active patients with phone numbers
             const patientsSnapshot = await db
@@ -402,13 +439,21 @@ To book an appointment or learn more, please use the options below:`
             patientsSnapshot.forEach((doc) => {
               const patientData = doc.data()
               const phone = patientData.phone || patientData.phoneNumber || patientData.contact
+              const patientName = patientData.name || patientData.fullName || "Patient"
 
               if (phone && phone.trim() !== "") {
+                // Include patient name in content variables (variable "1")
+                const contentVariables = {
+                  ...baseContentVariables,
+                  "1": patientName, // Patient name for personalization
+                }
+                
                 whatsAppPromises.push(
                   sendWhatsAppNotification({
                     to: phone,
-                    message: whatsAppMessage,
-                    buttons: buttons,
+                    message: messageWithLink, // Fallback message if template fails
+                    contentSid: whatsAppContentSid, // Use approved template
+                    contentVariables: contentVariables, // Template variables with numbered keys
                   })
                     .then((result) => {
                       if (!result.success) {

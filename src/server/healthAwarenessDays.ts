@@ -216,6 +216,15 @@ export const HEALTH_AWARENESS_DAYS: HealthAwarenessDay[] = [
     priority: 4,
     specialization: ["Pulmonology", "Pediatrics", "General Physician"],
   },
+  {
+    name: "World Diabetes Day",
+    date: "11-13",
+    description: "Raising awareness about diabetes prevention, management, and healthy living.",
+    keywords: ["diabetes", "sugar", "endocrine", "insulin", "health"],
+    targetAudience: "all",
+    priority: 4,
+    specialization: ["Endocrinology", "General Physician", "Nutritionist"],
+  },
   
   // December
   {
