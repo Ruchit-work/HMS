@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     }
 
     // Simple test message
-    const testMessage = `🧪 *Test Message - Cron Job Working!*
+    const testMessage = `🧪 *Test Message - Cron Job Workin good!*
 
 This is a test message to verify the cron job is running correctly.
 
