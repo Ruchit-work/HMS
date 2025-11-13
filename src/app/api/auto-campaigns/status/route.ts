@@ -4,11 +4,11 @@
  * Returns last execution time, recent campaigns, and cron configuration
  * 
  * CRON SCHEDULE:
- * - Schedule: "10 11 * * *" (11:10 AM UTC daily)
- * - IST Time: 4:40 PM IST
- * - UTC Time: 11:10 AM UTC (11:10 UTC)
- * - Time Conversion: IST = UTC + 5:30, so 4:40 PM IST = 11:10 AM UTC
- * - Example: 4:40 PM IST on Jan 2 = 11:10 AM UTC on Jan 2
+ * - Schedule: "30 00 * * *" (00:30 AM UTC daily)
+ * - IST Time: 6:00 AM IST
+ * - UTC Time: 00:30 AM UTC (00:30 UTC)
+ * - Time Conversion: IST = UTC + 5:30, so 6:00 AM IST = 00:30 AM UTC
+ * - Example: 6:00 AM IST on Jan 2 = 00:30 AM UTC on Jan 2
  */
 
 import { NextResponse } from "next/server"
@@ -20,7 +20,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
  * 
  * CRON CONFIGURATION (vercel.json):
  * - Path: "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true"
- * - Schedule: "10 11 * * *" (11:10 AM UTC = 4:40 PM IST)
+ * - Schedule: "30 00 * * *" (00:30 AM UTC = 6:00 AM IST)
  */
 export async function GET() {
   try {
@@ -90,22 +90,22 @@ export async function GET() {
     }
 
     // Calculate next cron execution
-    // CRON SCHEDULE: "10 11 * * *" (11:10 AM UTC = 4:40 PM IST)
-    // IST is UTC+5:30, so 4:40 PM IST = 11:10 AM UTC (11:10 UTC)
-    // Example: 4:40 PM IST on Jan 2 = 11:10 AM UTC on Jan 2
+    // CRON SCHEDULE: "30 00 * * *" (00:30 AM UTC = 6:00 AM IST)
+    // IST is UTC+5:30, so 6:00 AM IST = 00:30 AM UTC (00:30 UTC)
+    // Example: 6:00 AM IST on Jan 2 = 00:30 AM UTC on Jan 2
     const now = new Date()
     const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     
     // Get current time in UTC
     const utcNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000))
     
-    // Calculate target time: 4:40 PM IST = 11:10 AM UTC (11:10 UTC)
-    // CRON SCHEDULE: "10 11 * * *" runs at 11:10 AM UTC (11:10 UTC) which is 4:40 PM IST
-    // Create a date for today at 11:10 AM UTC (hour 11, minute 10)
+    // Calculate target time: 6:00 AM IST = 00:30 AM UTC (00:30 UTC)
+    // CRON SCHEDULE: "30 00 * * *" runs at 00:30 AM UTC (00:30 UTC) which is 6:00 AM IST
+    // Create a date for today at 00:30 AM UTC (hour 00, minute 30)
     const nextCronUTC = new Date(utcNow)
-    nextCronUTC.setUTCHours(11, 10, 0, 0) // Set to 11:10 AM UTC (11:10 UTC) = 4:40 PM IST
+    nextCronUTC.setUTCHours(0, 30, 0, 0) // Set to 00:30 AM UTC (00:30 UTC) = 6:00 AM IST
     
-    // If today's 11:10 AM UTC has already passed, set for tomorrow
+    // If today's 00:30 AM UTC has already passed, set for tomorrow
     if (nextCronUTC.getTime() <= utcNow.getTime()) {
       nextCronUTC.setUTCDate(nextCronUTC.getUTCDate() + 1)
     }
@@ -134,9 +134,9 @@ export async function GET() {
       success: true,
       cron: {
         configured: cronConfigured,
-        schedule: "10 11 * * *", // Daily at 11:10 AM UTC (4:40 PM IST)
-        scheduleUTC: "10 11 * * *", // Actual cron schedule (UTC) - 11:10 AM UTC = 4:40 PM IST
-        scheduleDisplay: "4:40 PM IST (11:10 AM UTC)", // Human-readable display
+        schedule: "30 00 * * *", // Daily at 00:30 AM UTC (6:00 AM IST)
+        scheduleUTC: "30 00 * * *", // Actual cron schedule (UTC) - 00:30 AM UTC = 6:00 AM IST
+        scheduleDisplay: "6:00 AM IST (00:30 AM UTC)", // Human-readable display
         nextExecution: nextCronUTC.toISOString(),
         nextExecutionFormatted: new Date(nextCronUTC).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",

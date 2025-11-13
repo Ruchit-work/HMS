@@ -148,9 +148,9 @@ export async function GET(request: Request) {
     }
 
     // Determine the target date for campaigns (in IST)
-    // CRON SCHEDULE: "10 11 * * *" (11:10 AM UTC = 4:40 PM IST)
-    // IST is UTC+5:30, so 4:40 PM IST = 11:10 AM UTC (11:10 UTC)
-    // Example: 4:40 PM IST on Jan 2 = 11:10 AM UTC on Jan 2
+    // CRON SCHEDULE: "30 00 * * *" (00:30 AM UTC = 6:00 AM IST)
+    // IST is UTC+5:30, so 6:00 AM IST = 00:30 AM UTC (00:30 UTC)
+    // Example: 6:00 AM IST on Jan 2 = 00:30 AM UTC on Jan 2
     const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     const now = new Date()
     // Get current UTC time
@@ -170,7 +170,7 @@ export async function GET(request: Request) {
     targetIST.setUTCMilliseconds(0)
     
     // Convert IST time to UTC for Firestore storage
-    // CRON SCHEDULE: "10 11 * * *" (11:10 AM UTC = 4:40 PM IST)
+    // CRON SCHEDULE: "30 00 * * *" (00:30 AM UTC = 6:00 AM IST)
     // Note: Campaigns are created for today's date in IST
     const targetDateUTC = new Date(targetIST.getTime() - istOffset)
 
