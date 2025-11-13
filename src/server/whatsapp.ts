@@ -109,9 +109,10 @@ export async function sendWhatsAppNotification(options: {
     // Add buttons as clickable links in the message
     // WhatsApp automatically makes URLs and phone numbers clickable
     // Format them to look like buttons (they'll appear as clickable in WhatsApp)
-    if (options.buttons && options.buttons.length > 0) {
+    if (options.buttons && Array.isArray(options.buttons) && options.buttons.length > 0) {
+      const buttons = options.buttons // Store in const so TypeScript knows it's defined
       messageBody += "\n\n"
-      options.buttons.forEach((button, index) => {
+      buttons.forEach((button, index) => {
         if (button.type === "url" && button.url) {
           // Format as clickable link button (WhatsApp will make URL clickable)
           messageBody += `🔗 *${button.title}*\n${button.url}\n`
@@ -124,7 +125,7 @@ export async function sendWhatsAppNotification(options: {
           messageBody += `📋 *${button.title}*\n`
         }
         // Add separator between buttons (except last one)
-        if (index < options.buttons.length - 1) {
+        if (index < buttons.length - 1) {
           messageBody += "\n"
         }
       })
