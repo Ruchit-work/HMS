@@ -1,16 +1,4 @@
-/**
- * Auto Campaign Generation API
- * This endpoint generates and publishes campaigns automatically based on health awareness days
- * Can be called manually or via cron job
- * 
- * CRON SCHEDULE:
- * - Schedule: "40 10 * * *" (10:40 AM UTC daily)
- * - IST Time: 4:10 PM IST
- * - UTC Time: 10:40 AM UTC (10:40 UTC)
- * - Time Conversion: IST = UTC + 5:30, so 4:10 PM IST = 10:40 AM UTC
- * - Example: 4:10 PM IST on Jan 2 = 10:40 AM UTC on Jan 2
- * - Cron runs daily at 10:40 AM UTC, which is 4:10 PM IST
- */
+
 
 export const dynamic = 'force-dynamic' // Prevent caching for cron jobs
 export const revalidate = 0
@@ -25,19 +13,7 @@ import { generateAdvertisements } from "@/server/groqAdvertisementGenerator"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { slugify } from "@/utils/campaigns"
 
-/**
- * GET /api/auto-campaigns/generate
- * Query params:
- * - check: "today" | "tomorrow" (default: "today")
- * - publish: "true" | "false" (default: "true")
- * - sendWhatsApp: "true" | "false" (default: "false")
- * - test: "true" | "false" (default: "false") - Create fake awareness day for testing
- * - random: "true" | "false" (default: "false") - Create random awareness day for testing
- * 
- * CRON CONFIGURATION (vercel.json):
- * - Path: "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true"
- * - Schedule: "40 10 * * *" (10:40 AM UTC = 4:10 PM IST)
- */
+
 export async function GET(request: Request) {
   const startTime = Date.now()
   const isCronTrigger = request.headers.get("x-vercel-cron") !== null
@@ -172,9 +148,9 @@ export async function GET(request: Request) {
     }
 
     // Determine the target date for campaigns (in IST)
-    // CRON SCHEDULE: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
-    // IST is UTC+5:30, so 11:50 AM IST = 6:20 AM UTC (06:20 UTC)
-    // Example: 11:50 AM IST on Jan 2 = 6:20 AM UTC on Jan 2
+    // CRON SCHEDULE: "10 11 * * *" (11:10 AM UTC = 4:40 PM IST)
+    // IST is UTC+5:30, so 4:40 PM IST = 11:10 AM UTC (11:10 UTC)
+    // Example: 4:40 PM IST on Jan 2 = 11:10 AM UTC on Jan 2
     const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     const now = new Date()
     // Get current UTC time
@@ -194,7 +170,7 @@ export async function GET(request: Request) {
     targetIST.setUTCMilliseconds(0)
     
     // Convert IST time to UTC for Firestore storage
-    // CRON SCHEDULE: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
+    // CRON SCHEDULE: "10 11 * * *" (11:10 AM UTC = 4:40 PM IST)
     // Note: Campaigns are created for today's date in IST
     const targetDateUTC = new Date(targetIST.getTime() - istOffset)
 
