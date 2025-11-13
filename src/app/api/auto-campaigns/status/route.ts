@@ -2,43 +2,30 @@
  * Cron Job Status API
  * This endpoint checks the status of the auto-campaign generation cron job
  * Returns last execution time, recent campaigns, and cron configuration
+ * 
+ * CRON SCHEDULE:
+ * - Schedule: "20 06 * * *" (6:20 AM UTC daily)
+ * - IST Time: 11:50 AM IST
+ * - UTC Time: 6:20 AM UTC (06:20 UTC)
+ * - Time Conversion: IST = UTC + 5:30, so 11:50 AM IST = 6:20 AM UTC
+ * - Example: 11:50 AM IST on Jan 2 = 6:20 AM UTC on Jan 2
  */
 
 import { NextResponse } from "next/server"
-import admin from "firebase-admin"
-
-function initAdmin() {
-  if (!admin.apps.length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY
-
-    if (privateKey && privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      privateKey = privateKey.slice(1, -1)
-    }
-    if (privateKey) {
-      privateKey = privateKey.replace(/\\n/g, "\n")
-    }
-
-    if (!projectId || !clientEmail || !privateKey) {
-      return false
-    }
-
-    admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-    })
-  }
-  return true
-}
+import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
 /**
  * GET /api/auto-campaigns/status
  * Returns cron job status, last execution, and recent campaigns
+ * 
+ * CRON CONFIGURATION (vercel.json):
+ * - Path: "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true"
+ * - Schedule: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
  */
 export async function GET() {
   try {
-    const ok = initAdmin()
-    if (!ok) {
+    const initResult = initFirebaseAdmin("auto-campaigns-status API")
+    if (!initResult.ok) {
       return NextResponse.json(
         { error: "Server not configured for admin" },
         { status: 500 }
@@ -102,21 +89,23 @@ export async function GET() {
       // Continue without recent campaigns if query fails (e.g., missing index)
     }
 
-    // Calculate next cron execution (Midnight IST = 6:30 PM UTC previous day)
-    // IST is UTC+5:30, so midnight IST (00:00 IST) = 6:30 PM UTC previous day (18:30 UTC)
-    // Example: 00:00 IST on Jan 2 = 18:30 UTC on Jan 1
+    // Calculate next cron execution
+    // CRON SCHEDULE: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
+    // IST is UTC+5:30, so 11:50 AM IST = 6:20 AM UTC (06:20 UTC)
+    // Example: 11:50 AM IST on Jan 2 = 6:20 AM UTC on Jan 2
     const now = new Date()
     const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     
     // Get current time in UTC
     const utcNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60 * 1000))
     
-    // Calculate target time: Midnight IST = 18:30 UTC (6:30 PM UTC)
-    // Create a date for today at 18:30 UTC (hour 18, minute 30)
+    // Calculate target time: 11:50 AM IST = 6:20 AM UTC (06:20 UTC)
+    // CRON SCHEDULE: "20 06 * * *" runs at 6:20 AM UTC (06:20 UTC) which is 11:50 AM IST
+    // Create a date for today at 6:20 AM UTC (hour 06, minute 20)
     const nextCronUTC = new Date(utcNow)
-    nextCronUTC.setUTCHours(18, 30, 0, 0) // Set to 6:30 PM UTC (which is midnight IST next day)
+    nextCronUTC.setUTCHours(6, 20, 0, 0) // Set to 6:20 AM UTC (06:20 UTC) = 11:50 AM IST
     
-    // If today's 18:30 UTC has already passed, set for tomorrow
+    // If today's 6:20 AM UTC has already passed, set for tomorrow
     if (nextCronUTC.getTime() <= utcNow.getTime()) {
       nextCronUTC.setUTCDate(nextCronUTC.getUTCDate() + 1)
     }
@@ -145,9 +134,9 @@ export async function GET() {
       success: true,
       cron: {
         configured: cronConfigured,
-        schedule: "30 18 * * *", // Daily at 6:30 PM UTC (Midnight IST)
-        scheduleUTC: "30 18 * * *", // Actual cron schedule (UTC) - 6:30 PM UTC = Midnight IST
-        scheduleDisplay: "Midnight IST (6:30 PM UTC)", // Human-readable display
+        schedule: "20 06 * * *", // Daily at 6:20 AM UTC (11:50 AM IST)
+        scheduleUTC: "20 06 * * *", // Actual cron schedule (UTC) - 6:20 AM UTC = 11:50 AM IST
+        scheduleDisplay: "11:50 AM IST (6:20 AM UTC)", // Human-readable display
         nextExecution: nextCronUTC.toISOString(),
         nextExecutionFormatted: new Date(nextCronUTC).toLocaleString("en-IN", {
           timeZone: "Asia/Kolkata",

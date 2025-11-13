@@ -1,27 +1,10 @@
 import { NextResponse } from 'next/server'
-import admin from 'firebase-admin'
-
-function initAdmin() {
-  if (!admin.apps.length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY
-    if (privateKey && privateKey.startsWith("\"") && privateKey.endsWith("\"")) {
-      privateKey = privateKey.slice(1, -1)
-    }
-    if (privateKey) privateKey = privateKey.replace(/\\n/g, "\n")
-    if (!projectId || !clientEmail || !privateKey) return false
-    admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey })
-    })
-  }
-  return true
-}
+import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
 export async function POST(req: Request) {
   try {
-    const ok = initAdmin()
-    if (!ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+    const initResult = initFirebaseAdmin("approve-refund API")
+    if (!initResult.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
     const { refundRequestId } = await req.json()
     if (!refundRequestId) {
       return NextResponse.json({ error: 'refundRequestId is required' }, { status: 400 })

@@ -1,29 +1,6 @@
-import admin from "firebase-admin"
+import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-
-const formatAppointmentDateTime = (date: string, time: string) => {
-  if (!date) return "the scheduled time"
-  const iso = `${date}T${time || "00:00"}`
-  const dt = new Date(iso)
-  if (Number.isNaN(dt.getTime())) {
-    return time ? `${date} at ${time}` : date
-  }
-
-  const formattedDate = dt.toLocaleDateString("en-IN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-
-  if (!time) return formattedDate
-
-  const formattedTime = dt.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-
-  return `${formattedDate} at ${formattedTime}`
-}
+import { formatAppointmentDateTime } from "@/utils/date"
 
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
@@ -47,35 +24,10 @@ const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => 
   })
 }
 
-function initAdmin() {
-  if (!admin.apps.length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY
-
-    if (privateKey && privateKey.startsWith("\"") && privateKey.endsWith("\"")) {
-      privateKey = privateKey.slice(1, -1)
-    }
-    if (privateKey) {
-      privateKey = privateKey.replace(/\\n/g, "\n")
-    }
-
-    if (!projectId || !clientEmail || !privateKey) {
-      console.warn("Firebase Admin env vars missing for create-appointment API.")
-      return false
-    }
-
-    admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey })
-    })
-  }
-  return true
-}
-
 export async function POST(request: Request) {
   try {
-    const ok = initAdmin()
-    if (!ok) {
+    const initResult = initFirebaseAdmin("create-appointment API")
+    if (!initResult.ok) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
 

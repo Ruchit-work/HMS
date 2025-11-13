@@ -13,6 +13,8 @@ import { UserData, Doctor, NotificationData } from "@/types/patient"
 import Footer from "@/components/ui/Footer"
 import { useSearchParams, useRouter } from "next/navigation"
 import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/whatsapp"
+import { isDateBlocked } from "@/utils/blockedDates"
+import { formatAppointmentDateTime } from "@/utils/date"
 
 export default function BookAppointmentPage() {
   return (
@@ -38,30 +40,6 @@ function BookAppointmentContent() {
   const rescheduleAppointmentId = useMemo(() => searchParams?.get('aptId') || '', [searchParams])
   const initialDoctorId = useMemo(() => searchParams?.get('doctorId') || '', [searchParams])
 
-  const formatAppointmentDateTime = useCallback((date: string, time: string) => {
-    if (!date) return "the scheduled time"
-
-    const isoString = `${date}T${time || "00:00"}`
-    const dt = new Date(isoString)
-    if (Number.isNaN(dt.getTime())) {
-      return time ? `${date} at ${time}` : date
-    }
-
-    const formattedDate = dt.toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-
-    if (!time) return formattedDate
-
-    const formattedTime = dt.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-
-    return `${formattedDate} at ${formattedTime}`
-  }, [])
 
   const sendWhatsAppSafely = useCallback(async (rawRecipient: string | null | undefined, message: string) => {
     const to = formatWhatsAppRecipient(rawRecipient ?? null)
@@ -107,7 +85,7 @@ function BookAppointmentContent() {
 
       await sendWhatsAppSafely(opts.patientPhone ?? null, message)
     },
-    [formatAppointmentDateTime, sendWhatsAppSafely]
+    [sendWhatsAppSafely]
   )
  
   useEffect(() => {
@@ -195,16 +173,8 @@ function BookAppointmentContent() {
     const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
     if (selectedDoctorData) {
       try {
-        const rawBlocked: any[] = Array.isArray((selectedDoctorData as any).blockedDates) ? (selectedDoctorData as any).blockedDates : []
-        const normalized: string[] = rawBlocked.map((b: any) => {
-          if (!b) return ''
-          if (typeof b === 'string') return b.slice(0, 10)
-          if (typeof b === 'object' && typeof b.date === 'string') return String(b.date).slice(0, 10)
-          if (b?.toDate) { const dt = b.toDate(); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2,'0'); const d = String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${d}` }
-          if (b?.seconds) { const dt = new Date(b.seconds*1000); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2,'0'); const d = String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${d}` }
-          return ''
-        }).filter(Boolean)
-        if (normalized.includes(appointmentData.date)) {
+        const blockedDates: any[] = Array.isArray((selectedDoctorData as any).blockedDates) ? (selectedDoctorData as any).blockedDates : []
+        if (isDateBlocked(appointmentData.date, blockedDates)) {
           setNotification({ type: 'error', message: 'Doctor is not available on the selected date' })
           return
         }

@@ -34,6 +34,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const [filter, setFilter] = useState<{status: CampaignStatus|"all"}>({ status: "all" })
   const [cronStatus, setCronStatus] = useState<any>(null)
   const [loadingCronStatus, setLoadingCronStatus] = useState(false)
+  const [sendWhatsAppOnManualGenerate, setSendWhatsAppOnManualGenerate] = useState(false)
 
   // Reload campaigns function - reusable and safe (doesn't clear on error)
   // This function loads ALL campaigns from Firestore without any filtering
@@ -496,51 +497,70 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                 {loadingCronStatus ? "Checking..." : "Check Cron Status"}
               </button>
               <div className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      setSuccessMessage("Checking today's health awareness days...")
-                      // First check what health awareness days are for today
-                      const checkResponse = await fetch("/api/auto-campaigns/test?date=today")
-                      const checkData = await checkResponse.json()
-                      
-                      if (checkData.healthDaysFound === 0) {
-                        setSuccessMessage(`No health awareness days found for today (${checkData.dateFormatted}). Check healthAwarenessDays.ts for available dates.`)
-                        return
-                      }
-                      
-                      setSuccessMessage(`Found ${checkData.healthDaysFound} health awareness day(s) for today: ${checkData.healthDays.map((d: any) => d.name).join(", ")}. Generating campaigns...`)
-                      
-                      const response = await fetch("/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=false")
-                      const data = await response.json()
-                      if (data.success) {
-                        if (data.campaignsGenerated === 0) {
-                          setSuccessMessage(`No new campaigns generated. ${data.message || "Campaigns may already exist for today."}`)
-                        } else {
-                          setSuccessMessage(`Generated ${data.campaignsGenerated} campaign(s) for today! Refreshing...`)
-                          setTimeout(async () => {
-                            await reloadCampaigns()
-                            await checkCronStatus()
-                            setSuccessMessage("Campaigns refreshed!")
-                          }, 1000)
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sendWhatsAppOnManualGenerate}
+                        onChange={(e) => setSendWhatsAppOnManualGenerate(e.target.checked)}
+                        className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span className="text-sm font-medium text-slate-700">
+                        Send WhatsApp notifications to patients
+                      </span>
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setSuccessMessage("Checking today's health awareness days...")
+                        // First check what health awareness days are for today
+                        const checkResponse = await fetch("/api/auto-campaigns/test?date=today")
+                        const checkData = await checkResponse.json()
+                        
+                        if (checkData.healthDaysFound === 0) {
+                          setSuccessMessage(`No health awareness days found for today (${checkData.dateFormatted}). Check healthAwarenessDays.ts for available dates.`)
+                          return
                         }
-                      } else {
-                        setSuccessMessage(`Error: ${data.error || "Failed to generate campaigns"}`)
+                        
+                        setSuccessMessage(`Found ${checkData.healthDaysFound} health awareness day(s) for today: ${checkData.healthDays.map((d: any) => d.name).join(", ")}. Generating campaigns...`)
+                        
+                        const sendWhatsApp = sendWhatsAppOnManualGenerate ? "true" : "false"
+                        const response = await fetch(`/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=${sendWhatsApp}`)
+                        const data = await response.json()
+                        if (data.success) {
+                          if (data.campaignsGenerated === 0) {
+                            setSuccessMessage(`No new campaigns generated. ${data.message || "Campaigns may already exist for today."}`)
+                          } else {
+                            const whatsAppMsg = sendWhatsAppOnManualGenerate 
+                              ? ` Generated ${data.campaignsGenerated} campaign(s) and sent WhatsApp notifications to all active patients!` 
+                              : ` Generated ${data.campaignsGenerated} campaign(s) for today!`
+                            setSuccessMessage(whatsAppMsg)
+                            setTimeout(async () => {
+                              await reloadCampaigns()
+                              await checkCronStatus()
+                              setSuccessMessage("Campaigns refreshed!")
+                            }, 1000)
+                          }
+                        } else {
+                          setSuccessMessage(`Error: ${data.error || "Failed to generate campaigns"}`)
+                        }
+                      } catch (error: any) {
+                        console.error("Error generating campaigns:", error)
+                        setSuccessMessage(`Error: ${error?.message || "Failed to generate campaigns"}`)
                       }
-                    } catch (error: any) {
-                      console.error("Error generating campaigns:", error)
-                      setSuccessMessage(`Error: ${error?.message || "Failed to generate campaigns"}`)
-                    }
-                  }}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                  title="Manually generate campaigns for today (useful for testing/local development). In production, campaigns are generated automatically via cron job at midnight IST (6:30 PM UTC)."
-                >
-                  Generate Auto Campaigns (Today) - Manual Test
-                </button>
-                <p className="text-xs text-slate-500 italic">
-                  Note: In production, campaigns are automatically generated daily at midnight IST (6:30 PM UTC) via cron job. This button is for testing/local development only.
-                </p>
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                    title="Manually generate campaigns for today (useful for testing/local development). In production, campaigns are generated automatically via cron job at midnight IST (6:30 PM UTC) with WhatsApp notifications enabled."
+                  >
+                    Generate Auto Campaigns (Today) - Manual Test
+                  </button>
+                  <p className="text-xs text-slate-500 italic">
+                    Note: In production, campaigns are automatically generated daily at midnight IST (6:30 PM UTC) via cron job with WhatsApp notifications enabled. This button is for testing/local development. Enable the checkbox above to also send WhatsApp messages to patients.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

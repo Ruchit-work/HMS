@@ -48,3 +48,42 @@ export const formatDateTime = (dateString: string) => {
   }
 }
 
+/**
+ * Format appointment date and time to a human-readable string
+ * @param date - Date string in YYYY-MM-DD format
+ * @param time - Time string in HH:MM format (24-hour)
+ * @returns Formatted string like "15 Jan 2024 at 2:30 PM" or "the scheduled time" if date is missing
+ * @example
+ * formatAppointmentDateTime("2024-01-15", "14:30")
+ * // Returns: "15 Jan 2024 at 2:30 PM"
+ */
+export function formatAppointmentDateTime(date: string, time: string): string {
+  if (!date) return "the scheduled time"
+  
+  const isoString = `${date}T${time || "00:00"}`
+  const dt = new Date(isoString)
+  
+  // If date is invalid, return a fallback
+  if (Number.isNaN(dt.getTime())) {
+    return time ? `${date} at ${time}` : date
+  }
+
+  // Format date in Indian locale (en-IN) for consistency with appointment display
+  const formattedDate = dt.toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+
+  // If no time provided, return only the date
+  if (!time) return formattedDate
+
+  // Format time in Indian locale (en-IN) for 12-hour format with AM/PM
+  const formattedTime = dt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+
+  return `${formattedDate} at ${formattedTime}`
+}
+

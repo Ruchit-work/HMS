@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
-    "test:auto-campaigns": "node -e \"console.log('Testing auto-campaigns...'); fetch('http://localhost:3000/api/auto-campaigns/test?date=today').then(r=>r.json()).then(d=>console.log(JSON.stringify(d,null,2))).catch(e=>console.error('Error:', e.message))\""
+    "test:auto-campaigns": "node -e \"console.log('Testing auto-campaigns...'); fetch('http://localhost:3000/api/auto-campaigns/test?date=today').then(r=>r.json()).then(d=>console.log(JSON.stringify(d,null,2))).catch(e=>console.error('Error:', e.message))\"",
+    "test:campaign": "node scripts/test-campaign-whatsapp.js",
+    "test:campaign:whatsapp": "node scripts/test-campaign-whatsapp.js --send-whatsapp",
+    "test:campaign:tomorrow": "node scripts/test-campaign-whatsapp.js --check=tomorrow"
   },
   "dependencies": {
     "axios": "^1.12.2",

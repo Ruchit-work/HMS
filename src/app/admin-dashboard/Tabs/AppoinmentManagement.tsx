@@ -11,6 +11,9 @@ import DeleteModal from '@/components/ui/DeleteModal'
 import { Appointment } from '@/types/patient'
 import SuccessToast from '@/components/ui/SuccessToast'
 import { formatDate, formatDateTime } from '@/utils/date'
+import { useTablePagination } from '@/hooks/useTablePagination'
+import Pagination from '@/components/ui/Pagination'
+import RefreshButton from '@/components/ui/RefreshButton'
 
 export default function AppoinmentManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
     const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -31,8 +34,6 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     const [selectedDoctorId, setSelectedDoctorId] = useState<string>('all')
     const [timeRange, setTimeRange] = useState<'all' | 'today' | 'last10' | 'month' | 'year'>('all')
     const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'completed' | 'cancelled'>('all')
-    const [currentPage, setCurrentPage] = useState<number>(1)
-    const [pageSize, setPageSize] = useState<number>(10)
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
     const resetFilters = () => {
@@ -42,7 +43,6 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
         setSearch('')
         setSortField('')
         setSortOrder('asc')
-        setCurrentPage(1)
     }
 
     const statusCounts = useMemo(() => {
@@ -185,7 +185,6 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             })) as Appointment[]
             setAppointments(appointmentsList)
             setFilteredAppointments(appointmentsList)
-            setCurrentPage(1)
             setLastUpdated(new Date())
         } catch (error) {
             setError((error as Error).message)
@@ -305,19 +304,21 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
         }
         
         setFilteredAppointments(filtered)
-        setCurrentPage(1)
     }, [search, appointments, sortField, sortOrder, selectedDoctorId, timeRange, statusFilter])
 
-    const totalPages = Math.max(1, Math.ceil(filteredAppointments.length / pageSize))
-    const paginatedAppointments = useMemo(() => {
-        const startIndex = (currentPage - 1) * pageSize
-        return filteredAppointments.slice(startIndex, startIndex + pageSize)
-    }, [filteredAppointments, currentPage, pageSize])
-
-    const goToPage = (page: number) => {
-        const nextPage = Math.min(Math.max(page, 1), totalPages)
-        setCurrentPage(nextPage)
-    }
+    // Use pagination hook
+    const {
+        currentPage,
+        pageSize,
+        totalPages,
+        paginatedItems: paginatedAppointments,
+        goToPage,
+        setPageSize,
+        resetPage,
+    } = useTablePagination(filteredAppointments, {
+        initialPageSize: 10,
+        resetOnFilterChange: true,
+    })
 
     // Protect component - only allow admins (moved after all hooks)
     if (authLoading) {
@@ -367,24 +368,12 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                     <span className="text-slate-500">{lastUpdatedDisplay}</span>
                                 </div>
                             )}
-                            <button
-                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+                            <RefreshButton
                                 onClick={fetchAppointments}
-                                disabled={loading}
-                                type="button"
-                            >
-                                {loading ? (
-                                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                ) : (
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                )}
-                                {loading ? 'Refreshing…' : 'Refresh data'}
-                            </button>
+                                loading={loading}
+                                variant="primary"
+                                label="Refresh data"
+                            />
                         </div>
                     </div>
 
@@ -411,8 +400,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             <div>
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Doctor</label>
                                 <select
-                                    value={selectedDoctorId}
-                                    onChange={(e) => setSelectedDoctorId(e.target.value)}
+                                    value={selectedDoctorId}  onChange={(e) => setSelectedDoctorId(e.target.value)}
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="all">All</option>
@@ -426,8 +414,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             <div>
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Time range</label>
                                 <select
-                                    value={timeRange}
-                                    onChange={(e) => setTimeRange(e.target.value as any)}
+                                    value={timeRange}   onChange={(e) => setTimeRange(e.target.value as any)}
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="all">All</option>
@@ -441,10 +428,8 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Search</label>
                                 <div className="relative">
                                     <input
-                                        type="text"
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search by patient, doctor, email, specialization, or patient ID…"
+                                        type="text" value={search}
+                                        onChange={(e) => setSearch(e.target.value)} placeholder="Search by patient, doctor, email, specialization, or patient ID…"
                                         className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                     <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -461,16 +446,12 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                     {statusTabs.map((tab) => {
                                         const active = statusFilter === tab.key
                                         return (
-                                            <button
-                                                key={tab.key}
-                                                type="button"
-                                                onClick={() => setStatusFilter(tab.key)}
+                                            <button key={tab.key}  type="button"   onClick={() => setStatusFilter(tab.key)}
                                                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                                                     active
                                                         ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                                                        : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700'
-                                                }`}
-                                            >
+                                                        : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700' 
+                                                           }`} >
                                                 <span>{tab.label}</span>
                                             </button>
                                         )
@@ -480,8 +461,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <span>Need a fresh start?</span>
                                 <button
-                                    type="button"
-                                    onClick={resetFilters}
+                                    type="button"   onClick={resetFilters}
                                     className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
                                 >
                                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -504,31 +484,20 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             <table className="w-full min-w-[1000px]">
                                 <thead className="sticky top-0 z-10 bg-white shadow-sm">
                                     <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                        <th
-                                            className="px-3 py-3 text-left hover:bg-slate-50"
-                                            onClick={() => handleSort('patientName')}
-                                        >
+                                        <th className="px-3 py-3 text-left hover:bg-slate-50"   onClick={() => handleSort('patientName')} >
                                             <div className="inline-flex items-center gap-1">
                                                 Patient ({filteredAppointments.length})
                                                 {sortField === 'patientName' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                                             </div>
                                         </th>
-                                        <th
-                                            className="hidden px-3 py-3 text-left hover:bg-slate-50 sm:table-cell"
-                                            onClick={() => handleSort('doctorName')}
-                                        >
+                                        <th className="hidden px-3 py-3 text-left hover:bg-slate-50 sm:table-cell" onClick={() => handleSort('doctorName')}>
                                             <div className="inline-flex items-center gap-1">
-                                                Doctor
-                                                {sortField === 'doctorName' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
+                                                Doctor   {sortField === 'doctorName' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                                             </div>
                                         </th>
-                                        <th
-                                            className="px-3 py-3 text-left hover:bg-slate-50"
-                                            onClick={() => handleSort('appointmentDate')}
-                                        >
+                                        <th className="px-3 py-3 text-left hover:bg-slate-50"onClick={() => handleSort('appointmentDate')}  >
                                             <div className="inline-flex items-center gap-1">
-                                                Date & time
-                                                {sortField === 'appointmentDate' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
+                                                Date & time  {sortField === 'appointmentDate' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                                             </div>
                                         </th>
                                         <th
@@ -658,55 +627,17 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             </table>
                         </div>
 
-                        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                Showing{' '}
-                                <span className="font-semibold text-slate-800">
-                                    {filteredAppointments.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–
-                                    {Math.min(currentPage * pageSize, filteredAppointments.length)}
-                                </span>{' '}
-                                of <span className="font-semibold text-slate-800">{filteredAppointments.length}</span> appointments
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                                <div className="flex items-center gap-2">
-                                    <span>Rows per page</span>
-                                    <select
-                                        value={pageSize}
-                                        onChange={(e) => {
-                                            setPageSize(Number(e.target.value))
-                                            setCurrentPage(1)
-                                        }}
-                                        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    >
-                                        {[10, 15, 20].map((size) => (
-                                            <option key={size} value={size}>
-                                                {size}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => goToPage(currentPage - 1)}
-                                        disabled={currentPage === 1}
-                                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        Prev
-                                    </button>
-                                    <span>
-                                        Page <span className="font-semibold text-slate-800">{currentPage}</span> of{' '}
-                                        <span className="font-semibold text-slate-800">{totalPages}</span>
-                                    </span>
-                                    <button
-                                        onClick={() => goToPage(currentPage + 1)}
-                                        disabled={currentPage === totalPages}
-                                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            pageSize={pageSize}
+                            totalItems={filteredAppointments.length}
+                            onPageChange={goToPage}
+                            onPageSizeChange={setPageSize}
+                            pageSizeOptions={[10, 15, 20]}
+                            showPageSizeSelector={true}
+                            itemLabel="appointments"
+                        />
                     </div>
                 </div>
             </div>

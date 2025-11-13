@@ -1,33 +1,8 @@
-import admin from "firebase-admin"
+import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 
 interface Params {
   admissionId: string
-}
-
-function initAdmin() {
-  if (!admin.apps.length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY
-
-    if (privateKey && privateKey.startsWith("\"") && privateKey.endsWith("\"")) {
-      privateKey = privateKey.slice(1, -1)
-    }
-    if (privateKey) {
-      privateKey = privateKey.replace(/\\n/g, "\n")
-    }
-
-    if (!projectId || !clientEmail || !privateKey) {
-      console.warn("Firebase Admin credentials missing for receptionist discharge API.")
-      return false
-    }
-
-    admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey })
-    })
-  }
-  return true
 }
 
 export async function POST(
@@ -35,8 +10,8 @@ export async function POST(
   context: { params: Promise<Params> }
 ) {
   try {
-    const ok = initAdmin()
-    if (!ok) {
+    const initResult = initFirebaseAdmin("receptionist-discharge API")
+    if (!initResult.ok) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
 

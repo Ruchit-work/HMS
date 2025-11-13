@@ -62,11 +62,19 @@ export async function getMessageStatus(sid: string): Promise<{ status?: string; 
   }
 }
 
+export interface WhatsAppButton {
+  type: "url" | "phone" | "text"
+  title: string
+  url?: string
+  phone?: string
+}
+
 export async function sendWhatsAppNotification(options: {
   to?: string | null | undefined
   fallbackRecipients?: Array<string | null | undefined>
   message: string
   mediaUrl?: string | string[]
+  buttons?: WhatsAppButton[]
 }): Promise<{ success: boolean; sid?: string; status?: string; error?: string }> {
   const client = getClient()
   const sender = normalizeSender()
@@ -95,15 +103,52 @@ export async function sendWhatsAppNotification(options: {
   }
 
   try {
+    // Format message with buttons if provided
+    let messageBody = options.message
+    
+    // Add buttons as clickable links in the message
+    // WhatsApp automatically makes URLs and phone numbers clickable
+    // Format them to look like buttons (they'll appear as clickable in WhatsApp)
+    if (options.buttons && options.buttons.length > 0) {
+      messageBody += "\n\n"
+      options.buttons.forEach((button, index) => {
+        if (button.type === "url" && button.url) {
+          // Format as clickable link button (WhatsApp will make URL clickable)
+          messageBody += `🔗 *${button.title}*\n${button.url}\n`
+        } else if (button.type === "phone" && button.phone) {
+          // Format phone number as clickable call button
+          // WhatsApp automatically detects phone numbers and makes them clickable
+          const cleanPhone = button.phone.replace(/[^\d+]/g, "")
+          messageBody += `📞 *${button.title}*\n${cleanPhone}\n`
+        } else if (button.type === "text") {
+          messageBody += `📋 *${button.title}*\n`
+        }
+        // Add separator between buttons (except last one)
+        if (index < options.buttons.length - 1) {
+          messageBody += "\n"
+        }
+      })
+    }
+    
+    // Add footer
+    messageBody += "\n\n_This is an automated message from Harmony Medical Services._"
+
     const payload: MessageListInstanceCreateOptions = {
       from: sender,
       to: recipient,
-      body: options.message,
+      body: messageBody,
     }
 
     if (options.mediaUrl) {
       payload.mediaUrl = Array.isArray(options.mediaUrl) ? options.mediaUrl : [options.mediaUrl]
     }
+
+    // Note: Interactive buttons require WhatsApp Business API approval and message templates
+    // For now, we use clickable links which work immediately without approval
+    // To use interactive buttons, you need to:
+    // 1. Register message templates with WhatsApp
+    // 2. Use Twilio's Content API
+    // 3. Get WhatsApp Business API approval
 
     const response = await client.messages.create(payload)
     

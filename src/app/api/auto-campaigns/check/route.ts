@@ -4,36 +4,7 @@
  */
 
 import { NextResponse } from "next/server"
-import admin from "firebase-admin"
-
-function initAdmin() {
-  if (!admin.apps.length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY
-
-    if (privateKey && privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      privateKey = privateKey.slice(1, -1)
-    }
-    if (privateKey) {
-      privateKey = privateKey.replace(/\\n/g, "\n")
-    }
-
-    if (!projectId || !clientEmail || !privateKey) {
-      return { ok: false, error: "Missing Firebase Admin credentials" }
-    }
-
-    try {
-      admin.initializeApp({
-        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-      })
-      return { ok: true }
-    } catch (error: any) {
-      return { ok: false, error: error?.message || "Failed to initialize Firebase Admin" }
-    }
-  }
-  return { ok: true }
-}
+import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
 /**
  * GET /api/auto-campaigns/check
@@ -62,7 +33,7 @@ export async function GET() {
     diagnostics.groqApiKey = !!process.env.GROQ_API_KEY
 
     // Check Firebase Admin
-    const adminResult = initAdmin()
+    const adminResult = initFirebaseAdmin("auto-campaigns-check API")
     diagnostics.firebaseAdmin = adminResult.ok
     if (!adminResult.ok) {
       diagnostics.firebaseAdminError = adminResult.error

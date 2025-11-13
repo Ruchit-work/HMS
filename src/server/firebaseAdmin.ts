@@ -1,0 +1,105 @@
+/**
+
+ * @returns { ok: boolean, error?: string } - Returns an object with ok status and optional error message
+ * 
+ * @example
+ * // Basic usage (returns boolean-like object)
+ * const result = initFirebaseAdmin()
+ * if (!result.ok) {
+ *   return NextResponse.json({ error: result.error }, { status: 500 })
+ * }
+ * 
+ * @example
+ * // With custom error context
+ * const result = initFirebaseAdmin('API endpoint')
+ * if (!result.ok) {
+ *   console.error(`Failed to initialize Firebase Admin for ${result.context}:`, result.error)
+ * }
+ */
+
+import admin from "firebase-admin"
+
+export interface InitAdminResult {
+  ok: boolean
+  error?: string
+  context?: string
+}
+
+export function initFirebaseAdmin(context?: string): InitAdminResult {
+  // Check if Firebase Admin is already initialized
+  if (admin.apps.length > 0) {
+    return { ok: true }
+  }
+
+  // Get environment variables
+  const projectId = process.env.FIREBASE_PROJECT_ID
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY
+
+  // Normalize private key (remove surrounding quotes and replace escaped newlines)
+  if (privateKey) {
+    // Remove surrounding quotes if present
+    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+      privateKey = privateKey.slice(1, -1)
+    }
+    // Replace escaped newlines with actual newlines
+    privateKey = privateKey.replace(/\\n/g, "\n")
+  }
+
+  // Validate required environment variables
+  if (!projectId || !clientEmail || !privateKey) {
+    const errorMsg = context
+      ? `Firebase Admin env vars missing for ${context}.`
+      : "Firebase Admin credentials are missing. Please set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY environment variables."
+    
+    return {
+      ok: false,
+      error: errorMsg,
+      context: context || "Firebase Admin initialization",
+    }
+  }
+
+  // Initialize Firebase Admin
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+    })
+    return { ok: true }
+  } catch (error: any) {
+    const errorMsg = error?.message || "Failed to initialize Firebase Admin"
+    return {
+      ok: false,
+      error: errorMsg,
+      context: context || "Firebase Admin initialization",
+    }
+  }
+}
+
+export function initFirebaseAdminSimple(context?: string): boolean {
+  return initFirebaseAdmin(context).ok
+}
+
+
+export function getFirestore(context?: string) {
+  const initResult = initFirebaseAdmin(context)
+  if (!initResult.ok) {
+    throw new Error(initResult.error || "Failed to initialize Firebase Admin")
+  }
+  return admin.firestore()
+}
+
+
+export function getAuth(context?: string) {
+  const initResult = initFirebaseAdmin(context)
+  if (!initResult.ok) {
+    throw new Error(initResult.error || "Failed to initialize Firebase Admin")
+  }
+  return admin.auth()
+}
+
+export { admin }
+

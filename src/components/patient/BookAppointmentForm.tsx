@@ -7,6 +7,7 @@ import SymptomSelector, { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import SmartQuestions from "./SmartQuestions"
 import MedicalHistoryChecklist from "./MedicalHistoryChecklist"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, isDateBlocked, getBlockedDateInfo, generateTimeSlots, isTimeSlotAvailable, timeToMinutes, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/blockedDates"
 import PaymentMethodSection, { PaymentData as PPaymentData, PaymentMethodOption } from "@/components/payments/PaymentMethodSection"
 import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore"
 import { db } from "@/firebase/config"
@@ -178,16 +179,8 @@ export default function BookAppointmentForm({
 
         // Respect blocked dates (normalize to YYYY-MM-DD; support string/Timestamp/object with date)
         try {
-          const rawBlocked: any[] = Array.isArray((selectedDoctorData as any)?.blockedDates) ? (selectedDoctorData as any).blockedDates : []
-          const normalizedBlocked: string[] = rawBlocked.map((b: any) => {
-            if (!b) return ''
-            if (typeof b === 'string') return b.slice(0, 10)
-            if (typeof b === 'object' && typeof b.date === 'string') return String(b.date).slice(0, 10)
-            if (b?.toDate) { const dt = b.toDate(); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2, '0'); const d = String(dt.getDate()).padStart(2, '0'); return `${y}-${m}-${d}` }
-            if (b?.seconds) { const dt = new Date(b.seconds * 1000); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2, '0'); const d = String(dt.getDate()).padStart(2, '0'); return `${y}-${m}-${d}` }
-            return ''
-          }).filter(Boolean)
-          if (normalizedBlocked.includes(appointmentData.date)) {
+          const blockedDates: any[] = Array.isArray((selectedDoctorData as any)?.blockedDates) ? (selectedDoctorData as any).blockedDates : []
+          if (isDateBlockedFromRaw(appointmentData.date, blockedDates)) {
             setAllTimeSlots([])
             setBookedTimeSlots([])
             setPastTimeSlots([])

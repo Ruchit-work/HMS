@@ -2,13 +2,21 @@
  * Auto Campaign Generation API
  * This endpoint generates and publishes campaigns automatically based on health awareness days
  * Can be called manually or via cron job
+ * 
+ * CRON SCHEDULE:
+ * - Schedule: "20 06 * * *" (6:20 AM UTC daily)
+ * - IST Time: 11:50 AM IST
+ * - UTC Time: 6:20 AM UTC (06:20 UTC)
+ * - Time Conversion: IST = UTC + 5:30, so 11:50 AM IST = 6:20 AM UTC
+ * - Example: 11:50 AM IST on Jan 2 = 6:20 AM UTC on Jan 2
+ * - Cron runs daily at 6:20 AM UTC, which is 11:50 AM IST
  */
 
 export const dynamic = 'force-dynamic' // Prevent caching for cron jobs
 export const revalidate = 0
 
 import { NextResponse } from "next/server"
-import admin from "firebase-admin"
+import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import {
   getHealthAwarenessDaysForToday,
   getHealthAwarenessDaysForTomorrow,
@@ -17,37 +25,17 @@ import { generateAdvertisements } from "@/server/groqAdvertisementGenerator"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { slugify } from "@/utils/campaigns"
 
-function initAdmin() {
-  if (!admin.apps.length) {
-    const projectId = process.env.FIREBASE_PROJECT_ID
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY
-
-    if (privateKey && privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      privateKey = privateKey.slice(1, -1)
-    }
-    if (privateKey) {
-      privateKey = privateKey.replace(/\\n/g, "\n")
-    }
-
-    if (!projectId || !clientEmail || !privateKey) {
-      console.error("Firebase Admin env vars missing for auto-campaigns API.")
-      return false
-    }
-
-    admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-    })
-  }
-  return true
-}
-
 /**
  * GET /api/auto-campaigns/generate
  * Query params:
  * - check: "today" | "tomorrow" (default: "today")
  * - publish: "true" | "false" (default: "true")
  * - sendWhatsApp: "true" | "false" (default: "false")
+ * - test: "true" | "false" (default: "false") - Create fake awareness day for testing
+ * 
+ * CRON CONFIGURATION (vercel.json):
+ * - Path: "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true"
+ * - Schedule: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
  */
 export async function GET(request: Request) {
   const startTime = Date.now()
@@ -57,9 +45,9 @@ export async function GET(request: Request) {
   console.log(`[auto-campaigns-generate] ${triggerSource.toUpperCase()} trigger at ${new Date().toISOString()}`)
   
   try {
-    const ok = initAdmin()
-    if (!ok) {
-      console.error("[auto-campaigns-generate] Firebase Admin initialization failed")
+    const initResult = initFirebaseAdmin("auto-campaigns-generate API")
+    if (!initResult.ok) {
+      console.error("[auto-campaigns-generate] Firebase Admin initialization failed:", initResult.error)
       return NextResponse.json(
         { error: "Server not configured for admin" },
         { status: 500 }
@@ -69,15 +57,43 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const checkParam = url.searchParams.get("check") || "today"
     const publishParam = url.searchParams.get("publish") !== "false"
-    const sendWhatsAppParam = url.searchParams.get("sendWhatsApp") === "true"
+    // Enable WhatsApp by default for cron jobs, but allow override via query param
+    // For manual testing, default to false unless explicitly set to true
+    const sendWhatsAppParam = url.searchParams.get("sendWhatsApp") === "true" || 
+                             (url.searchParams.get("sendWhatsApp") !== "false" && isCronTrigger)
+    // Test mode: Create a fake awareness day for today (for testing purposes only)
+    const testMode = url.searchParams.get("test") === "true"
 
-    console.log(`[auto-campaigns-generate] Parameters: check=${checkParam}, publish=${publishParam}, sendWhatsApp=${sendWhatsAppParam}`)
+    console.log(`[auto-campaigns-generate] Parameters: check=${checkParam}, publish=${publishParam}, sendWhatsApp=${sendWhatsAppParam}, test=${testMode} (trigger: ${triggerSource})`)
 
     // Get health awareness days based on check parameter
-    const healthDays =
+    let healthDays =
       checkParam === "tomorrow"
         ? getHealthAwarenessDaysForTomorrow()
         : getHealthAwarenessDaysForToday()
+
+    // TEST MODE: If test mode is enabled and no awareness days found, create a fake one for today
+    if (testMode && healthDays.length === 0 && checkParam === "today") {
+      console.log(`[auto-campaigns-generate] TEST MODE: Creating fake awareness day for testing`)
+      const now = new Date()
+      const istOffset = 5.5 * 60 * 60 * 1000
+      const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
+      const istTime = new Date(utcTime + istOffset)
+      const month = String(istTime.getUTCMonth() + 1).padStart(2, '0')
+      const day = String(istTime.getUTCDate()).padStart(2, '0')
+      const testDate = `${month}-${day}`
+      
+      healthDays = [{
+        name: "Test Health Awareness Day",
+        date: testDate,
+        description: "This is a test awareness day created for testing the auto-campaign system. It will be automatically generated when test mode is enabled.",
+        keywords: ["test", "health", "awareness", "testing"],
+        targetAudience: "all",
+        priority: 5,
+        specialization: ["General Physician"],
+      }]
+      console.log(`[auto-campaigns-generate] TEST MODE: Created fake awareness day: ${healthDays[0].name} (${testDate})`)
+    }
 
     console.log(`[auto-campaigns-generate] Found ${healthDays.length} health awareness day(s) for ${checkParam}`)
     if (healthDays.length > 0) {
@@ -115,8 +131,10 @@ export async function GET(request: Request) {
     }
 
     // Determine the target date for campaigns (in IST)
-    // IST is UTC+5:30, so midnight IST = 18:30 UTC previous day
-    const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds
+    // CRON SCHEDULE: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
+    // IST is UTC+5:30, so 11:50 AM IST = 6:20 AM UTC (06:20 UTC)
+    // Example: 11:50 AM IST on Jan 2 = 6:20 AM UTC on Jan 2
+    const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
     const now = new Date()
     // Get current UTC time
     const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
@@ -134,8 +152,9 @@ export async function GET(request: Request) {
     targetIST.setUTCSeconds(0)
     targetIST.setUTCMilliseconds(0)
     
-    // Convert IST midnight to UTC for Firestore storage
-    // IST midnight = 18:30 UTC previous day
+    // Convert IST time to UTC for Firestore storage
+    // CRON SCHEDULE: "20 06 * * *" (6:20 AM UTC = 11:50 AM IST)
+    // Note: Campaigns are created for today's date in IST
     const targetDateUTC = new Date(targetIST.getTime() - istOffset)
 
     // Generate advertisements using Groq API
@@ -212,57 +231,166 @@ export async function GET(request: Request) {
           alreadyExists = false
         }
 
+        // Store advertisement data for WhatsApp sending (even if campaign already exists)
+        let whatsAppAdvertisement = advertisement
+        let whatsAppCampaignTitle = advertisement.title
+        let campaignRef: admin.firestore.DocumentReference | null = null
+
         if (alreadyExists) {
           console.log(
-            `[auto-campaigns-generate] Campaign for ${healthDay.name} already exists for ${checkParam} (${targetDateStringIST}), skipping...`
+            `[auto-campaigns-generate] Campaign for ${healthDay.name} already exists for ${checkParam} (${targetDateStringIST}), skipping creation...`
           )
-          continue
+          
+          // If campaign already exists but WhatsApp is requested, get existing campaign data for WhatsApp
+          if (sendWhatsAppParam && checkParam === "today") {
+            try {
+              // Try to get existing campaign data for WhatsApp message
+              const existingCampaignsList = await db
+                .collection("campaigns")
+                .where("metadata.healthDayDate", "==", healthDay.date)
+                .where("metadata.autoGenerated", "==", true)
+                .limit(1)
+                .get()
+              
+              if (!existingCampaignsList.empty) {
+                const existingCampaignDoc = existingCampaignsList.docs[0]
+                campaignRef = existingCampaignsList.docs[0].ref
+                const existingCampaign = existingCampaignDoc.data()
+                whatsAppCampaignTitle = existingCampaign.title || advertisement.title
+                // Use existing campaign's content if available, otherwise use generated advertisement
+                if (existingCampaign.content) {
+                  // Extract plain text from HTML content for WhatsApp
+                  const plainText = existingCampaign.content
+                    .replace(/<[^>]*>/g, "")
+                    .replace(/&nbsp;/g, " ")
+                    .replace(/&amp;/g, "&")
+                    .replace(/&lt;/g, "<")
+                    .replace(/&gt;/g, ">")
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#39;/g, "'")
+                    .trim()
+                  
+                  // Use existing campaign's short message if available, otherwise use generated
+                  whatsAppAdvertisement = {
+                    ...advertisement,
+                    title: whatsAppCampaignTitle,
+                    shortMessage: existingCampaign.metadata?.shortMessage || plainText.substring(0, 200) || advertisement.shortMessage,
+                    ctaHref: existingCampaign.ctaHref || advertisement.ctaHref,
+                    ctaText: existingCampaign.ctaText || advertisement.ctaText,
+                  }
+                }
+                console.log(`[auto-campaigns-generate] Using existing campaign data for WhatsApp: ${whatsAppCampaignTitle}`)
+              }
+            } catch (error) {
+              console.error(`[auto-campaigns-generate] Error getting existing campaign data for WhatsApp:`, error)
+              // Continue with generated advertisement data
+            }
+          } else {
+            // Campaign exists and WhatsApp is not requested, skip entirely
+            continue
+          }
+        } else {
+          // Campaign doesn't exist, create it
+          console.log(`[auto-campaigns-generate] Creating new campaign for ${healthDay.name}`)
+
+          // Create campaign document
+          const campaignData = {
+            title: advertisement.title,
+            slug: slugify(healthDay.name),
+            content: advertisement.content,
+            imageUrl: "", // Can be enhanced later to generate or fetch images
+            ctaText: advertisement.ctaText,
+            ctaHref: advertisement.ctaHref,
+            audience: healthDay.targetAudience,
+            status: publishParam ? "published" : "draft",
+            priority: healthDay.priority,
+            startAt: admin.firestore.Timestamp.fromDate(targetDateUTC),
+            endAt: null, // Campaign doesn't expire by default
+            createdBy: "auto-campaign-system",
+            updatedBy: "auto-campaign-system",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            metadata: {
+              healthAwarenessDay: healthDay.name,
+              healthDayDate: healthDay.date,
+              autoGenerated: true,
+              generatedAt: new Date().toISOString(),
+              targetDate: targetIST.toISOString(), // Target date in IST
+              targetDateUTC: targetDateUTC.toISOString(), // Target date in UTC (for Firestore)
+              shortMessage: advertisement.shortMessage, // Store short message in metadata for later use
+            },
+          }
+
+          campaignRef = await db.collection("campaigns").add(campaignData)
+          
+          console.log(`[auto-campaigns-generate] Created campaign with ID: ${campaignRef.id} for ${healthDay.name}`)
+
+          campaignsCreated.push({
+            id: campaignRef.id,
+            title: advertisement.title,
+            healthDay: healthDay.name,
+            status: campaignData.status,
+          })
         }
-        
-        console.log(`[auto-campaigns-generate] Creating new campaign for ${healthDay.name}`)
-
-        // Create campaign document
-        const campaignData = {
-          title: advertisement.title,
-          slug: slugify(healthDay.name),
-          content: advertisement.content,
-          imageUrl: "", // Can be enhanced later to generate or fetch images
-          ctaText: advertisement.ctaText,
-          ctaHref: advertisement.ctaHref,
-          audience: healthDay.targetAudience,
-          status: publishParam ? "published" : "draft",
-          priority: healthDay.priority,
-          startAt: admin.firestore.Timestamp.fromDate(targetDateUTC),
-          endAt: null, // Campaign doesn't expire by default
-          createdBy: "auto-campaign-system",
-          updatedBy: "auto-campaign-system",
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          metadata: {
-            healthAwarenessDay: healthDay.name,
-            healthDayDate: healthDay.date,
-            autoGenerated: true,
-            generatedAt: new Date().toISOString(),
-            targetDate: targetIST.toISOString(), // Target date in IST
-            targetDateUTC: targetDateUTC.toISOString(), // Target date in UTC (for Firestore)
-          },
-        }
-
-        const campaignRef = await db.collection("campaigns").add(campaignData)
-        
-        console.log(`[auto-campaigns-generate] Created campaign with ID: ${campaignRef.id} for ${healthDay.name}`)
-
-        campaignsCreated.push({
-          id: campaignRef.id,
-          title: advertisement.title,
-          healthDay: healthDay.name,
-          status: campaignData.status,
-        })
 
         // Send WhatsApp notifications if enabled
+        // Send WhatsApp even if campaign already exists (when user explicitly requests it)
         // Only send notifications if the campaign is for today (not tomorrow)
-        if (sendWhatsAppParam && advertisement.shortMessage && checkParam === "today") {
+        if (sendWhatsAppParam && whatsAppAdvertisement.shortMessage && checkParam === "today") {
           try {
+            // Get base URL for building full links
+            // Try VERCEL_URL first (for Vercel deployments), then NEXT_PUBLIC_BASE_URL, then request origin
+            const requestUrl = new URL(request.url)
+            const baseUrl = 
+              process.env.VERCEL_URL 
+                ? `https://${process.env.VERCEL_URL}`
+                : process.env.NEXT_PUBLIC_BASE_URL 
+                ? process.env.NEXT_PUBLIC_BASE_URL
+                : requestUrl.origin || request.headers.get("origin") || "https://your-domain.com"
+            
+            // Build the book appointment URL
+            // Use the campaign's ctaHref if available, otherwise default to book appointment page
+            const appointmentPath = whatsAppAdvertisement.ctaHref || "/patient-dashboard/book-appointment"
+            const appointmentUrl = appointmentPath.startsWith("http") 
+              ? appointmentPath 
+              : `${baseUrl}${appointmentPath.startsWith("/") ? appointmentPath : `/${appointmentPath}`}`
+            
+            // Get hospital phone number from environment or use default
+            const hospitalPhone = process.env.HOSPITAL_PHONE || process.env.CONTACT_PHONE || "+91-1234567890"
+            const phoneNumber = hospitalPhone.replace(/[^\d+]/g, "") // Clean phone number for tel: link
+            const phoneDisplay = hospitalPhone // Keep formatted phone for display
+            
+            // Format WhatsApp message with campaign info and buttons
+            // WhatsApp automatically makes URLs and phone numbers clickable (no approval needed)
+            // For interactive buttons like in the image, you need WhatsApp Business API approval
+            const whatsAppMessage = `🏥 *${whatsAppCampaignTitle}*
+
+${whatsAppAdvertisement.shortMessage}
+
+To book an appointment or learn more, please use the options below:`
+
+            // Create buttons array for WhatsApp
+            // These will appear as clickable links/buttons in the message
+            // WhatsApp automatically formats URLs and phone numbers as clickable buttons
+            const buttons = [
+              {
+                type: "url" as const,
+                title: "Book Appointment",
+                url: appointmentUrl,
+              },
+              {
+                type: "phone" as const,
+                title: "Call Us",
+                phone: phoneDisplay, // Use formatted phone for display
+              },
+            ]
+            
+            // Note: True interactive buttons (like in the image) require:
+            // 1. WhatsApp Business API approval
+            // 2. Message template registration
+            // 3. Using Twilio's Content API
+            // For now, we use clickable links which work immediately
+
             // Get all active patients with phone numbers
             const patientsSnapshot = await db
               .collection("patients")
@@ -279,7 +407,8 @@ export async function GET(request: Request) {
                 whatsAppPromises.push(
                   sendWhatsAppNotification({
                     to: phone,
-                    message: advertisement.shortMessage || advertisement.title,
+                    message: whatsAppMessage,
+                    buttons: buttons,
                   })
                     .then((result) => {
                       if (!result.success) {
@@ -287,6 +416,8 @@ export async function GET(request: Request) {
                           `Failed to send WhatsApp to ${phone}:`,
                           result.error
                         )
+                      } else {
+                        console.log(`Successfully sent WhatsApp to ${phone} for campaign: ${whatsAppCampaignTitle}`)
                       }
                     })
                     .catch((error) => {
@@ -302,7 +433,7 @@ export async function GET(request: Request) {
             })
 
             console.log(
-              `Queued WhatsApp notifications for ${whatsAppPromises.length} patients`
+              `[auto-campaigns-generate] Queued WhatsApp notifications for ${whatsAppPromises.length} patients for campaign: ${whatsAppCampaignTitle}${alreadyExists ? " (existing campaign)" : " (newly created)"}`
             )
           } catch (error) {
             console.error("Error sending WhatsApp notifications:", error)
@@ -314,9 +445,15 @@ export async function GET(request: Request) {
           )
         }
 
-        console.log(
-          `[auto-campaigns-generate] Successfully created campaign "${advertisement.title}" for ${healthDay.name} (ID: ${campaignRef.id})`
-        )
+        if (!alreadyExists) {
+          console.log(
+            `[auto-campaigns-generate] Successfully created campaign "${advertisement.title}" for ${healthDay.name} (ID: ${campaignRef ? campaignRef.id : "N/A"})`
+          )
+        } else {
+          console.log(
+            `[auto-campaigns-generate] Campaign for ${healthDay.name} already exists, WhatsApp notification sent (if enabled)`
+          )
+        }
       } catch (error) {
         console.error(
           `Error creating campaign for ${healthDay.name}:`,
@@ -364,8 +501,8 @@ export async function GET(request: Request) {
     
     // Log failed execution to Firestore
     try {
-      const ok = initAdmin()
-      if (ok) {
+      const initResult = initFirebaseAdmin("auto-campaigns-generate API (error logging)")
+      if (initResult.ok) {
         const db = admin.firestore()
         const url = new URL(request.url)
         const checkParam = url.searchParams.get("check") || "today"

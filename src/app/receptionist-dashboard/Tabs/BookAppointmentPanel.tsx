@@ -13,6 +13,8 @@ import OTPVerificationModal from "@/components/forms/OTPVerificationModal"
 import { bloodGroups } from "@/constants/signup"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay } from "@/utils/timeSlots"
+import { isDateBlocked } from "@/utils/blockedDates"
+import { formatAppointmentDateTime } from "@/utils/date"
 
 interface BookAppointmentPanelProps {
   patientMode: "existing" | "new"
@@ -88,24 +90,6 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], [])
   const paymentAmount = useMemo(() => selectedDoctorFee || 0, [selectedDoctorFee])
 
-  const formatAppointmentDateTime = useCallback((date: string, time: string) => {
-    if (!date) return "the scheduled time"
-
-    const isoString = `${date}T${time || "00:00"}`
-    const dt = new Date(isoString)
-    if (Number.isNaN(dt.getTime())) {
-      return time ? `${date} at ${time}` : date
-    }
-
-    const formattedDate = dt.toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-
-    if (!time) return formattedDate
-    return `${formattedDate} at ${formatTimeDisplay(time)}`
-  }, [])
 
   const selectedDoctor = useMemo(() => {
     if (!selectedDoctorId) return null
@@ -223,30 +207,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     if (!selectedDoctorId || !appointmentDate) return false
     const docObj: any = doctors.find((d: any) => d.id === selectedDoctorId)
     if (!docObj) return false
-    const rawBlocked: any[] = Array.isArray(docObj?.blockedDates) ? docObj.blockedDates : []
-    const normalized: string[] = rawBlocked
-      .map((b: any) => {
-        if (!b) return ""
-        if (typeof b === "string") return b.slice(0, 10)
-        if (typeof b === "object" && typeof b.date === "string") return String(b.date).slice(0, 10)
-        if (b?.toDate) {
-          const dt = b.toDate() as Date
-          const y = dt.getFullYear()
-          const m = String(dt.getMonth() + 1).padStart(2, "0")
-          const d = String(dt.getDate()).padStart(2, "0")
-          return `${y}-${m}-${d}`
-        }
-        if (b?.seconds) {
-          const dt = new Date(b.seconds * 1000)
-          const y = dt.getFullYear()
-          const m = String(dt.getMonth() + 1).padStart(2, "0")
-          const d = String(dt.getDate()).padStart(2, "0")
-          return `${y}-${m}-${d}`
-        }
-        return ""
-      })
-      .filter(Boolean)
-    return normalized.includes(appointmentDate)
+    const blockedDates: any[] = Array.isArray(docObj?.blockedDates) ? docObj.blockedDates : []
+    return isDateBlocked(appointmentDate, blockedDates)
   }, [selectedDoctorId, appointmentDate, doctors])
 
   const filteredPatients = useMemo(() => {
@@ -407,30 +369,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       if (!selectedDoctorId || !appointmentDate) return
 
       const doctor = doctors.find((d: any) => d.id === selectedDoctorId) || {}
-      const rawBlocked: any[] = Array.isArray((doctor as any)?.blockedDates) ? (doctor as any).blockedDates : []
-      const blockedNorm: string[] = rawBlocked
-        .map((b: any) => {
-          if (!b) return ""
-          if (typeof b === "string") return b.slice(0, 10)
-          if (typeof b === "object" && typeof b.date === "string") return String(b.date).slice(0, 10)
-          if (b?.toDate) {
-            const dt = b.toDate() as Date
-            const y = dt.getFullYear()
-            const m = String(dt.getMonth() + 1).padStart(2, "0")
-            const d = String(dt.getDate()).padStart(2, "0")
-            return `${y}-${m}-${d}`
-          }
-          if (b?.seconds) {
-            const dt = new Date(b.seconds * 1000)
-            const y = dt.getFullYear()
-            const m = String(dt.getMonth() + 1).padStart(2, "0")
-            const d = String(dt.getDate()).padStart(2, "0")
-            return `${y}-${m}-${d}`
-          }
-          return ""
-        })
-        .filter(Boolean)
-      if (blockedNorm.includes(appointmentDate)) {
+      const blockedDates: any[] = Array.isArray((doctor as any)?.blockedDates) ? (doctor as any).blockedDates : []
+      if (isDateBlocked(appointmentDate, blockedDates)) {
         setAvailableSlots([])
         return
       }

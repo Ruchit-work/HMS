@@ -5,6 +5,7 @@ import { collection, getDocs } from "firebase/firestore"
 import { db } from "@/firebase/config"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import { Admission, AdmissionRequest, Room } from "@/types/patient"
+import RefreshButton from "@/components/ui/RefreshButton"
 
 const roomTypeLabelMap: Record<Room["roomType"], string> = ROOM_TYPES.reduce((acc, type) => {
   acc[type.id] = type.name
@@ -438,37 +439,12 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
+              <RefreshButton
                 onClick={fetchAdmitRequests}
-                disabled={admitRequestsLoading}
-                className="inline-flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-semibold text-purple-700 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {admitRequestsLoading ? (
-                  <>
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Refreshing…
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                      />
-                    </svg>
-                    Refresh
-                  </>
-                )}
-              </button>
+                loading={admitRequestsLoading}
+                variant="purple"
+                label="Refresh"
+              />
             </div>
           </div>
 
@@ -640,37 +616,12 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
             <h3 className="text-xl font-semibold text-slate-900">Currently Admitted Patients</h3>
             <p className="text-sm text-slate-500">Monitor active inpatients and wrap up their discharge paperwork.</p>
           </div>
-          <button
+          <RefreshButton
             onClick={fetchAdmissions}
-            disabled={admissionsLoading}
-            className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {admissionsLoading ? (
-              <>
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                Refreshing…
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                Refresh
-              </>
-            )}
-          </button>
+            loading={admissionsLoading}
+            variant="sky"
+            label="Refresh"
+          />
         </div>
 
         <div className="px-6 py-5">

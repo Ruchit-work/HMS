@@ -13,6 +13,9 @@ import OTPVerificationModal from '@/components/forms/OTPVerificationModal'
 import PatientProfileForm, { PatientProfileFormValues } from '@/components/forms/PatientProfileForm'
 import { calculateAge, formatDate, formatDateTime } from '@/utils/date'
 import SuccessToast from '@/components/ui/SuccessToast'
+import { useTablePagination } from '@/hooks/useTablePagination'
+import Pagination from '@/components/ui/Pagination'
+import RefreshButton from '@/components/ui/RefreshButton'
 // import toast from 'react-hot-toast'
 
 interface Patient {
@@ -50,8 +53,6 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
     const [showOtpModal, setShowOtpModal] = useState(false)
     const [pendingPatientValues, setPendingPatientValues] = useState<PatientProfileFormValues | null>(null)
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
-    const [currentPage, setCurrentPage] = useState(1)
-    const [pageSize, setPageSize] = useState(10)
     const handleView = (patient: Patient) => {
         setSelectedPatient(patient)
         setShowViewModal(true)
@@ -204,30 +205,18 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
         return filtered
     }, [patients, search, sortField, sortOrder, statusFilter])
 
-    useEffect(() => {
-        setCurrentPage(1)
-    }, [search, statusFilter])
-
-    const totalPages = useMemo(
-        () => Math.max(1, Math.ceil(filteredPatients.length / pageSize)),
-        [filteredPatients.length, pageSize]
-    )
-
-    useEffect(() => {
-        if (currentPage > totalPages) {
-            setCurrentPage(totalPages)
-        }
-    }, [currentPage, totalPages])
-
-    const paginatedPatients = useMemo(() => {
-        const start = (currentPage - 1) * pageSize
-        return filteredPatients.slice(start, start + pageSize)
-    }, [filteredPatients, currentPage, pageSize])
-
-    const goToPage = (page: number) => {
-        const nextPage = Math.min(Math.max(page, 1), totalPages)
-        setCurrentPage(nextPage)
-    }
+    // Use pagination hook
+    const {
+        currentPage,
+        pageSize,
+        totalPages,
+        paginatedItems: paginatedPatients,
+        goToPage,
+        setPageSize,
+    } = useTablePagination(filteredPatients, {
+        initialPageSize: 10,
+        resetOnFilterChange: true,
+    })
 
     const allowAdd = canAdd && user?.role !== "admin"
 
@@ -447,49 +436,12 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                       Registrations handled by reception team
                     </div>
                   )}
-                  <button
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:text-slate-900"
+                  <RefreshButton
                     onClick={fetchPatients}
-                    disabled={loading}
-                    type="button"
-                  >
-                    {loading ? (
-                      <svg
-                        className="h-4 w-4 animate-spin"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                        />
-                      </svg>
-                    )}
-                    {loading ? "Refreshing…" : "Refresh"}
-                  </button>
+                    loading={loading}
+                    variant="outline"
+                    label="Refresh"
+                  />
                 </div>
               </div>
 
@@ -588,10 +540,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                     </label>
                     <select
                       value={pageSize}
-                      onChange={(e) => {
-                        setPageSize(Number(e.target.value));
-                        setCurrentPage(1);
-                      }}
+                      onChange={(e) => setPageSize(Number(e.target.value))}
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       {[10, 15, 20].map((size) => (
@@ -642,7 +591,6 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                     Patient directory
                   </span>
                   <span className="text-xs text-slate-500">
-                    Page {currentPage} of {totalPages} ·{" "}
                     {filteredPatients.length.toLocaleString()} total
                   </span>
                 </div>
@@ -901,70 +849,17 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                   </table>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    Showing{" "}
-                    <span className="font-semibold text-slate-800">
-                      {filteredPatients.length === 0
-                        ? 0
-                        : (currentPage - 1) * pageSize + 1}
-                      –
-                      {Math.min(
-                        currentPage * pageSize,
-                        filteredPatients.length
-                      )}
-                    </span>{" "}
-                    of{" "}
-                    <span className="font-semibold text-slate-800">
-                      {filteredPatients.length}
-                    </span>{" "}
-                    patients
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => goToPage(1)}
-                      disabled={currentPage === 1}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      type="button"
-                    >
-                      First
-                    </button>
-                    <button
-                      onClick={() => goToPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      type="button"
-                    >
-                      Prev
-                    </button>
-                    <span>
-                      Page{" "}
-                      <span className="font-semibold text-slate-800">
-                        {currentPage}
-                      </span>{" "}
-                      of{" "}
-                      <span className="font-semibold text-slate-800">
-                        {totalPages}
-                      </span>
-                    </span>
-                    <button
-                      onClick={() => goToPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      type="button"
-                    >
-                      Next
-                    </button>
-                    <button
-                      onClick={() => goToPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      type="button"
-                    >
-                      Last
-                    </button>
-                  </div>
-                </div>
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={filteredPatients.length}
+                  onPageChange={goToPage}
+                  onPageSizeChange={setPageSize}
+                  pageSizeOptions={[10, 15, 20]}
+                  showPageSizeSelector={false}
+                  itemLabel="patients"
+                />
               </div>
             </div>
           </div>
