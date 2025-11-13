@@ -4,12 +4,12 @@
  * Can be called manually or via cron job
  * 
  * CRON SCHEDULE:
- * - Schedule: "50 09 * * *" (9:50 AM UTC daily)
- * - IST Time: 3:20 PM IST
- * - UTC Time: 9:50 AM UTC (09:50 UTC)
- * - Time Conversion: IST = UTC + 5:30, so 3:20 PM IST = 9:50 AM UTC
- * - Example: 3:20 PM IST on Jan 2 = 9:50 AM UTC on Jan 2
- * - Cron runs daily at 9:50 AM UTC, which is 3:20 PM IST
+ * - Schedule: "40 10 * * *" (10:40 AM UTC daily)
+ * - IST Time: 4:10 PM IST
+ * - UTC Time: 10:40 AM UTC (10:40 UTC)
+ * - Time Conversion: IST = UTC + 5:30, so 4:10 PM IST = 10:40 AM UTC
+ * - Example: 4:10 PM IST on Jan 2 = 10:40 AM UTC on Jan 2
+ * - Cron runs daily at 10:40 AM UTC, which is 4:10 PM IST
  */
 
 export const dynamic = 'force-dynamic' // Prevent caching for cron jobs
@@ -36,7 +36,7 @@ import { slugify } from "@/utils/campaigns"
  * 
  * CRON CONFIGURATION (vercel.json):
  * - Path: "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true"
- * - Schedule: "50 09 * * *" (9:50 AM UTC = 3:20 PM IST)
+ * - Schedule: "40 10 * * *" (10:40 AM UTC = 4:10 PM IST)
  */
 export async function GET(request: Request) {
   const startTime = Date.now()
