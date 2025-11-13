@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/auto-campaigns/test-whatsapp",
-      "schedule": "*/5 * * * *"
+      "schedule": "40 11 * * *"
     }
   ]
 }
