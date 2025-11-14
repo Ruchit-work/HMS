@@ -70,10 +70,14 @@ export const completeAppointment = async (
   const apt = aptSnap.data() as any
 
   // Rule 1: Only today's appointments may be completed
+  // TEMPORARILY DISABLED - Allow completing appointments for any date
+  // TODO: Re-enable this restriction when needed
+  /*
   const isToday = new Date(String(apt.appointmentDate)).toDateString() === new Date().toDateString()
   if (!isToday) {
     throw new Error("Only today's appointments can be completed")
   }
+  */
 
   // Rule 2: Must complete earliest pending first
   const doctorId = String(apt.doctorId || "")

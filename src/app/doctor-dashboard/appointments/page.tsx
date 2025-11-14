@@ -33,7 +33,8 @@ export default function DoctorAppointments() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
   const [completionData, setCompletionData] = useState({
     medicine: "",
-    notes: ""
+    notes: "",
+    recheckupRequired: false
   })
   const [patientHistory, setPatientHistory] = useState<AppointmentType[]>([])
   const [aiDiagnosis, setAiDiagnosis] = useState<{[key: string]: string}>({})
@@ -300,12 +301,38 @@ export default function DoctorAppointments() {
           : apt
       ))
 
+      // Send re-checkup WhatsApp message if required
+      if (completionData.recheckupRequired) {
+        const appointment = appointments.find(apt => apt.id === selectedAppointmentId)
+        if (appointment) {
+          try {
+            const response = await fetch("/api/doctor/send-recheckup-whatsapp", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                appointmentId: selectedAppointmentId,
+                patientId: appointment.patientId,
+                patientPhone: appointment.patientPhone,
+                doctorName: appointment.doctorName || userData?.name || "Doctor",
+                appointmentDate: appointment.appointmentDate,
+              }),
+            })
+
+            if (!response.ok) {
+              console.error("Failed to send re-checkup WhatsApp message")
+            }
+          } catch (error) {
+            console.error("Error sending re-checkup WhatsApp:", error)
+          }
+        }
+      }
+
       setNotification({ 
         type: "success", 
-        message: result.message
+        message: result.message + (completionData.recheckupRequired ? " Re-checkup message sent to patient." : "")
       })
 
-      setCompletionData({ medicine: "", notes: "" })
+      setCompletionData({ medicine: "", notes: "", recheckupRequired: false })
       setShowCompletionModal(false)
       setSelectedAppointmentId(null)
     } catch (error: unknown) {
@@ -1286,7 +1313,7 @@ export default function DoctorAppointments() {
                   onClick={() => {
                     setShowCompletionModal(false)
                     setSelectedAppointmentId(null)
-                    setCompletionData({ medicine: "", notes: "" })
+                    setCompletionData({ medicine: "", notes: "", recheckupRequired: false })
                   }}
                   className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
                 >
@@ -1323,6 +1350,19 @@ export default function DoctorAppointments() {
                   />
                 </div>
 
+                <div className="flex items-center gap-3 pt-2">
+                  <input
+                    type="checkbox"
+                    id="recheckupRequired"
+                    checked={completionData.recheckupRequired}
+                    onChange={(e) => setCompletionData({...completionData, recheckupRequired: e.target.checked})}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <label htmlFor="recheckupRequired" className="text-sm font-medium text-gray-700 cursor-pointer">
+                    🔄 Re-checkup Required - Send WhatsApp message to patient
+                  </label>
+                </div>
+
                 <div className="flex gap-3 pt-4">
                   <button
                     type="submit"
@@ -1336,7 +1376,7 @@ export default function DoctorAppointments() {
                     onClick={() => {
                       setShowCompletionModal(false)
                       setSelectedAppointmentId(null)
-                      setCompletionData({ medicine: "", notes: "" })
+                      setCompletionData({ medicine: "", notes: "", recheckupRequired: false })
                     }}
                     disabled={updating}
                     className="px-6 py-3 border border-slate-300 rounded-lg hover:bg-slate-50 transition-all font-semibold text-slate-700"

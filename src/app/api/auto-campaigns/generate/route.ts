@@ -415,19 +415,30 @@ To book an appointment or learn more, please use the options below:`
             patientsSnapshot.forEach((doc) => {
               const patientData = doc.data()
               const phone = patientData.phone || patientData.phoneNumber || patientData.contact
-              const patientName = patientData.name || patientData.fullName || "Patient"
+              const patientName = patientData.name || patientData.fullName || `${patientData.firstName || ""} ${patientData.lastName || ""}`.trim() || "Patient"
+              const patientId = doc.id
 
               if (phone && phone.trim() !== "") {
-                // Include patient name in content variables (variable "1")
+                // Create booking URL with patient phone and ID for auto-fill
+                // Format: /patient-dashboard/book-appointment?phone=PHONE&patientId=PATIENT_ID
+                const bookingParams = new URLSearchParams({
+                  phone: phone.replace(/[^\d+]/g, ""), // Clean phone number (digits and + only)
+                  patientId: patientId,
+                })
+                const bookingUrl = `${appointmentUrl}?${bookingParams.toString()}`
+
+                // Update content variables with booking URL that includes patient info
                 const contentVariables = {
                   ...baseContentVariables,
                   "1": patientName, // Patient name for personalization
+                  "4": bookingUrl, // Booking URL with patient data
+                  "6": bookingUrl, // Button URL with patient data
                 }
                 
                 whatsAppPromises.push(
                   sendWhatsAppNotification({
                     to: phone,
-                    message: messageWithLink, // Fallback message if template fails
+                    message: messageWithLink.replace(appointmentUrl, bookingUrl), // Fallback message with personalized URL
                     contentSid: whatsAppContentSid, // Use approved template
                     contentVariables: contentVariables, // Template variables with numbered keys
                   })
