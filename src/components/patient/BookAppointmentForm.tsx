@@ -78,6 +78,9 @@ export default function BookAppointmentForm({
 
   // Confirmation modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  // Doctor selection confirmation modal (for non-recommended doctors)
+  const [showDoctorConfirmModal, setShowDoctorConfirmModal] = useState(false)
+  const [pendingDoctorId, setPendingDoctorId] = useState<string | null>(null)
 
   const totalSteps = rescheduleMode ? 4 : 5
 
@@ -312,6 +315,11 @@ export default function BookAppointmentForm({
       return
     }
 
+    // For cancer category, skip auto-generation here (handled by the other useEffect)
+    if (selectedSymptomCategory === "cancer_oncology") {
+      return
+    }
+
     // Otherwise, build a helpful default from category + quick answers
     const parts: string[] = []
     if (symptomAnswers.description) {
@@ -356,11 +364,43 @@ export default function BookAppointmentForm({
 
   // When SmartQuestions updates, persist "Tell us more" free-text into appointment data
   useEffect(() => {
-    const additional = (symptomAnswers.description as string) || (symptomAnswers.concerns as string) || ''
-    if (additional && additional !== appointmentData.additionalConcern) {
-      setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
+    // For cancer category, build comprehensive summary from all selected fields
+    if (selectedSymptomCategory === "cancer_oncology") {
+      const cancerParts: string[] = []
+      
+      if (symptomAnswers.cancerType) {
+        cancerParts.push(`Type: ${symptomAnswers.cancerType}`)
+      }
+      if (symptomAnswers.visitType) {
+        cancerParts.push(`Visit Type: ${symptomAnswers.visitType}`)
+      }
+      if (symptomAnswers.treatmentStatus) {
+        cancerParts.push(`Status: ${symptomAnswers.treatmentStatus}`)
+      }
+      if (symptomAnswers.symptoms && Array.isArray(symptomAnswers.symptoms) && symptomAnswers.symptoms.length > 0) {
+        const treatments = (symptomAnswers.symptoms as string[]).filter(s => s !== 'None / I don\'t know')
+        if (treatments.length > 0) {
+          cancerParts.push(`Current Treatments: ${treatments.join(', ')}`)
+        }
+      }
+      if (symptomAnswers.additionalConcerns) {
+        cancerParts.push(`Additional Concerns: ${symptomAnswers.additionalConcerns}`)
+      }
+      
+      if (cancerParts.length > 0) {
+        const cancerSummary = cancerParts.join(' | ')
+        if (cancerSummary !== appointmentData.problem) {
+          setAppointmentData(prev => ({ ...prev, problem: cancerSummary }))
+        }
+      }
+    } else {
+      // For other categories, use existing logic
+      const additional = (symptomAnswers.description as string) || (symptomAnswers.concerns as string) || ''
+      if (additional && additional !== appointmentData.additionalConcern) {
+        setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
+      }
     }
-  }, [symptomAnswers])
+  }, [symptomAnswers, selectedSymptomCategory])
 
   // Reset payment method to null whenever step 5 becomes active
   useEffect(() => {
@@ -380,11 +420,95 @@ export default function BookAppointmentForm({
   const filteredDoctors = selectedSymptomCategory 
     ? doctors.filter(doc => {
         const category = SYMPTOM_CATEGORIES.find(c => c.id === selectedSymptomCategory)
-        return category?.relatedSpecializations.some(spec => 
-          doc.specialization.toLowerCase().includes(spec.toLowerCase())
-        )
+        if (!category) return true // If category not found, show all doctors
+        
+        // Normalize doctor specialization - remove special chars and convert to lowercase
+        const normalize = (str: string) => str.toLowerCase().replace(/[()\/]/g, " ").replace(/\s+/g, " ").trim()
+        const docSpecialization = normalize(doc.specialization || "")
+        if (!docSpecialization) return true // If doctor has no specialization, show them
+        
+        // Specialization mappings: category specialization -> doctor specialization variations
+        const specializationMappings: Record<string, string[]> = {
+          "general physician": ["family medicine", "family physician", "family medicine specialist", "general practitioner", "gp", "general practice"],
+          "gynecology": ["gynecologist", "obstetrician", "ob gyn", "obstetrician ob gyn", "gynecologist obstetrician", "women's health"],
+          "psychology": ["psychologist"],
+          "psychiatry": ["psychiatrist"],
+          "gastroenterology": ["gastroenterologist"],
+          "endocrinology": ["endocrinologist"],
+          "cardiology": ["cardiologist"],
+          "orthopedic surgery": ["orthopedic", "orthopedics", "orthopedic surgeon"],
+          "dermatology": ["dermatologist"],
+          "ophthalmology": ["ophthalmologist", "eye specialist"],
+          "pulmonology": ["pulmonologist", "chest specialist", "respiratory"],
+          "nephrology": ["nephrologist", "kidney specialist"],
+          "urology": ["urologist"],
+          "internal medicine": ["internal medicine", "internal medicine specialist"],
+          "hematology": ["hematologist"],
+          "rheumatology": ["rheumatologist"],
+          "allergy specialist": ["allergy specialist", "allergist"],
+          "pediatrics": ["pediatrician", "child specialist"],
+          "geriatrics": ["geriatrician"],
+          "oncology": ["oncologist", "medical oncologist", "surgical oncologist", "radiation oncologist", "cancer specialist"]
+        }
+        
+        // Check if any category specialization matches the doctor's specialization
+        return category.relatedSpecializations.some(categorySpec => {
+          const categorySpecLower = normalize(categorySpec)
+          
+          // Direct match - check if doctor specialization contains category spec or vice versa
+          if (docSpecialization.includes(categorySpecLower) || categorySpecLower.includes(docSpecialization)) {
+            return true
+          }
+          
+          // Check if doctor specialization matches any variation of the category specialization
+          const variations = specializationMappings[categorySpecLower] || []
+          for (const variation of variations) {
+            const variationNormalized = normalize(variation)
+            // Check if doctor specialization contains variation or variation contains doctor specialization
+            if (docSpecialization.includes(variationNormalized) || variationNormalized.includes(docSpecialization)) {
+              return true
+            }
+            // Also check word-by-word matching for better accuracy
+            const docWords = docSpecialization.split(/\s+/)
+            const varWords = variationNormalized.split(/\s+/)
+            if (varWords.some(word => docWords.includes(word) && word.length > 3)) {
+              return true
+            }
+          }
+          
+          return false
+        })
       })
     : doctors
+
+  // Calculate which doctors are recommended vs all others
+  const recommendedDoctors = filteredDoctors
+  const otherDoctors = selectedSymptomCategory && filteredDoctors.length > 0
+    ? doctors.filter(doc => !filteredDoctors.some(filtered => filtered.id === doc.id))
+    : []
+
+  // Handle doctor selection with confirmation for non-recommended doctors
+  const handleDoctorSelect = (doctorId: string) => {
+    const isRecommended = recommendedDoctors.some(doc => doc.id === doctorId)
+    
+    if (isRecommended || !selectedSymptomCategory) {
+      // Direct selection for recommended doctors or when no category selected
+      setSelectedDoctor(doctorId)
+    } else {
+      // Show confirmation for non-recommended doctors
+      setPendingDoctorId(doctorId)
+      setShowDoctorConfirmModal(true)
+    }
+  }
+
+  // Confirm selection of non-recommended doctor
+  const handleConfirmDoctorSelection = () => {
+    if (pendingDoctorId) {
+      setSelectedDoctor(pendingDoctorId)
+      setShowDoctorConfirmModal(false)
+      setPendingDoctorId(null)
+    }
+  }
 
   const canProceedToNextStep = () => {
     switch (currentStep) {
@@ -712,6 +836,37 @@ export default function BookAppointmentForm({
           {/* Step 2: Symptoms & Medical Information */}
           {!rescheduleMode && currentStep === 2 && (
             <div className={`space-y-3 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
+              {/* Reset Button */}
+              <div className="flex justify-end mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Reset all step 2 data
+                    setSelectedSymptomCategory(null)
+                    setSymptomAnswers({})
+                    setMedicalConditions([])
+                    setAllergies(userData?.allergies || "")
+                    setCurrentMedications(userData?.currentMedications || "")
+                    setAppointmentData(prev => ({
+                      ...prev,
+                      problem: "",
+                      symptomDuration: "",
+                      symptomProgression: "",
+                      symptomTriggers: "",
+                      associatedSymptoms: "",
+                      additionalConcern: "",
+                      medicalHistory: ""
+                    }))
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border-2 border-slate-300 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Reset All
+                </button>
+              </div>
+
               {/* Required Free-text */}
               <div className="bg-white border-2 border-slate-200 rounded-xl p-4">
                 <label className="block text-sm font-semibold text-slate-800 mb-2">
@@ -745,59 +900,58 @@ export default function BookAppointmentForm({
                 </div>
               )}
 
-          {/* Structured Symptom Details */}
-          {selectedSymptomCategory && (
-            <div className="bg-white border-2 border-slate-200 rounded-xl p-4 animate-fade-in">
-              <h4 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                <span>📝</span>
-                <span>Symptom Details</span>
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Duration</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., 3 days / 2 weeks"
-                    value={appointmentData.symptomDuration || ''}
-                    onChange={(e) => setAppointmentData({ ...appointmentData, symptomDuration: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  />
+              {/* Structured Symptom Details - Hide for cancer category */}
+              {selectedSymptomCategory && selectedSymptomCategory !== "cancer_oncology" && (
+                <div className="bg-white border-2 border-slate-200 rounded-xl p-4 animate-fade-in">
+                  <h4 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                    <span>📝</span>
+                    <span>Symptom Details</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Duration</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., 3 days / 2 weeks"
+                        value={appointmentData.symptomDuration || ''}
+                        onChange={(e) => setAppointmentData({ ...appointmentData, symptomDuration: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Progression</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., worsening / improving / unchanged"
+                        value={appointmentData.symptomProgression || ''}
+                        onChange={(e) => setAppointmentData({ ...appointmentData, symptomProgression: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Triggers / Relievers</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., worse on exertion; better with rest"
+                        value={appointmentData.symptomTriggers || ''}
+                        onChange={(e) => setAppointmentData({ ...appointmentData, symptomTriggers: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Associated Symptoms</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., fever, cough, nausea"
+                        value={appointmentData.associatedSymptoms || ''}
+                        onChange={(e) => setAppointmentData({ ...appointmentData, associatedSymptoms: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Progression</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., worsening / improving / unchanged"
-                    value={appointmentData.symptomProgression || ''}
-                    onChange={(e) => setAppointmentData({ ...appointmentData, symptomProgression: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Triggers / Relievers</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., worse on exertion; better with rest"
-                    value={appointmentData.symptomTriggers || ''}
-                    onChange={(e) => setAppointmentData({ ...appointmentData, symptomTriggers: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Associated Symptoms</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., fever, cough, nausea"
-                    value={appointmentData.associatedSymptoms || ''}
-                    onChange={(e) => setAppointmentData({ ...appointmentData, associatedSymptoms: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          
               {/* Medical History Checklist */}
               {selectedSymptomCategory && (
                 <div className="animate-fade-in">
@@ -814,17 +968,62 @@ export default function BookAppointmentForm({
 
               {/* Generated Summary */}
               {selectedSymptomCategory && appointmentData.problem && (
-                <div className="bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-300 rounded-lg p-2 animate-fade-in">
-                  <p className="text-xs text-teal-700 font-semibold mb-1 flex items-center gap-1">
+                <div className={`border rounded-lg p-2 animate-fade-in ${
+                  selectedSymptomCategory === "cancer_oncology" 
+                    ? "bg-gradient-to-r from-purple-50 to-pink-50 border-purple-300" 
+                    : "bg-gradient-to-r from-teal-50 to-cyan-50 border-teal-300"
+                }`}>
+                  <p className={`text-xs font-semibold mb-1 flex items-center gap-1 ${
+                    selectedSymptomCategory === "cancer_oncology" ? "text-purple-700" : "text-teal-700"
+                  }`}>
                     <span>✓</span>
                     <span>Summary:</span>
                   </p>
-                  <p className="text-xs font-semibold text-slate-800 break-words whitespace-pre-wrap">{appointmentData.problem}</p>
-                  {appointmentData.medicalHistory && (
-                    <p className="text-xs text-slate-600 mt-1 break-words whitespace-pre-wrap">{appointmentData.medicalHistory}</p>
-                  )}
-                  {appointmentData.additionalConcern && (
-                    <p className="text-xs text-slate-700 mt-1 break-words whitespace-pre-wrap"><span className="font-semibold">Additional:</span> {appointmentData.additionalConcern}</p>
+                  {selectedSymptomCategory === "cancer_oncology" ? (
+                    <div className="space-y-1">
+                      {symptomAnswers.cancerType && (
+                        <p className="text-xs font-semibold text-slate-800">
+                          <span className="text-purple-600">Type of Cancer:</span> {symptomAnswers.cancerType}
+                        </p>
+                      )}
+                      {symptomAnswers.visitType && (
+                        <p className="text-xs text-slate-700">
+                          <span className="font-semibold text-purple-600">Visit Type:</span> {symptomAnswers.visitType}
+                        </p>
+                      )}
+                      {symptomAnswers.treatmentStatus && (
+                        <p className="text-xs text-slate-700">
+                          <span className="font-semibold text-purple-600">Treatment Status:</span> {symptomAnswers.treatmentStatus}
+                        </p>
+                      )}
+                      {symptomAnswers.symptoms && Array.isArray(symptomAnswers.symptoms) && symptomAnswers.symptoms.length > 0 && (
+                        <p className="text-xs text-slate-700">
+                          <span className="font-semibold text-purple-600">Current Treatments:</span> {
+                            (symptomAnswers.symptoms as string[]).filter(s => s !== 'None / I don\'t know').join(', ') || 'None'
+                          }
+                        </p>
+                      )}
+                      {symptomAnswers.additionalConcerns && (
+                        <p className="text-xs text-slate-700 mt-2 break-words whitespace-pre-wrap">
+                          <span className="font-semibold text-purple-600">Additional Concerns:</span> {symptomAnswers.additionalConcerns}
+                        </p>
+                      )}
+                      {appointmentData.medicalHistory && (
+                        <p className="text-xs text-slate-600 mt-2 break-words whitespace-pre-wrap border-t border-purple-200 pt-2">
+                          <span className="font-semibold">Medical History:</span> {appointmentData.medicalHistory}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs font-semibold text-slate-800 break-words whitespace-pre-wrap">{appointmentData.problem}</p>
+                      {appointmentData.medicalHistory && (
+                        <p className="text-xs text-slate-600 mt-1 break-words whitespace-pre-wrap">{appointmentData.medicalHistory}</p>
+                      )}
+                      {appointmentData.additionalConcern && (
+                        <p className="text-xs text-slate-700 mt-1 break-words whitespace-pre-wrap"><span className="font-semibold">Additional:</span> {appointmentData.additionalConcern}</p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -845,36 +1044,79 @@ export default function BookAppointmentForm({
                   )}
                 </div>
                 
-                {/* Cards grid */}
-                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-                  {filteredDoctors.map((doctor) => (
-                    <DoctorCard
-                      key={doctor.id}
-                      doctor={doctor}
-                      isSelected={selectedDoctor === doctor.id}
-                      onSelect={() => setSelectedDoctor(doctor.id)}
-                    />
-                  ))}
-                </div>
+                {/* Recommended Doctors Section */}
+                {selectedSymptomCategory && recommendedDoctors.length > 0 && (
+                  <>
+                    <div className="mb-4 flex items-center gap-2">
+                      <span className="text-sm font-semibold text-teal-700">⭐ Recommended for Your Symptoms</span>
+                      <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">
+                        {recommendedDoctors.length} {recommendedDoctors.length === 1 ? 'doctor' : 'doctors'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-6">
+                      {recommendedDoctors.map((doctor) => (
+                        <DoctorCard
+                          key={doctor.id}
+                          doctor={doctor}
+                          isSelected={selectedDoctor === doctor.id}
+                          onSelect={() => handleDoctorSelect(doctor.id)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
 
-                {filteredDoctors.length === 0 && (
+                {/* Other Doctors Section */}
+                {selectedSymptomCategory && recommendedDoctors.length > 0 && otherDoctors.length > 0 && (
+                  <>
+                    <div className="mb-4 flex items-center gap-2 border-t border-slate-200 pt-4">
+                      <span className="text-sm font-semibold text-slate-600">👨‍⚕️ All Other Doctors</span>
+                      <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                        {otherDoctors.length} {otherDoctors.length === 1 ? 'doctor' : 'doctors'}
+                      </span>
+                      <span className="text-xs text-amber-600 font-medium ml-auto">⚠️ Not specifically recommended</span>
+                    </div>
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                      {otherDoctors.map((doctor) => (
+                        <DoctorCard
+                          key={doctor.id}
+                          doctor={doctor}
+                          isSelected={selectedDoctor === doctor.id}
+                          onSelect={() => handleDoctorSelect(doctor.id)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Show all doctors if no category selected or no recommendations */}
+                {(!selectedSymptomCategory || recommendedDoctors.length === 0) && doctors.length > 0 && (
+                  <>
+                    {selectedSymptomCategory && recommendedDoctors.length === 0 && (
+                      <div className="text-center py-4 text-slate-500 mb-4">
+                        <p className="text-sm font-medium">No matching doctors found for your symptoms</p>
+                        <p className="text-xs mt-1">Showing all available doctors…</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                      {doctors.map((doctor) => (
+                        <DoctorCard
+                          key={doctor.id}
+                          doctor={doctor}
+                          isSelected={selectedDoctor === doctor.id}
+                          onSelect={() => handleDoctorSelect(doctor.id)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* No doctors available */}
+                {doctors.length === 0 && (
                   <div className="text-center py-10 sm:py-12 text-slate-500">
                     <span className="text-4xl sm:text-5xl block mb-2 sm:mb-3">👨‍⚕️</span>
-                    <p className="font-medium">No matching doctors found for your symptoms</p>
-                    <p className="text-xs sm:text-sm mt-1">Showing all doctors…</p>
-                  </div>
-                )}
-                
-                {filteredDoctors.length === 0 && doctors.length > 0 && (
-                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-4">
-                    {doctors.map((doctor) => (
-                      <DoctorCard
-                        key={doctor.id}
-                        doctor={doctor}
-                        isSelected={selectedDoctor === doctor.id}
-                        onSelect={() => setSelectedDoctor(doctor.id)}
-                      />
-                    ))}
+                    <p className="font-medium">No doctors available</p>
+                    <p className="text-xs sm:text-sm mt-1">Please contact reception for assistance</p>
                   </div>
                 )}
 
@@ -1414,6 +1656,104 @@ export default function BookAppointmentForm({
                     ✅ Confirm & Book Appointment
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Selection Confirmation Modal (for non-recommended doctors) */}
+      {showDoctorConfirmModal && pendingDoctorId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-fade-in">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white text-2xl">
+                  ⚠️
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Select Non-Recommended Doctor?</h3>
+                  <p className="text-sm text-orange-100">Please confirm your selection</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDoctorConfirmModal(false)
+                  setPendingDoctorId(null)
+                }}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
+                  <p className="text-sm text-amber-800 font-semibold mb-2 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>This doctor is not specifically recommended for your symptoms.</span>
+                  </p>
+                  <p className="text-xs text-amber-700 mt-2">
+                    You selected: <strong>{selectedSymptomCategory && SYMPTOM_CATEGORIES.find(c => c.id === selectedSymptomCategory)?.label}</strong>
+                  </p>
+                </div>
+
+                {/* Doctor Information */}
+                {(() => {
+                  const doctorToConfirm = doctors.find(d => d.id === pendingDoctorId)
+                  return doctorToConfirm ? (
+                    <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                      <div className="flex items-start gap-3">
+                        <div className="text-3xl">👨‍⚕️</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 mb-1">Selected Doctor</h4>
+                          <p className="text-lg font-bold text-blue-700">
+                            Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {doctorToConfirm.specialization}
+                          </p>
+                          {doctorToConfirm.consultationFee && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              Consultation Fee: ₹{doctorToConfirm.consultationFee}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <p className="text-xs text-slate-600">
+                    <strong>Note:</strong> You can still select this doctor, but we recommend choosing from the suggested doctors above for better treatment of your specific symptoms.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
+              <button
+                onClick={() => {
+                  setShowDoctorConfirmModal(false)
+                  setPendingDoctorId(null)
+                }}
+                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDoctorSelection}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>Yes, Select This Doctor</span>
               </button>
             </div>
           </div>

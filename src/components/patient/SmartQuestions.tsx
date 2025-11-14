@@ -410,6 +410,129 @@ export default function SmartQuestions({ category, onComplete }: SmartQuestionsP
           </div>
         )
 
+      case "cancer_oncology":
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Type of Cancer <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  'Breast Cancer',
+                  'Lung Cancer',
+                  'Prostate Cancer',
+                  'Colon Cancer',
+                  'Stomach Cancer',
+                  'Liver Cancer',
+                  'Blood Cancer (Leukemia)',
+                  'Lymphoma',
+                  'Skin Cancer',
+                  'Thyroid Cancer',
+                  'Cervical Cancer',
+                  'Ovarian Cancer',
+                  'Brain Tumor',
+                  'Bone Cancer',
+                  'Other Type',
+                  'Not Sure / Awaiting Diagnosis'
+                ].map(cancerType => (
+                  <button
+                    key={cancerType}
+                    type="button"
+                    onClick={() => updateAnswer('cancerType', cancerType)}
+                    className={`py-2 px-3 rounded-lg border-2 text-xs sm:text-sm font-medium transition-all ${
+                      answers.cancerType === cancerType
+                        ? 'bg-purple-500 text-white border-purple-500'
+                        : 'bg-white border-slate-300 text-slate-700 hover:border-purple-300'
+                    }`}
+                  >
+                    {answers.cancerType === cancerType ? '✓ ' : ''}{cancerType}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Visit Type?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {['Initial Consultation', 'Follow-up', 'Second Opinion', 'Treatment Planning', 'Routine Checkup'].map(visitType => (
+                  <button
+                    key={visitType}
+                    type="button"
+                    onClick={() => updateAnswer('visitType', visitType)}
+                    className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      answers.visitType === visitType
+                        ? 'bg-purple-100 border-purple-400 text-purple-800'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300'
+                    }`}
+                  >
+                    {answers.visitType === visitType ? '✓ ' : ''}{visitType}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Current Treatment Status:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {['Newly Diagnosed', 'Under Treatment', 'Post-Treatment', 'Remission', 'Recurrence', 'Surveillance'].map(status => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => updateAnswer('treatmentStatus', status)}
+                    className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      answers.treatmentStatus === status
+                        ? 'bg-purple-100 border-purple-400 text-purple-800'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300'
+                    }`}
+                  >
+                    {answers.treatmentStatus === status ? '✓ ' : ''}{status}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Current treatments (if any):
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {['Chemotherapy', 'Radiation', 'Surgery', 'Immunotherapy', 'Targeted Therapy', 'Hormone Therapy', 'None Yet', 'Other'].map(treatment => (
+                  <button
+                    key={treatment}
+                    type="button"
+                    onClick={() => toggleSymptom(treatment)}
+                    className={`py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      ((answers.symptoms as string[]) || []).includes(treatment)
+                        ? 'bg-purple-100 border-purple-400 text-purple-800'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300'
+                    }`}
+                  >
+                    {((answers.symptoms as string[]) || []).includes(treatment) ? '✓ ' : ''}{treatment}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Additional concerns or questions:
+              </label>
+              <textarea
+                value={(answers.additionalConcerns as string) || ''}
+                onChange={(e) => updateAnswer('additionalConcerns', e.target.value)}
+                rows={3}
+                placeholder="Optional: Share any specific concerns, questions, or details about your condition..."
+                className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              />
+            </div>
+          </div>
+        )
+
       case "known_condition":
         const conditionCategories = [
           {

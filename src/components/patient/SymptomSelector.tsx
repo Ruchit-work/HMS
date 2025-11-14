@@ -133,6 +133,13 @@ export const SYMPTOM_CATEGORIES: SymptomCategory[] = [
     icon: "🩺",
     relatedSpecializations: ["General Physician", "Internal Medicine"],
     color: "from-teal-100 to-cyan-100 border-teal-300"
+  },
+  {
+    id: "cancer_oncology",
+    label: "Cancer & Oncology Care",
+    icon: "🎗️",
+    relatedSpecializations: ["Oncology", "Hematology", "General Physician", "Internal Medicine"],
+    color: "from-purple-100 to-pink-100 border-purple-300"
   }
 ]
 
@@ -164,7 +171,12 @@ export default function SymptomSelector({ selectedCategory, onSelect }: SymptomS
     kidney: "kidney_uti",
     eye: "eye_problems",
     checkup: "general_checkup",
-    routine: "general_checkup"
+    routine: "general_checkup",
+    cancer: "cancer_oncology",
+    oncology: "cancer_oncology",
+    tumor: "cancer_oncology",
+    chemo: "cancer_oncology",
+    chemotherapy: "cancer_oncology"
   }), [])
 
   // Try loading JSON-driven config; fallback to built-in
