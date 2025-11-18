@@ -56,7 +56,7 @@ const parsePrescription = (text: string) => {
       }
       
       // Clean up name (remove brackets, dashes, extra spaces)
-      let name = nameWithDosage.replace(/\[.*?\]/g, '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim()
+      const name = nameWithDosage.replace(/\[.*?\]/g, '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim()
       
       currentMedicine = {
         emoji,
