@@ -435,7 +435,7 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
 
   const leftX = margin + 5
   const rightX = margin + cardWidth / 2 + 5
-  let innerY = yPos + 15
+  const innerY = yPos + 15
 
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(71, 85, 105)
