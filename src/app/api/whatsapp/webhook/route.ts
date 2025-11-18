@@ -838,8 +838,39 @@ async function handleConfirmation(
     updatedAt: new Date().toISOString(),
     createdBy: "whatsapp",
   }
+  const slotDocId = `${session.selectedDoctorId}_${session.selectedDate}_${session.selectedTime}`.replace(/[:\s]/g, "-")
+  let appointmentId = ""
 
-  const appointmentRef = await db.collection("appointments").add(appointmentData)
+  try {
+    await db.runTransaction(async (transaction) => {
+      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+      const slotSnap = await transaction.get(slotRef)
+      if (slotSnap.exists) {
+        throw new Error("SLOT_ALREADY_BOOKED")
+      }
+
+      const appointmentRef = db.collection("appointments").doc()
+      appointmentId = appointmentRef.id
+
+      transaction.set(appointmentRef, appointmentData)
+      transaction.set(slotRef, {
+        appointmentId,
+        doctorId: session.selectedDoctorId,
+        appointmentDate: session.selectedDate,
+        appointmentTime: session.selectedTime,
+        createdAt: new Date().toISOString(),
+      })
+    })
+  } catch (error) {
+    if ((error as Error).message === "SLOT_ALREADY_BOOKED") {
+      await sendWhatsAppNotification({
+        to: phone,
+        message: "That slot was just booked by another patient. Please pick a different time slot.",
+      })
+      return NextResponse.json({ success: true })
+    }
+    throw error
+  }
 
   // Update session
   await sessionsRef.doc((session as any).id).update({
@@ -869,7 +900,7 @@ async function handleConfirmation(
     `👨‍⚕️ Doctor: ${doctorName}\n` +
     `📅 Date: ${dateDisplay}\n` +
     `🕐 Time: ${timeDisplay}\n` +
-    `📋 Appointment ID: ${appointmentRef.id}\n\n` +
+    `📋 Appointment ID: ${appointmentId}\n\n` +
     `We'll send you a reminder before your appointment. See you soon! 🏥`
 
   await sendWhatsAppNotification({
@@ -877,7 +908,7 @@ async function handleConfirmation(
     message: successMessage,
   })
 
-  return NextResponse.json({ success: true, appointmentId: appointmentRef.id })
+  return NextResponse.json({ success: true, appointmentId })
 }
 
 /**

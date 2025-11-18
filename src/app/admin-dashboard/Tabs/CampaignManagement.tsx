@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import AdminProtected from "@/components/AdminProtected"
-import { Campaign, CampaignAudience, CampaignStatus, createCampaign, deleteCampaign, slugify, updateCampaign } from "@/utils/campaigns"
+import { Campaign, CampaignAudience, CampaignStatus, createCampaign, slugify, updateCampaign } from "@/utils/campaigns"
 import { collection, getDocs, orderBy, query, Timestamp } from "firebase/firestore"
 import { db } from "@/firebase/config"
 import SuccessToast from "@/components/ui/SuccessToast"
@@ -253,8 +253,17 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const handleDelete = async (id?: string) => {
     if (!id) return
     try {
-      await deleteCampaign(id)
-      setCampaigns(prev => prev.filter(c => c.id !== id))
+      const response = await fetch("/api/campaigns/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || "Failed to delete campaign")
+      }
+
+      await reloadCampaigns()
       setSelectedCampaignId(prev => (prev === id ? null : prev))
       if (editingId === id) {
         resetForm()
@@ -264,6 +273,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error) {
       console.error("Error deleting campaign:", error)
+      setSuccessMessage("Failed to delete campaign. Please try again.")
+      setTimeout(() => setSuccessMessage(null), 4000)
     }
   }
 

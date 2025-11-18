@@ -102,7 +102,28 @@ export async function POST(request: Request) {
       }
     })
 
-    const ref = await admin.firestore().collection("appointments").add(docData)
+    const firestore = admin.firestore()
+    const slotDocId = `${docData.doctorId}_${docData.appointmentDate}_${docData.appointmentTime}`.replace(/[:\s]/g, "-")
+    let appointmentId: string | null = null
+
+    await firestore.runTransaction(async (transaction) => {
+      const slotRef = firestore.collection("appointmentSlots").doc(slotDocId)
+      const slotSnap = await transaction.get(slotRef)
+      if (slotSnap.exists) {
+        throw new Error("SLOT_ALREADY_BOOKED")
+      }
+
+      const appointmentRef = firestore.collection("appointments").doc()
+      appointmentId = appointmentRef.id
+      transaction.set(appointmentRef, docData)
+      transaction.set(slotRef, {
+        appointmentId,
+        doctorId: docData.doctorId,
+        appointmentDate: docData.appointmentDate,
+        appointmentTime: docData.appointmentTime,
+        createdAt: nowIso,
+      })
+    })
 
     // If patient phone is missing, try to fetch it from the patient record
     let patientPhone = docData.patientPhone || appointmentData.patientPhone
@@ -132,9 +153,12 @@ export async function POST(request: Request) {
       })
     }
 
-    return Response.json({ success: true, id: ref.id })
+    return Response.json({ success: true, id: appointmentId })
   } catch (error: any) {
     console.error("create-appointment error:", error)
+    if (error?.message === "SLOT_ALREADY_BOOKED") {
+      return Response.json({ error: "This time slot has already been booked. Please select another slot." }, { status: 409 })
+    }
     return Response.json({ error: error?.message || "Failed to create appointment" }, { status: 500 })
   }
 }

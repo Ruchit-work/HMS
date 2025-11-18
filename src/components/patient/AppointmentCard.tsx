@@ -4,6 +4,99 @@ import { Appointment } from "@/types/patient"
 import { generatePrescriptionPDF } from "@/utils/prescriptionPDF"
 import { generateAppointmentConfirmationPDF } from "@/utils/appointmentConfirmationPDF"
 
+// Helper function to parse and render prescription text
+const parsePrescription = (text: string) => {
+  if (!text) return null
+  
+  const lines = text.split('\n').filter(line => line.trim())
+  const medicines: Array<{emoji: string, name: string, dosage: string, frequency: string, duration: string}> = []
+  let advice = ""
+  
+  let currentMedicine: {emoji: string, name: string, dosage: string, frequency: string, duration: string} | null = null
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    
+    // Skip prescription header
+    if (line.includes('🧾') && line.includes('Prescription')) continue
+    
+    // Check for medicine line (contains emoji and medicine name) - matches *1️⃣ Medicine Name Dosage*
+    const medicineMatch = line.match(/\*([1-9]️⃣|🔟)\s+(.+?)\*/)
+    if (medicineMatch) {
+      // Save previous medicine
+      if (currentMedicine) {
+        medicines.push(currentMedicine)
+      }
+      
+      const emoji = medicineMatch[1]
+      let nameWithDosage = medicineMatch[2].trim()
+      
+      // Extract dosage from anywhere (e.g., "20mg", "400mg")
+      const dosageMatch = nameWithDosage.match(/(\d+(?:\.\d+)?\s*(?:mg|g|ml|capsule|tablet|tab|cap))/i)
+      let dosage = ""
+      if (dosageMatch) {
+        dosage = dosageMatch[1]
+        nameWithDosage = nameWithDosage.replace(dosageMatch[0], '').trim()
+      }
+      
+      // Extract duration if present in the line (e.g., "for 14 days", "for 7 days")
+      let duration = ""
+      const durationMatch = nameWithDosage.match(/(?:for|duration)\s+(\d+\s*(?:days?|weeks?|months?))/i)
+      if (durationMatch) {
+        duration = durationMatch[1]
+        nameWithDosage = nameWithDosage.replace(durationMatch[0], '').trim()
+      }
+      
+      // Extract frequency if present (e.g., "daily", "twice", "three times")
+      let frequency = ""
+      const frequencyMatch = nameWithDosage.match(/(daily|once|twice|three times|four times|\d+\s*times)/i)
+      if (frequencyMatch) {
+        frequency = frequencyMatch[1]
+        nameWithDosage = nameWithDosage.replace(frequencyMatch[0], '').trim()
+      }
+      
+      // Clean up name (remove brackets, dashes, extra spaces)
+      let name = nameWithDosage.replace(/\[.*?\]/g, '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim()
+      
+      currentMedicine = {
+        emoji,
+        name: name || "Medicine",
+        dosage,
+        frequency,
+        duration
+      }
+    } else if (currentMedicine) {
+      // Check for frequency (starts with • and doesn't contain "duration")
+      if (line.startsWith('•') && !line.toLowerCase().includes('duration')) {
+        const freq = line.replace('•', '').trim()
+        if (freq && !currentMedicine.frequency) {
+          currentMedicine.frequency = freq
+        }
+      }
+      
+      // Check for duration (starts with • and contains "duration")
+      if (line.startsWith('•') && line.toLowerCase().includes('duration')) {
+        const duration = line.replace('•', '').replace(/duration:/i, '').trim()
+        if (duration) {
+          currentMedicine.duration = duration
+        }
+      }
+    }
+    
+    // Check for advice
+    if (line.includes('📌') && line.includes('Advice')) {
+      advice = line.replace(/📌\s*\*?Advice:\*?\s*/i, '').trim()
+    }
+  }
+  
+  // Add last medicine
+  if (currentMedicine) {
+    medicines.push(currentMedicine)
+  }
+  
+  return { medicines, advice }
+}
+
 interface AppointmentCardProps {
   appointment: Appointment
   isExpanded: boolean
@@ -166,19 +259,66 @@ export default function AppointmentCard({
                     Download PDF
                   </button>
                 </div>
-                <div className="space-y-3 text-sm">
-                  {appointment.medicine && (
-                    <div>
-                      <span className="text-gray-600 font-medium">💊 Prescribed Medicine:</span>
-                      <p className="text-gray-900 mt-1 bg-white p-3 rounded border whitespace-pre-line">
-                        {appointment.medicine}
-                      </p>
-                    </div>
-                  )}
+                <div className="space-y-4">
+                  {appointment.medicine && (() => {
+                    const parsed = parsePrescription(appointment.medicine)
+                    if (parsed && parsed.medicines.length > 0) {
+                      return (
+                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                          <h5 className="text-gray-700 font-semibold mb-3 flex items-center gap-2">
+                            <span>💊</span>
+                            <span>Prescribed Medicines</span>
+                          </h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {parsed.medicines.map((med, index) => (
+                              <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                <div className="flex items-start gap-2 mb-1.5">
+                                  <span className="text-lg">{med.emoji}</span>
+                                  <div className="flex-1">
+                                    <h6 className="font-semibold text-gray-900 text-sm">
+                                      {med.name}
+                                      {med.dosage && <span className="text-gray-600 font-normal">({med.dosage})</span>}
+                                    </h6>
+                                  </div>
+                                </div>
+                                <div className="ml-7 space-y-0.5 text-sm text-gray-700">
+                                  {med.frequency && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-400">•</span>
+                                      <span>{med.frequency}</span>
+                                    </div>
+                                  )}
+                                  {med.duration && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-400">•</span>
+                                      <span><span className="font-medium">Duration:</span> {med.duration}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    } else {
+                      // Fallback to plain text if parsing fails
+                      return (
+                        <div>
+                          <span className="text-gray-600 font-medium">💊 Prescribed Medicine:</span>
+                          <p className="text-gray-900 mt-1 bg-white p-3 rounded border whitespace-pre-line text-sm">
+                            {appointment.medicine}
+                          </p>
+                        </div>
+                      )
+                    }
+                  })()}
                   {appointment.doctorNotes && (
                     <div>
-                      <span className="text-gray-600 font-medium">📝 Doctor's Notes:</span>
-                      <p className="text-gray-900 mt-1 bg-white p-3 rounded border whitespace-pre-line">
+                      <h5 className="text-gray-700 font-semibold mb-2 flex items-center gap-2">
+                        <span>📝</span>
+                        <span>Doctor's Notes</span>
+                      </h5>
+                      <p className="text-gray-900 bg-white p-3 rounded border whitespace-pre-line text-sm">
                         {appointment.doctorNotes}
                       </p>
                     </div>

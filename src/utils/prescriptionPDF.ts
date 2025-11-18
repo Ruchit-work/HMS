@@ -29,6 +29,119 @@ function formatDate(value?: string, locale: string = 'en-US') {
   })
 }
 
+function formatCurrency(amount?: number | null) {
+  const safeAmount = typeof amount === 'number' ? amount : 0
+  return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0 }).format(safeAmount)
+}
+
+type ParsedPrescription = {
+  medicines: Array<{
+    emoji: string
+    name: string
+    dosage: string
+    frequency: string
+    duration: string
+  }>
+  advice?: string
+}
+
+const emojiRegex = /([\u2700-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF][\uDC00-\uDFFF])/g
+
+function sanitizeForPdf(text: string) {
+  return text
+    .replace(emojiRegex, '')
+    .replace(/[^\x20-\x7EÀ-ÿ]/g, '')
+    .trim()
+}
+
+function parsePrescriptionText(text: string | undefined | null): ParsedPrescription | null {
+  if (!text) return null
+
+  const lines = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  const medicines: ParsedPrescription['medicines'] = []
+  let advice = ''
+  let currentMedicine: ParsedPrescription['medicines'][number] | null = null
+
+  const medicineLineRegex = /^\*(?:([1-9]️⃣|🔟)\s+)?(.+?)\*$/
+
+  for (const line of lines) {
+    if (line.includes('🧾') && line.toLowerCase().includes('prescription')) continue
+
+    if (line.startsWith('📌')) {
+      advice = line.replace(/📌\s*\*?Advice:\*?\s*/i, '').trim()
+      continue
+    }
+
+    const medicineMatch = line.match(medicineLineRegex)
+    if (medicineMatch) {
+      if (currentMedicine) {
+        medicines.push(currentMedicine)
+      }
+
+      const emoji = medicineMatch[1] || ''
+      let nameWithDetails = medicineMatch[2].trim()
+
+      let dosage = ''
+      const dosageMatch = nameWithDetails.match(/(\d+(?:\.\d+)?\s*(?:mg|g|ml|capsule|tablet|tab|cap))/i)
+      if (dosageMatch) {
+        dosage = dosageMatch[1]
+        nameWithDetails = nameWithDetails.replace(dosageMatch[0], '').trim()
+      }
+
+      let duration = ''
+      const durationMatch = nameWithDetails.match(/(?:for|duration)\s+(\d+\s*(?:days?|weeks?|months?))/i)
+      if (durationMatch) {
+        duration = durationMatch[1]
+        nameWithDetails = nameWithDetails.replace(durationMatch[0], '').trim()
+      }
+
+      let frequency = ''
+      const frequencyMatch = nameWithDetails.match(/(daily|once|twice|three times|four times|\d+\s*times)/i)
+      if (frequencyMatch) {
+        frequency = frequencyMatch[1]
+        nameWithDetails = nameWithDetails.replace(frequencyMatch[0], '').trim()
+      }
+
+      const name = nameWithDetails.replace(/\[.*?\]/g, '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim()
+
+      currentMedicine = {
+        emoji,
+        name: name || 'Medicine',
+        dosage,
+        frequency,
+        duration
+      }
+      continue
+    }
+
+    if (currentMedicine && line.startsWith('•')) {
+      const detail = line.replace(/^•\s*/, '')
+      if (!detail) continue
+
+      if (!currentMedicine.frequency && !detail.toLowerCase().includes('duration')) {
+        currentMedicine.frequency = detail.trim()
+      } else if (detail.toLowerCase().includes('duration')) {
+        currentMedicine.duration = detail.replace(/duration:\s*/i, '').trim()
+      }
+    }
+  }
+
+  if (currentMedicine) {
+    medicines.push(currentMedicine)
+  }
+
+  if (!medicines.length) return null
+
+  return {
+    medicines,
+    advice
+  }
+}
+
 function createPrescriptionDocument(appointment: Appointment, options: PrescriptionRenderOptions = {}) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -214,7 +327,53 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
   doc.setFontSize(10)
   doc.setTextColor(30, 41, 59)
 
-  if (appointment.medicine) {
+  const structuredPrescription = parsePrescriptionText(appointment.medicine)
+
+  if (structuredPrescription && structuredPrescription.medicines.length > 0) {
+    structuredPrescription.medicines.forEach((med, idx) => {
+      const detailLines: string[] = []
+      if (med.frequency) detailLines.push(`• ${sanitizeForPdf(med.frequency)}`)
+      if (med.duration) detailLines.push(`• Duration: ${sanitizeForPdf(med.duration)}`)
+
+      const boxHeight = 14 + detailLines.length * 5
+      doc.setFillColor(248, 250, 252)
+      doc.setDrawColor(226, 232, 240)
+      doc.rect(margin, yPos, pageWidth - 2 * margin, boxHeight, 'F')
+
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(17, 24, 39)
+      const title = `${idx + 1}. ${sanitizeForPdf(med.name)}${med.dosage ? ` (${sanitizeForPdf(med.dosage)})` : ''}`
+      doc.text(title.trim(), margin + 5, yPos + 6)
+
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(55, 65, 81)
+      detailLines.forEach((line: string, idx: number) => {
+        doc.text(line, margin + 7, yPos + 11 + idx * 5)
+      })
+
+      yPos += boxHeight + 6
+    })
+
+    if (structuredPrescription.advice) {
+      const adviceLines = doc.splitTextToSize(sanitizeForPdf(structuredPrescription.advice), pageWidth - 2 * margin - 10)
+      const adviceHeight = 12 + adviceLines.length * 5
+      doc.setFillColor(254, 249, 195)
+      doc.setDrawColor(250, 204, 21)
+      doc.rect(margin, yPos, pageWidth - 2 * margin, adviceHeight, 'F')
+
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(120, 53, 15)
+      doc.text('📌 Advice', margin + 5, yPos + 6)
+
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(146, 64, 14)
+      adviceLines.forEach((line: string, idx: number) => {
+        doc.text(line, margin + 5, yPos + 11 + idx * 5)
+      })
+
+      yPos += adviceHeight + 6
+    }
+  } else if (appointment.medicine) {
     const medicineLines = doc.splitTextToSize(appointment.medicine, pageWidth - 2 * margin)
     doc.text(medicineLines, margin, yPos)
     yPos += medicineLines.length * 5 + 5
@@ -256,22 +415,52 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
   }
 
   // Payment summary
-  doc.setFillColor(248, 250, 252)
-  doc.rect(margin, pageHeight - 68, pageWidth - 2 * margin, 30, 'F')
+  const paymentBlockHeight = 42
+  if (yPos + paymentBlockHeight + 30 > pageHeight) {
+    doc.addPage()
+    yPos = margin
+  }
+
+  const cardWidth = pageWidth - 2 * margin
+  doc.setFillColor(255, 255, 255)
+  doc.setDrawColor(203, 213, 225)
+  doc.rect(margin, yPos, cardWidth, paymentBlockHeight, 'FD')
+
+  doc.setFillColor(15, 118, 110)
+  doc.rect(margin, yPos, cardWidth, 9, 'F')
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
-  doc.setTextColor(30, 41, 59)
-  doc.text('Payment Summary', margin + 5, pageHeight - 62)
+  doc.setTextColor(255, 255, 255)
+  doc.text('Payment Summary', margin + 5, yPos + 6.5)
+
+  const leftX = margin + 5
+  const rightX = margin + cardWidth / 2 + 5
+  let innerY = yPos + 15
 
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(71, 85, 105)
   doc.setFontSize(9.5)
 
-  doc.text(`Method: ${safeText(appointment.paymentMethod)}`, margin + 5, pageHeight - 56)
-  doc.text(`Payment Status: ${safeText(appointment.paymentStatus)}`, margin + 5, pageHeight - 50)
-  doc.text(`Total Fee: ₹${appointment.totalConsultationFee ?? 0}`, margin + 5, pageHeight - 44)
-  doc.text(`Amount Paid: ₹${appointment.paymentAmount ?? 0}`, margin + (pageWidth - 2 * margin) / 2 + 5, pageHeight - 50)
-  doc.text(`Transaction ID: ${safeText(appointment.transactionId)}`, margin + (pageWidth - 2 * margin) / 2 + 5, pageHeight - 44)
+  doc.text(`Method: ${safeText(appointment.paymentMethod)}`, leftX, innerY)
+  doc.text(`Status: ${safeText(appointment.paymentStatus)}`, leftX, innerY + 6)
+  doc.text(`Transaction: ${safeText(appointment.transactionId)}`, leftX, innerY + 12)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(15, 118, 110)
+  doc.setFontSize(11)
+  doc.text(`Total Fee`, rightX, innerY)
+  doc.setFontSize(13)
+  doc.text(`INR ${formatCurrency(appointment.totalConsultationFee)}`, rightX, innerY + 5)
+
+  doc.setFontSize(11)
+  doc.setTextColor(107, 114, 128)
+  doc.text(`Amount Paid`, rightX, innerY + 13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(22, 101, 52)
+  doc.setFontSize(13)
+  doc.text(`INR ${formatCurrency(appointment.paymentAmount)}`, rightX, innerY + 18)
+
+  yPos += paymentBlockHeight + 12
 
   // Footer & signature
   doc.setDrawColor(203, 213, 225)

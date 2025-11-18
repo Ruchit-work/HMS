@@ -1,5 +1,20 @@
 import { db } from "@/firebase/config"
-import { doc, updateDoc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
+import { doc, updateDoc, getDoc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore"
+const SLOT_COLLECTION = "appointmentSlots"
+const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {
+  if (!doctorId || !date || !time) return null
+  return `${doctorId}_${date}_${time.replace(/[:\s]/g, "-")}`
+}
+
+export const releaseAppointmentSlot = async (doctorId?: string, date?: string, time?: string) => {
+  const slotId = getSlotDocId(doctorId, date, time)
+  if (!slotId) return
+  try {
+    await deleteDoc(doc(db, SLOT_COLLECTION, slotId))
+  } catch (error) {
+    console.warn("releaseAppointmentSlot error:", error)
+  }
+}
 import { Appointment } from "@/types/patient"
 
 // Calculate hours until appointment
@@ -39,6 +54,8 @@ export const cancelAppointment = async (appointment: Appointment) => {
   const refundMessage = hoursUntil >= 10 
     ? `Full refund of ₹${refundAmount} processed. Refund ID: ${refundTransactionId}`
     : `Refund of ₹${refundAmount} processed. Cancellation fee: ₹${cancellationFee}. Refund ID: ${refundTransactionId}`
+
+  await releaseAppointmentSlot(appointment.doctorId, appointment.appointmentDate, appointment.appointmentTime)
 
   return {
     success: true,
@@ -110,6 +127,8 @@ export const completeAppointment = async (
     completedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   })
+
+  await releaseAppointmentSlot(apt.doctorId, apt.appointmentDate, apt.appointmentTime)
 
   return {
     success: true,

@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where, addDoc, onSnapshot, updateDoc, increment } from "firebase/firestore"
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, increment } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
@@ -188,18 +188,28 @@ function BookAppointmentContent() {
 
       // RESCHEDULE: only update date/time and status
       if (rescheduleMode && rescheduleAppointmentId) {
-        await updateDoc(doc(db, 'appointments', rescheduleAppointmentId), {
-          appointmentDate: appointmentData.date,
-          appointmentTime: appointmentData.time,
-          status: 'resrescheduled',
-          updatedAt: new Date().toISOString()
+        const response = await fetch("/api/patient/book-appointment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "reschedule",
+            appointmentId: rescheduleAppointmentId,
+            patientUid: user.uid,
+            appointmentDate: appointmentData.date,
+            appointmentTime: appointmentData.time,
+          }),
         })
-        setNotification({ type: 'success', message: 'Appointment rescheduled successfully' })
-        // Remove query params and optionally redirect back to dashboard
-        router.push('/patient-dashboard')
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data?.error || "Failed to reschedule appointment")
+        }
+
+        setNotification({ type: "success", message: "Appointment rescheduled successfully" })
+        router.push("/patient-dashboard")
         return
       }
-      
+
       const transactionId = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`
       
       const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
@@ -217,17 +227,18 @@ function BookAppointmentContent() {
       const latestUserData = latestPatientDoc.exists() ? (latestPatientDoc.data() as UserData) : userData
       
       // If paying by wallet, deduct from wallet first
+      let walletDeducted = false
       if (!rescheduleMode && formData.paymentMethod === 'wallet') {
         await updateDoc(doc(db, 'patients', user.uid), {
           walletBalance: increment(-AMOUNT_TO_PAY)
         })
         // reflect locally
         setUserData(prev => prev ? ({ ...prev, walletBalance: Number((prev as any).walletBalance || 0) - AMOUNT_TO_PAY } as any) : prev)
+        walletDeducted = true
       }
       
       const patientSixDigitId = latestUserData?.patientId || user.uid
-
-      await addDoc(collection(db, "appointments"), {
+      const appointmentPayload = {
         patientUid: user.uid,
         patientId: patientSixDigitId,
         patientName: `${latestUserData.firstName} ${latestUserData.lastName}`,
@@ -281,7 +292,34 @@ function BookAppointmentContent() {
         status: "confirmed",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      }
+
+      const response = await fetch("/api/patient/book-appointment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "create",
+          appointmentData: appointmentPayload,
+        }),
       })
+
+      if (!response.ok) {
+        if (walletDeducted) {
+          await updateDoc(doc(db, "patients", user.uid), {
+            walletBalance: increment(AMOUNT_TO_PAY),
+          })
+          setUserData(prev =>
+            prev ? ({ ...prev, walletBalance: Number((prev as any).walletBalance || 0) + AMOUNT_TO_PAY } as any) : prev
+          )
+        }
+        const data = await response.json().catch(() => ({}))
+        setNotification({
+          type: "error",
+          message: data?.error || "Failed to create appointment",
+        })
+        setSubmitting(false)
+        return
+      }
 
       await sendAppointmentConfirmationMessage({
         patientFirstName: latestUserData.firstName,

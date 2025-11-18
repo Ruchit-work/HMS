@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
@@ -11,6 +11,94 @@ import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
 import { calculateAge } from "@/utils/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
+import Pagination from "@/components/ui/Pagination"
+
+// Helper function to parse and render prescription text
+const parsePrescription = (text: string) => {
+  if (!text) return null
+  
+  const lines = text.split('\n').filter(line => line.trim())
+  const medicines: Array<{emoji: string, name: string, dosage: string, frequency: string, duration: string}> = []
+  
+  let currentMedicine: {emoji: string, name: string, dosage: string, frequency: string, duration: string} | null = null
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    
+    // Skip prescription header
+    if (line.includes('🧾') && line.includes('Prescription')) continue
+    
+    // Check for medicine line (contains emoji and medicine name) - matches *1️⃣ Medicine Name Dosage*
+    const medicineMatch = line.match(/\*([1-9]️⃣|🔟)\s+(.+?)\*/)
+    if (medicineMatch) {
+      // Save previous medicine
+      if (currentMedicine) {
+        medicines.push(currentMedicine)
+      }
+      
+      const emoji = medicineMatch[1]
+      let nameWithDosage = medicineMatch[2].trim()
+      
+      // Extract dosage from anywhere (e.g., "20mg", "400mg")
+      const dosageMatch = nameWithDosage.match(/(\d+(?:\.\d+)?\s*(?:mg|g|ml|capsule|tablet|tab|cap))/i)
+      let dosage = ""
+      if (dosageMatch) {
+        dosage = dosageMatch[1]
+        nameWithDosage = nameWithDosage.replace(dosageMatch[0], '').trim()
+      }
+      
+      // Extract duration if present in the line (e.g., "for 14 days", "for 7 days")
+      let duration = ""
+      const durationMatch = nameWithDosage.match(/(?:for|duration)\s+(\d+\s*(?:days?|weeks?|months?))/i)
+      if (durationMatch) {
+        duration = durationMatch[1]
+        nameWithDosage = nameWithDosage.replace(durationMatch[0], '').trim()
+      }
+      
+      // Extract frequency if present (e.g., "daily", "twice", "three times")
+      let frequency = ""
+      const frequencyMatch = nameWithDosage.match(/(daily|once|twice|three times|four times|\d+\s*times)/i)
+      if (frequencyMatch) {
+        frequency = frequencyMatch[1]
+        nameWithDosage = nameWithDosage.replace(frequencyMatch[0], '').trim()
+      }
+      
+      // Clean up name (remove brackets, dashes, extra spaces)
+      let name = nameWithDosage.replace(/\[.*?\]/g, '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim()
+      
+      currentMedicine = {
+        emoji,
+        name: name || "Medicine",
+        dosage,
+        frequency,
+        duration
+      }
+    } else if (currentMedicine) {
+      // Check for frequency (starts with • and doesn't contain "duration")
+      if (line.startsWith('•') && !line.toLowerCase().includes('duration')) {
+        const freq = line.replace('•', '').trim()
+        if (freq && !currentMedicine.frequency) {
+          currentMedicine.frequency = freq
+        }
+      }
+      
+      // Check for duration (starts with • and contains "duration")
+      if (line.startsWith('•') && line.toLowerCase().includes('duration')) {
+        const duration = line.replace('•', '').replace(/duration:/i, '').trim()
+        if (duration) {
+          currentMedicine.duration = duration
+        }
+      }
+    }
+  }
+  
+  // Add last medicine
+  if (currentMedicine) {
+    medicines.push(currentMedicine)
+  }
+  
+  return { medicines }
+}
 
 interface UserData {
   id: string;
@@ -28,18 +116,17 @@ export default function DoctorAppointments() {
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "thisWeek" | "nextWeek" | "history">("today")
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
-  const [updating, setUpdating] = useState(false)
-  const [showCompletionModal, setShowCompletionModal] = useState(false)
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
-  const [completionData, setCompletionData] = useState({
-    medicine: "",
-    notes: "",
-    recheckupRequired: false
-  })
-  const [aiPrescription, setAiPrescription] = useState<{medicine: string, notes: string} | null>(null)
-  const [loadingAiPrescription, setLoadingAiPrescription] = useState(false)
-  const [showAiPrescriptionSuggestion, setShowAiPrescriptionSuggestion] = useState(true)
+  const [updating, setUpdating] = useState<{[key: string]: boolean}>({})
+  const [showCompletionForm, setShowCompletionForm] = useState<{[key: string]: boolean}>({})
+  const [completionData, setCompletionData] = useState<{[key: string]: {medicines: Array<{name: string, dosage: string, frequency: string, duration: string}>, notes: string, recheckupRequired: boolean}}>({})
+  const [aiPrescription, setAiPrescription] = useState<{[key: string]: {medicine: string, notes: string}}>({})
+  const [loadingAiPrescription, setLoadingAiPrescription] = useState<{[key: string]: boolean}>({})
+  const [showAiPrescriptionSuggestion, setShowAiPrescriptionSuggestion] = useState<{[key: string]: boolean}>({})
   const [patientHistory, setPatientHistory] = useState<AppointmentType[]>([])
+  const [historySearchFilters, setHistorySearchFilters] = useState<{ [key: string]: { text: string; date: string } }>({})
+  const [historyTabFilters, setHistoryTabFilters] = useState<{ text: string; date: string }>({ text: "", date: "" })
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(10)
   const [aiDiagnosis, setAiDiagnosis] = useState<{[key: string]: string}>({})
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{[key: string]: boolean}>({})
   const [showHistory, setShowHistory] = useState<{[key: string]: boolean}>({})
@@ -106,14 +193,6 @@ export default function DoctorAppointments() {
     }
   }
 
-  if (loading) {
-    return <LoadingSpinner message="Loading appointments..." />
-  }
-
-  if (!user || !userData) {
-    return null
-  }
-
   // Toggle accordion and fetch patient history
   const toggleAccordion = async (appointmentId: string) => {
     if (expandedAppointment === appointmentId) {
@@ -136,11 +215,32 @@ export default function DoctorAppointments() {
             .filter((apt: AppointmentType) => apt.id !== appointmentId)
             .sort((a: AppointmentType, b: AppointmentType) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
           setPatientHistory(history)
+          setHistorySearchFilters(prev => ({
+            ...prev,
+            [appointmentId]: { text: "", date: "" }
+          }))
         } catch (error) {
           console.error("Error fetching patient history:", error)
         }
       }
     }
+  }
+
+  const handleHistorySearchChange = (appointmentId: string, field: "text" | "date", value: string) => {
+    setHistorySearchFilters(prev => ({
+      ...prev,
+      [appointmentId]: {
+        ...(prev[appointmentId] || { text: "", date: "" }),
+        [field]: value
+      }
+    }))
+  }
+
+  const clearHistoryFilters = (appointmentId: string) => {
+    setHistorySearchFilters(prev => ({
+      ...prev,
+      [appointmentId]: { text: "", date: "" }
+    }))
   }
 
   // Get latest checkup recommendation for same doctor
@@ -163,15 +263,117 @@ export default function DoctorAppointments() {
     return null
   }
 
-  const openCompletionModal = (appointmentId: string) => {
-    setSelectedAppointmentId(appointmentId)
-    setShowCompletionModal(true)
-    setShowAiPrescriptionSuggestion(true)
-    // Auto-generate AI prescription when modal opens
-    const appointment = appointments.find(apt => apt.id === appointmentId)
-    if (appointment) {
-      handleGenerateAiPrescription(appointmentId)
+  const toggleCompletionForm = (appointmentId: string) => {
+    const isOpen = showCompletionForm[appointmentId] || false
+    setShowCompletionForm({...showCompletionForm, [appointmentId]: !isOpen})
+    
+    if (!isOpen) {
+      // Initialize completion data for this appointment
+      setCompletionData({
+        ...completionData,
+        [appointmentId]: {
+          medicines: [],
+          notes: "",
+          recheckupRequired: false
+        }
+      })
+      setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: true})
+      // Auto-generate AI prescription when form opens
+      const appointment = appointments.find(apt => apt.id === appointmentId)
+      if (appointment) {
+        handleGenerateAiPrescription(appointmentId)
+      }
+    } else {
+      // Clean up when closing
+      const newCompletionData = {...completionData}
+      delete newCompletionData[appointmentId]
+      setCompletionData(newCompletionData)
+      
+      const newAiPrescription = {...aiPrescription}
+      delete newAiPrescription[appointmentId]
+      setAiPrescription(newAiPrescription)
     }
+  }
+
+  // Helper function to add a new medicine
+  const addMedicine = (appointmentId: string) => {
+    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+    setCompletionData({
+      ...completionData,
+      [appointmentId]: {
+        ...currentData,
+        medicines: [...currentData.medicines, { name: "", dosage: "", frequency: "", duration: "" }]
+      }
+    })
+  }
+
+  // Helper function to remove a medicine
+  const removeMedicine = (appointmentId: string, index: number) => {
+    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+    const updatedMedicines = currentData.medicines.filter((_, i) => i !== index)
+    setCompletionData({
+      ...completionData,
+      [appointmentId]: {
+        ...currentData,
+        medicines: updatedMedicines
+      }
+    })
+  }
+
+  // Helper function to update a medicine field
+  const updateMedicine = (appointmentId: string, index: number, field: string, value: string) => {
+    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+    const updatedMedicines = [...currentData.medicines]
+    updatedMedicines[index] = { ...updatedMedicines[index], [field]: value }
+    setCompletionData({
+      ...completionData,
+      [appointmentId]: {
+        ...currentData,
+        medicines: updatedMedicines
+      }
+    })
+  }
+
+  // Helper function to get number emoji
+  const getNumberEmoji = (num: number): string => {
+    const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+    return num <= 10 ? emojis[num - 1] : `${num}.`
+  }
+
+  // Helper function to format medicines as text for storage
+  const formatMedicinesAsText = (medicines: Array<{name: string, dosage: string, frequency: string, duration: string}>, notes?: string): string => {
+    if (medicines.length === 0) return ""
+    
+    let prescriptionText = "🧾 *Prescription*\n\n"
+    
+    medicines.forEach((med, index) => {
+      const emoji = getNumberEmoji(index + 1)
+      const name = med.name || 'Medicine'
+      const dosage = med.dosage ? ` ${med.dosage}` : ''
+      
+      prescriptionText += `*${emoji} ${name}${dosage}*\n\n`
+      
+      // Format frequency line
+      if (med.frequency) {
+        prescriptionText += `• ${med.frequency}\n`
+      }
+      
+      // Format duration line
+      if (med.duration) {
+        // Ensure "Duration:" prefix is added if not already present
+        const durationText = med.duration.toLowerCase().includes('duration:') ? med.duration : `Duration: ${med.duration}`
+        prescriptionText += `• ${durationText}\n`
+      }
+      
+      prescriptionText += `\n`
+    })
+    
+    // Add advice section if notes are provided
+    if (notes && notes.trim()) {
+      prescriptionText += `📌 *Advice:* ${notes.trim()}\n`
+    }
+    
+    return prescriptionText.trim()
   }
 
   // Parse AI diagnosis into structured format for better display
@@ -283,14 +485,13 @@ export default function DoctorAppointments() {
     }
   }
 
-  const handleGenerateAiPrescription = async (appointmentId?: string) => {
-    const aptId = appointmentId || selectedAppointmentId
-    if (!aptId) return
+  const handleGenerateAiPrescription = async (appointmentId: string) => {
+    if (!appointmentId) return
     
-    const appointment = appointments.find(apt => apt.id === aptId)
+    const appointment = appointments.find(apt => apt.id === appointmentId)
     if (!appointment) return
 
-    setLoadingAiPrescription(true)
+    setLoadingAiPrescription({...loadingAiPrescription, [appointmentId]: true})
     try {
       const ageValue = calculateAge(appointment.patientDateOfBirth)
       let patientInfo = `Age: ${ageValue}, Gender: ${appointment.patientGender || 'Unknown'}, Blood Group: ${appointment.patientBloodGroup || 'Unknown'}`
@@ -313,8 +514,11 @@ export default function DoctorAppointments() {
       })
 
       setAiPrescription({
-        medicine: data.medicine || "",
-        notes: data.notes || ""
+        ...aiPrescription,
+        [appointmentId]: {
+          medicine: data.medicine || "",
+          notes: data.notes || ""
+        }
       })
       setNotification({ type: "success", message: "AI prescription generated!" })
     } catch (error: unknown) {
@@ -325,63 +529,216 @@ export default function DoctorAppointments() {
         message: `AI Prescription Error: ${errorMessage}` 
       })
     } finally {
-      setLoadingAiPrescription(false)
+      setLoadingAiPrescription({...loadingAiPrescription, [appointmentId]: false})
     }
   }
 
-  const handleAcceptPrescription = () => {
-    if (aiPrescription) {
+  // Helper function to parse AI prescription text into structured format
+  const parseAiPrescription = (text: string): Array<{name: string, dosage: string, frequency: string, duration: string}> => {
+    const medicines: Array<{name: string, dosage: string, frequency: string, duration: string}> = []
+    
+    // Split by newlines and try to parse each line
+    const lines = text.split('\n').filter(line => line.trim())
+    
+    let currentMedicine: {name: string, dosage: string, frequency: string, duration: string} | null = null
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      
+      // Skip empty lines
+      if (!trimmedLine) continue
+      
+      // Check if this looks like a new medicine (starts with number, dash, or medicine name pattern)
+      const medicinePattern = /^(\d+\.?\s*)?([A-Z][a-zA-Z\s]+(?:\s+\d+[a-z]{2})?)/i
+      const match = trimmedLine.match(medicinePattern)
+      
+      if (match || trimmedLine.match(/^[A-Z]/)) {
+        // Save previous medicine if exists
+        if (currentMedicine && currentMedicine.name) {
+          medicines.push(currentMedicine)
+        }
+        
+        // Extract medicine name (remove numbering and common prefixes)
+        let name = trimmedLine.replace(/^\d+\.?\s*/, '').replace(/^-\s*/, '').trim()
+        
+        // Try to extract dosage, frequency, etc. from the same line
+        let dosage = ""
+        let frequency = ""
+        let duration = ""
+        
+        // Look for common patterns like "500mg", "1-0-1", "2 times daily", "for 5 days"
+        const dosageMatch = trimmedLine.match(/(\d+(?:\.\d+)?\s*(?:mg|g|ml|tablet|tab|capsule|cap))/i)
+        if (dosageMatch) {
+          dosage = dosageMatch[1]
+          name = name.replace(dosageMatch[0], '').trim()
+        }
+        
+        const frequencyMatch = trimmedLine.match(/(\d+[-\s]\d+[-\s]\d+|\d+\s*(?:times|tab|cap)s?\s*(?:daily|per day|a day)|once|twice)/i)
+        if (frequencyMatch) {
+          frequency = frequencyMatch[1]
+          name = name.replace(frequencyMatch[0], '').trim()
+        }
+        
+        const durationMatch = trimmedLine.match(/(?:for|duration|take|continue)\s+(\d+\s*(?:days?|weeks?|months?|times?))?/i)
+        if (durationMatch && durationMatch[1]) {
+          duration = durationMatch[1]
+        }
+        
+        // Clean up name (remove extra spaces and punctuation)
+        name = name.replace(/[,;:]\s*$/, '').trim()
+        
+        currentMedicine = { name: name || "Medicine", dosage, frequency, duration }
+      } else if (currentMedicine) {
+        // Check if this line contains frequency or duration info
+        const frequencyMatch = trimmedLine.match(/(\d+[-\s]\d+[-\s]\d+|\d+\s*(?:times|tab|cap)s?\s*(?:daily|per day|a day)|once|twice)/i)
+        if (frequencyMatch && !currentMedicine.frequency) {
+          currentMedicine.frequency = frequencyMatch[1]
+        }
+        
+        const durationMatch = trimmedLine.match(/(?:for|duration|take|continue)\s+(\d+\s*(?:days?|weeks?|months?|times?))?/i)
+        if (durationMatch && durationMatch[1] && !currentMedicine.duration) {
+          currentMedicine.duration = durationMatch[1]
+        }
+      }
+    }
+    
+    // Add last medicine if exists
+    if (currentMedicine && currentMedicine.name) {
+      medicines.push(currentMedicine)
+    }
+    
+    // If parsing failed, create one medicine entry with the name from text
+    if (medicines.length === 0 && text.trim()) {
+      const firstLine = text.split('\n')[0].trim()
+      medicines.push({
+        name: firstLine || "Medicine",
+        dosage: "",
+        frequency: "",
+        duration: ""
+      })
+    }
+    
+    return medicines
+  }
+
+  const handleAcceptPrescription = (appointmentId: string) => {
+    if (aiPrescription[appointmentId]) {
+      const parsedMedicines = parseAiPrescription(aiPrescription[appointmentId].medicine)
       setCompletionData({
         ...completionData,
-        medicine: aiPrescription.medicine
+        [appointmentId]: {
+          ...completionData[appointmentId],
+          medicines: parsedMedicines.length > 0 ? parsedMedicines : [{ name: "", dosage: "", frequency: "", duration: "" }]
+        }
       })
-      setShowAiPrescriptionSuggestion(false)
+      setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: false})
       setNotification({ type: "success", message: "AI prescription accepted! You can still edit it." })
     }
   }
 
-  const handleDeclinePrescription = () => {
-    setShowAiPrescriptionSuggestion(false)
+  const handleDeclinePrescription = (appointmentId: string) => {
+    setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: false})
   }
 
+  const handleCopyPreviousPrescription = (appointmentId: string) => {
+    const appointment = appointments.find(apt => apt.id === appointmentId)
+    if (!appointment) return
 
-  const handleCompleteAppointment = async (e: React.FormEvent) => {
-    e.preventDefault()
+    // Get the latest previous prescription from patient history
+    const sameDoctorHistory = patientHistory.filter((historyItem: AppointmentType) => 
+      historyItem.doctorId === appointment.doctorId && 
+      historyItem.id !== appointment.id &&
+      historyItem.medicine
+    )
     
-    if (!selectedAppointmentId) return
-    
-    if (!completionData.medicine.trim() || !completionData.notes.trim()) {
+    if (sameDoctorHistory.length > 0) {
+      const latest = sameDoctorHistory[0] // Already sorted by date desc
+      if (latest.medicine) {
+        // Parse the previous prescription
+        const parsed = parsePrescription(latest.medicine)
+        if (parsed && parsed.medicines.length > 0) {
+          // Convert to structured format
+          const structuredMedicines = parsed.medicines.map(med => ({
+            name: med.name || "",
+            dosage: med.dosage || "",
+            frequency: med.frequency || "",
+            duration: med.duration || ""
+          }))
+          
+          // Populate completion data with previous prescription
+          setCompletionData({
+            ...completionData,
+            [appointmentId]: {
+              medicines: structuredMedicines,
+              notes: latest.doctorNotes || "",
+              recheckupRequired: false
+            }
+          })
+          
+          setNotification({ 
+            type: "success", 
+            message: "Previous prescription copied! You can edit it as needed." 
+          })
+        } else {
+          setNotification({ 
+            type: "error", 
+            message: "Could not parse previous prescription" 
+          })
+        }
+      }
+    } else {
       setNotification({ 
         type: "error", 
-        message: "Please fill in both medicine and notes" 
+        message: "No previous prescription found for this patient" 
+      })
+    }
+  }
+
+  const handleCompleteAppointment = async (e: React.FormEvent, appointmentId: string) => {
+    e.preventDefault()
+    
+    if (!appointmentId) return
+    
+    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+    
+    // Validate that at least one medicine has a name
+    const hasValidMedicine = currentData.medicines.some(med => med.name.trim())
+    
+    if (!hasValidMedicine || !currentData.notes.trim()) {
+      setNotification({ 
+        type: "error", 
+        message: "Please add at least one medicine with a name and fill in notes" 
       })
       return
     }
 
-    setUpdating(true)
+    // Format medicines as text for storage (including advice/notes)
+    const medicineText = formatMedicinesAsText(currentData.medicines, currentData.notes)
+
+    setUpdating({...updating, [appointmentId]: true})
     try {
       const result = await completeAppointment(
-        selectedAppointmentId,
-        completionData.medicine,
-        completionData.notes
+        appointmentId,
+        medicineText,
+        currentData.notes
       )
 
       setAppointments(appointments.map(apt => 
-        apt.id === selectedAppointmentId 
+        apt.id === appointmentId 
           ? { ...apt, ...result.updates } 
           : apt
       ))
 
       // Send re-checkup WhatsApp message if required
-      if (completionData.recheckupRequired) {
-        const appointment = appointments.find(apt => apt.id === selectedAppointmentId)
+      if (currentData.recheckupRequired) {
+        const appointment = appointments.find(apt => apt.id === appointmentId)
         if (appointment) {
           try {
             const response = await fetch("/api/doctor/send-recheckup-whatsapp", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                appointmentId: selectedAppointmentId,
+                appointmentId: appointmentId,
                 patientId: appointment.patientId,
                 patientPhone: appointment.patientPhone,
                 doctorName: appointment.doctorName || userData?.name || "Doctor",
@@ -400,12 +757,20 @@ export default function DoctorAppointments() {
 
       setNotification({ 
         type: "success", 
-        message: result.message + (completionData.recheckupRequired ? " Re-checkup message sent to patient." : "")
+        message: result.message + (currentData.recheckupRequired ? " Re-checkup message sent to patient." : "")
       })
 
-      setCompletionData({ medicine: "", notes: "", recheckupRequired: false })
-      setShowCompletionModal(false)
-      setSelectedAppointmentId(null)
+      // Reset form data for this appointment
+      const newCompletionData = {...completionData}
+      delete newCompletionData[appointmentId]
+      setCompletionData(newCompletionData)
+      
+      const newAiPrescription = {...aiPrescription}
+      delete newAiPrescription[appointmentId]
+      setAiPrescription(newAiPrescription)
+      
+      setShowCompletionForm({...showCompletionForm, [appointmentId]: false})
+      setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: true})
     } catch (error: unknown) {
       console.error("Error completing appointment:", error)
       setNotification({ 
@@ -413,7 +778,7 @@ export default function DoctorAppointments() {
         message: (error as Error).message || "Failed to complete appointment" 
       })
     } finally {
-      setUpdating(false)
+      setUpdating({...updating, [appointmentId]: false})
     }
   }
 
@@ -521,6 +886,57 @@ export default function DoctorAppointments() {
     return dateB.getTime() - dateA.getTime()
   }
   
+  const filteredHistoryAppointments = useMemo(() => {
+    const normalizedQuery = historyTabFilters.text.trim().toLowerCase()
+    return historyAppointments.filter(apt => {
+      const matchesText = normalizedQuery
+        ? [
+            apt.patientName,
+            apt.patientId,
+            apt.id,
+            apt.chiefComplaint,
+            apt.associatedSymptoms,
+            apt.medicalHistory,
+            apt.doctorNotes
+          ].some(field => (field || "").toLowerCase().includes(normalizedQuery))
+        : true
+
+      const matchesDate = historyTabFilters.date
+        ? new Date(apt.appointmentDate).toISOString().split("T")[0] === historyTabFilters.date
+        : true
+
+      return matchesText && matchesDate
+    })
+  }, [historyAppointments, historyTabFilters])
+
+  const totalHistoryPages = Math.max(1, Math.ceil(filteredHistoryAppointments.length / historyPageSize))
+
+  const paginatedHistoryAppointments = useMemo(() => {
+    const sorted = [...filteredHistoryAppointments].sort(sortByDateTimeDesc)
+    const startIndex = (historyPage - 1) * historyPageSize
+    return sorted.slice(startIndex, startIndex + historyPageSize)
+  }, [filteredHistoryAppointments, historyPage, historyPageSize])
+
+  useEffect(() => {
+    if (historyPage > totalHistoryPages) {
+      setHistoryPage(totalHistoryPages)
+    }
+  }, [historyPage, totalHistoryPages])
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      setHistoryPage(1)
+    }
+  }, [historyTabFilters, historyPageSize, activeTab])
+
+  if (loading) {
+    return <LoadingSpinner message="Loading appointments..." />
+  }
+
+  if (!user || !userData) {
+    return null
+  }
+
   // Get displayed appointments based on active tab
   const getDisplayedAppointments = () => {
     switch (activeTab) {
@@ -533,7 +949,7 @@ export default function DoctorAppointments() {
       case "nextWeek":
         return [...nextWeekAppointments].sort(sortByDateTime)
       case "history":
-        return [...historyAppointments].sort(sortByDateTimeDesc)
+        return paginatedHistoryAppointments
       default:
         return []
     }
@@ -715,11 +1131,43 @@ export default function DoctorAppointments() {
             }
           `}</style>
 
+          {activeTab === "history" && (
+            <div className="mb-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔎</span>
+                  <input type="text" value={historyTabFilters.text}
+                    onChange={(e) => setHistoryTabFilters(prev => ({ ...prev, text: e.target.value }))}
+                    placeholder="Search by patient name, appointment ID, symptoms..."
+                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+                  />
+                </div>
+                <div className="flex gap-2 w-full md:w-auto">
+                  <input type="date" value={historyTabFilters.date}
+                    onChange={(e) => setHistoryTabFilters(prev => ({ ...prev, date: e.target.value }))}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+                  />
+                  {(historyTabFilters.text || historyTabFilters.date) && (
+                    <button type="button"  onClick={() => setHistoryTabFilters({ text: "", date: "" })}
+                      className="px-3 py-2 text-xs font-semibold text-slate-600 border border-slate-300 rounded-lg bg-white hover:bg-slate-100"
+                    > Reset </button>
+                  )}
+                </div>
+              </div>
+              <div className="text-xs text-slate-500 flex items-center justify-between">
+                <span>
+                  Filtering{" "}
+                  <span className="font-semibold text-slate-800">{filteredHistoryAppointments.length}</span> of{" "}
+                  <span className="font-semibold text-slate-800">{historyAppointments.length}</span> completed appointments
+                </span>
+                <span className="italic">Tip: search by patient ID, date, or chief complaint</span>
+              </div>
+            </div>
+          )}
+
           {displayedAppointments.length === 0 ? (
             <div className="text-center py-12 bg-slate-50 rounded-lg">
-              <span className="text-6xl text-slate-300 block mb-3">
-                📋
-              </span>
+              <span className="text-6xl text-slate-300 block mb-3"> 📋 </span>
               <p className="text-slate-600 font-medium">
                 {activeTab === "today" ? "No appointments scheduled for today" :
                  activeTab === "tomorrow" ? "No appointments scheduled for tomorrow" :
@@ -731,6 +1179,75 @@ export default function DoctorAppointments() {
                 {activeTab === "history" ? "Completed appointments will appear here" : 
                  "Appointments will appear here once patients book them"}
               </p>
+            </div>
+          ) : activeTab === "history" ? (
+            <div className="space-y-2.5">
+              {displayedAppointments.map((appointment) => {
+                const isExpanded = expandedAppointment === appointment.id
+                return (
+                  <div key={appointment.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                        <span>{appointment.patientName}</span>
+                        <span className="text-[11px] font-normal text-slate-500 border-l border-slate-200 pl-2">
+                          ID: {appointment.patientId}
+                        </span>
+                      </div>
+                      <div className="text-right text-[11px] text-slate-500">
+                        <p className="font-semibold text-slate-700 text-xs">
+                          {new Date(appointment.appointmentDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                        <p>{appointment.appointmentTime}</p>
+                      </div>
+                    </div>
+                    <div className="mt-1 text-[12px] text-slate-600 line-clamp-2">
+                      {appointment.chiefComplaint || "No chief complaint recorded."}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        <span>Doctor: {appointment.doctorName}</span>
+                        <span>Prescription: {appointment.medicine ? "Provided" : "Pending"}</span>
+                        <span>Notes: {appointment.doctorNotes ? "Added" : "Pending"}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => toggleAccordion(appointment.id)}
+                          className="px-2.5 py-1 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 font-semibold transition-colors"
+                        >
+                          {isExpanded ? "Hide Details" : "View Details"}
+                        </button>
+                        {appointment.medicine && (
+                          <button
+                            onClick={() => generatePrescriptionPDF(appointment as unknown as AppointmentType)}
+                            className="px-2.5 py-1 rounded-md border border-teal-300 text-teal-700 hover:bg-teal-50 font-semibold transition-colors"
+                          >Download PDF  </button>
+                        )}
+                      </div>
+                    </div>
+                    {appointment.associatedSymptoms && (
+                      <div className="mt-1 text-[11px] text-slate-500 line-clamp-1">
+                        Symptoms: {appointment.associatedSymptoms}
+                      </div>
+                    )}
+                    {isExpanded && (
+                      <div className="mt-2 border border-slate-200 rounded-lg bg-slate-50 p-2.5 space-y-2 text-[11px] text-slate-700">
+                        {appointment.medicine && (
+                          <div>
+                            <p className="font-semibold text-slate-800 mb-1">Prescription</p>
+                            <pre className="whitespace-pre-wrap">{appointment.medicine}</pre>
+                          </div>
+                        )}
+                        {appointment.doctorNotes && (
+                          <div>
+                            <p className="font-semibold text-slate-800 mb-1">Doctor Notes</p>
+                            <p>{appointment.doctorNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <div className="space-y-4">
@@ -885,27 +1402,69 @@ export default function DoctorAppointments() {
                                       <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
                                         {latestRecommendation.date}
                                       </span>
-                            </div>
+                                    </div>
                                     
-                                    {latestRecommendation.medicine && (
-                                      <div className="mb-3">
-                                        <span className="text-blue-700 text-xs font-semibold block mb-1">💊 Previous Medicine:</span>
-                                        <p className="text-blue-900 text-sm font-medium bg-white p-2 rounded border border-blue-200">
-                                          {latestRecommendation.medicine}
-                                        </p>
-                          </div>
-                                    )}
+                                    {latestRecommendation.medicine && (() => {
+                                      const parsed = parsePrescription(latestRecommendation.medicine)
+                                      if (parsed && parsed.medicines.length > 0) {
+                                        return (
+                                          <div className="mb-3">
+                                            <span className="text-blue-700 text-xs font-semibold block mb-2">💊 Previous Medicine:</span>
+                                            <div className="bg-white rounded-lg p-3 border border-blue-200">
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {parsed.medicines.map((med, index) => (
+                                                  <div key={index} className="bg-gray-50 border border-gray-200 rounded p-2">
+                                                    <div className="flex items-start gap-1.5 mb-1">
+                                                      <span className="text-sm">{med.emoji}</span>
+                                                      <div className="flex-1">
+                                                        <h6 className="font-semibold text-gray-900 text-xs">
+                                                          {med.name}
+                                                          {med.dosage && <span className="text-gray-600 font-normal">({med.dosage})</span>}
+                                                        </h6>
+                                                      </div>
+                                                    </div>
+                                                    <div className="ml-5 space-y-0.5 text-xs text-gray-700">
+                                                      {med.frequency && (
+                                                        <div className="flex items-center gap-1.5">
+                                                          <span className="text-gray-400">•</span>
+                                                          <span>{med.frequency}</span>
+                                                        </div>
+                                                      )}
+                                                      {med.duration && (
+                                                        <div className="flex items-center gap-1.5">
+                                                          <span className="text-gray-400">•</span>
+                                                          <span><span className="font-medium">Duration:</span> {med.duration}</span>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      } else {
+                                        return (
+                                          <div className="mb-3">
+                                            <span className="text-blue-700 text-xs font-semibold block mb-1">💊 Previous Medicine:</span>
+                                            <p className="text-blue-900 text-sm font-medium bg-white p-2 rounded border border-blue-200 whitespace-pre-line">
+                                              {latestRecommendation.medicine}
+                                            </p>
+                                          </div>
+                                        )
+                                      }
+                                    })()}
                                     
                                     {latestRecommendation.notes && (
                                       <div className="mb-2">
                                         <span className="text-blue-700 text-xs font-semibold block mb-1">📝 Previous Notes:</span>
-                                        <p className="text-blue-900 text-sm font-medium bg-white p-2 rounded border border-blue-200">
+                                        <p className="text-blue-900 text-sm font-medium bg-white p-2 rounded border border-blue-200 whitespace-pre-line">
                                           {latestRecommendation.notes}
                                         </p>
                                       </div>
                                     )}
                                     
-                                    <div className="text-xs text-blue-600 font-medium">
+                                    <div className="text-xs text-blue-600 font-medium mt-2">
                                       Recommended by {latestRecommendation.doctorName}
                                     </div>
                                   </div>
@@ -1213,40 +1772,197 @@ export default function DoctorAppointments() {
                                     >
                                       <span>🔄</span> Regenerate
                                     </button>
-                              {appointment.status === "confirmed" && (()=>{
-                                const isTodayAppt = isToday(appointment.appointmentDate)
-                                const earlierPendingExists = appointments.some(a => {
-                                  if (a.status !== 'confirmed') return false
-                                  if (!isToday(a.appointmentDate)) return false
-                                  const tA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
-                                  const tThis = new Date(`${appointment.appointmentDate} ${appointment.appointmentTime}`).getTime()
-                                  return tA < tThis
-                                })
-                                const disabled = !isTodayAppt || earlierPendingExists || updating
-                                return (
+                              {appointment.status === "confirmed" && (
                                       <button
-                                        onClick={() => openCompletionModal(appointment.id)}
-                                    disabled={disabled}
+                                        onClick={() => toggleCompletionForm(appointment.id)}
+                                        disabled={updating[appointment.id] || false}
                                         className="px-4 py-2.5 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-sm flex items-center justify-center gap-2"
                                       >
                                         <span>✓</span> Complete Checkup
                                       </button>
-                                )
-                              })()}
+                              )}
                                   </div>
                                 </div>
                               </div>
                             )
                           })()}
 
+                        {/* Patient History */}
+                        {patientHistory.length > 0 && (() => {
+                          const historyFilters = historySearchFilters[appointment.id] || { text: "", date: "" }
+                          const normalizedQuery = historyFilters.text.trim().toLowerCase()
+                          const historyForPatient = patientHistory.filter(historyItem => historyItem.patientId === appointment.patientId)
+                          if (!historyForPatient.length) return null
+
+                          const filteredHistory = historyForPatient.filter(historyItem => {
+                            const matchesText = normalizedQuery
+                              ? [
+                                  historyItem.patientName,
+                                  historyItem.patientId,
+                                  historyItem.id,
+                                  historyItem.chiefComplaint,
+                                  historyItem.associatedSymptoms,
+                                  historyItem.medicalHistory,
+                                  historyItem.doctorNotes
+                                ].some(field => (field || "").toLowerCase().includes(normalizedQuery))
+                              : true
+
+                            const matchesDate = historyFilters.date
+                              ? new Date(historyItem.appointmentDate).toISOString().split("T")[0] === historyFilters.date
+                              : true
+
+                            return matchesText && matchesDate
+                          })
+
+                          return (
+                            <div className="mt-4">
+                              <div className="bg-white rounded-xl p-4 border-2 border-slate-200 shadow-sm">
+                                <button
+                                  onClick={() => setShowHistory({ ...showHistory, [appointment.id]: !showHistory[appointment.id] })}
+                                  className="w-full flex items-center justify-between hover:bg-slate-50 rounded-lg p-2 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xl">📚</span>
+                                    <h4 className="font-semibold text-slate-800 text-base">
+                                      Previous Checkup History ({filteredHistory.length}/{historyForPatient.length})
+                                    </h4>
+                                  </div>
+                                  <div className={`transition-transform duration-200 ${showHistory[appointment.id] ? "rotate-180" : ""}`}>
+                                    <span className="text-slate-600 text-lg">▼</span>
+                                  </div>
+                                </button>
+
+                                {showHistory[appointment.id] && (
+                                  <div className="mt-4 space-y-3">
+                                    <div className="grid gap-2 md:grid-cols-2">
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                                        <input
+                                          type="text"
+                                          value={historyFilters.text}
+                                          onChange={(e) => handleHistorySearchChange(appointment.id, "text", e.target.value)}
+                                          placeholder="Search by name, ID, date, symptoms..."
+                                          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="date"
+                                          value={historyFilters.date}
+                                          onChange={(e) => handleHistorySearchChange(appointment.id, "date", e.target.value)}
+                                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+                                        />
+                                        {(historyFilters.text || historyFilters.date) && (
+                                          <button
+                                            type="button"
+                                            onClick={() => clearHistoryFilters(appointment.id)}
+                                            className="px-3 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+                                          >
+                                            Reset
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {filteredHistory.length === 0 ? (
+                                      <div className="text-sm text-slate-500 text-center py-6 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                                        No visits match the current search filters.
+                                      </div>
+                                    ) : (
+                                      filteredHistory.map((historyItem) => {
+                                        const visitIndex = historyForPatient.findIndex(item => item.id === historyItem.id)
+                                        const visitNumber = visitIndex >= 0 ? historyForPatient.length - visitIndex : "-"
+                                        return (
+                                          <div key={historyItem.id} className="bg-white p-3 rounded border">
+                                            <div className="flex items-center justify-between mb-2">
+                                              <p className="text-sm font-semibold text-gray-900">
+                                                Visit #{visitNumber}
+                                              </p>
+                                              <p className="text-xs text-gray-600">
+                                                {new Date(historyItem.appointmentDate).toLocaleDateString()}
+                                              </p>
+                                            </div>
+                                            <div className="space-y-2 text-xs">
+                                              <div>
+                                                <span className="text-gray-600 font-medium">Chief Complaint:</span>
+                                                <p className="text-gray-900 mt-1">{historyItem.chiefComplaint}</p>
+                                              </div>
+                                              {historyItem.associatedSymptoms && (
+                                                <div>
+                                                  <span className="text-gray-600 font-medium">Symptoms:</span>
+                                                  <p className="text-gray-900 mt-1 whitespace-pre-line">{historyItem.associatedSymptoms}</p>
+                                                </div>
+                                              )}
+                                              {historyItem.medicine && (() => {
+                                                const parsed = parsePrescription(historyItem.medicine)
+                                                if (parsed && parsed.medicines.length > 0) {
+                                                  return (
+                                                    <div>
+                                                      <span className="text-gray-600 font-medium mb-2 block">💊 Prescribed Medicines:</span>
+                                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                                                        {parsed.medicines.map((med, medIndex) => (
+                                                          <div key={medIndex} className="bg-gray-50 border border-gray-200 rounded p-2">
+                                                            <div className="flex items-start gap-1.5 mb-1">
+                                                              <span className="text-sm">{med.emoji}</span>
+                                                              <div className="flex-1">
+                                                                <h6 className="font-semibold text-gray-900 text-xs">
+                                                                  {med.name}
+                                                                  {med.dosage && <span className="text-gray-600 font-normal">({med.dosage})</span>}
+                                                                </h6>
+                                                              </div>
+                                                            </div>
+                                                            <div className="ml-5 space-y-0.5 text-xs text-gray-700">
+                                                              {med.frequency && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                  <span className="text-gray-400">•</span>
+                                                                  <span>{med.frequency}</span>
+                                                                </div>
+                                                              )}
+                                                              {med.duration && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                  <span className="text-gray-400">•</span>
+                                                                  <span><span className="font-medium">Duration:</span> {med.duration}</span>
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )
+                                                } else {
+                                                  return (
+                                                    <div>
+                                                      <span className="text-gray-600 font-medium">💊 Medicine:</span>
+                                                      <p className="text-gray-900 mt-1 whitespace-pre-line">{historyItem.medicine}</p>
+                                                    </div>
+                                                  )
+                                                }
+                                              })()}
+                                              {historyItem.doctorNotes && (
+                                                <div>
+                                                  <span className="text-gray-600 font-medium">📝 Notes:</span>
+                                                  <p className="text-gray-900 mt-1 whitespace-pre-line">{historyItem.doctorNotes}</p>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
                           {/* Complete Checkup Button - Show at bottom if AI not shown yet */}
-                          {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (()=>{
-                            const disabled = updating
-                            return (
+                          {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (
                             <div className="mt-4">
                                 <button
-                                  onClick={() => openCompletionModal(appointment.id)}
-                                  disabled={disabled}
+                                  onClick={() => toggleCompletionForm(appointment.id)}
+                                  disabled={updating[appointment.id] || false}
                                   className="w-full px-5 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-base flex items-center justify-center gap-2"
                                 >
                                   <span>✓</span> Complete Checkup
@@ -1272,26 +1988,339 @@ export default function DoctorAppointments() {
                                   )}
                                 </button>
                             </div>
-                            )
-                          })()}
+                          )}
+
+                          {/* Complete Checkup Form Accordion */}
+                          {showCompletionForm[appointment.id] && appointment.status === "confirmed" && (
+                            <div className="mt-3 bg-white rounded-lg border border-green-200 shadow-sm overflow-hidden">
+                              <div className="bg-gradient-to-r from-green-600 to-teal-600 p-2.5">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-white font-bold text-sm flex items-center gap-1.5">
+                                    <span>✓</span> Complete Checkup
+                                  </h4>
+                                  <button
+                                    onClick={() => toggleCompletionForm(appointment.id)}
+                                    className="text-white hover:bg-white/20 rounded p-0.5 transition-all"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              <form onSubmit={(e) => handleCompleteAppointment(e, appointment.id)} className="p-3 space-y-2.5">
+                                {/* Prescription Section */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-xs font-medium text-gray-700">
+                                      Prescribed Medicines <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                      {(() => {
+                                        const sameDoctorHistory = patientHistory.filter((historyItem: AppointmentType) => 
+                                          historyItem.doctorId === appointment.doctorId && 
+                                          historyItem.id !== appointment.id &&
+                                          historyItem.medicine
+                                        )
+                                        if (sameDoctorHistory.length > 0) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleCopyPreviousPrescription(appointment.id)}
+                                              className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition-all"
+                                              title="Copy previous prescription"
+                                            >
+                                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                              </svg>
+                                              Use Previous
+                                            </button>
+                                          )
+                                        }
+                                        return null
+                                      })()}
+                                      <p className="text-xs text-gray-500">Add</p>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* AI Generated Prescription Suggestion Box */}
+                                  {loadingAiPrescription[appointment.id] ? (
+                                    <div className="mb-2 bg-purple-50 border border-purple-200 rounded p-2">
+                                      <div className="flex items-center gap-2">
+                                        <svg className="animate-spin h-4 w-4 text-purple-600" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span className="text-xs font-medium text-purple-700">Generating AI prescription...</span>
+                                      </div>
+                                    </div>
+                                  ) : showAiPrescriptionSuggestion[appointment.id] && aiPrescription[appointment.id]?.medicine ? (
+                                    <div className="mb-2 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-300 rounded p-2 shadow-sm">
+                                      <div className="flex items-start justify-between mb-1.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                          </svg>
+                                          <span className="text-xs font-semibold text-purple-700 uppercase">AI Generated</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAcceptPrescription(appointment.id)}
+                                            className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded transition-all"
+                                          >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Accept
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeclinePrescription(appointment.id)}
+                                            className="flex items-center gap-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded transition-all"
+                                          >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                            Decline
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="bg-white rounded p-2 border border-purple-100">
+                                        <pre className="text-xs text-gray-800 whitespace-pre-wrap font-sans">{aiPrescription[appointment.id].medicine}</pre>
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {/* Structured Medicine Form */}
+                                  <div className="space-y-2">
+                                    {(completionData[appointment.id]?.medicines || []).length === 0 ? (
+                                      <div className="text-center py-3 bg-gray-50 rounded border border-dashed border-gray-300">
+                                        <p className="text-xs text-gray-600 mb-2">No medicines added yet</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => addMedicine(appointment.id)}
+                                          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-xs transition-all"
+                                        >
+                                          + Add Medicine
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {(completionData[appointment.id]?.medicines || []).map((medicine, index) => (
+                                          <div key={index} className="bg-gray-50 rounded p-2.5 border border-gray-200">
+                                            <div className="flex items-center justify-between mb-2">
+                                              <h5 className="font-semibold text-gray-800 text-xs">#{index + 1}</h5>
+                                              <button
+                                                type="button"
+                                                onClick={() => removeMedicine(appointment.id, index)}
+                                                className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded p-0.5 transition-all"
+                                                title="Remove medicine"
+                                              >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                              </button>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                              <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-0.5">
+                                                  Name <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={medicine.name}
+                                                  onChange={(e) => updateMedicine(appointment.id, index, "name", e.target.value)}
+                                                  placeholder="e.g., Paracetamol"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
+                                                  required
+                                                />
+                                              </div>
+                                              
+                                              <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-0.5">
+                                                  Dosage
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={medicine.dosage}
+                                                  onChange={(e) => updateMedicine(appointment.id, index, "dosage", e.target.value)}
+                                                  placeholder="e.g., 500mg"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
+                                                />
+                                              </div>
+                                              
+                                              <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-0.5">
+                                                  Frequency
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={medicine.frequency}
+                                                  onChange={(e) => updateMedicine(appointment.id, index, "frequency", e.target.value)}
+                                                  placeholder="e.g., 1-0-1"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
+                                                />
+                                              </div>
+                                              
+                                              <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-0.5">
+                                                  Duration
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={medicine.duration}
+                                                  onChange={(e) => updateMedicine(appointment.id, index, "duration", e.target.value)}
+                                                  placeholder="e.g., 5 days"
+                                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
+                                                />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                        
+                                        <button
+                                          type="button"
+                                          onClick={() => addMedicine(appointment.id)}
+                                          className="w-full px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-xs transition-all flex items-center justify-center gap-1.5"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                          </svg>
+                                          Add Medicine
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Notes Section */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Doctor&apos;s Notes <span className="text-red-500">*</span>
+                                  </label>
+                                  <textarea
+                                    value={completionData[appointment.id]?.notes || ""}
+                                    onChange={(e) => setCompletionData({
+                                      ...completionData,
+                                      [appointment.id]: {
+                                        ...completionData[appointment.id],
+                                        notes: e.target.value,
+                                        medicines: completionData[appointment.id]?.medicines || [],
+                                        recheckupRequired: completionData[appointment.id]?.recheckupRequired || false
+                                      }
+                                    })}
+                                    rows={3}
+                                    placeholder="Enter observations, diagnosis, recommendations..."
+                                    className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
+                                    required
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1">
+                                  <input
+                                    type="checkbox"
+                                    id={`recheckupRequired-${appointment.id}`}
+                                    checked={completionData[appointment.id]?.recheckupRequired || false}
+                                    onChange={(e) => setCompletionData({
+                                      ...completionData,
+                                      [appointment.id]: {
+                                        ...completionData[appointment.id],
+                                        recheckupRequired: e.target.checked,
+                                        medicines: completionData[appointment.id]?.medicines || [],
+                                        notes: completionData[appointment.id]?.notes || ""
+                                      }
+                                    })}
+                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <label htmlFor={`recheckupRequired-${appointment.id}`} className="text-xs font-medium text-gray-700 cursor-pointer">
+                                    🔄 Re-checkup Required
+                                  </label>
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                  <button
+                                    type="submit"
+                                    disabled={updating[appointment.id] || false}
+                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {updating[appointment.id] ? "Completing..." : "Complete Checkup"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCompletionForm(appointment.id)}
+                                    disabled={updating[appointment.id] || false}
+                                    className="px-4 py-2 border border-slate-300 rounded hover:bg-slate-50 transition-all font-semibold text-sm text-slate-700"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </form>
+                            </div>
+                          )}
 
                           {/* Completed Status with Prescription */}
                               {appointment.status === "completed" && (
-                            <div className="bg-white rounded-xl p-5 border-2 border-green-200 shadow-sm">
+                            <div className="bg-white rounded-xl p-4 border-2 border-green-200 shadow-sm">
                                 <div className="space-y-3">
-                                  <div className="text-center py-2 text-green-600 font-medium">
+                                  <div className="text-center py-2 text-green-600 font-medium text-sm">
                                     ✓ Checkup Completed
                                   </div>
-                                  {appointment.medicine && (
-                                    <div className="bg-white p-3 rounded border">
-                                      <p className="text-xs text-gray-600 mb-1 font-semibold">💊 Prescribed Medicine:</p>
-                                      <p className="text-sm text-gray-900">{appointment.medicine}</p>
-                                    </div>
-                                  )}
+                                  {appointment.medicine && (() => {
+                                    const parsed = parsePrescription(appointment.medicine)
+                                    if (parsed && parsed.medicines.length > 0) {
+                                      return (
+                                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                          <h5 className="text-gray-700 font-semibold mb-2 flex items-center gap-2 text-sm">
+                                            <span>💊</span>
+                                            <span>Prescribed Medicines</span>
+                                          </h5>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                            {parsed.medicines.map((med, index) => (
+                                              <div key={index} className="bg-white border border-gray-200 rounded p-2 text-xs">
+                                                <div className="flex items-start gap-1.5 mb-1">
+                                                  <span className="text-base">{med.emoji}</span>
+                                                  <div className="flex-1">
+                                                    <h6 className="font-semibold text-gray-900 text-xs">
+                                                      {med.name}
+                                                      {med.dosage && <span className="text-gray-600 font-normal">({med.dosage})</span>}
+                                                    </h6>
+                                                  </div>
+                                                </div>
+                                                <div className="ml-5 space-y-0.5 text-xs text-gray-700">
+                                                  {med.frequency && (
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-gray-400">•</span>
+                                                      <span>{med.frequency}</span>
+                                                    </div>
+                                                  )}
+                                                  {med.duration && (
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-gray-400">•</span>
+                                                      <span><span className="font-medium">Duration:</span> {med.duration}</span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )
+                                    } else {
+                                      return (
+                                        <div className="bg-white p-3 rounded border">
+                                          <p className="text-xs text-gray-600 mb-1 font-semibold">💊 Prescribed Medicine:</p>
+                                          <p className="text-sm text-gray-900 whitespace-pre-line">{appointment.medicine}</p>
+                                        </div>
+                                      )
+                                    }
+                                  })()}
                                   {appointment.doctorNotes && (
                                     <div className="bg-white p-3 rounded border">
                                       <p className="text-xs text-gray-600 mb-1 font-semibold">📝 Doctor&apos;s Notes:</p>
-                                      <p className="text-sm text-gray-900">{appointment.doctorNotes}</p>
+                                      <p className="text-sm text-gray-900 whitespace-pre-line">{appointment.doctorNotes}</p>
                                     </div>
                                   )}
                                   <button
@@ -1306,63 +2335,6 @@ export default function DoctorAppointments() {
                                 </div>
                             </div>
                           )}
-
-                        {/* Patient History */}
-                        {patientHistory.length > 0 && (
-                          <div>
-                            <div className="bg-white rounded-xl p-4 border-2 border-slate-200 shadow-sm">
-                              <button
-                                onClick={() => setShowHistory({...showHistory, [appointment.id]: !showHistory[appointment.id]})}
-                                className="w-full flex items-center justify-between hover:bg-slate-50 rounded-lg p-2 transition-colors"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xl">📚</span>
-                                  <h4 className="font-semibold text-slate-800 text-base">
-                                    Previous Checkup History ({patientHistory.length})
-                              </h4>
-                                </div>
-                                <div className={`transition-transform duration-200 ${showHistory[appointment.id] ? 'rotate-180' : ''}`}>
-                                  <span className="text-slate-600 text-lg">▼</span>
-                                </div>
-                              </button>
-                              
-                              {showHistory[appointment.id] && (
-                                <div className="space-y-3 mt-4">
-                                {patientHistory.map((historyItem, index) => (
-                                  <div key={historyItem.id} className="bg-white p-3 rounded border">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <p className="text-sm font-semibold text-gray-900">
-                                        Visit #{patientHistory.length - index}
-                                      </p>
-                                      <p className="text-xs text-gray-600">
-                                        {new Date(historyItem.appointmentDate).toLocaleDateString()}
-                                      </p>
-                                    </div>
-                                    <div className="space-y-2 text-xs">
-                                      <div>
-                                        <span className="text-gray-600">Chief Complaint:</span>
-                                        <p className="text-gray-900">{historyItem.chiefComplaint}</p>
-                                      </div>
-                                      {historyItem.medicine && (
-                                        <div>
-                                          <span className="text-gray-600">💊 Medicine:</span>
-                                          <p className="text-gray-900">{historyItem.medicine}</p>
-                                        </div>
-                                      )}
-                                      {historyItem.doctorNotes && (
-                                        <div>
-                                          <span className="text-gray-600">📝 Notes:</span>
-                                          <p className="text-gray-900">{historyItem.doctorNotes}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
@@ -1370,154 +2342,21 @@ export default function DoctorAppointments() {
               ))}
             </div>
           )}
+
+          {activeTab === "history" && filteredHistoryAppointments.length > 0 && (
+            <Pagination
+              currentPage={historyPage}
+              totalPages={totalHistoryPages}
+              pageSize={historyPageSize}
+              totalItems={filteredHistoryAppointments.length}
+              onPageChange={setHistoryPage}
+              onPageSizeChange={setHistoryPageSize}
+              itemLabel="appointments"
+              className="mt-4 rounded-xl"
+            />
+          )}
         </div>
       </main>
-
-      {/* Completion Modal */}
-      {showCompletionModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl border border-slate-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                <h2 className="text-xl font-semibold text-slate-800">Complete Checkup</h2>
-                <button 
-                  onClick={() => {
-                    setShowCompletionModal(false)
-                    setSelectedAppointmentId(null)
-                    setCompletionData({ medicine: "", notes: "", recheckupRequired: false })
-                    setAiPrescription(null)
-                    setShowAiPrescriptionSuggestion(true)
-                  }}
-                  className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-
-              <form onSubmit={handleCompleteAppointment} className="space-y-4">
-                {/* Prescription Section */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Prescribed Medicine <span className="text-red-500">*</span>
-                  </label>
-                  
-                  {/* AI Generated Prescription Suggestion Box */}
-                  {loadingAiPrescription ? (
-                    <div className="mb-3 bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
-                      <div className="flex items-center gap-3">
-                        <svg className="animate-spin h-5 w-5 text-purple-600" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span className="text-sm font-medium text-purple-700">Generating AI prescription...</span>
-                      </div>
-                    </div>
-                  ) : showAiPrescriptionSuggestion && aiPrescription?.medicine ? (
-                    <div className="mb-3 bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-lg p-4 shadow-sm">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                          </svg>
-                          <span className="text-xs font-semibold text-purple-700 uppercase">AI Generated</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleAcceptPrescription}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-all"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Accept
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleDeclinePrescription}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-lg transition-all"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                            Decline
-                          </button>
-                        </div>
-                      </div>
-                      <div className="bg-white rounded p-3 border border-purple-100">
-                        <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans">{aiPrescription.medicine}</pre>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <textarea
-                    value={completionData.medicine}
-                    onChange={(e) => setCompletionData({...completionData, medicine: e.target.value})}
-                    rows={4}
-                    placeholder="Enter medicine names, dosages, and instructions..."
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">You can accept the AI suggestion above or type your own prescription</p>
-                </div>
-
-                {/* Notes Section */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Doctor&apos;s Notes <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={completionData.notes}
-                    onChange={(e) => setCompletionData({...completionData, notes: e.target.value})}
-                    rows={4}
-                    placeholder="Enter your observations, diagnosis, and recommendations..."
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Write your personal notes, diagnosis, and recommendations</p>
-                </div>
-
-                <div className="flex items-center gap-3 pt-2">
-                  <input
-                    type="checkbox"
-                    id="recheckupRequired"
-                    checked={completionData.recheckupRequired}
-                    onChange={(e) => setCompletionData({...completionData, recheckupRequired: e.target.checked})}
-                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  <label htmlFor="recheckupRequired" className="text-sm font-medium text-gray-700 cursor-pointer">
-                    🔄 Re-checkup Required - Send WhatsApp message to patient
-                  </label>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    disabled={updating}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {updating ? "Completing..." : "Complete Checkup"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowCompletionModal(false)
-                      setSelectedAppointmentId(null)
-                      setCompletionData({ medicine: "", notes: "", recheckupRequired: false })
-                      setAiPrescription(null)
-                      setShowAiPrescriptionSuggestion(true)
-                    }}
-                    disabled={updating}
-                    className="px-6 py-3 border border-slate-300 rounded-lg hover:bg-slate-50 transition-all font-semibold text-slate-700"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Notification Toast */}
       {notification && (
