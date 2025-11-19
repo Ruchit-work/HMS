@@ -1,7 +1,15 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { applyRateLimit } from "@/utils/rateLimit"
+import { logPaymentEvent } from "@/utils/auditLog"
 
 export async function POST(req: Request) {
+  // Apply rate limiting first
+  const rateLimitResult = await applyRateLimit(req, "PAYMENT")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires patient, receptionist, or admin role
   const auth = await authenticateRequest(req)
   if (!auth.success) {
@@ -16,14 +24,30 @@ export async function POST(req: Request) {
     )
   }
 
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(req, "PAYMENT", auth.user?.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
+  }
+
+  // Declare variables outside try block for catch block access
+  let billingId: string | undefined
+  let method: "card" | "upi" | "cash" | "wallet" | "demo" = "card"
+  const isAdmissionBilling = false
+  let totalAmount = 0
+
   try {
     const initResult = initFirebaseAdmin("patient-billing-pay API")
     if (!initResult.ok) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
 
-    const { billingId, paymentMethod, actor, type } = await req.json().catch(() => ({}))
-    const method: "card" | "upi" | "cash" | "wallet" | "demo" = paymentMethod || "card"
+    const body = await req.json().catch(() => ({}))
+    billingId = body?.billingId
+    const paymentMethod = body?.paymentMethod || "card"
+    method = paymentMethod
+    const actor = body?.actor
+    const type = body?.type
     const actorType: "patient" | "receptionist" | "admin" = actor || (isPatient ? "patient" : "receptionist")
     const billingType: "admission" | "appointment" | undefined = type
 
@@ -38,9 +62,13 @@ export async function POST(req: Request) {
 
     let walletBalanceAfter: number | null = null
 
+    if (!billingId) {
+      return Response.json({ error: "Missing billingId" }, { status: 400 })
+    }
+
     await firestore.runTransaction(async (tx) => {
       // First, try to find in billing_records (admission billing)
-      const billingRef = firestore.collection("billing_records").doc(billingId)
+      const billingRef = firestore.collection("billing_records").doc(billingId!)
       const billingSnap = await tx.get(billingRef)
       
       let isAdmissionBilling = false
@@ -51,7 +79,7 @@ export async function POST(req: Request) {
         billingData = billingSnap.data() || {}
       } else {
         // If not found in billing_records, check appointments (appointment billing)
-        const appointmentRef = firestore.collection("appointments").doc(billingId)
+        const appointmentRef = firestore.collection("appointments").doc(billingId!)
         const appointmentSnap = await tx.get(appointmentRef)
         
         if (!appointmentSnap.exists) {
@@ -82,7 +110,7 @@ export async function POST(req: Request) {
       }
 
       // Get amount based on billing type
-      const totalAmount = isAdmissionBilling
+      totalAmount = isAdmissionBilling
         ? Number(billingData.totalAmount || 0)
         : Number(billingData.paymentAmount || billingData.totalConsultationFee || 0)
 
@@ -147,7 +175,7 @@ export async function POST(req: Request) {
         })
       } else {
         // Appointment billing - update appointments
-        const appointmentRef = firestore.collection("appointments").doc(billingId)
+        const appointmentRef = firestore.collection("appointments").doc(billingId!)
         tx.update(appointmentRef, {
           paymentStatus: "paid",
           paymentMethod: method,
@@ -157,6 +185,21 @@ export async function POST(req: Request) {
         })
       }
     })
+
+    // Log successful payment
+    await logPaymentEvent(
+      "payment_processed",
+      req,
+      auth.user?.uid,
+      auth.user?.email || undefined,
+      auth.user?.role,
+      totalAmount,
+      method,
+      transactionId,
+      billingId,
+      undefined,
+      { billingType: isAdmissionBilling ? "admission" : "appointment", actorType }
+    )
 
     return Response.json({
       success: true,
@@ -168,6 +211,23 @@ export async function POST(req: Request) {
     })
   } catch (error: any) {
     console.error("billing pay error", error)
+    
+    // Log failed payment
+    if (auth.success && auth.user && billingId) {
+      await logPaymentEvent(
+        "payment_failed",
+        req,
+        auth.user.uid,
+        auth.user.email || undefined,
+        auth.user.role,
+        undefined,
+        method,
+        undefined,
+        billingId,
+        error?.message || "Failed to pay bill"
+      )
+    }
+
     return Response.json(
       { error: error?.message || "Failed to pay bill" },
       { status: 500 }

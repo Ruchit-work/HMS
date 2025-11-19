@@ -17,6 +17,7 @@ interface Doctor {
     firstName: string
     lastName: string
     email: string
+    phoneNumber?: string
     gender: string
     specialization: string
     qualification: string
@@ -104,6 +105,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 firstName: formValues.firstName,
                 lastName: formValues.lastName,
                 email: formValues.email,
+                phoneNumber: formValues.phoneNumber,
                 gender: formValues.gender,
                 specialization: formValues.specialization,
                 qualification: formValues.qualification,

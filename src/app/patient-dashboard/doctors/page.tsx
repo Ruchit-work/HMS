@@ -14,6 +14,7 @@ interface Doctor {
   firstName: string
   lastName: string
   email: string
+  phoneNumber?: string
   specialization: string
   qualification: string
   experience: number

@@ -21,10 +21,23 @@ if (!admin.apps.length) {
 }
 
 export async function POST(request) {
+  // Apply rate limiting first
+  const { applyRateLimit } = await import("@/utils/rateLimit")
+  const rateLimitResult = await applyRateLimit(request, "USER_CREATION")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires admin role
   const auth = await authenticateRequest(request, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
+  }
+
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(request, "USER_CREATION", auth.user?.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
   }
 
   try {
@@ -43,6 +56,11 @@ export async function POST(request) {
     if (!doctorData.email || !password) {
       return Response.json({ error: 'Email and password are required' }, { status: 400 })
     }
+    if (!doctorData.phoneNumber || !String(doctorData.phoneNumber).trim()) {
+      return Response.json({ error: 'Phone number is required for MFA' }, { status: 400 })
+    }
+
+    const normalizedPhone = String(doctorData.phoneNumber).trim()
     
     if (password.length < 6) {
       return Response.json({ error: 'Password must be at least 6 characters long' }, { status: 400 })
@@ -59,6 +77,8 @@ export async function POST(request) {
     // Prepare doctor data for Firestore
     const firestoreData = {
       ...doctorData,
+      phoneNumber: normalizedPhone,
+      mfaPhone: normalizedPhone,
       uid: userRecord.uid,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -67,6 +87,19 @@ export async function POST(request) {
     
     // Save to Firestore using Admin SDK
     await admin.firestore().collection('doctors').doc(userRecord.uid).set(firestoreData)
+    
+    // Log user creation event
+    const { logUserEvent } = await import("@/utils/auditLog")
+    await logUserEvent(
+      "user_created",
+      request,
+      userRecord.uid,
+      "doctor",
+      auth.user?.uid,
+      auth.user?.email || undefined,
+      auth.user?.role,
+      { email: doctorData.email, phoneNumber: normalizedPhone, specialization: firestoreData.specialization }
+    )
     
     return Response.json({ 
       success: true, 

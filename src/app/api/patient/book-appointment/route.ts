@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
+import { applyRateLimit } from "@/utils/rateLimit"
+import { logAppointmentEvent } from "@/utils/auditLog"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -12,10 +14,22 @@ const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting first
+  const rateLimitResult = await applyRateLimit(request, "BOOKING")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires patient role
   const auth = await authenticateRequest(request, "patient")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
+  }
+
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(request, "BOOKING", auth.user?.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
   }
 
   const initResult = initFirebaseAdmin("patient-book-appointment")
@@ -78,6 +92,20 @@ export async function POST(request: Request) {
         })
       })
 
+      // Log successful appointment booking
+      await logAppointmentEvent(
+        "appointment_booked",
+        request,
+        auth.user?.uid,
+        auth.user?.email || undefined,
+        auth.user?.role,
+        appointmentId,
+        appointmentData.doctorId,
+        appointmentData.patientId || auth.user?.uid,
+        undefined,
+        { appointmentDate: appointmentData.appointmentDate, appointmentTime: normalizedAppointmentTime }
+      )
+
       return NextResponse.json({ success: true, id: appointmentId })
     }
 
@@ -89,6 +117,9 @@ export async function POST(request: Request) {
       if (!appointmentId || !appointmentDate || !appointmentTime) {
         return NextResponse.json({ error: "Missing reschedule parameters" }, { status: 400 })
       }
+
+      // Normalize time to 24-hour format before transaction
+      const normalizedNewTime = normalizeTime(appointmentTime)
 
       await firestore.runTransaction(async (transaction) => {
         const appointmentRef = firestore.collection("appointments").doc(appointmentId)
@@ -104,8 +135,6 @@ export async function POST(request: Request) {
         }
 
         const doctorId = appointment.doctorId
-        // Normalize time to 24-hour format
-        const normalizedNewTime = normalizeTime(appointmentTime)
         const newSlotId = getSlotDocId(doctorId, appointmentDate, normalizedNewTime)
         if (!newSlotId) {
           throw new Error("INVALID_SLOT")
@@ -140,6 +169,21 @@ export async function POST(request: Request) {
         })
       })
 
+      // Log successful appointment reschedule
+      const rescheduledAppointment = (await firestore.collection("appointments").doc(appointmentId).get()).data() as Record<string, any>
+      await logAppointmentEvent(
+        "appointment_rescheduled",
+        request,
+        auth.user?.uid,
+        auth.user?.email || undefined,
+        auth.user?.role,
+        appointmentId,
+        rescheduledAppointment?.doctorId,
+        rescheduledAppointment?.patientId || auth.user?.uid,
+        undefined,
+        { oldDate: rescheduledAppointment?.appointmentDate, newDate: appointmentDate, oldTime: normalizeTime(rescheduledAppointment?.appointmentTime || ""), newTime: normalizedNewTime }
+      )
+
       return NextResponse.json({ success: true })
     }
 
@@ -147,6 +191,22 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[patient/book-appointment]", error)
     const message = (error as Error).message
+    
+    // Log failed appointment operation
+    if (auth.success && auth.user) {
+      await logAppointmentEvent(
+        "appointment_failed",
+        request,
+        auth.user.uid,
+        auth.user.email || undefined,
+        auth.user.role,
+        undefined,
+        undefined,
+        undefined,
+        message
+      )
+    }
+    
     if (message === "SLOT_ALREADY_BOOKED") {
       return NextResponse.json({ error: "This slot was just booked. Please choose another time." }, { status: 409 })
     }

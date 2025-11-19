@@ -3,6 +3,8 @@ import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { formatAppointmentDateTime } from "@/utils/date"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
+import { applyRateLimit } from "@/utils/rateLimit"
+import { logAppointmentEvent } from "@/utils/auditLog"
 
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
@@ -27,6 +29,12 @@ const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => 
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting first
+  const rateLimitResult = await applyRateLimit(request, "BOOKING")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires receptionist or admin role
   const auth = await authenticateRequest(request)
   if (!auth.success) {
@@ -37,6 +45,12 @@ export async function POST(request: Request) {
       { error: "Access denied. This endpoint requires receptionist or admin role." },
       { status: 403 }
     )
+  }
+
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(request, "BOOKING", auth.user?.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
   }
 
   try {
@@ -171,9 +185,39 @@ export async function POST(request: Request) {
       })
     }
 
+    // Log successful appointment booking
+    await logAppointmentEvent(
+      "appointment_booked",
+      request,
+      auth.user?.uid,
+      auth.user?.email || undefined,
+      auth.user?.role,
+      appointmentId || undefined,
+      docData.doctorId ? String(docData.doctorId) : undefined,
+      appointmentData.patientId ? String(appointmentData.patientId) : undefined,
+      undefined,
+      { appointmentDate: docData.appointmentDate, appointmentTime: normalizedAppointmentTime, createdBy: "receptionist" }
+    )
+
     return Response.json({ success: true, id: appointmentId })
   } catch (error: any) {
     console.error("create-appointment error:", error)
+    
+    // Log failed appointment creation (note: request body may have already been consumed)
+    if (auth.success && auth.user) {
+      await logAppointmentEvent(
+        "appointment_failed",
+        request,
+        auth.user.uid,
+        auth.user.email || undefined,
+        auth.user.role,
+        undefined,
+        undefined,
+        undefined,
+        error?.message || "Failed to create appointment"
+      )
+    }
+    
     if (error?.message === "SLOT_ALREADY_BOOKED") {
       return Response.json({ error: "This time slot has already been booked. Please select another slot." }, { status: 409 })
     }

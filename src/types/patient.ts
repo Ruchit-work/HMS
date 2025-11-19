@@ -56,6 +56,7 @@ export interface Doctor {
   specialization: string
   consultationFee: number
   email?: string
+  phoneNumber?: string
   role?: string
   qualification?: string
   experience?: string

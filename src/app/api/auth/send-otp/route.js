@@ -40,6 +40,13 @@ function generateOTP() {
 // POST /api/auth/send-otp - Send OTP via SMS
 export async function POST(request) {
   try {
+    // Apply rate limiting
+    const { applyRateLimit } = await import("@/utils/rateLimit");
+    const rateLimitResult = await applyRateLimit(request, "OTP");
+    if (rateLimitResult instanceof Response) {
+      return rateLimitResult; // Rate limited
+    }
+
     const body = await request.json();
     const { phoneNumber } = body;
 
@@ -101,6 +108,13 @@ export async function POST(request) {
       to: cleanedPhone, // Phone number with country code (e.g., +1234567890)
     });
 
+    // Log audit event
+    const { logAuthEvent } = await import("@/utils/auditLog");
+    await logAuthEvent("otp_sent", request, undefined, undefined, undefined, undefined, {
+      phoneNumber: cleanedPhone,
+      messageSid: message.sid,
+    });
+
     // Return success (don't return OTP in response for security)
     return Response.json({
       success: true,
@@ -110,6 +124,12 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("Error sending OTP:", error);
+
+    // Log audit event for failure
+    const { logAuthEvent } = await import("@/utils/auditLog");
+    await logAuthEvent("otp_failed", request, undefined, undefined, undefined, error?.message || "Failed to send OTP", {
+      errorCode: error?.code,
+    });
 
     // Handle Twilio-specific errors
     if (error.code === 21211) {

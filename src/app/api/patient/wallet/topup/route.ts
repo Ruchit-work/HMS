@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { applyRateLimit } from "@/utils/rateLimit"
+import { logPaymentEvent } from "@/utils/auditLog"
 
 export async function POST(req: Request) {
+  // Apply rate limiting first
+  const rateLimitResult = await applyRateLimit(req, "PAYMENT")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires patient, receptionist, or admin role
   const auth = await authenticateRequest(req)
   if (!auth.success) {
@@ -15,6 +23,12 @@ export async function POST(req: Request) {
       { error: "Access denied. This endpoint requires patient, receptionist, or admin role." },
       { status: 403 }
     )
+  }
+
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(req, "PAYMENT", auth.user?.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
   }
 
   try {
@@ -37,16 +51,46 @@ export async function POST(req: Request) {
       walletBalance: admin.firestore.FieldValue.increment(amt)
     }, { merge: true })
 
-    await db.collection('wallet_transactions').add({
+    const transactionRef = await db.collection('wallet_transactions').add({
       patientId: String(patientId),
       type: 'topup',
       amount: amt,
       createdAt: new Date().toISOString()
     })
 
+    // Log successful wallet topup
+    await logPaymentEvent(
+      "wallet_topup",
+      req,
+      auth.user?.uid,
+      auth.user?.email ?? undefined,
+      auth.user?.role,
+      amt,
+      undefined,
+      transactionRef.id,
+      patientId
+    )
+
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error('wallet topup error', e)
+    
+    // Log failed wallet topup
+    if (auth.success && auth.user) {
+      await logPaymentEvent(
+        "wallet_topup_failed",
+        req,
+        auth.user.uid,
+        auth.user.email ?? undefined,
+        auth.user.role,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        e?.message || 'Internal error'
+      )
+    }
+
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
   }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { db } from "@/firebase/config"
+import { auth, db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import Link from "next/link"
@@ -104,9 +104,18 @@ export default function DoctorDashboard() {
 
     setSavingSchedule(true)
     try {
-      const res = await fetch('/api/doctor/schedule-request', {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to submit schedule requests")
+      }
+      const token = await currentUser.getIdToken()
+
+      const res = await fetch('/api/doctor/schedule-request', { 
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           doctorId: user.uid,
           requestType: 'both',
@@ -134,9 +143,18 @@ export default function DoctorDashboard() {
 
     setSavingSchedule(true)
     try {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to submit schedule requests")
+      }
+      const token = await currentUser.getIdToken()
+
       const res = await fetch('/api/doctor/schedule-request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           doctorId: user.uid,
           requestType: 'blockedDates',

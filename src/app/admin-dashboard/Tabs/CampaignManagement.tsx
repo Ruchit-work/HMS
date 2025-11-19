@@ -9,6 +9,7 @@ import { collection, getDocs, orderBy, query, Timestamp } from "firebase/firesto
 import { db, auth } from "@/firebase/config"
 import SuccessToast from "@/components/ui/SuccessToast"
 import { formatDateTime } from "@/utils/date"
+import { sanitizeForInnerHTML } from "@/utils/sanitizeHtml"
 
 export default function CampaignManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
   const { user, loading: authLoading } = useAuth()
@@ -708,7 +709,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                       <h4 className="text-lg font-semibold text-slate-900">{campaign.title}</h4>
                       <p
                         className="mt-2 line-clamp-2 text-sm text-slate-600"
-                        dangerouslySetInnerHTML={{ __html: campaign.content }}
+                        dangerouslySetInnerHTML={sanitizeForInnerHTML(campaign.content)}
                       />
                       {campaign.ctaText && campaign.ctaHref && (
                         <p className="mt-2 text-xs font-medium text-teal-600">
@@ -926,7 +927,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
             <h3 className="text-2xl font-bold text-slate-900">{selectedCampaign.title}</h3>
             <div
               className="prose prose-sm max-w-none text-slate-700"
-              dangerouslySetInnerHTML={{ __html: selectedCampaign.content }}
+              dangerouslySetInnerHTML={sanitizeForInnerHTML(selectedCampaign.content)}
             />
             {selectedCampaign.ctaText && selectedCampaign.ctaHref && (
               <a

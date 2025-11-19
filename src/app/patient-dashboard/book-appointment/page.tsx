@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
-import { db } from "@/firebase/config"
+import { auth, db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, increment } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
@@ -186,11 +186,20 @@ function BookAppointmentContent() {
     try {
       // await new Promise(resolve => setTimeout(resolve, 2000))
 
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to book appointments.")
+      }
+      const authToken = await currentUser.getIdToken()
+
       // RESCHEDULE: only update date/time and status
       if (rescheduleMode && rescheduleAppointmentId) {
         const response = await fetch("/api/patient/book-appointment", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${authToken}`,
+          },
           body: JSON.stringify({
             mode: "reschedule",
             appointmentId: rescheduleAppointmentId,
@@ -312,7 +321,10 @@ function BookAppointmentContent() {
 
       const response = await fetch("/api/patient/book-appointment", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`,
+        },
         body: JSON.stringify({
           mode: "create",
           appointmentData: appointmentPayload,

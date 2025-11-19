@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { db } from "@/firebase/config"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { auth, db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
@@ -12,6 +12,13 @@ import { calculateAge } from "@/utils/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
 import Pagination from "@/components/ui/Pagination"
+import {
+  fetchMedicineSuggestions,
+  MedicineSuggestion,
+  MedicineSuggestionOption,
+  recordMedicineSuggestions,
+  sanitizeMedicineName,
+} from "@/utils/medicineSuggestions"
 
 // Helper function to parse and render prescription text
 const parsePrescription = (text: string) => {
@@ -106,6 +113,15 @@ const parsePrescription = (text: string) => {
   return { medicines, advice }
 }
 
+type CompletionFormEntry = {
+  medicines: Array<{ name: string; dosage: string; frequency: string; duration: string }>
+  notes: string
+  recheckupRequired: boolean
+}
+
+const hasValidPrescriptionInput = (entry?: CompletionFormEntry) =>
+  Boolean(entry?.medicines?.some((med) => med.name && med.name.trim()))
+
 interface UserData {
   id: string;
   name: string;
@@ -124,7 +140,7 @@ export default function DoctorAppointments() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [updating, setUpdating] = useState<{[key: string]: boolean}>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{[key: string]: boolean}>({})
-  const [completionData, setCompletionData] = useState<{[key: string]: {medicines: Array<{name: string, dosage: string, frequency: string, duration: string}>, notes: string, recheckupRequired: boolean}}>({})
+  const [completionData, setCompletionData] = useState<Record<string, CompletionFormEntry>>({})
   const [aiPrescription, setAiPrescription] = useState<{[key: string]: {medicine: string, notes: string}}>({})
   const [loadingAiPrescription, setLoadingAiPrescription] = useState<{[key: string]: boolean}>({})
   const [showAiPrescriptionSuggestion, setShowAiPrescriptionSuggestion] = useState<{[key: string]: boolean}>({})
@@ -138,6 +154,39 @@ export default function DoctorAppointments() {
   const [showHistory, setShowHistory] = useState<{[key: string]: boolean}>({})
   const [refreshing, setRefreshing] = useState(false)
   const [admitting, setAdmitting] = useState<{ [key: string]: boolean }>({})
+  const [admitDialog, setAdmitDialog] = useState<{
+    open: boolean
+    appointment: AppointmentType | null
+    note: string
+  }>({
+    open: false,
+    appointment: null,
+    note: "",
+  })
+  const [medicineSuggestions, setMedicineSuggestions] = useState<MedicineSuggestion[]>([])
+  const [activeNameSuggestion, setActiveNameSuggestion] = useState<{ appointmentId: string; index: number } | null>(null)
+  const [inlineSuggestion, setInlineSuggestion] = useState<{
+    appointmentId: string
+    index: number
+    suggestion: string
+  } | null>(null)
+  const [medicineSuggestionsLoading, setMedicineSuggestionsLoading] = useState(false)
+
+  const refreshMedicineSuggestions = useCallback(async () => {
+    try {
+      setMedicineSuggestionsLoading(true)
+      const suggestions = await fetchMedicineSuggestions(100)
+      setMedicineSuggestions(suggestions)
+    } catch (error) {
+      console.error("Failed to load medicine suggestions", error)
+    } finally {
+      setMedicineSuggestionsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshMedicineSuggestions()
+  }, [refreshMedicineSuggestions])
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
@@ -275,14 +324,14 @@ export default function DoctorAppointments() {
     
     if (!isOpen) {
       // Initialize completion data for this appointment
-      setCompletionData({
-        ...completionData,
+      setCompletionData((prev) => ({
+        ...prev,
         [appointmentId]: {
           medicines: [],
           notes: "",
-          recheckupRequired: false
-        }
-      })
+          recheckupRequired: false,
+        },
+      }))
       setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: true})
       // Auto-generate AI prescription when form opens
       const appointment = appointments.find(apt => apt.id === appointmentId)
@@ -291,9 +340,11 @@ export default function DoctorAppointments() {
       }
     } else {
       // Clean up when closing
-      const newCompletionData = {...completionData}
-      delete newCompletionData[appointmentId]
-      setCompletionData(newCompletionData)
+      setCompletionData((prev) => {
+        const updated = { ...prev }
+        delete updated[appointmentId]
+        return updated
+      })
       
       const newAiPrescription = {...aiPrescription}
       delete newAiPrescription[appointmentId]
@@ -303,41 +354,184 @@ export default function DoctorAppointments() {
 
   // Helper function to add a new medicine
   const addMedicine = (appointmentId: string) => {
-    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
-    setCompletionData({
-      ...completionData,
-      [appointmentId]: {
-        ...currentData,
-        medicines: [...currentData.medicines, { name: "", dosage: "", frequency: "", duration: "" }]
+    setCompletionData((prev) => {
+      const currentData = prev[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+      return {
+        ...prev,
+        [appointmentId]: {
+          ...currentData,
+          medicines: [...currentData.medicines, { name: "", dosage: "", frequency: "", duration: "" }],
+        },
       }
     })
   }
 
   // Helper function to remove a medicine
   const removeMedicine = (appointmentId: string, index: number) => {
-    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
-    const updatedMedicines = currentData.medicines.filter((_, i) => i !== index)
-    setCompletionData({
-      ...completionData,
-      [appointmentId]: {
-        ...currentData,
-        medicines: updatedMedicines
+    setCompletionData((prev) => {
+      const currentData = prev[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+      const updatedMedicines = currentData.medicines.filter((_, i) => i !== index)
+      return {
+        ...prev,
+        [appointmentId]: {
+          ...currentData,
+          medicines: updatedMedicines,
+        },
       }
     })
   }
 
   // Helper function to update a medicine field
   const updateMedicine = (appointmentId: string, index: number, field: string, value: string) => {
-    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
-    const updatedMedicines = [...currentData.medicines]
-    updatedMedicines[index] = { ...updatedMedicines[index], [field]: value }
-    setCompletionData({
-      ...completionData,
-      [appointmentId]: {
-        ...currentData,
-        medicines: updatedMedicines
+    setCompletionData((prev) => {
+      const currentData = prev[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+      const updatedMedicines = [...currentData.medicines]
+      updatedMedicines[index] = { ...updatedMedicines[index], [field]: value }
+      return {
+        ...prev,
+        [appointmentId]: {
+          ...currentData,
+          medicines: updatedMedicines,
+        },
       }
     })
+  }
+
+  const getMedicineNameSuggestions = useCallback(
+    (query: string, limitOptions = 5) => {
+      if (!medicineSuggestions.length) return []
+      const cleaned = query.trim().toLowerCase()
+      if (cleaned.length < 2) return []
+
+      const startsWithMatches = medicineSuggestions.filter((suggestion) =>
+        suggestion.name.toLowerCase().startsWith(cleaned)
+      )
+      if (startsWithMatches.length >= limitOptions) {
+        return startsWithMatches.slice(0, limitOptions)
+      }
+
+      const remainingSlots = limitOptions - startsWithMatches.length
+      const containsMatches = medicineSuggestions
+        .filter(
+          (suggestion) =>
+            !suggestion.name.toLowerCase().startsWith(cleaned) &&
+            suggestion.name.toLowerCase().includes(cleaned)
+        )
+        .slice(0, remainingSlots)
+
+      return [...startsWithMatches, ...containsMatches]
+    },
+    [medicineSuggestions]
+  )
+
+  const findSuggestionByName = useCallback(
+    (name?: string) => {
+      if (!name) return undefined
+      const cleaned = name.trim().toLowerCase()
+      if (!cleaned) return undefined
+      return medicineSuggestions.find(
+        (suggestion) =>
+          suggestion.normalizedName === cleaned || suggestion.name.toLowerCase() === cleaned
+      )
+    },
+    [medicineSuggestions]
+  )
+
+  const handleSelectMedicineSuggestion = (
+    appointmentId: string,
+    index: number,
+    suggestion: MedicineSuggestion,
+    { setFocusNext = false }: { setFocusNext?: boolean } = {}
+  ) => {
+    const sanitizedName = sanitizeMedicineName(suggestion.name)
+    updateMedicine(appointmentId, index, "name", sanitizedName || suggestion.name)
+    const currentMed = completionData[appointmentId]?.medicines?.[index]
+
+    if ((!currentMed?.dosage || !currentMed.dosage.trim()) && suggestion.dosageOptions?.length) {
+      updateMedicine(appointmentId, index, "dosage", suggestion.dosageOptions[0].value)
+    }
+    if (
+      (!currentMed?.frequency || !currentMed.frequency.trim()) &&
+      suggestion.frequencyOptions?.length
+    ) {
+      updateMedicine(appointmentId, index, "frequency", suggestion.frequencyOptions[0].value)
+    }
+    if (
+      (!currentMed?.duration || !currentMed.duration.trim()) &&
+      suggestion.durationOptions?.length
+    ) {
+      updateMedicine(appointmentId, index, "duration", suggestion.durationOptions[0].value)
+    }
+
+    setActiveNameSuggestion(null)
+    setInlineSuggestion(null)
+    if (setFocusNext) {
+      const nextField = document.querySelector<HTMLInputElement>(
+        `#dosage-${appointmentId}-${index}`
+      )
+      if (nextField) {
+        requestAnimationFrame(() => nextField.focus())
+      }
+    }
+  }
+
+  const getTopOptions = (options?: MedicineSuggestionOption[]) =>
+    (options || []).slice(0, 4)
+
+  const handleOptionChipClick = (
+    appointmentId: string,
+    index: number,
+    field: "dosage" | "frequency" | "duration",
+    value: string
+  ) => {
+    updateMedicine(appointmentId, index, field, value)
+  }
+
+  const updateInlineSuggestion = useCallback(
+    (appointmentId: string, index: number, value: string) => {
+      const cleanedValue = value.trim()
+      if (cleanedValue.length < 2) {
+        setInlineSuggestion((prev) =>
+          prev?.appointmentId === appointmentId && prev.index === index ? null : prev
+        )
+        return
+      }
+
+      const bestMatch = getMedicineNameSuggestions(cleanedValue, 1)[0]
+      if (bestMatch && bestMatch.name.toLowerCase().startsWith(cleanedValue.toLowerCase())) {
+        setInlineSuggestion({
+          appointmentId,
+          index,
+          suggestion: bestMatch.name,
+        })
+      } else {
+        setInlineSuggestion((prev) =>
+          prev?.appointmentId === appointmentId && prev.index === index ? null : prev
+        )
+      }
+    },
+    [getMedicineNameSuggestions]
+  )
+
+  const acceptInlineSuggestion = (
+    appointmentId: string,
+    index: number
+  ) => {
+    if (
+      inlineSuggestion &&
+      inlineSuggestion.appointmentId === appointmentId &&
+      inlineSuggestion.index === index
+    ) {
+      const suggestion = medicineSuggestions.find(
+        (item) => item.name === inlineSuggestion.suggestion
+      )
+      if (suggestion) {
+        handleSelectMedicineSuggestion(appointmentId, index, suggestion, { setFocusNext: true })
+      } else {
+        updateMedicine(appointmentId, index, "name", inlineSuggestion.suggestion)
+        setInlineSuggestion(null)
+      }
+    }
   }
 
   // Helper function to get number emoji
@@ -462,11 +656,25 @@ export default function DoctorAppointments() {
       
       // Call diagnosis API
       //
-      const { data } = await axios.post("/api/diagnosis", {
-        symptoms,
-        patientInfo,
-        medicalHistory
-      })
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to generate AI diagnosis")
+      }
+      const token = await currentUser.getIdToken()
+
+      const { data } = await axios.post(
+        "/api/diagnosis",
+        {
+          symptoms,
+          patientInfo,
+          medicalHistory,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
       //
       
       const diagnosisText = data?.[0]?.generated_text || "Unable to generate diagnosis"
@@ -509,15 +717,29 @@ export default function DoctorAppointments() {
         patientInfo += `, Weight: ${appointment.patientWeightKg} kg`
       }
 
-      const { data } = await axios.post("/api/prescription/generate", {
-        chiefComplaint: appointment.chiefComplaint || "",
-        medicalHistory: appointment.medicalHistory || "",
-        patientInfo,
-        allergies: appointment.patientAllergies || "",
-        currentMedications: appointment.patientCurrentMedications || "",
-        patientAge: ageValue,
-        patientGender: appointment.patientGender || ""
-      })
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to generate AI prescription")
+      }
+      const token = await currentUser.getIdToken()
+
+      const { data } = await axios.post(
+        "/api/prescription/generate",
+        {
+          chiefComplaint: appointment.chiefComplaint || "",
+          medicalHistory: appointment.medicalHistory || "",
+          patientInfo,
+          allergies: appointment.patientAllergies || "",
+          currentMedications: appointment.patientCurrentMedications || "",
+          patientAge: ageValue,
+          patientGender: appointment.patientGender || "",
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
 
       setAiPrescription({
         ...aiPrescription,
@@ -630,13 +852,16 @@ export default function DoctorAppointments() {
   const handleAcceptPrescription = (appointmentId: string) => {
     if (aiPrescription[appointmentId]) {
       const parsedMedicines = parseAiPrescription(aiPrescription[appointmentId].medicine)
-      setCompletionData({
-        ...completionData,
+      setCompletionData((prev) => ({
+        ...prev,
         [appointmentId]: {
-          ...completionData[appointmentId],
-          medicines: parsedMedicines.length > 0 ? parsedMedicines : [{ name: "", dosage: "", frequency: "", duration: "" }]
-        }
-      })
+          ...prev[appointmentId],
+          medicines:
+            parsedMedicines.length > 0
+              ? parsedMedicines
+              : [{ name: "", dosage: "", frequency: "", duration: "" }],
+        },
+      }))
       setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: false})
       setNotification({ type: "success", message: "AI prescription accepted! You can still edit it." })
     }
@@ -672,14 +897,14 @@ export default function DoctorAppointments() {
           }))
           
           // Populate completion data with previous prescription
-          setCompletionData({
-            ...completionData,
+          setCompletionData((prev) => ({
+            ...prev,
             [appointmentId]: {
               medicines: structuredMedicines,
               notes: latest.doctorNotes || "",
-              recheckupRequired: false
-            }
-          })
+              recheckupRequired: false,
+            },
+          }))
           
           setNotification({ 
             type: "success", 
@@ -700,88 +925,120 @@ export default function DoctorAppointments() {
     }
   }
 
+  const runCompletionFlow = async (
+    appointmentId: string,
+    formData: CompletionFormEntry,
+    options?: { showToast?: boolean }
+  ) => {
+    const appointmentSnapshot = appointments.find((apt) => apt.id === appointmentId)
+    const medicineText = formatMedicinesAsText(formData.medicines, formData.notes)
+
+    const result = await completeAppointment(
+      appointmentId,
+      medicineText,
+      formData.notes
+    )
+
+    setAppointments((prevAppointments) =>
+      prevAppointments.map((apt) =>
+        apt.id === appointmentId ? { ...apt, ...result.updates } : apt
+      )
+    )
+
+    if (formData.recheckupRequired && appointmentSnapshot) {
+      try {
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          throw new Error("You must be logged in to send re-checkup messages")
+        }
+        const token = await currentUser.getIdToken()
+
+        const response = await fetch("/api/doctor/send-recheckup-whatsapp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            appointmentId,
+            patientId: appointmentSnapshot.patientId,
+            patientPhone: appointmentSnapshot.patientPhone,
+            doctorName: appointmentSnapshot.doctorName || userData?.name || "Doctor",
+            appointmentDate: appointmentSnapshot.appointmentDate,
+          }),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to send re-checkup WhatsApp message")
+        }
+      } catch (error) {
+        console.error("Error sending re-checkup WhatsApp:", error)
+      }
+    }
+
+    if (options?.showToast !== false) {
+      setNotification({
+        type: "success",
+        message:
+          result.message +
+          (formData.recheckupRequired
+            ? " Re-checkup message sent to patient."
+            : ""),
+      })
+    }
+
+    try {
+      await recordMedicineSuggestions(formData.medicines)
+      await refreshMedicineSuggestions()
+    } catch (suggestionError) {
+      console.error("Failed to record medicine suggestions", suggestionError)
+    }
+
+    setCompletionData((prev) => {
+      const updated = { ...prev }
+      delete updated[appointmentId]
+      return updated
+    })
+
+    setAiPrescription((prev) => {
+      const updated = { ...prev }
+      delete updated[appointmentId]
+      return updated
+    })
+
+    setShowCompletionForm((prev) => ({ ...prev, [appointmentId]: false }))
+    setShowAiPrescriptionSuggestion((prev) => ({
+      ...prev,
+      [appointmentId]: true,
+    }))
+
+    return result
+  }
+
   const handleCompleteAppointment = async (e: React.FormEvent, appointmentId: string) => {
     e.preventDefault()
     
     if (!appointmentId) return
     
-    const currentData = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+    const currentData: CompletionFormEntry = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
     
     // Validate that at least one medicine has a name
-    const hasValidMedicine = currentData.medicines.some(med => med.name.trim())
-    
-    if (!hasValidMedicine || !currentData.notes.trim()) {
+    if (!hasValidPrescriptionInput(currentData)) {
       setNotification({ 
         type: "error", 
-        message: "Please add at least one medicine with a name and fill in notes" 
+        message: "Please add at least one medicine with a name" 
       })
       return
     }
 
-    // Format medicines as text for storage (including advice/notes)
-    const medicineText = formatMedicinesAsText(currentData.medicines, currentData.notes)
-
     setUpdating({...updating, [appointmentId]: true})
     try {
-      const result = await completeAppointment(
-        appointmentId,
-        medicineText,
-        currentData.notes
-      )
-
-      setAppointments(appointments.map(apt => 
-        apt.id === appointmentId 
-          ? { ...apt, ...result.updates } 
-          : apt
-      ))
-
-      // Send re-checkup WhatsApp message if required
-      if (currentData.recheckupRequired) {
-        const appointment = appointments.find(apt => apt.id === appointmentId)
-        if (appointment) {
-          try {
-            const response = await fetch("/api/doctor/send-recheckup-whatsapp", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                appointmentId: appointmentId,
-                patientId: appointment.patientId,
-                patientPhone: appointment.patientPhone,
-                doctorName: appointment.doctorName || userData?.name || "Doctor",
-                appointmentDate: appointment.appointmentDate,
-              }),
-            })
-
-            if (!response.ok) {
-              console.error("Failed to send re-checkup WhatsApp message")
-            }
-          } catch (error) {
-            console.error("Error sending re-checkup WhatsApp:", error)
-          }
-        }
-      }
-
-      setNotification({ 
-        type: "success", 
-        message: result.message + (currentData.recheckupRequired ? " Re-checkup message sent to patient." : "")
-      })
-
-      // Reset form data for this appointment
-      const newCompletionData = {...completionData}
-      delete newCompletionData[appointmentId]
-      setCompletionData(newCompletionData)
-      
-      const newAiPrescription = {...aiPrescription}
-      delete newAiPrescription[appointmentId]
-      setAiPrescription(newAiPrescription)
-      
-      setShowCompletionForm({...showCompletionForm, [appointmentId]: false})
-      setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: true})
+      await runCompletionFlow(appointmentId, currentData)
     } catch (error: unknown) {
       console.error("Error completing appointment:", error)
       setNotification({ 
         type: "error", 
-        message: (error as Error).message || "Failed to complete appointment" 
+        message: error instanceof Error ? error.message : "Failed to complete appointment" 
       })
     } finally {
       setUpdating({...updating, [appointmentId]: false})
@@ -793,16 +1050,22 @@ export default function DoctorAppointments() {
     const appointmentId = appointment.id
     if (admitting[appointmentId]) return
 
-    const reason = window.prompt("Optional: add a note for the receptionist (leave blank if none).") || undefined
-
     setAdmitting(prev => ({ ...prev, [appointmentId]: true }))
     try {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to submit admission requests")
+      }
+      const token = await currentUser.getIdToken()
+
       const res = await fetch("/api/doctor/admission-request", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          appointmentId,
-          notes: reason && reason.trim() ? reason.trim() : undefined
+          appointmentId
         })
       })
       if (!res.ok) {
@@ -832,6 +1095,108 @@ export default function DoctorAppointments() {
       setNotification({
         type: "error",
         message: error?.message || "Failed to submit admission request"
+      })
+    } finally {
+      setAdmitting(prev => ({ ...prev, [appointmentId]: false }))
+    }
+  }
+
+  const openAdmitDialog = (appointment: AppointmentType) => {
+    setAdmitDialog({
+      open: true,
+      appointment,
+      note: "",
+    })
+  }
+
+  const closeAdmitDialog = () => {
+    setAdmitDialog({
+      open: false,
+      appointment: null,
+      note: "",
+    })
+  }
+
+  const confirmAdmitPatient = async () => {
+    if (!admitDialog.appointment) return
+    
+    const appointmentId = admitDialog.appointment.id
+    
+    // Prevent duplicate clicks - disable immediately
+    if (admitting[appointmentId]) return
+    
+    // Check if appointment already has an admission request
+    const appointment = appointments.find(apt => apt.id === appointmentId)
+    if (appointment?.admissionRequestId) {
+      setNotification({
+        type: "error",
+        message: "Admission request already sent. Please wait for receptionist to process."
+      })
+      closeAdmitDialog()
+      return
+    }
+    
+    // Set admitting state immediately to disable button
+    setAdmitting(prev => ({ ...prev, [appointmentId]: true }))
+    
+    try {
+      // Check if appointment already has a saved prescription
+      let hasMedicine = Boolean(appointment?.medicine && appointment.medicine.trim())
+      
+      // Check completion form data (not yet submitted)
+      const formData = completionData[appointmentId]
+      const hasFormMedicine = hasValidPrescriptionInput(formData)
+      
+      if (!hasMedicine && !hasFormMedicine) {
+        setNotification({
+          type: "error",
+          message: "Please add at least one medicine before admitting the patient."
+        })
+        setAdmitting(prev => ({ ...prev, [appointmentId]: false }))
+        closeAdmitDialog()
+        return
+      }
+      
+      // If form data exists but wasn't saved yet, finalize the checkup automatically
+      if (!hasMedicine && hasFormMedicine && formData) {
+        setUpdating(prev => ({ ...prev, [appointmentId]: true }))
+        try {
+          await runCompletionFlow(appointmentId, formData, { showToast: false })
+          hasMedicine = true
+        } catch (error) {
+          console.error("Auto-complete before admission failed:", error)
+          setNotification({
+            type: "error",
+            message: error instanceof Error
+              ? error.message
+              : "Failed to save prescription before admitting. Please try again."
+          })
+          setAdmitting(prev => ({ ...prev, [appointmentId]: false }))
+          closeAdmitDialog()
+          return
+        } finally {
+          setUpdating(prev => ({ ...prev, [appointmentId]: false }))
+        }
+      }
+      
+      if (!hasMedicine) {
+        setNotification({
+          type: "error",
+          message: "Please add at least one medicine before admitting the patient."
+        })
+        setAdmitting(prev => ({ ...prev, [appointmentId]: false }))
+        closeAdmitDialog()
+        return
+      }
+      
+      // handleAdmitPatient will manage the admitting state
+      await handleAdmitPatient(admitDialog.appointment)
+      closeAdmitDialog()
+    } catch (error) {
+      console.error("Admit patient error:", error)
+      setNotification({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to admit patient. Please try again."
       })
     } finally {
       setAdmitting(prev => ({ ...prev, [appointmentId]: false }))
@@ -968,24 +1333,17 @@ export default function DoctorAppointments() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* Page Header */}
-        <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-xl p-6 mb-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-6 mb-6 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-3xl">
+            <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center text-3xl text-slate-700">
               📋
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Patient Appointments</h1>
-              <p className="text-slate-200 text-sm mt-1">Manage and complete patient consultations</p>
-          </div>
-        </div>
-
+              <h1 className="text-2xl font-bold text-slate-900">Patient Appointments</h1>
+              <p className="text-slate-500 text-sm mt-1">Manage and complete patient consultations</p>
             </div>
           </div>
-          
-      
-          
-          
+        </div>
 
         {/* Appointments Section */}
         <div className="bg-white border border-slate-200 rounded-xl p-6">
@@ -1679,7 +2037,7 @@ export default function DoctorAppointments() {
                               <button
                                 onClick={() => getAIDiagnosisSuggestion(appointment)}
                                 disabled={loadingAiDiagnosis[appointment.id]}
-                                className="w-full px-4 py-3 bg-gradient-to-r from-slate-700 to-slate-800 text-white rounded-lg hover:from-slate-800 hover:to-slate-900 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-sm flex items-center justify-center gap-2"
+                                className="w-full px-4 py-2.5 bg-slate-900 text-white rounded-md hover:bg-black transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm"
                               >
                                 {loadingAiDiagnosis[appointment.id] ? (
                                   <>
@@ -1702,9 +2060,9 @@ export default function DoctorAppointments() {
                           {aiDiagnosis[appointment.id] && (() => {
                             const parsed = parseAIDiagnosis(aiDiagnosis[appointment.id])
                             return (
-                              <div className="bg-white rounded-xl border-2 border-slate-300 shadow-lg overflow-hidden">
+                              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                                 {/* Header */}
-                                <div className="bg-gradient-to-r from-slate-700 to-slate-800 p-4">
+                                <div className="bg-slate-900 text-white p-4">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                       <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center text-xl backdrop-blur">
@@ -1826,7 +2184,7 @@ export default function DoctorAppointments() {
                                       <button
                                         onClick={() => toggleCompletionForm(appointment.id)}
                                         disabled={updating[appointment.id] || false}
-                                        className="px-4 py-2.5 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-sm flex items-center justify-center gap-2"
+                                        className="px-3 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm"
                                       >
                                         <span>✓</span> Complete Checkup
                                       </button>
@@ -1983,44 +2341,24 @@ export default function DoctorAppointments() {
                                 <button
                                   onClick={() => toggleCompletionForm(appointment.id)}
                                   disabled={updating[appointment.id] || false}
-                                  className="w-full px-5 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-base flex items-center justify-center gap-2"
+                                  className="w-full px-4 py-2.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm"
                                 >
                                   <span>✓</span> Complete Checkup
-                                </button>
-                                <button
-                                  onClick={() => handleAdmitPatient(appointment)}
-                                  disabled={Boolean(admitting[appointment.id])}
-                                  className="mt-2 w-full px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg text-base flex items-center justify-center gap-2"
-                                >
-                                  {admitting[appointment.id] ? (
-                                    <>
-                                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                      </svg>
-                                      <span>Sending request...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span>🏥</span>
-                                      <span>Admit Patient</span>
-                                    </>
-                                  )}
                                 </button>
                             </div>
                           )}
 
                           {/* Complete Checkup Form Accordion */}
                           {showCompletionForm[appointment.id] && appointment.status === "confirmed" && (
-                            <div className="mt-3 bg-white rounded-lg border border-green-200 shadow-sm overflow-hidden">
-                              <div className="bg-gradient-to-r from-green-600 to-teal-600 p-2.5">
+                            <div className="mt-3 bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                              <div className="bg-slate-50 border-b border-slate-200 px-3 py-2">
                                 <div className="flex items-center justify-between">
-                                  <h4 className="text-white font-bold text-sm flex items-center gap-1.5">
+                                  <h4 className="text-slate-800 font-semibold text-sm flex items-center gap-1.5">
                                     <span>✓</span> Complete Checkup
                                   </h4>
                                   <button
                                     onClick={() => toggleCompletionForm(appointment.id)}
-                                    className="text-white hover:bg-white/20 rounded p-0.5 transition-all"
+                                    className="text-slate-500 hover:text-slate-800 rounded p-0.5 transition-all"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2128,7 +2466,15 @@ export default function DoctorAppointments() {
                                       </div>
                                     ) : (
                                       <>
-                                        {(completionData[appointment.id]?.medicines || []).map((medicine, index) => (
+                                        {(completionData[appointment.id]?.medicines || []).map((medicine, index) => {
+                                          const selectedSuggestion = findSuggestionByName(medicine.name)
+                                          const nameSuggestions = getMedicineNameSuggestions(medicine.name || "")
+                                          const showNameSuggestions =
+                                            activeNameSuggestion?.appointmentId === appointment.id &&
+                                            activeNameSuggestion?.index === index &&
+                                            nameSuggestions.length > 0
+
+                                          return (
                                           <div key={index} className="bg-gray-50 rounded p-2.5 border border-gray-200">
                                             <div className="flex items-center justify-between mb-2">
                                               <h5 className="font-semibold text-gray-800 text-xs">#{index + 1}</h5>
@@ -2149,14 +2495,138 @@ export default function DoctorAppointments() {
                                                 <label className="block text-xs font-medium text-gray-700 mb-0.5">
                                                   Name <span className="text-red-500">*</span>
                                                 </label>
-                                                <input
-                                                  type="text"
-                                                  value={medicine.name}
-                                                  onChange={(e) => updateMedicine(appointment.id, index, "name", e.target.value)}
-                                                  placeholder="e.g., Paracetamol"
-                                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
-                                                  required
-                                                />
+                                                <div className="relative">
+                                                  <input
+                                                    type="text"
+                                                    id={`name-${appointment.id}-${index}`}
+                                                    value={medicine.name}
+                                                    onChange={(e) => {
+                                                      updateMedicine(appointment.id, index, "name", e.target.value)
+                                                      updateInlineSuggestion(appointment.id, index, e.target.value)
+                                                    }}
+                                                    onFocus={() => {
+                                                      setActiveNameSuggestion({ appointmentId: appointment.id, index })
+                                                      updateInlineSuggestion(appointment.id, index, medicine.name || "")
+                                                    }}
+                                                    onBlur={() => {
+                                                      setTimeout(() => {
+                                                        setActiveNameSuggestion((current) => {
+                                                          if (
+                                                            current?.appointmentId === appointment.id &&
+                                                            current.index === index
+                                                          ) {
+                                                            return null
+                                                          }
+                                                          return current
+                                                        })
+                                                      }, 150)
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === "Tab" || e.key === "ArrowRight") {
+                                                        if (inlineSuggestion?.appointmentId === appointment.id && inlineSuggestion.index === index) {
+                                                          e.preventDefault()
+                                                          acceptInlineSuggestion(appointment.id, index)
+                                                        }
+                                                      } else if (e.key === "Enter") {
+                                                        if (inlineSuggestion?.appointmentId === appointment.id && inlineSuggestion.index === index) {
+                                                          e.preventDefault()
+                                                          acceptInlineSuggestion(appointment.id, index)
+                                                        }
+                                                      } else if (e.key === "ArrowDown") {
+                                                        if (nameSuggestions.length > 0) {
+                                                          e.preventDefault()
+                                                          const firstOption = document.querySelector<HTMLButtonElement>(
+                                                            `#suggestion-btn-${appointment.id}-${index}-0`
+                                                          )
+                                                          firstOption?.focus()
+                                                        }
+                                                      } else if (e.key === "Escape") {
+                                                        setInlineSuggestion((prev) =>
+                                                          prev?.appointmentId === appointment.id && prev.index === index ? null : prev
+                                                        )
+                                                      }
+                                                    }}
+                                                    placeholder="e.g., Paracetamol"
+                                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
+                                                    required
+                                                  />
+                                                  {inlineSuggestion?.appointmentId === appointment.id &&
+                                                  inlineSuggestion?.index === index &&
+                                                  inlineSuggestion?.suggestion &&
+                                                  inlineSuggestion.suggestion.toLowerCase().startsWith((medicine.name || "").toLowerCase()) ? (
+                                                    <div className="pointer-events-none absolute inset-0 flex items-center px-2 text-xs text-gray-400 select-none">
+                                                      <span className="opacity-0">
+                                                        {(medicine.name || "").split("").map(() => "•").join("")}
+                                                      </span>
+                                                      <span>
+                                                        {
+                                                          inlineSuggestion.suggestion.slice(
+                                                            (medicine.name || "").length
+                                                          )
+                                                        }
+                                                      </span>
+                                                    </div>
+                                                  ) : null}
+                                                  {showNameSuggestions && (
+                                                    <div className="absolute z-20 mt-1 w-full max-h-40 overflow-auto bg-white border border-gray-200 rounded shadow-lg">
+                                                      {medicineSuggestionsLoading ? (
+                                                        <div className="px-3 py-2 text-[11px] text-gray-500">Loading suggestions...</div>
+                                                      ) : (
+                                                        nameSuggestions.map((suggestion, suggestionIndex) => (
+                                                          <button
+                                                            type="button"
+                                                            key={suggestion.id}
+                                                            id={`suggestion-btn-${appointment.id}-${index}-${suggestionIndex}`}
+                                                            className="w-full px-3 py-1.5 text-left hover:bg-green-50 transition text-[11px]"
+                                                            onMouseDown={(e) => {
+                                                              e.preventDefault()
+                                                              handleSelectMedicineSuggestion(appointment.id, index, suggestion, { setFocusNext: true })
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                              if (e.key === "Enter") {
+                                                                e.preventDefault()
+                                                                handleSelectMedicineSuggestion(appointment.id, index, suggestion, { setFocusNext: true })
+                                                              } else if (e.key === "ArrowDown") {
+                                                                const nextButton = document.querySelector<HTMLButtonElement>(
+                                                                  `#suggestion-btn-${appointment.id}-${index}-${suggestionIndex + 1}`
+                                                                )
+                                                                if (nextButton) {
+                                                                  e.preventDefault()
+                                                                  nextButton.focus()
+                                                                }
+                                                              } else if (e.key === "ArrowUp") {
+                                                                if (suggestionIndex === 0) {
+                                                                  e.preventDefault()
+                                                                  const input = document.querySelector<HTMLInputElement>(
+                                                                    `#name-${appointment.id}-${index}`
+                                                                  )
+                                                                  input?.focus()
+                                                                } else {
+                                                                  const prevButton = document.querySelector<HTMLButtonElement>(
+                                                                    `#suggestion-btn-${appointment.id}-${index}-${suggestionIndex - 1}`
+                                                                  )
+                                                                  if (prevButton) {
+                                                                    e.preventDefault()
+                                                                    prevButton.focus()
+                                                                  }
+                                                                }
+                                                              }
+                                                            }}
+                                                          >
+                                                            <div className="text-gray-800 font-semibold text-xs">
+                                                              {suggestion.name}
+                                                            </div>
+                                                            {suggestion.dosageOptions?.length ? (
+                                                              <div className="text-[10px] text-gray-500">
+                                                                Common dosage: {suggestion.dosageOptions[0].value}
+                                                              </div>
+                                                            ) : null}
+                                                          </button>
+                                                        ))
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
                                               </div>
                                               
                                               <div>
@@ -2170,6 +2640,20 @@ export default function DoctorAppointments() {
                                                   placeholder="e.g., 500mg"
                                                   className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
                                                 />
+                                                {selectedSuggestion?.dosageOptions?.length ? (
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                    {getTopOptions(selectedSuggestion.dosageOptions).map((option) => (
+                                                      <button
+                                                        type="button"
+                                                        key={`${option.value}-dosage`}
+                                                        onClick={() => handleOptionChipClick(appointment.id, index, "dosage", option.value)}
+                                                        className="px-2 py-0.5 bg-white text-[10px] border border-gray-200 rounded-full hover:border-green-400 hover:text-green-600 transition"
+                                                      >
+                                                        {option.value}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                ) : null}
                                               </div>
                                               
                                               <div>
@@ -2183,6 +2667,20 @@ export default function DoctorAppointments() {
                                                   placeholder="e.g., 1-0-1"
                                                   className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
                                                 />
+                                                {selectedSuggestion?.frequencyOptions?.length ? (
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                    {getTopOptions(selectedSuggestion.frequencyOptions).map((option) => (
+                                                      <button
+                                                        type="button"
+                                                        key={`${option.value}-frequency`}
+                                                        onClick={() => handleOptionChipClick(appointment.id, index, "frequency", option.value)}
+                                                        className="px-2 py-0.5 bg-white text-[10px] border border-gray-200 rounded-full hover:border-green-400 hover:text-green-600 transition"
+                                                      >
+                                                        {option.value}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                ) : null}
                                               </div>
                                               
                                               <div>
@@ -2196,21 +2694,38 @@ export default function DoctorAppointments() {
                                                   placeholder="e.g., 5 days"
                                                   className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
                                                 />
+                                                {selectedSuggestion?.durationOptions?.length ? (
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                    {getTopOptions(selectedSuggestion.durationOptions).map((option) => (
+                                                      <button
+                                                        type="button"
+                                                        key={`${option.value}-duration`}
+                                                        onClick={() => handleOptionChipClick(appointment.id, index, "duration", option.value)}
+                                                        className="px-2 py-0.5 bg-white text-[10px] border border-gray-200 rounded-full hover:border-green-400 hover:text-green-600 transition"
+                                                      >
+                                                        {option.value}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                ) : null}
                                               </div>
                                             </div>
                                           </div>
-                                        ))}
+                                          )
+                                        })}
                                         
-                                        <button
-                                          type="button"
-                                          onClick={() => addMedicine(appointment.id)}
-                                          className="w-full px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-xs transition-all flex items-center justify-center gap-1.5"
-                                        >
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                          </svg>
-                                          Add Medicine
-                                        </button>
+                                        <div className="flex justify-end">
+                                          <button
+                                            type="button"
+                                            onClick={() => addMedicine(appointment.id)}
+                                            className="px-3 py-1 bg-slate-100 text-slate-700 border border-slate-300 rounded-md text-xs font-medium hover:bg-slate-200 transition flex items-center gap-1"
+                                          >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            Add More
+                                          </button>
+                                        </div>
                                       </>
                                     )}
                                   </div>
@@ -2219,19 +2734,21 @@ export default function DoctorAppointments() {
                                 {/* Notes Section */}
                                 <div>
                                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Doctor&apos;s Notes <span className="text-red-500">*</span>
+                                    Doctor&apos;s Notes <span className="text-gray-400 text-xs">(Optional)</span>
                                   </label>
                                   <textarea
                                     value={completionData[appointment.id]?.notes || ""}
-                                    onChange={(e) => setCompletionData({
-                                      ...completionData,
-                                      [appointment.id]: {
-                                        ...completionData[appointment.id],
-                                        notes: e.target.value,
-                                        medicines: completionData[appointment.id]?.medicines || [],
-                                        recheckupRequired: completionData[appointment.id]?.recheckupRequired || false
-                                      }
-                                    })}
+                                    onChange={(e) =>
+                                      setCompletionData((prev) => ({
+                                        ...prev,
+                                        [appointment.id]: {
+                                          ...prev[appointment.id],
+                                          notes: e.target.value,
+                                          medicines: prev[appointment.id]?.medicines || [],
+                                          recheckupRequired: prev[appointment.id]?.recheckupRequired || false,
+                                        },
+                                      }))
+                                    }
                                     rows={3}
                                     placeholder="Enter observations, diagnosis, recommendations..."
                                     className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
@@ -2244,15 +2761,17 @@ export default function DoctorAppointments() {
                                     type="checkbox"
                                     id={`recheckupRequired-${appointment.id}`}
                                     checked={completionData[appointment.id]?.recheckupRequired || false}
-                                    onChange={(e) => setCompletionData({
-                                      ...completionData,
-                                      [appointment.id]: {
-                                        ...completionData[appointment.id],
-                                        recheckupRequired: e.target.checked,
-                                        medicines: completionData[appointment.id]?.medicines || [],
-                                        notes: completionData[appointment.id]?.notes || ""
-                                      }
-                                    })}
+                                    onChange={(e) =>
+                                      setCompletionData((prev) => ({
+                                        ...prev,
+                                        [appointment.id]: {
+                                          ...prev[appointment.id],
+                                          recheckupRequired: e.target.checked,
+                                          medicines: prev[appointment.id]?.medicines || [],
+                                          notes: prev[appointment.id]?.notes || "",
+                                        },
+                                      }))
+                                    }
                                     className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
                                   />
                                   <label htmlFor={`recheckupRequired-${appointment.id}`} className="text-xs font-medium text-gray-700 cursor-pointer">
@@ -2263,18 +2782,38 @@ export default function DoctorAppointments() {
                                 <div className="flex gap-2 pt-2">
                                   <button
                                     type="submit"
-                                    disabled={updating[appointment.id] || false}
+                                    disabled={
+                                      updating[appointment.id] ||
+                                      !hasValidPrescriptionInput(completionData[appointment.id])
+                                    }
                                     className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     {updating[appointment.id] ? "Completing..." : "Complete Checkup"}
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => toggleCompletionForm(appointment.id)}
-                                    disabled={updating[appointment.id] || false}
-                                    className="px-4 py-2 border border-slate-300 rounded hover:bg-slate-50 transition-all font-semibold text-sm text-slate-700"
+                                    onClick={() => openAdmitDialog(appointment)}
+                                    disabled={
+                                      updating[appointment.id] ||
+                                      Boolean(admitting[appointment.id]) ||
+                                      !hasValidPrescriptionInput(completionData[appointment.id])
+                                    }
+                                    className="flex-1 px-4 py-2 bg-slate-900 hover:bg-black text-white rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                   >
-                                    Cancel
+                                    {admitting[appointment.id] ? (
+                                      <>
+                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span>Sending...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>🏥</span>
+                                        <span>Admit Patient</span>
+                                      </>
+                                    )}
                                   </button>
                                 </div>
                               </form>
@@ -2385,6 +2924,47 @@ export default function DoctorAppointments() {
           message={notification.message}
           onClose={() => setNotification(null)}
         />
+      )}
+
+      {admitDialog.open && admitDialog.appointment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white border border-slate-200 shadow-2xl p-6">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                🏥
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900">Admit patient?</h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  Are you sure you want to send an admission request for{" "}
+                  <span className="font-semibold text-slate-900">
+                    {admitDialog.appointment.patientName || "this patient"}
+                  </span>
+                  ? This will send the request to the receptionist for further processing.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeAdmitDialog}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
+                disabled={admitting[admitDialog.appointment.id]}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmAdmitPatient}
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={admitting[admitDialog.appointment.id]}
+              >
+                {admitting[admitDialog.appointment.id] ? "Sending..." : "Yes, Admit Patient"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

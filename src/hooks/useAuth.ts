@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 
 type UserRole = "patient" | "doctor" | "admin" | "receptionist" | null
+const STAFF_ROLES: Exclude<UserRole, "patient" | null>[] = ["admin", "doctor", "receptionist"]
 
 interface AuthUser {
   uid: string
@@ -134,6 +135,26 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
           return
         }
 
+        // Verify MFA for staff roles
+        if (
+          userRoleData.role === "admin" ||
+          userRoleData.role === "doctor" ||
+          userRoleData.role === "receptionist"
+        ) {
+          const tokenResult = await currentUser.getIdTokenResult(true)
+          const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+          const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+          const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+
+          if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+            await signOut(auth)
+            const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
+            router.replace(loginPath)
+            setLoading(false)
+            return
+          }
+        }
+
         // If route requires specific role and user has different role
         if (requiredRole && requiredRole !== userRoleData.role) {
           const dashboardPath = `/${userRoleData.role}-dashboard`
@@ -172,6 +193,23 @@ export function usePublicRoute() {
         // User is logged in - check their role and redirect to dashboard using cached data
         const userRoleData = await getUserRole(currentUser.uid)
         if (userRoleData) {
+        if (
+          userRoleData.role === "admin" ||
+          userRoleData.role === "doctor" ||
+          userRoleData.role === "receptionist"
+        ) {
+            const tokenResult = await currentUser.getIdTokenResult(true)
+            const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+            const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+            const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+
+            if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+              // MFA not complete yet - allow login page to handle OTP flow
+              setLoading(false)
+              return
+            }
+          }
+
           router.replace(`/${userRoleData.role}-dashboard`)
         } else {
           // User exists but no data - sign them out

@@ -8,6 +8,7 @@ export interface DoctorProfileFormValues {
   firstName: string
   lastName: string
   email: string
+  phoneNumber: string
   gender: string
   specialization: string
   qualification: string
@@ -48,6 +49,7 @@ export default function DoctorProfileForm({
   const [firstName, setFirstName] = useState(initialValues?.firstName ?? '')
   const [lastName, setLastName] = useState(initialValues?.lastName ?? '')
   const [email, setEmail] = useState(initialValues?.email ?? '')
+  const [phoneNumber, setPhoneNumber] = useState(initialValues?.phoneNumber ?? '')
   const [gender, setGender] = useState(initialValues?.gender ?? '')
   const [experience, setExperience] = useState(initialValues?.experience ?? '')
   const [consultationFee, setConsultationFee] = useState(
@@ -233,6 +235,7 @@ export default function DoctorProfileForm({
     const trimmedFirst = firstName.trim()
     const trimmedLast = lastName.trim()
     const trimmedEmail = email.trim()
+    const trimmedPhone = phoneNumber.trim()
 
     if (!trimmedFirst) {
       return setFormError('Please enter first name')
@@ -246,6 +249,10 @@ export default function DoctorProfileForm({
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(trimmedEmail)) {
       return setFormError('Please enter a valid email address')
+    }
+
+    if (!trimmedPhone) {
+      return setFormError('Please provide a phone number')
     }
 
     if (!finalSpecializationLabel) {
@@ -285,6 +292,7 @@ export default function DoctorProfileForm({
       firstName: trimmedFirst,
       lastName: trimmedLast,
       email: trimmedEmail,
+      phoneNumber: trimmedPhone,
       gender,
       specialization: finalSpecializationLabel,
       qualification: finalQualificationLabel,
@@ -667,6 +675,27 @@ export default function DoctorProfileForm({
             required
           />
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          Phone Number <span className="text-red-500">*</span>
+        </label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📱</span>
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => {
+              setPhoneNumber(e.target.value)
+              clearErrors()
+            }}
+            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+            placeholder="+91 98765 43210"
+            required
+          />
+        </div>
+        <p className="text-xs text-slate-500 mt-1">Include country code for OTP (e.g., +91 9876543210)</p>
       </div>
 
       <div>

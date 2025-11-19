@@ -1,12 +1,30 @@
 import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { applyRateLimit } from "@/utils/rateLimit"
+import { logAdminEvent } from "@/utils/auditLog"
 
 export async function POST(req: NextRequest) {
+  // Apply rate limiting first
+  const rateLimitResult = await applyRateLimit(req, "ADMIN")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires admin role
   const auth = await authenticateRequest(req, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
+  }
+  if (!auth.user) {
+    return Response.json({ error: "Authenticated user context missing" }, { status: 403 })
+  }
+  const adminUser = auth.user
+
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(req, "ADMIN", adminUser.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
   }
 
   try {
@@ -105,6 +123,20 @@ export async function POST(req: NextRequest) {
     })
 
     await batch.commit()
+
+    // Log admin approval
+    await logAdminEvent(
+      "admin_approval",
+      req,
+      adminUser.uid,
+      adminUser.email || undefined,
+      "approve_schedule_request",
+      "doctor_schedule_request",
+      requestId,
+      doctorId,
+      true,
+      { conflicts: conflicts.length, awaitingCount, cancelledCount, requestType: request.requestType }
+    )
 
     return Response.json({ success: true, conflicts: conflicts.length, awaitingCount, cancelledCount })
   } catch (e: any) {

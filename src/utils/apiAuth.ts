@@ -36,7 +36,13 @@ function extractAuthToken(request: Request): string | null {
 /**
  * Verify Firebase Auth token and get user info
  */
-async function verifyAuthToken(token: string): Promise<{ uid: string; email: string | null } | null> {
+interface VerifiedTokenData {
+  uid: string
+  email: string | null
+  authTime: string | null
+}
+
+async function verifyAuthToken(token: string): Promise<VerifiedTokenData | null> {
   try {
     const initResult = initFirebaseAdmin("api-auth")
     if (!initResult.ok) {
@@ -47,6 +53,7 @@ async function verifyAuthToken(token: string): Promise<{ uid: string; email: str
     return {
       uid: decodedToken.uid,
       email: decodedToken.email || null,
+      authTime: decodedToken.auth_time ? String(decodedToken.auth_time) : null,
     }
   } catch (error) {
     console.error("[api-auth] Token verification failed:", error)
@@ -144,13 +151,23 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
  * }
  * const adminUser = auth.user
  */
+interface AuthenticateOptions {
+  skipMfaCheck?: boolean
+}
+
+const MFA_REQUIRED_ROLES: UserRole[] = ["admin", "doctor", "receptionist"]
+
 export async function authenticateRequest(
   request: Request,
-  requiredRole?: UserRole
+  requiredRole?: UserRole,
+  options?: AuthenticateOptions
 ): Promise<AuthResult> {
   // Extract token from Authorization header
   const token = extractAuthToken(request)
   if (!token) {
+    // Log authentication failure
+    const { logAuthEvent } = await import("@/utils/auditLog")
+    await logAuthEvent("token_invalid", request, undefined, undefined, undefined, "Authorization token missing")
     return {
       success: false,
       error: "Authorization token missing. Please include 'Authorization: Bearer <token>' header.",
@@ -161,6 +178,9 @@ export async function authenticateRequest(
   // Verify token
   const tokenData = await verifyAuthToken(token)
   if (!tokenData) {
+    // Log authentication failure
+    const { logAuthEvent } = await import("@/utils/auditLog")
+    await logAuthEvent("token_invalid", request, undefined, undefined, undefined, "Invalid or expired token")
     return {
       success: false,
       error: "Invalid or expired authentication token.",
@@ -171,6 +191,9 @@ export async function authenticateRequest(
   // Get user role
   const roleData = await getUserRole(tokenData.uid, requiredRole)
   if (!roleData) {
+    // Log authorization failure
+    const { logAuthzEvent } = await import("@/utils/auditLog")
+    await logAuthzEvent("access_denied", request, tokenData.uid, tokenData.email || undefined, undefined, undefined, undefined, "User not found")
     return {
       success: false,
       error: requiredRole
@@ -182,6 +205,9 @@ export async function authenticateRequest(
 
   // Check if required role matches
   if (requiredRole && roleData.role !== requiredRole) {
+    // Log authorization failure
+    const { logAuthzEvent } = await import("@/utils/auditLog")
+    await logAuthzEvent("permission_denied", request, tokenData.uid, tokenData.email || undefined, roleData.role, undefined, undefined, `Required role: ${requiredRole}`)
     return {
       success: false,
       error: `Access denied. This endpoint requires ${requiredRole} role.`,
@@ -191,12 +217,47 @@ export async function authenticateRequest(
 
   // Check if doctor account is approved (if status exists)
   if (roleData.role === "doctor" && roleData.data?.status === "pending") {
+    // Log authorization failure
+    const { logAuthzEvent } = await import("@/utils/auditLog")
+    await logAuthzEvent("permission_denied", request, tokenData.uid, tokenData.email || undefined, roleData.role, undefined, undefined, "Doctor account pending approval")
     return {
       success: false,
       error: "Your doctor account is pending approval. Please wait for admin approval.",
       statusCode: 403,
     }
   }
+
+  // Enforce MFA for staff roles unless explicitly skipped (e.g., during MFA verification flow)
+  const shouldCheckMfa = !options?.skipMfaCheck && MFA_REQUIRED_ROLES.includes(roleData.role)
+  if (shouldCheckMfa) {
+    const tokenAuthTime = tokenData.authTime
+    const db = admin.firestore()
+    const mfaDoc = await db.collection("mfaSessions").doc(tokenData.uid).get()
+    const storedAuthTime = mfaDoc.exists ? String(mfaDoc.data()?.authTime || "") : ""
+
+    if (!tokenAuthTime || !storedAuthTime || storedAuthTime !== tokenAuthTime) {
+      const { logAuthzEvent } = await import("@/utils/auditLog")
+      await logAuthzEvent(
+        "permission_denied",
+        request,
+        tokenData.uid,
+        tokenData.email || undefined,
+        roleData.role,
+        undefined,
+        undefined,
+        "Multi-factor authentication required or expired"
+      )
+      return {
+        success: false,
+        error: "Additional verification required. Please sign in again and complete OTP verification.",
+        statusCode: 401,
+      }
+    }
+  }
+
+  // Log successful authentication
+  const { logAuthEvent } = await import("@/utils/auditLog")
+  await logAuthEvent("token_verified", request, tokenData.uid, tokenData.email || undefined, roleData.role)
 
   return {
     success: true,

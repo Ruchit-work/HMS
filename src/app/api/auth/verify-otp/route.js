@@ -19,6 +19,13 @@ if (!admin.apps.length) {
 // POST /api/auth/verify-otp - Verify OTP
 export async function POST(request) {
   try {
+    // Apply rate limiting
+    const { applyRateLimit } = await import("@/utils/rateLimit");
+    const rateLimitResult = await applyRateLimit(request, "AUTH");
+    if (rateLimitResult instanceof Response) {
+      return rateLimitResult; // Rate limited
+    }
+
     const body = await request.json();
     const { phoneNumber, otp } = body;
 
@@ -96,6 +103,14 @@ export async function POST(request) {
         attempts: admin.firestore.FieldValue.increment(1),
       });
 
+      // Log audit event for failed verification
+      const { logAuthEvent } = await import("@/utils/auditLog");
+      await logAuthEvent("otp_failed", request, undefined, undefined, undefined, "Invalid OTP", {
+        phoneNumber: cleanedPhone,
+        attempts: attempts + 1,
+        remainingAttempts: 5 - (attempts + 1),
+      });
+
       const remainingAttempts = 5 - (attempts + 1);
       return Response.json(
         {
@@ -110,6 +125,12 @@ export async function POST(request) {
     await otpRef.update({
       verified: true,
       verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Log audit event for successful verification
+    const { logAuthEvent } = await import("@/utils/auditLog");
+    await logAuthEvent("otp_verified", request, undefined, undefined, undefined, undefined, {
+      phoneNumber: otpData.phoneNumber || cleanedPhone,
     });
 
     // Return success

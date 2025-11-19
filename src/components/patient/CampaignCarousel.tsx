@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Campaign } from "@/utils/campaigns"
 import { getContentPreview, getPlainText, shouldTruncate } from "@/utils/campaignContent"
+import { sanitizeForInnerHTML } from "@/utils/sanitizeHtml"
 
 interface CampaignCarouselProps {
   campaigns: Campaign[]
@@ -87,7 +88,7 @@ function CampaignCard({ campaign, gradient, index }: CampaignCardProps) {
             textOverflow: 'ellipsis',
             maxHeight: '6rem'
           } : {}}
-          dangerouslySetInnerHTML={{ __html: displayContent }}
+          dangerouslySetInnerHTML={sanitizeForInnerHTML(displayContent)}
         />
         {shouldShowTruncate && (
           <button

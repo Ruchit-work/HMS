@@ -46,6 +46,13 @@ interface BookingSession {
  * Receives webhooks from Twilio WhatsApp
  */
 export async function POST(request: Request) {
+  // Apply rate limiting (protect against spam)
+  const { applyRateLimit } = await import("@/utils/rateLimit")
+  const rateLimitResult = await applyRateLimit(request, "WEBHOOK")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   try {
     const initResult = initFirebaseAdmin("whatsapp-webhook API")
     if (!initResult.ok) {

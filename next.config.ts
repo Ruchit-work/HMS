@@ -30,6 +30,35 @@ const nextConfig: NextConfig = {
   
   // Reduce initial bundle size
   output: 'standalone',
+  
+  // Server-side external packages to handle ES module compatibility
+  serverExternalPackages: ['jsdom', 'parse5', 'isomorphic-dompurify'],
+  
+  // Webpack configuration to handle jsdom/parse5 ES module compatibility
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Mark problematic packages as external to prevent bundling issues
+      const originalExternals = config.externals
+      config.externals = [
+        ...(Array.isArray(originalExternals) ? originalExternals : [originalExternals]),
+        // Externalize packages that have ES module compatibility issues
+        ({ request }: { request?: string }, callback: (err?: Error | null, result?: string) => void) => {
+          if (request === 'jsdom' || request === 'parse5' || request?.includes('jsdom') || request?.includes('parse5')) {
+            return callback(null, `commonjs ${request}`)
+          }
+          callback()
+        },
+      ]
+      
+      // Configure resolve to handle module types
+      config.resolve = config.resolve || {}
+      config.resolve.extensionAlias = {
+        '.js': ['.js', '.ts', '.tsx'],
+      }
+    }
+    
+    return config
+  },
 };
 
 export default nextConfig;

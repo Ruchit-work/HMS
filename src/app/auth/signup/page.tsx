@@ -140,10 +140,11 @@ function SignUpContent() {
       );
       const user = userCredential.user;
 
-        await setDoc(doc(db, "doctors", user.uid), {
-        email: values.email,
-          status: "pending",
+      const trimmedPhone = values.phoneNumber.trim();
 
+      await setDoc(doc(db, "doctors", user.uid), {
+        email: values.email,
+        status: "pending",
         firstName: values.firstName,
         lastName: values.lastName,
         gender: values.gender,
@@ -151,8 +152,9 @@ function SignUpContent() {
         qualification: values.qualification,
         experience: values.experience,
         consultationFee: values.consultationFee,
-          createdAt: new Date().toISOString(),
-
+        phoneNumber: trimmedPhone,
+        mfaPhone: trimmedPhone,
+        createdAt: new Date().toISOString(),
         createdBy: "self",
       });
 

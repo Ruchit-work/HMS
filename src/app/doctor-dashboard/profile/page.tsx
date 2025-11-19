@@ -19,7 +19,7 @@ interface DoctorData {
   email: string
   role: string
   gender?: string
-  phoneNumber: string
+  phoneNumber?: string
   dateOfBirth?: string
   bloodGroup?: string
   address?: string
@@ -77,10 +77,15 @@ export default function DoctorProfilePage() {
 
     setUpdating(true)
     try {
-      await updateDoc(doc(db, "doctors", user.uid), {
+      const updates: Record<string, unknown> = {
         ...formData,
-        updatedAt: new Date().toISOString()
-      })
+        updatedAt: new Date().toISOString(),
+      }
+      if (typeof formData.phoneNumber === "string" && formData.phoneNumber.trim()) {
+        updates.mfaPhone = formData.phoneNumber.trim()
+      }
+
+      await updateDoc(doc(db, "doctors", user.uid), updates)
 
       setUserData({ ...userData, ...formData })
       setIsEditing(false)

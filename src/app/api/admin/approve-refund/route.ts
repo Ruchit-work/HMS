@@ -1,12 +1,30 @@
 import { NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { applyRateLimit } from "@/utils/rateLimit"
+import { logAdminEvent, logPaymentEvent } from "@/utils/auditLog"
 
 export async function POST(req: Request) {
+  // Apply rate limiting first
+  const rateLimitResult = await applyRateLimit(req, "ADMIN")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires admin role
   const auth = await authenticateRequest(req, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
+  }
+  if (!auth.user) {
+    return NextResponse.json({ error: "Authenticated user context missing" }, { status: 403 })
+  }
+  const adminUser = auth.user
+
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(req, "ADMIN", adminUser.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
   }
 
   try {
@@ -79,9 +97,54 @@ export async function POST(req: Request) {
       })
     }
 
+    // Log admin approval and refund processing
+    await logAdminEvent(
+      "admin_approval",
+      req,
+      adminUser.uid,
+      adminUser.email || undefined,
+      "approve_refund",
+      "refund_request",
+      refundRequestId,
+      patientId,
+      true,
+      { amount, appointmentId }
+    )
+
+    await logPaymentEvent(
+      "refund_processed",
+      req,
+      adminUser.uid,
+      adminUser.email || undefined,
+      adminUser.role,
+      amount,
+      undefined,
+      undefined,
+      appointmentId,
+      undefined,
+      { refundRequestId, patientId }
+    )
+
     return NextResponse.json({ ok: true, amountRefunded: amount })
   } catch (e: any) {
     console.error('approve-refund error', e)
+    
+    // Log failed refund processing
+    if (auth.success && auth.user) {
+      await logPaymentEvent(
+        "refund_failed",
+        req,
+        auth.user.uid,
+        auth.user.email || undefined,
+        auth.user.role,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        e?.message || 'Internal error'
+      )
+    }
+
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
   }
 }

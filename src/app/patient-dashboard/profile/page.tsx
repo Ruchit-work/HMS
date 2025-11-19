@@ -61,12 +61,30 @@ export default function PatientProfilePage() {
 
     setUpdating(true)
     try {
-      await updateDoc(doc(db, "patients", user.uid), {
-        ...formData,
+      // Filter out undefined values and convert to null for numeric fields
+      const updateData: Record<string, unknown> = {
         updatedAt: new Date().toISOString()
-      })
+      }
+      
+      for (const [key, value] of Object.entries(formData)) {
+        // For numeric fields (heightCm, weightKg), convert undefined/empty to null
+        if (key === 'heightCm' || key === 'weightKg') {
+          if (value === undefined || value === null || value === '') {
+            updateData[key] = null
+          } else {
+            updateData[key] = value
+          }
+        } else {
+          // Skip undefined values for other fields - Firestore doesn't accept undefined
+          if (value !== undefined) {
+            updateData[key] = value
+          }
+        }
+      }
 
-      setUserData({ ...userData, ...formData })
+      await updateDoc(doc(db, "patients", user.uid), updateData)
+
+      setUserData({ ...userData, ...updateData } as UserData)
       setIsEditing(false)
       setNotification({ 
         type: "success", 

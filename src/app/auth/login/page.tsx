@@ -3,25 +3,238 @@
 import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
-import { signInWithEmailAndPassword } from "firebase/auth"
+import { signInWithEmailAndPassword, type User } from "firebase/auth"
 import { getDoc, doc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 
+type DashboardRole = "patient" | "doctor" | "admin" | "receptionist"
+const STAFF_ROLES: DashboardRole[] = ["admin", "doctor", "receptionist"]
+
 function LoginContent() {
   const searchParams = useSearchParams()
-  const role = searchParams.get("role") as "patient" | "doctor" | "admin" | "receptionist" | null
+  const role = searchParams.get("role") as DashboardRole | null
   
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [otpCode, setOtpCode] = useState("")
+  const [otpError, setOtpError] = useState("")
+  const [otpSending, setOtpSending] = useState(false)
+  const [otpVerifying, setOtpVerifying] = useState(false)
+  const [otpCountdown, setOtpCountdown] = useState(0)
+  const [pendingUser, setPendingUser] = useState<User | null>(null)
+  const [pendingRole, setPendingRole] = useState<DashboardRole | null>(null)
+  const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
+  const [pendingPhone, setPendingPhone] = useState<string>("")
   const router = useRouter()
   
   // Protect route - redirect if already authenticated
   const { loading: checking } = usePublicRoute()
+
+  useEffect(() => {
+    if (otpCountdown <= 0) return
+    const interval = setInterval(() => {
+      setOtpCountdown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [otpCountdown])
+
+  const maskPhoneNumber = (phone: string) => {
+    if (!phone) return ""
+    const clean = phone.replace(/\D/g, "")
+    if (clean.length <= 4) return phone
+    const lastFour = clean.slice(-4)
+    return `**** **** ${lastFour}`
+  }
+
+  const extractPhoneNumber = (profile: any) => {
+    if (!profile) return null
+    const candidateFields = [
+      "mfaPhone",
+      "phoneNumber",
+      "phone",
+      "contactNumber",
+      "mobile",
+      "contact",
+    ]
+    for (const field of candidateFields) {
+      const value = profile[field]
+      if (typeof value === "string" && value.trim()) {
+        return value.trim()
+      }
+    }
+    return null
+  }
+
+  const determineUserRole = async (user: User) => {
+    // Check admin collection first
+    const adminDoc = await getDoc(doc(db, "admins", user.uid))
+    if (adminDoc.exists()) {
+      return { role: "admin" as DashboardRole, data: adminDoc.data(), redirect: "/admin-dashboard" }
+    }
+
+    // Check doctor collection
+    const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
+    if (doctorDoc.exists()) {
+      const doctorData = doctorDoc.data()
+      if (doctorData.status === "pending") {
+        throw new Error(
+          "Your account is pending admin approval. Please wait for approval before logging in. You will be notified once your account is approved."
+        )
+      }
+      return { role: "doctor" as DashboardRole, data: doctorData, redirect: "/doctor-dashboard" }
+    }
+
+    // Check patient collection
+    const patientDoc = await getDoc(doc(db, "patients", user.uid))
+    if (patientDoc.exists()) {
+      return { role: "patient" as DashboardRole, data: patientDoc.data(), redirect: "/patient-dashboard" }
+    }
+
+    // Check receptionist collection
+    const receptionistDoc = await getDoc(doc(db, "receptionists", user.uid))
+    if (receptionistDoc.exists()) {
+      return {
+        role: "receptionist" as DashboardRole,
+        data: receptionistDoc.data(),
+        redirect: "/receptionist-dashboard",
+      }
+    }
+
+    return null
+  }
+
+  const sendOtpCode = async (phoneOverride?: string) => {
+    const phoneNumber = phoneOverride || pendingPhone
+    if (!phoneNumber) {
+      setOtpError("Phone number not found on file. Please contact an administrator.")
+      return
+    }
+    setOtpSending(true)
+    setOtpError("")
+    try {
+      const response = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ phoneNumber }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to send OTP. Please try again.")
+      }
+      setSuccess("Security code sent successfully.")
+      setOtpCountdown(45)
+    } catch (err: any) {
+      setOtpError(err?.message || "Failed to send OTP. Please try again.")
+    } finally {
+      setOtpSending(false)
+    }
+  }
+
+  const beginMfaFlow = async (user: User, roleInfo: { role: DashboardRole; data: any; redirect: string }) => {
+    const phone = extractPhoneNumber(roleInfo.data)
+    if (!phone) {
+      setError(
+        "No phone number found for this account. Please contact your administrator to update your profile before logging in."
+      )
+      await auth.signOut()
+      setLoading(false)
+      return
+    }
+
+    setPendingUser(user)
+    setPendingRole(roleInfo.role)
+    setPendingRedirect(roleInfo.redirect)
+    setPendingPhone(phone)
+    setMfaRequired(true)
+    setOtpCode("")
+    setOtpError("")
+    setSuccess("")
+    setLoading(false)
+    await sendOtpCode(phone)
+  }
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pendingPhone || !pendingUser) {
+      setOtpError("Session expired. Please sign in again.")
+      await auth.signOut()
+      setMfaRequired(false)
+      return
+    }
+
+    setOtpError("")
+    setOtpVerifying(true)
+    try {
+      const verifyResponse = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ phoneNumber: pendingPhone, otp: otpCode }),
+      })
+      const verifyData = await verifyResponse.json().catch(() => ({}))
+      if (!verifyResponse.ok) {
+        throw new Error(verifyData?.error || "Invalid OTP. Please try again.")
+      }
+
+      const tokenResult = await pendingUser.getIdTokenResult(true)
+      const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+      if (!authTime) {
+        throw new Error("Unable to validate this session. Please sign in again.")
+      }
+
+      const token = await pendingUser.getIdToken(true)
+      const markResponse = await fetch("/api/auth/mark-mfa", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ authTime }),
+      })
+      const markData = await markResponse.json().catch(() => ({}))
+      if (!markResponse.ok) {
+        throw new Error(markData?.error || "Failed to finalize verification. Please try again.")
+      }
+
+      setSuccess("Verification successful! Redirecting...")
+      setMfaRequired(false)
+      setOtpCode("")
+      setOtpCountdown(0)
+      dispatchCountdownMessage("Login successful!", () =>
+        router.replace(pendingRedirect || "/")
+      )
+    } catch (err: any) {
+      const message = err?.message || "Failed to verify OTP. Please try again."
+      setOtpError(message)
+      if (message.toLowerCase().includes("sign in again")) {
+        await auth.signOut()
+        setMfaRequired(false)
+      }
+    } finally {
+      setOtpVerifying(false)
+    }
+  }
+
+  const handleCancelMfa = async () => {
+    setMfaRequired(false)
+    setPendingUser(null)
+    setPendingRole(null)
+    setPendingPhone("")
+    setPendingRedirect(null)
+    setOtpCode("")
+    setOtpError("")
+    setSuccess("")
+    await auth.signOut()
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,53 +245,29 @@ function LoginContent() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
-      
-      // Check admin collection first
-      const adminDoc = await getDoc(doc(db, "admins", user.uid))
-      if (adminDoc.exists()) {
+      const roleInfo = await determineUserRole(user)
+
+      if (!roleInfo) {
+        setError("Account not found. Please sign up first.")
+        await auth.signOut()
         setLoading(false)
-        dispatchCountdownMessage("Login successful!", () => router.replace("/admin-dashboard"))
         return
       }
 
-      // Check doctor collection
-      const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
-      if (doctorDoc.exists()) {
-        const doctorData = doctorDoc.data()
-        
-        if (doctorData.status === "pending") {
-          setError("Your account is pending admin approval. Please wait for approval before logging in. You will be notified once your account is approved.")
-          await auth.signOut()
-          setLoading(false)
-          return
-        }
+      if (roleInfo.role === "patient") {
         setLoading(false)
-        dispatchCountdownMessage("Login successful!", () => router.replace("/doctor-dashboard"))
+        dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
         return
       }
-      
-      // Check patient collection
-      const patientDoc = await getDoc(doc(db, "patients", user.uid))
-      if (patientDoc.exists()) {
-        setLoading(false)
-        dispatchCountdownMessage("Login successful!", () => router.replace("/patient-dashboard"))
+
+      if (STAFF_ROLES.includes(roleInfo.role)) {
+        await beginMfaFlow(user, roleInfo)
         return
       }
-      
-      // Check receptionist collection
-      const receptionistDoc = await getDoc(doc(db, "receptionists", user.uid))
-      if (receptionistDoc.exists()) {
-        setLoading(false)
-        dispatchCountdownMessage("Login successful!", () => router.replace("/receptionist-dashboard"))
-        return
-      }
-      
-      // No account found in any collection
-      setError("Account not found. Please sign up first.")
-      await auth.signOut()
+
       setLoading(false)
+      dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
       return
-      
     } catch (err) {
       const firebaseError = err as { code?: string; message?: string }
       let errorMessage = "Failed to sign in"
@@ -104,6 +293,9 @@ function LoginContent() {
         default:
           errorMessage = firebaseError.message || "Failed to sign in. Please try again."
       }
+      if (!firebaseError.code && firebaseError.message) {
+        errorMessage = firebaseError.message
+      }
       
       setError(errorMessage)
     } finally {
@@ -128,6 +320,8 @@ function LoginContent() {
   if (checking) {
     return <LoadingSpinner />
   }
+
+  const otpMaskedPhone = pendingPhone ? maskPhoneNumber(pendingPhone) : ""
 
   return (
     <div className="min-h-screen flex">
@@ -229,67 +423,133 @@ function LoginContent() {
           )}
           
           {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
-                <span className="text-red-500 ml-1">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-                  placeholder={role === "doctor" ? "doctor@hospital.com" : 
-                                role === "admin" ? "admin@hospital.com" : 
-                                role === "receptionist" ? "receptionist@hospital.com" :
-                                role === "patient" ? "patient@email.com" :
-                                "your@email.com"}
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-slate-700">
-                  Password
+          {!mfaRequired ? (
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Email Address
                   <span className="text-red-500 ml-1">*</span>
                 </label>
-                <Link 
-                  href="/auth/forgot-password" 
-                  className="text-xs font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
-                >
-                  Forgot password?
-                </Link>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+                    placeholder={
+                      role === "doctor"
+                        ? "doctor@hospital.com"
+                        : role === "admin"
+                        ? "admin@hospital.com"
+                        : role === "receptionist"
+                        ? "receptionist@hospital.com"
+                        : role === "patient"
+                        ? "patient@email.com"
+                        : "your@email.com"
+                    }
+                    required
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Password
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <Link
+                    href="/auth/forgot-password"
+                    className="text-xs font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg
                     focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200
                     bg-white text-slate-900 placeholder:text-slate-400
                     transition-all duration-200"
-                  placeholder="••••••••"
-                  minLength={8}
+                    placeholder="••••••••"
+                    minLength={8}
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+              >
+                {loading ? "Signing in..." : "Sign In"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleOtpSubmit} className="space-y-5">
+              <div className="p-4 bg-slate-100 rounded-xl border border-slate-200">
+                <p className="text-sm text-slate-700 font-semibold mb-1">Two-Factor Authentication</p>
+                <p className="text-xs text-slate-600">
+                  Enter the 6-digit security code we sent to{" "}
+                  <span className="font-semibold">{otpMaskedPhone}</span> to verify your identity.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Security Code
+                  <span className="text-red-500 ml-1">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  className="w-full text-center tracking-widest text-2xl py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 transition-all duration-200"
+                  placeholder="••••••"
                   required
                 />
               </div>
-            </div>
 
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-            >
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
-          </form>
+              {otpError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{otpError}</p>
+              )}
+
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <button
+                  type="button"
+                  onClick={() => sendOtpCode()}
+                  disabled={otpSending || otpCountdown > 0}
+                  className="text-cyan-600 font-semibold disabled:opacity-50"
+                >
+                  {otpCountdown > 0 ? `Resend in ${otpCountdown}s` : otpSending ? "Sending..." : "Resend Code"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelMfa}
+                  className="text-slate-500 hover:text-slate-700 transition-colors font-medium"
+                >
+                  Cancel &amp; sign out
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={otpVerifying || otpCode.length !== 6}
+                className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+              >
+                {otpVerifying ? "Verifying..." : "Verify & Continue"}
+              </button>
+            </form>
+          )}
           
           {/* Sign Up Link - Only show for patient and doctor (admin and receptionist signup is disabled) */}
           {(role === "patient" || role === "doctor" || !role) && (

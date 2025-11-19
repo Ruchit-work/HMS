@@ -1,6 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { applyRateLimit } from "@/utils/rateLimit"
+import { logUserEvent } from "@/utils/auditLog"
 
 const buildWelcomeMessage = (firstName?: string, patientId?: string) => {
   const friendlyName = firstName?.trim() || "there"
@@ -9,6 +11,12 @@ const buildWelcomeMessage = (firstName?: string, patientId?: string) => {
 }
 
 export async function POST(request: Request) {
+  // Apply rate limiting first
+  const rateLimitResult = await applyRateLimit(request, "USER_CREATION")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   // Authenticate request - requires receptionist or admin role
   const auth = await authenticateRequest(request)
   if (!auth.success) {
@@ -19,6 +27,12 @@ export async function POST(request: Request) {
       { error: "Access denied. This endpoint requires receptionist or admin role." },
       { status: 403 }
     )
+  }
+
+  // Re-apply rate limit with user ID for better tracking
+  const rateLimitWithUser = await applyRateLimit(request, "USER_CREATION", auth.user?.uid)
+  if (rateLimitWithUser instanceof Response) {
+    return rateLimitWithUser // Rate limited
   }
 
   try {
@@ -123,6 +137,18 @@ export async function POST(request: Request) {
         console.error("[create-patient] WhatsApp notification failed:", error)
       })
     }
+
+    // Log user creation event
+    await logUserEvent(
+      "user_created",
+      request,
+      authUid,
+      "patient",
+      auth.user?.uid,
+      auth.user?.email || undefined,
+      auth.user?.role,
+      { patientId, email: docData.email, phone: docData.phone }
+    )
 
     return Response.json({ success: true, id: authUid, authUid, patientId })
   } catch (error: any) {

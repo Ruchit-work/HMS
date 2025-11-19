@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime } from "@/utils/timeSlots"
+import { applyRateLimit } from "@/utils/rateLimit"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -16,6 +17,12 @@ const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {
  * Public endpoint (used before payment collection)
  */
 export async function GET(request: Request) {
+  // Apply rate limiting (public endpoint but still needs protection)
+  const rateLimitResult = await applyRateLimit(request, "SLOT_CHECK")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult // Rate limited
+  }
+
   try {
     const initResult = initFirebaseAdmin("check-slot API")
     if (!initResult.ok) {
