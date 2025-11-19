@@ -1,4 +1,12 @@
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+
 export async function POST(req: Request) {
+  // Authenticate request - requires doctor role
+  const auth = await authenticateRequest(req, "doctor")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const body = await req.json();
     const { 

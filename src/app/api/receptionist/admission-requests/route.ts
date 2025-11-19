@@ -1,6 +1,19 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Authenticate request - requires receptionist or admin role
+  const auth = await authenticateRequest(request)
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
+    return Response.json(
+      { error: "Access denied. This endpoint requires receptionist or admin role." },
+      { status: 403 }
+    )
+  }
+
   try {
     const initResult = initFirebaseAdmin("receptionist-admission-requests API")
     if (!initResult.ok) {

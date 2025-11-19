@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 function isSequentialPatientId(value?: string | null) {
   if (!value) return false
@@ -7,6 +8,12 @@ function isSequentialPatientId(value?: string | null) {
 }
 
 export async function POST(req: NextRequest) {
+  // Authenticate request - requires doctor role
+  const auth = await authenticateRequest(req, "doctor")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const initResult = initFirebaseAdmin("doctor-admission-request API")
     if (!initResult.ok) {
@@ -45,6 +52,13 @@ export async function POST(req: NextRequest) {
       return Response.json({
         error: "Appointment is missing doctor or patient identifiers"
       }, { status: 400 })
+    }
+
+    // Verify doctor can only create admission requests for their own appointments
+    if (doctorId !== auth.user?.uid) {
+      return Response.json({
+        error: "You can only create admission requests for your own appointments"
+      }, { status: 403 })
     }
 
     const nowIso = new Date().toISOString()

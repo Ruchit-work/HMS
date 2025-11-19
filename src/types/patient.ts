@@ -224,24 +224,29 @@ export interface Admission {
 
 export interface BillingRecord {
   id: string
-  admissionId: string
+  type?: "admission" | "appointment" // Type of billing record
+  admissionId?: string
   appointmentId?: string
   patientId: string
   patientUid?: string | null
   patientName?: string | null
   doctorId: string
   doctorName?: string | null
-  roomCharges: number
-  doctorFee?: number
+  roomCharges?: number // For admission billing
+  doctorFee?: number // For admission billing
+  consultationFee?: number // For appointment billing
   otherServices?: Array<{ description: string; amount: number }>
   totalAmount: number
   generatedAt: string
-  status: "pending" | "paid" | "void"
+  status: "pending" | "paid" | "void" | "cancelled"
   paymentMethod?: "card" | "upi" | "cash" | "wallet" | "demo"
   paidAt?: string | null
   paymentReference?: string | null
+  transactionId?: string | null
   paidAtFrontDesk?: boolean
   handledBy?: string | null
   settlementMode?: string | null
+  paymentType?: "full" | "partial" // For appointment billing
+  remainingAmount?: number // For appointment billing (partial payments)
 }
 

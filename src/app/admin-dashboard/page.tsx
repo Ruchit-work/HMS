@@ -15,6 +15,7 @@ import PatientManagement from "./Tabs/PatientManagement"
 import DoctorManagement from "./Tabs/DoctorManagement"
 import AppoinmentManagement from "./Tabs/AppoinmentManagement"
 import CampaignManagement from "./Tabs/CampaignManagement"
+import BillingManagement from "./Tabs/BillingManagement"
 import AdminProtected from "@/components/AdminProtected"
 
 interface UserData {
@@ -81,7 +82,7 @@ export default function AdminDashboard() {
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "reports">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "reports">("overview")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
@@ -387,9 +388,20 @@ export default function AdminDashboard() {
 
   const approveRequest = async (request: any) => {
     try {
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to approve requests")
+      }
+
+      const token = await currentUser.getIdToken()
+
       const res = await fetch('/api/admin/approve-schedule-request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ requestId: request.id })
       })
       if (!res.ok) {
@@ -420,9 +432,20 @@ export default function AdminDashboard() {
 
   const approveRefund = async (refund: any) => {
     try {
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to approve refunds")
+      }
+
+      const token = await currentUser.getIdToken()
+
       const res = await fetch('/api/admin/approve-refund', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ refundRequestId: refund.id })
       })
       if (!res.ok) {
@@ -600,6 +623,23 @@ export default function AdminDashboard() {
             
             <button
               onClick={() => {
+                setActiveTab("billing")
+                setSidebarOpen(false)
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === "billing" 
+                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Billing & Payments
+            </button>
+            
+            <button
+              onClick={() => {
                 setActiveTab("reports")
                 setSidebarOpen(false)
               }}
@@ -631,6 +671,7 @@ export default function AdminDashboard() {
                    activeTab === "doctors" ? "Doctor Management" :
                    activeTab === "campaigns" ? "Campaigns" :
                    activeTab === "appointments" ? "Appointment Management" :
+                   activeTab === "billing" ? "Billing & Payments" :
                    "Reports & Analytics"}
                 </h1>
                 <p className="text-sm sm:text-base text-gray-600 mt-1">
@@ -639,6 +680,7 @@ export default function AdminDashboard() {
                    activeTab === "doctors" ? "Manage doctor profiles and schedules" :
                    activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
                    activeTab === "appointments" ? "Monitor and manage all appointments" :
+                   activeTab === "billing" ? "View billing records, payments, and revenue tracking" :
                    "View detailed reports and analytics"}
                 </p>
               </div>
@@ -1358,6 +1400,12 @@ export default function AdminDashboard() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Appointment Management</h2> */}
               <AppoinmentManagement />
+            </div>
+          )}
+
+          {activeTab === "billing" && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <BillingManagement />
             </div>
           )}
 

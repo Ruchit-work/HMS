@@ -13,6 +13,7 @@ import { generateAdvertisements } from "@/server/groqAdvertisementGenerator"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { slugify } from "@/utils/campaigns"
 import type { Firestore } from "firebase-admin/firestore"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 async function cleanupExpiredAutoCampaigns(db: Firestore) {
   const now = new Date()
@@ -53,8 +54,17 @@ async function cleanupExpiredAutoCampaigns(db: Firestore) {
 
 
 export async function GET(request: Request) {
-  const startTime = Date.now()
+  // Allow cron triggers or admin authentication
   const isCronTrigger = request.headers.get("x-vercel-cron") !== null
+  if (!isCronTrigger) {
+    // If not a cron trigger, require admin authentication
+    const auth = await authenticateRequest(request, "admin")
+    if (!auth.success) {
+      return createAuthErrorResponse(auth)
+    }
+  }
+
+  const startTime = Date.now()
   const triggerSource = isCronTrigger ? "cron" : "manual"
   
   console.log(`[auto-campaigns-generate] ${triggerSource.toUpperCase()} trigger at ${new Date().toISOString()}`)

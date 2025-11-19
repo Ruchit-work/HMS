@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore"
-import { db } from "@/firebase/config"
+import { db, auth } from "@/firebase/config"
 import PaymentMethodSection, {
   PaymentData as BookingPaymentData,
   PaymentMethodOption as BookingPaymentMethod,
@@ -12,7 +12,7 @@ import AppointmentSuccessModal from "@/components/patient/AppointmentSuccessModa
 import OTPVerificationModal from "@/components/forms/OTPVerificationModal"
 import { bloodGroups } from "@/constants/signup"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
-import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay } from "@/utils/timeSlots"
+import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, normalizeTime } from "@/utils/timeSlots"
 import { isDateBlocked } from "@/utils/blockedDates"
 import { formatAppointmentDateTime } from "@/utils/date"
 
@@ -86,6 +86,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   const [otpModalOpen, setOtpModalOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [successData, setSuccessData] = useState<any>(null)
+  const [pendingDoctorId, setPendingDoctorId] = useState<string | null>(null)
+  const [showDoctorConfirmModal, setShowDoctorConfirmModal] = useState(false)
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], [])
   const paymentAmount = useMemo(() => selectedDoctorFee || 0, [selectedDoctorFee])
@@ -278,14 +280,105 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     ]
   )
 
-  const suggestedDoctors = useMemo(() => {
+  // Filter doctors based on symptom category (same logic as patient side)
+  const filteredDoctors = useMemo(() => {
     if (!symptomCategory || symptomCategory === "custom") return doctors
     const category = SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)
     if (!category) return doctors
-    const specs = category.relatedSpecializations.map((s) => s.toLowerCase())
-    const filtered = doctors.filter((d: any) => specs.some((spec) => String(d.specialization || "").toLowerCase().includes(spec)))
-    return filtered.length ? filtered : doctors
+    
+    // Normalize doctor specialization - remove special chars and convert to lowercase
+    const normalize = (str: string) => str.toLowerCase().replace(/[()\/]/g, " ").replace(/\s+/g, " ").trim()
+    
+    return doctors.filter((doc: any) => {
+      const docSpecialization = normalize(doc.specialization || "")
+      if (!docSpecialization) return true // If doctor has no specialization, show them
+      
+      // Specialization mappings: category specialization -> doctor specialization variations
+      const specializationMappings: Record<string, string[]> = {
+        "general physician": ["family medicine", "family physician", "family medicine specialist", "general practitioner", "gp", "general practice"],
+        "gynecology": ["gynecologist", "obstetrician", "ob gyn", "obstetrician ob gyn", "gynecologist obstetrician", "women's health"],
+        "psychology": ["psychologist"],
+        "psychiatry": ["psychiatrist"],
+        "gastroenterology": ["gastroenterologist"],
+        "endocrinology": ["endocrinologist"],
+        "cardiology": ["cardiologist"],
+        "orthopedic surgery": ["orthopedic", "orthopedics", "orthopedic surgeon"],
+        "dermatology": ["dermatologist"],
+        "ophthalmology": ["ophthalmologist", "eye specialist"],
+        "pulmonology": ["pulmonologist", "chest specialist", "respiratory"],
+        "nephrology": ["nephrologist", "kidney specialist"],
+        "urology": ["urologist"],
+        "internal medicine": ["internal medicine", "internal medicine specialist"],
+        "hematology": ["hematologist"],
+        "rheumatology": ["rheumatologist"],
+        "allergy specialist": ["allergy specialist", "allergist"],
+        "pediatrics": ["pediatrician", "child specialist"],
+        "geriatrics": ["geriatrician"],
+        "oncology": ["oncologist", "medical oncologist", "surgical oncologist", "radiation oncologist", "cancer specialist"]
+      }
+      
+      // Check if any category specialization matches the doctor's specialization
+      return category.relatedSpecializations.some(categorySpec => {
+        const categorySpecLower = normalize(categorySpec)
+        
+        // Direct match - check if doctor specialization contains category spec or vice versa
+        if (docSpecialization.includes(categorySpecLower) || categorySpecLower.includes(docSpecialization)) {
+          return true
+        }
+        
+        // Check if doctor specialization matches any variation of the category specialization
+        const variations = specializationMappings[categorySpecLower] || []
+        for (const variation of variations) {
+          const variationNormalized = normalize(variation)
+          // Check if doctor specialization contains variation or variation contains doctor specialization
+          if (docSpecialization.includes(variationNormalized) || variationNormalized.includes(docSpecialization)) {
+            return true
+          }
+          // Also check word-by-word matching for better accuracy
+          const docWords = docSpecialization.split(/\s+/)
+          const varWords = variationNormalized.split(/\s+/)
+          if (varWords.some(word => docWords.includes(word) && word.length > 3)) {
+            return true
+          }
+        }
+        
+        return false
+      })
+    })
   }, [symptomCategory, doctors])
+
+  // Calculate which doctors are recommended vs all others
+  const recommendedDoctors = filteredDoctors.length > 0 ? filteredDoctors : (symptomCategory && symptomCategory !== "custom" ? [] : doctors)
+  const otherDoctors = symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0
+    ? doctors.filter((doc: any) => !recommendedDoctors.some((filtered: any) => filtered.id === doc.id))
+    : []
+
+  // Handle doctor selection with confirmation for non-recommended doctors
+  const handleDoctorSelect = (doctorId: string) => {
+    const isRecommended = recommendedDoctors.some((doc: any) => doc.id === doctorId)
+    
+    if (isRecommended || !symptomCategory || symptomCategory === "custom") {
+      // Direct selection for recommended doctors or when no category selected
+      setSelectedDoctorId(doctorId)
+      const selected = doctors.find((d: any) => d.id === doctorId)
+      setSelectedDoctorFee(selected?.consultationFee || null)
+    } else {
+      // Show confirmation for non-recommended doctors
+      setPendingDoctorId(doctorId)
+      setShowDoctorConfirmModal(true)
+    }
+  }
+
+  // Confirm selection of non-recommended doctor
+  const handleConfirmDoctorSelection = () => {
+    if (pendingDoctorId) {
+      setSelectedDoctorId(pendingDoctorId)
+      const selected = doctors.find((d: any) => d.id === pendingDoctorId)
+      setSelectedDoctorFee(selected?.consultationFee || null)
+      setShowDoctorConfirmModal(false)
+      setPendingDoctorId(null)
+    }
+  }
 
   const notify = useCallback(
     (payload: { type: "success" | "error"; message: string } | null) => {
@@ -376,6 +469,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       }
 
       try {
+        // Fetch existing appointments
         const aptQuery = query(
           collection(db, "appointments"),
           where("doctorId", "==", selectedDoctorId),
@@ -383,9 +477,38 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         )
         const aptSnap = await getDocs(aptQuery)
         const existing = aptSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
+        
+        // Fetch booked slots from appointmentSlots collection (prevents double booking)
+        const slotsQuery = query(
+          collection(db, "appointmentSlots"),
+          where("doctorId", "==", selectedDoctorId),
+          where("appointmentDate", "==", appointmentDate)
+        )
+        const slotsSnap = await getDocs(slotsQuery)
+        const bookedSlots = new Set<string>()
+        slotsSnap.docs.forEach((doc) => {
+          const slotData = doc.data()
+          if (slotData.appointmentTime) {
+            // Normalize time format to 24-hour HH:MM format (handles all formats)
+            const normalizedTime = normalizeTime(slotData.appointmentTime)
+            bookedSlots.add(normalizedTime)
+          }
+        })
+        
         const dateObj = new Date(`${appointmentDate}T00:00:00`)
         const slots = getAvailableTimeSlots(doctor as any, dateObj, existing as any)
-        const filtered = slots.filter((s) => !isSlotInPast(s, appointmentDate))
+        
+        // Filter out slots that are booked in appointmentSlots collection AND past slots
+        const filtered = slots.filter((s) => {
+          // Remove past slots
+          if (isSlotInPast(s, appointmentDate)) return false
+          // Normalize slot time for comparison (should already be in 24-hour format, but ensure it)
+          const normalizedSlot = normalizeTime(s)
+          // Remove slots that are booked in appointmentSlots collection
+          if (bookedSlots.has(normalizedSlot)) return false
+          return true
+        })
+        
         setAvailableSlots(filtered)
       } catch (error) {
         console.error("Failed to compute time slots", error)
@@ -440,9 +563,20 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   }, [onPatientModeChange])
 
   const createPatientForBooking = useCallback(async () => {
+    // Get Firebase Auth token
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      throw new Error("You must be logged in to create patients")
+    }
+
+    const token = await currentUser.getIdToken()
+
     const res = await fetch("/api/receptionist/create-patient", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         patientData: {
           ...newPatient,
@@ -496,6 +630,14 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       }
       medicalHistory = historyParts.join(". ")
       
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to create appointments")
+      }
+
+      const token = await currentUser.getIdToken()
+
       const appointmentData = {
         patientId,
         patientName: `${patientPayload.firstName || ""} ${patientPayload.lastName || ""}`.trim(),
@@ -521,7 +663,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       }
       const res = await fetch("/api/receptionist/create-appointment", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ appointmentData }),
       })
       if (!res.ok) {
@@ -575,6 +720,19 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       let patientId = selectedPatientId
       let patientPayload: any = null
 
+      // Check slot availability FIRST (before patient creation or payment)
+      const slotCheckResponse = await fetch(
+        `/api/appointments/check-slot?doctorId=${selectedDoctorId}&date=${appointmentDate}&time=${appointmentTime}`
+      )
+      if (!slotCheckResponse.ok) {
+        const slotData = await slotCheckResponse.json().catch(() => ({}))
+        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
+      }
+      const slotData = await slotCheckResponse.json().catch(() => ({}))
+      if (!slotData?.available) {
+        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
+      }
+
       if (patientMode === "new") {
         if (!newPatient.firstName || !newPatient.lastName || !newPatient.email) {
           throw new Error("Fill first name, last name, email")
@@ -586,6 +744,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
           throw new Error("Passwords do not match")
         }
         if ((newPatient.phone || "").trim()) {
+          // Slot already checked above, safe to proceed to OTP
           setOtpModalOpen(true)
           return
         }
@@ -630,6 +789,20 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     try {
       setBookLoading(true)
       setBookError(null)
+
+      // Check slot availability FIRST (before patient creation - prevents wasting time/money)
+      const slotCheckResponse = await fetch(
+        `/api/appointments/check-slot?doctorId=${selectedDoctorId}&date=${appointmentDate}&time=${appointmentTime}`
+      )
+      if (!slotCheckResponse.ok) {
+        const slotData = await slotCheckResponse.json().catch(() => ({}))
+        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
+      }
+      const slotData = await slotCheckResponse.json().catch(() => ({}))
+      if (!slotData?.available) {
+        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
+      }
+
       const result = await createPatientForBooking()
       const patientId = result.id
       const patientPayload: any = { ...newPatient, patientId: result.patientId }
@@ -1047,19 +1220,52 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     value={selectedDoctorId}
                     onChange={(e) => {
                       const doctorId = e.target.value
-                      setSelectedDoctorId(doctorId)
-                      const selected = doctors.find((d: any) => d.id === doctorId)
-                      setSelectedDoctorFee(selected?.consultationFee || null)
+                      if (doctorId) {
+                        handleDoctorSelect(doctorId)
+                      } else {
+                        setSelectedDoctorId("")
+                        setSelectedDoctorFee(null)
+                      }
                     }}
                     className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                   >
                     <option value="">Select doctor</option>
-                    {suggestedDoctors.map((d: any) => (
+                    {/* Recommended Doctors Section */}
+                    {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0 && (
+                      <>
+                        <optgroup label={`⭐ Recommended for Symptoms (${recommendedDoctors.length})`}>
+                          {recommendedDoctors.map((d: any) => (
+                            <option key={d.id} value={d.id}>
+                              {d.firstName} {d.lastName} — {d.specialization}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </>
+                    )}
+                    {/* Other Doctors Section */}
+                    {symptomCategory && symptomCategory !== "custom" && otherDoctors.length > 0 && (
+                      <>
+                        <optgroup label={`👨‍⚕️ Other Doctors (${otherDoctors.length}) ⚠️ Not specifically recommended`}>
+                          {otherDoctors.map((d: any) => (
+                            <option key={d.id} value={d.id}>
+                              {d.firstName} {d.lastName} — {d.specialization}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </>
+                    )}
+                    {/* Show all doctors if no category selected or no recommendations */}
+                    {(!symptomCategory || symptomCategory === "custom" || recommendedDoctors.length === 0) && doctors.map((d: any) => (
                       <option key={d.id} value={d.id}>
                         {d.firstName} {d.lastName} — {d.specialization}
                       </option>
                     ))}
                   </select>
+                  {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length === 0 && doctors.length > 0 && (
+                    <p className="mt-2 text-xs text-amber-600">
+                      ⚠️ No matching doctors found for selected symptoms. Showing all available doctors.
+                    </p>
+                  )}
                   {selectedDoctorFee !== null && (
                     <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
                       <div className="flex items-center justify-between text-sm">
@@ -1068,6 +1274,13 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                           ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)}
                         </span>
                       </div>
+                      {symptomCategory && symptomCategory !== "custom" && selectedDoctorId && !recommendedDoctors.some((d: any) => d.id === selectedDoctorId) && (
+                        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                          <p className="text-xs text-amber-700 font-medium">
+                            ⚠️ This doctor is not specifically recommended for the selected symptoms.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1163,6 +1376,86 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       </section>
 
       <AppointmentSuccessModal isOpen={successOpen} onClose={() => setSuccessOpen(false)} appointmentData={successData} />
+
+      {/* Doctor Selection Confirmation Modal */}
+      {showDoctorConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl">
+            {/* Modal Header */}
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h3 className="text-lg font-semibold text-slate-900">Confirm Doctor Selection</h3>
+              <p className="text-xs text-slate-500 mt-1">You're selecting a doctor that's not specifically recommended</p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
+                  <p className="text-sm text-amber-800 font-semibold mb-2 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>This doctor is not specifically recommended for the selected symptoms.</span>
+                  </p>
+                  <p className="text-xs text-amber-700 mt-2">
+                    You selected: <strong>{symptomCategory && SYMPTOM_CATEGORIES.find(c => c.id === symptomCategory)?.label}</strong>
+                  </p>
+                </div>
+
+                {/* Doctor Information */}
+                {(() => {
+                  const doctorToConfirm = doctors.find((d: any) => d.id === pendingDoctorId)
+                  return doctorToConfirm ? (
+                    <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                      <div className="flex items-start gap-3">
+                        <div className="text-3xl">👨‍⚕️</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 mb-1">Selected Doctor</h4>
+                          <p className="text-lg font-bold text-blue-700">
+                            Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {doctorToConfirm.specialization}
+                          </p>
+                          {doctorToConfirm.consultationFee && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              Consultation Fee: ₹{doctorToConfirm.consultationFee}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <p className="text-xs text-slate-600">
+                    <strong>Note:</strong> You can still select this doctor, but we recommend choosing from the suggested doctors above for better treatment of the specific symptoms.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
+              <button
+                onClick={() => {
+                  setShowDoctorConfirmModal(false)
+                  setPendingDoctorId(null)
+                }}
+                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDoctorSelection}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>Yes, Select This Doctor</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {otpModalOpen && (
         <OTPVerificationModal

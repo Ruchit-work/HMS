@@ -13,6 +13,7 @@
 
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 /**
  * GET /api/auto-campaigns/status
@@ -22,7 +23,13 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
  * - Path: "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true"
  * - Schedule: "30 00 * * *" (00:30 AM UTC = 6:00 AM IST)
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(request, "admin")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const initResult = initFirebaseAdmin("auto-campaigns-status API")
     if (!initResult.ok) {

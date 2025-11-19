@@ -19,6 +19,7 @@ const parsePrescription = (text: string) => {
   
   const lines = text.split('\n').filter(line => line.trim())
   const medicines: Array<{emoji: string, name: string, dosage: string, frequency: string, duration: string}> = []
+  let advice = ""
   
   let currentMedicine: {emoji: string, name: string, dosage: string, frequency: string, duration: string} | null = null
   
@@ -90,6 +91,11 @@ const parsePrescription = (text: string) => {
         }
       }
     }
+    
+    // Capture advice
+    if (line.includes('📌') && /advice/i.test(line)) {
+      advice = line.replace(/📌\s*\*?Advice:\*?\s*/i, '').trim()
+    }
   }
   
   // Add last medicine
@@ -97,7 +103,7 @@ const parsePrescription = (text: string) => {
     medicines.push(currentMedicine)
   }
   
-  return { medicines }
+  return { medicines, advice }
 }
 
 interface UserData {
@@ -1231,12 +1237,56 @@ export default function DoctorAppointments() {
                     )}
                     {isExpanded && (
                       <div className="mt-2 border border-slate-200 rounded-lg bg-slate-50 p-2.5 space-y-2 text-[11px] text-slate-700">
-                        {appointment.medicine && (
-                          <div>
-                            <p className="font-semibold text-slate-800 mb-1">Prescription</p>
-                            <pre className="whitespace-pre-wrap">{appointment.medicine}</pre>
-                          </div>
-                        )}
+                        {appointment.medicine && (() => {
+                          const parsed = parsePrescription(appointment.medicine)
+                          if (parsed && parsed.medicines.length > 0) {
+                            return (
+                              <div className="space-y-2">
+                                <p className="font-semibold text-slate-800 mb-1">Prescription</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {parsed.medicines.map((med, medIndex) => (
+                                    <div key={medIndex} className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-sm">
+                                      <div className="flex items-start gap-1.5 mb-1">
+                                        <span className="text-base">{med.emoji}</span>
+                                        <div className="flex-1">
+                                          <p className="font-semibold text-slate-900 text-xs">
+                                            {med.name}
+                                            {med.dosage && <span className="text-slate-500 font-normal ml-1">({med.dosage})</span>}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="ml-5 space-y-0.5 text-[11px] text-slate-600">
+                                        {med.frequency && (
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-slate-300">•</span>
+                                            <span>{med.frequency}</span>
+                                          </div>
+                                        )}
+                                        {med.duration && (
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-slate-300">•</span>
+                                            <span><span className="font-medium">Duration:</span> {med.duration}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {parsed.advice && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-md p-2 text-xs text-amber-800">
+                                    <span className="font-semibold">📌 Advice:</span> {parsed.advice}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          }
+                          return (
+                            <div>
+                              <p className="font-semibold text-slate-800 mb-1">Prescription</p>
+                              <pre className="whitespace-pre-wrap">{appointment.medicine}</pre>
+                            </div>
+                          )
+                        })()}
                         {appointment.doctorNotes && (
                           <div>
                             <p className="font-semibold text-slate-800 mb-1">Doctor Notes</p>
@@ -1834,36 +1884,6 @@ export default function DoctorAppointments() {
 
                                 {showHistory[appointment.id] && (
                                   <div className="mt-4 space-y-3">
-                                    <div className="grid gap-2 md:grid-cols-2">
-                                      <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
-                                        <input
-                                          type="text"
-                                          value={historyFilters.text}
-                                          onChange={(e) => handleHistorySearchChange(appointment.id, "text", e.target.value)}
-                                          placeholder="Search by name, ID, date, symptoms..."
-                                          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
-                                        />
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <input
-                                          type="date"
-                                          value={historyFilters.date}
-                                          onChange={(e) => handleHistorySearchChange(appointment.id, "date", e.target.value)}
-                                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
-                                        />
-                                        {(historyFilters.text || historyFilters.date) && (
-                                          <button
-                                            type="button"
-                                            onClick={() => clearHistoryFilters(appointment.id)}
-                                            className="px-3 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
-                                          >
-                                            Reset
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-
                                     {filteredHistory.length === 0 ? (
                                       <div className="text-sm text-slate-500 text-center py-6 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                                         No visits match the current search filters.

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { collection, getDocs } from "firebase/firestore"
-import { db } from "@/firebase/config"
+import { db, auth } from "@/firebase/config"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import { Admission, AdmissionRequest, Room } from "@/types/patient"
 import RefreshButton from "@/components/ui/RefreshButton"
@@ -153,7 +153,18 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
       setRoomsLoading(true)
       let roomsSnap = await getDocs(collection(db, "rooms"))
       if (roomsSnap.empty) {
-        await fetch("/api/admin/rooms/seed", { method: "POST" })
+        // Get Firebase Auth token
+        const currentUser = auth.currentUser
+        if (currentUser) {
+          const token = await currentUser.getIdToken()
+          await fetch("/api/admin/rooms/seed", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          })
+        }
         roomsSnap = await getDocs(collection(db, "rooms"))
       }
       let roomsList = roomsSnap.docs.map((r) => {
@@ -185,7 +196,21 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
     try {
       setAdmitRequestsLoading(true)
       setAdmitRequestsError(null)
-      const res = await fetch("/api/receptionist/admission-requests")
+
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to access admission requests")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const res = await fetch("/api/receptionist/admission-requests", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || "Failed to load admit requests")
@@ -221,7 +246,21 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
     try {
       setAdmissionsLoading(true)
       setAdmissionsError(null)
-      const res = await fetch("/api/receptionist/admissions?status=admitted")
+
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to access admissions")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const res = await fetch("/api/receptionist/admissions?status=admitted", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || "Failed to load admissions")
@@ -289,9 +328,20 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
     }
     setAssignLoading(true)
     try {
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to accept admission requests")
+      }
+
+      const token = await currentUser.getIdToken()
+
       const res = await fetch(`/api/receptionist/admission-request/${selectedAdmitRequest.id}/accept`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           roomId: assignRoomId,
           notes: assignNotes.trim() ? assignNotes.trim() : undefined,
@@ -321,9 +371,20 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
     const cancelReason = window.prompt("Optional: add a cancellation note for history.") || undefined
     setCancelLoadingId(request.id)
     try {
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to cancel admission requests")
+      }
+
+      const token = await currentUser.getIdToken()
+
       const res = await fetch(`/api/receptionist/admission-request/${request.id}/cancel`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           reason: cancelReason && cancelReason.trim() ? cancelReason.trim() : undefined,
         }),
@@ -360,9 +421,20 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
     if (!selectedAdmission) return
     setDischargeLoading(true)
     try {
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to discharge patients")
+      }
+
+      const token = await currentUser.getIdToken()
+
       const res = await fetch(`/api/receptionist/admissions/${selectedAdmission.id}/discharge`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           doctorFee: dischargeDoctorFee ? Number(dischargeDoctorFee) : undefined,
           otherCharges: dischargeOtherCharges ? Number(dischargeOtherCharges) : undefined,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import twilio from "twilio"
 import type { MessageListInstanceCreateOptions } from "twilio/lib/rest/api/v2010/account/message"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID
 const authToken = process.env.TWILIO_AUTH_TOKEN
@@ -19,6 +20,18 @@ function normalizeWhatsAppNumber(value: string): string {
 }
 
 export async function POST(request: Request) {
+  // Authenticate request - requires admin or receptionist role
+  const auth = await authenticateRequest(request)
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+  if (auth.user && auth.user.role !== "admin" && auth.user.role !== "receptionist") {
+    return NextResponse.json(
+      { error: "Access denied. This endpoint requires admin or receptionist role." },
+      { status: 403 }
+    )
+  }
+
   try {
     if (!whatsappFrom) {
       return NextResponse.json(

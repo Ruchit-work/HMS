@@ -30,20 +30,14 @@ interface UnifiedBillingRecord {
 }
 
 export async function GET(request: Request) {
-  // Authenticate request - requires receptionist or admin role
-  const auth = await authenticateRequest(request)
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(request, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
   }
-  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
-    return Response.json(
-      { error: "Access denied. This endpoint requires receptionist or admin role." },
-      { status: 403 }
-    )
-  }
 
   try {
-    const initResult = initFirebaseAdmin("receptionist billing-records API")
+    const initResult = initFirebaseAdmin("admin billing-records API")
     if (!initResult.ok) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
@@ -260,12 +254,11 @@ export async function GET(request: Request) {
 
     return Response.json({ records })
   } catch (error: any) {
-    console.error("receptionist billing records GET error", error)
+    console.error("admin billing records GET error", error)
     return Response.json(
       { error: error?.message || "Failed to load billing records" },
       { status: 500 }
     )
   }
 }
-
 

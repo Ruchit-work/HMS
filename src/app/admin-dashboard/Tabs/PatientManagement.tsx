@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
 import { collection, getDocs,where,query,doc, deleteDoc } from 'firebase/firestore'
-import { db } from '@/firebase/config'
+import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import AdminProtected from '@/components/AdminProtected'
@@ -71,9 +71,20 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
             
             // First, delete from Firebase Auth
             try {
+                // Get Firebase Auth token
+                const currentUser = auth.currentUser
+                if (!currentUser) {
+                    throw new Error("You must be logged in to delete users")
+                }
+
+                const token = await currentUser.getIdToken()
+
                 const authDeleteResponse = await fetch('/api/admin/delete-user', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ uid: deletePatient.id, userType: 'Patient' })
                 })
                 
@@ -256,9 +267,20 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                 createdBy: user?.role ?? 'admin'
             }
 
+            // Get Firebase Auth token
+            const currentUser = auth.currentUser
+            if (!currentUser) {
+                throw new Error("You must be logged in to create patients")
+            }
+
+            const token = await currentUser.getIdToken()
+
             const res = await fetch('/api/receptionist/create-patient', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ patientData: payload, password: values.password })
             })
 

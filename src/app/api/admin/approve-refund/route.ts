@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 export async function POST(req: Request) {
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(req, "admin")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const initResult = initFirebaseAdmin("approve-refund API")
     if (!initResult.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })

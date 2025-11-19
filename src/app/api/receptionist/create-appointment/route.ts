@@ -1,6 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { formatAppointmentDateTime } from "@/utils/date"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { normalizeTime } from "@/utils/timeSlots"
 
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
@@ -25,6 +27,18 @@ const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => 
 }
 
 export async function POST(request: Request) {
+  // Authenticate request - requires receptionist or admin role
+  const auth = await authenticateRequest(request)
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
+    return Response.json(
+      { error: "Access denied. This endpoint requires receptionist or admin role." },
+      { status: 403 }
+    )
+  }
+
   try {
     const initResult = initFirebaseAdmin("create-appointment API")
     if (!initResult.ok) {
@@ -51,6 +65,9 @@ export async function POST(request: Request) {
       return val !== undefined && val !== null ? val : defaultValue
     }
     
+    // Normalize appointment time to 24-hour format (HH:MM) for consistent storage
+    const normalizedAppointmentTime = normalizeTime(String(appointmentData.appointmentTime))
+    
     const docData: any = {
       patientId: String(appointmentData.patientId),
       patientName: String(appointmentData.patientName),
@@ -60,7 +77,7 @@ export async function POST(request: Request) {
       doctorName: String(appointmentData.doctorName),
       doctorSpecialization: safeValue(appointmentData.doctorSpecialization, ""),
       appointmentDate: String(appointmentData.appointmentDate),
-      appointmentTime: String(appointmentData.appointmentTime),
+      appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
       status: safeValue(appointmentData.status, "confirmed"),
       paymentAmount: typeof appointmentData.paymentAmount === 'number' ? appointmentData.paymentAmount : 0,
       createdAt: safeValue(appointmentData.createdAt, nowIso),
@@ -103,7 +120,8 @@ export async function POST(request: Request) {
     })
 
     const firestore = admin.firestore()
-    const slotDocId = `${docData.doctorId}_${docData.appointmentDate}_${docData.appointmentTime}`.replace(/[:\s]/g, "-")
+    // Use normalized time for slot document ID (already normalized above)
+    const slotDocId = `${docData.doctorId}_${docData.appointmentDate}_${normalizedAppointmentTime}`.replace(/[:\s]/g, "-")
     let appointmentId: string | null = null
 
     await firestore.runTransaction(async (transaction) => {
@@ -120,7 +138,7 @@ export async function POST(request: Request) {
         appointmentId,
         doctorId: docData.doctorId,
         appointmentDate: docData.appointmentDate,
-        appointmentTime: docData.appointmentTime,
+        appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
         createdAt: nowIso,
       })
     })

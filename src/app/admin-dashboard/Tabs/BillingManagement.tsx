@@ -2,47 +2,47 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { auth } from "@/firebase/config"
-import PaymentMethodSection, {
-  PaymentData as BillingPaymentData,
-  PaymentMethodOption as BillingPaymentMethod,
-} from "@/components/payments/PaymentMethodSection"
-import { BillingRecord } from "@/types/patient"
 import RefreshButton from "@/components/ui/RefreshButton"
 
-const BILLING_PAGE_SIZE = 6
+const BILLING_PAGE_SIZE = 10
 
-interface BillingHistoryPanelProps {
-  onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
+interface UnifiedBillingRecord {
+  id: string
+  type: "admission" | "appointment"
+  admissionId?: string
+  appointmentId?: string
+  patientId: string
+  patientUid?: string | null
+  patientName?: string | null
+  doctorId: string
+  doctorName?: string | null
+  roomCharges?: number
+  doctorFee?: number
+  consultationFee?: number
+  otherServices?: Array<{ description: string; amount: number }>
+  totalAmount: number
+  generatedAt: string
+  status: "pending" | "paid" | "void" | "cancelled"
+  paymentMethod?: "card" | "upi" | "cash" | "wallet" | "demo"
+  paidAt?: string | null
+  paymentReference?: string | null
+  transactionId?: string | null
+  paidAtFrontDesk?: boolean
+  handledBy?: string | null
+  settlementMode?: string | null
+  paymentType?: "full" | "partial"
+  remainingAmount?: number
 }
 
-const emptyPaymentData: BillingPaymentData = {
-  cardNumber: "",
-  cardName: "",
-  expiryDate: "",
-  cvv: "",
-  upiId: "",
-}
-
-export default function BillingHistoryPanel({ onNotification }: BillingHistoryPanelProps) {
-  const [billingRecords, setBillingRecords] = useState<BillingRecord[]>([])
+export default function BillingManagement() {
+  const [billingRecords, setBillingRecords] = useState<UnifiedBillingRecord[]>([])
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
   const [billingSearchTerm, setBillingSearchTerm] = useState("")
   const [billingDateFilter, setBillingDateFilter] = useState("")
-  const [billingPaymentModalOpen, setBillingPaymentModalOpen] = useState(false)
-  const [selectedBillingRecord, setSelectedBillingRecord] = useState<BillingRecord | null>(null)
-  const [billingPaymentMethod, setBillingPaymentMethod] = useState<BillingPaymentMethod>("cash")
-  const [billingPaymentData, setBillingPaymentData] = useState<BillingPaymentData>(emptyPaymentData)
-  const [processingBillingPayment, setProcessingBillingPayment] = useState(false)
-  const [billingStatusFilter, setBillingStatusFilter] = useState<"all" | "pending" | "paid" | "void">("all")
+  const [billingStatusFilter, setBillingStatusFilter] = useState<"all" | "pending" | "paid" | "void" | "cancelled">("all")
+  const [billingTypeFilter, setBillingTypeFilter] = useState<"all" | "admission" | "appointment">("all")
   const [currentPage, setCurrentPage] = useState(1)
-
-  const notify = useCallback(
-    (payload: { type: "success" | "error"; message: string } | null) => {
-      onNotification?.(payload)
-    },
-    [onNotification]
-  )
 
   const fetchBillingRecords = useCallback(async () => {
     try {
@@ -57,7 +57,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
 
       const token = await currentUser.getIdToken()
 
-      const res = await fetch("/api/receptionist/billing-records", {
+      const res = await fetch("/api/admin/billing-records", {
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -70,34 +70,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
       }
       const data = await res.json().catch(() => ({}))
       const records = Array.isArray(data?.records) ? data.records : []
-      const formatted: BillingRecord[] = records.map((record: any) => ({
-        id: String(record.id || ""),
-        type: record.type || "admission", // Default to admission for backward compatibility
-        admissionId: record.admissionId ? String(record.admissionId) : undefined,
-        appointmentId: record.appointmentId ? String(record.appointmentId) : undefined,
-        patientId: String(record.patientId || ""),
-        patientUid: record.patientUid || null,
-        patientName: record.patientName || null,
-        doctorId: String(record.doctorId || ""),
-        doctorName: record.doctorName || null,
-        roomCharges: record.roomCharges !== undefined ? Number(record.roomCharges) : undefined,
-        doctorFee: record.doctorFee !== undefined ? Number(record.doctorFee) : undefined,
-        consultationFee: record.consultationFee !== undefined ? Number(record.consultationFee) : undefined,
-        otherServices: Array.isArray(record.otherServices) ? record.otherServices : [],
-        totalAmount: Number(record.totalAmount || 0),
-        generatedAt: record.generatedAt || new Date().toISOString(),
-        status: record.status || "pending",
-        paymentMethod: record.paymentMethod,
-        paidAt: record.paidAt,
-        paymentReference: record.paymentReference,
-        transactionId: record.transactionId || null,
-        paidAtFrontDesk: record.paidAtFrontDesk,
-        handledBy: record.handledBy || null,
-        settlementMode: record.settlementMode || null,
-        paymentType: record.paymentType || "full",
-        remainingAmount: record.remainingAmount !== undefined ? Number(record.remainingAmount) : undefined,
-      }))
-      setBillingRecords(formatted)
+      setBillingRecords(records as UnifiedBillingRecord[])
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load billing records"
       setBillingError(message)
@@ -111,15 +84,20 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
   }, [fetchBillingRecords])
 
   const billingSearchValue = billingSearchTerm.trim().toLowerCase()
+  const typeFilteredRecords = useMemo(() => {
+    if (billingTypeFilter === "all") return billingRecords
+    return billingRecords.filter((record) => record.type === billingTypeFilter)
+  }, [billingRecords, billingTypeFilter])
+
   const statusFilteredRecords = useMemo(() => {
-    if (billingStatusFilter === "all") return billingRecords
-    return billingRecords.filter((record) => {
+    if (billingStatusFilter === "all") return typeFilteredRecords
+    return typeFilteredRecords.filter((record) => {
       if (billingStatusFilter === "pending") {
-        return record.status !== "paid" && record.status !== "void"
+        return record.status !== "paid" && record.status !== "void" && record.status !== "cancelled"
       }
       return record.status === billingStatusFilter
     })
-  }, [billingRecords, billingStatusFilter])
+  }, [typeFilteredRecords, billingStatusFilter])
 
   const filteredBillingRecords = useMemo(() => {
     let filtered = statusFilteredRecords
@@ -138,13 +116,14 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
       const idMatch = record.patientId?.toLowerCase().includes(billingSearchValue)
       const nameMatch = record.patientName ? record.patientName.toLowerCase().includes(billingSearchValue) : false
       const billingIdMatch = record.id.toLowerCase().includes(billingSearchValue)
-      return idMatch || nameMatch || billingIdMatch
+      const doctorNameMatch = record.doctorName ? record.doctorName.toLowerCase().includes(billingSearchValue) : false
+      return idMatch || nameMatch || billingIdMatch || doctorNameMatch
     })
   }, [statusFilteredRecords, billingSearchValue, billingDateFilter])
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [billingStatusFilter, billingSearchValue, billingDateFilter])
+  }, [billingStatusFilter, billingTypeFilter, billingSearchValue, billingDateFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredBillingRecords.length / BILLING_PAGE_SIZE))
 
@@ -167,22 +146,27 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
     let paidCount = 0
     let pendingCount = 0
     let voidCount = 0
-    let lastPaymentAt: string | null = null
+    let cancelledCount = 0
+    let admissionCount = 0
+    let appointmentCount = 0
 
     billingRecords.forEach((record) => {
       const amount = record.totalAmount || 0
       totalBilled += amount
 
+      if (record.type === "admission") {
+        admissionCount += 1
+      } else if (record.type === "appointment") {
+        appointmentCount += 1
+      }
+
       if (record.status === "paid") {
         totalCollected += amount
         paidCount += 1
-        if (record.paidAt) {
-          if (!lastPaymentAt || new Date(record.paidAt) > new Date(lastPaymentAt)) {
-            lastPaymentAt = record.paidAt
-          }
-        }
       } else if (record.status === "void") {
         voidCount += 1
+      } else if (record.status === "cancelled") {
+        cancelledCount += 1
       } else {
         pendingAmount += amount
         pendingCount += 1
@@ -196,8 +180,10 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
       paidCount,
       pendingCount,
       voidCount,
+      cancelledCount,
+      admissionCount,
+      appointmentCount,
       totalCount: billingRecords.length,
-      lastPaymentAt,
     }
   }, [billingRecords])
 
@@ -232,12 +218,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
           billingMetrics.totalCount > 0
             ? formatCurrency(Math.round(billingMetrics.totalBilled / billingMetrics.totalCount))
             : "₹0",
-        caption: billingMetrics.lastPaymentAt
-          ? `Last payment ${new Date(billingMetrics.lastPaymentAt).toLocaleDateString("en-IN", {
-              month: "short",
-              day: "2-digit",
-            })}`
-          : "No payments yet",
+        caption: `${billingMetrics.voidCount} voided bills`,
         icon: "📊",
         tone: "from-sky-500 to-cyan-500",
       },
@@ -250,112 +231,42 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
       { value: "pending" as const, label: "Pending", count: billingMetrics.pendingCount },
       { value: "paid" as const, label: "Paid", count: billingMetrics.paidCount },
       { value: "void" as const, label: "Voided", count: billingMetrics.voidCount },
+      { value: "cancelled" as const, label: "Cancelled", count: billingMetrics.cancelledCount },
     ],
     [billingMetrics]
   )
 
-  const handleOpenBillingPayment = useCallback(
-    (record: BillingRecord) => {
-      if (record.status === "paid") return
-      setSelectedBillingRecord(record)
-      setBillingPaymentMethod(
-        record.paymentMethod && record.paymentMethod !== "demo"
-          ? (record.paymentMethod as BillingPaymentMethod)
-          : "cash"
-      )
-      setBillingPaymentData(emptyPaymentData)
-      setBillingPaymentModalOpen(true)
-    },
-    []
+  const typeTabs = useMemo(
+    () => [
+      { value: "all" as const, label: "All Types", count: billingMetrics.totalCount },
+      { value: "admission" as const, label: "Admissions", count: billingMetrics.admissionCount },
+      { value: "appointment" as const, label: "Appointments", count: billingMetrics.appointmentCount },
+    ],
+    [billingMetrics]
   )
 
-  const resetPaymentState = useCallback(() => {
-    setBillingPaymentModalOpen(false)
-    setSelectedBillingRecord(null)
-    setBillingPaymentMethod("cash")
-    setBillingPaymentData(emptyPaymentData)
-    setProcessingBillingPayment(false)
-  }, [])
-
-  const handleConfirmBillingPayment = useCallback(async () => {
-    if (!selectedBillingRecord) return
-    setProcessingBillingPayment(true)
-    try {
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to process payments")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch("/api/patient/billing/pay", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          billingId: selectedBillingRecord.id,
-          paymentMethod: billingPaymentMethod,
-          actor: "receptionist",
-          type: selectedBillingRecord.type, // Pass type to help API identify collection
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to record payment")
-      }
-      const data = await res.json().catch(() => ({}))
-      setBillingRecords((prev) =>
-        prev.map((record) =>
-          record.id === selectedBillingRecord.id
-            ? {
-                ...record,
-                status: "paid",
-                paymentMethod: data?.paymentMethod || billingPaymentMethod,
-                paidAt: data?.paidAt || new Date().toISOString(),
-                paymentReference: data?.paymentReference || record.paymentReference || null,
-                transactionId: data?.transactionId || record.transactionId || null,
-                paidAtFrontDesk: record.type === "admission" ? true : false, // Only for admission billing
-                handledBy: record.type === "admission" ? "receptionist" : record.handledBy || null,
-                settlementMode: record.type === "admission" ? billingPaymentMethod : record.settlementMode || null,
-              }
-            : record
-        )
-      )
-      notify({ type: "success", message: "Payment recorded successfully." })
-      resetPaymentState()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to record payment."
-      notify({ type: "error", message })
-      setProcessingBillingPayment(false)
-    }
-  }, [billingPaymentMethod, notify, resetPaymentState, selectedBillingRecord])
-
   return (
-    <div className="space-y-8">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-800 text-white shadow-lg">
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-purple-800 text-white shadow-lg">
         <div className="relative px-6 py-10 sm:px-10">
           <div className="absolute inset-y-0 right-0 hidden w-48 translate-x-16 rotate-12 rounded-full bg-white/10 blur-3xl sm:block" />
           <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-200/80">
-                Billing Desk
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-200/80">
+                Billing & Payments
               </p>
               <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
-                Track revenue and outstanding dues instantly.
+                Monitor all billing records and payments.
               </h2>
-              <p className="text-sm text-emerald-100/90 sm:text-base">
-                Keep tabs on discharge billing, record front-desk payments, and spot outstanding balances before patients
-                leave the hospital.
+              <p className="text-sm text-purple-100/90 sm:text-base">
+                View comprehensive billing history, track revenue, and monitor outstanding dues across all appointments and admissions.
               </p>
-              <div className="flex flex-wrap gap-2 text-xs text-emerald-100/90">
-                <span className="rounded-full border border-emerald-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
-                  Front-desk settlement
+              <div className="flex flex-wrap gap-2 text-xs text-purple-100/90">
+                <span className="rounded-full border border-purple-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
+                  Complete overview
                 </span>
-                <span className="rounded-full border border-emerald-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
-                  Outstanding insights
+                <span className="rounded-full border border-purple-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
+                  Revenue tracking
                 </span>
               </div>
             </div>
@@ -366,9 +277,9 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                   className="relative overflow-hidden rounded-2xl border border-white/20 bg-white/15 p-4 shadow-md backdrop-blur"
                 >
                   <div className="absolute right-3 top-3 text-lg">{card.icon}</div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-100/90">{card.label}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-100/90">{card.label}</p>
                   <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
-                  <p className="mt-2 text-[12px] text-emerald-100/80">{card.caption}</p>
+                  <p className="mt-2 text-[12px] text-purple-100/80">{card.caption}</p>
                   <div className={`absolute inset-0 -z-10 bg-gradient-to-br ${card.tone} opacity-20`} />
                 </div>
               ))}
@@ -380,8 +291,8 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
       <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-xl font-semibold text-slate-900">Recent Billing History</h3>
-            <p className="text-sm text-slate-500">Latest invoices generated during patient discharge.</p>
+            <h3 className="text-xl font-semibold text-slate-900">Billing History</h3>
+            <p className="text-sm text-slate-500">All billing records from appointments and patient admissions.</p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <div className="relative sm:w-48">
@@ -389,7 +300,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                 type="date"
                 value={billingDateFilter}
                 onChange={(e) => setBillingDateFilter(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
               />
               {billingDateFilter && (
                 <button
@@ -406,8 +317,8 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                 type="text"
                 value={billingSearchTerm}
                 onChange={(e) => setBillingSearchTerm(e.target.value)}
-                placeholder="Search bills by patient name or ID"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                placeholder="Search by patient name, ID, doctor name, or bill ID"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
               />
               {billingSearchTerm && (
                 <button
@@ -428,30 +339,63 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {statusTabs.map((tab) => {
-            const isActive = billingStatusFilter === tab.value
-            return (
-              <button
-                key={tab.value}
-                onClick={() => setBillingStatusFilter(tab.value)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  isActive
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                }`}
-              >
-                {tab.label}
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] ${
-                    isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            )
-          })}
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filter by Type</p>
+            <div className="flex flex-wrap gap-2">
+              {typeTabs.map((tab) => {
+                const isActive = billingTypeFilter === tab.value
+                return (
+                  <button
+                    key={tab.value}
+                    onClick={() => setBillingTypeFilter(tab.value)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      isActive
+                        ? "border-purple-500 bg-purple-50 text-purple-700 shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                    }`}
+                  >
+                    {tab.label}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] ${
+                        isActive ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filter by Status</p>
+            <div className="flex flex-wrap gap-2">
+              {statusTabs.map((tab) => {
+                const isActive = billingStatusFilter === tab.value
+                return (
+                  <button
+                    key={tab.value}
+                    onClick={() => setBillingStatusFilter(tab.value)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      isActive
+                        ? "border-purple-500 bg-purple-50 text-purple-700 shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                    }`}
+                  >
+                    {tab.label}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] ${
+                        isActive ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
 
         {billingError && (
@@ -467,8 +411,8 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
         ) : billingRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">
             <span className="mb-2 text-4xl">📄</span>
-            <p className="text-sm font-medium">No invoices yet</p>
-            <p className="text-xs text-slate-400">Bills appear once patients are discharged.</p>
+            <p className="text-sm font-medium">No billing records yet</p>
+            <p className="text-xs text-slate-400">Billing records appear when appointments are paid or patients are discharged.</p>
           </div>
         ) : filteredBillingRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">
@@ -489,28 +433,31 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                     ? "bg-rose-100 text-rose-700"
                     : "bg-amber-100 text-amber-700"
                 const statusLabel =
-                  record.status === "paid" ? "Paid" : record.status === "void" ? "Voided" : "Pending Settlement"
+                  record.status === "paid" ? "Paid" : 
+                  record.status === "void" ? "Voided" : 
+                  record.status === "cancelled" ? "Cancelled" : 
+                  "Pending Settlement"
                 return (
                   <article
                     key={record.id}
-                    className="group rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+                    className="group rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
                   >
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="flex-1 space-y-4">
                         <div className="flex flex-wrap items-center gap-3">
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            Bill #{record.id.slice(0, 8).toUpperCase()}
-                          </span>
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${
-                            record.type === "appointment" 
-                              ? "bg-blue-100 text-blue-700 border border-blue-200" 
-                              : "bg-purple-100 text-purple-700 border border-purple-200"
+                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                            record.type === "admission" 
+                              ? "bg-blue-100 text-blue-700" 
+                              : "bg-green-100 text-green-700"
                           }`}>
-                            {record.type === "appointment" ? "Appointment" : "Admission"}
+                            {record.type === "admission" ? "🏥 Admission" : "📅 Appointment"}
+                          </span>
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            {record.type === "admission" ? "Bill" : "Payment"} #{record.id.slice(0, 8).toUpperCase()}
                           </span>
                           {record.admissionId && (
                             <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono text-slate-500">
-                              Admission {record.admissionId}
+                              Admission {record.admissionId.slice(0, 8)}
                             </span>
                           )}
                           {record.appointmentId && (
@@ -522,7 +469,9 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
 
                         <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Generated</p>
+                            <p className="text-xs uppercase tracking-wide text-slate-400">
+                              {record.type === "admission" ? "Generated" : "Paid"}
+                            </p>
                             <p className="font-semibold text-slate-800">{generatedAt ? generatedAt.toLocaleString() : "—"}</p>
                           </div>
                           <div>
@@ -538,20 +487,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                             <p className="text-xs uppercase tracking-wide text-slate-400">Doctor</p>
                             <p className="font-semibold text-slate-800">{record.doctorName || "—"}</p>
                           </div>
-                          {record.type === "appointment" ? (
-                            <>
-                              <div>
-                                <p className="text-xs uppercase tracking-wide text-slate-400">Consultation Fee</p>
-                                <p className="font-semibold text-slate-800">{formatCurrency(record.consultationFee || 0)}</p>
-                              </div>
-                              {record.paymentType === "partial" && record.remainingAmount !== undefined && (
-                                <div>
-                                  <p className="text-xs uppercase tracking-wide text-slate-400">Remaining Amount</p>
-                                  <p className="font-semibold text-amber-600">{formatCurrency(record.remainingAmount)}</p>
-                                </div>
-                              )}
-                            </>
-                          ) : (
+                          {record.type === "admission" ? (
                             <>
                               <div>
                                 <p className="text-xs uppercase tracking-wide text-slate-400">Room Charges</p>
@@ -562,11 +498,28 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                                 <p className="font-semibold text-slate-800">{formatCurrency(record.doctorFee || 0)}</p>
                               </div>
                             </>
+                          ) : (
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Consultation Fee</p>
+                              <p className="font-semibold text-slate-800">{formatCurrency(record.consultationFee || 0)}</p>
+                            </div>
                           )}
                           <div>
                             <p className="text-xs uppercase tracking-wide text-slate-400">Total Amount</p>
                             <p className="text-lg font-bold text-slate-900">{formatCurrency(record.totalAmount)}</p>
                           </div>
+                          {record.type === "appointment" && record.remainingAmount !== undefined && record.remainingAmount > 0 && (
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Remaining Amount</p>
+                              <p className="font-semibold text-amber-600">{formatCurrency(record.remainingAmount)}</p>
+                            </div>
+                          )}
+                          {record.type === "appointment" && record.paymentType && (
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-slate-400">Payment Type</p>
+                              <p className="font-semibold text-slate-800 capitalize">{record.paymentType}</p>
+                            </div>
+                          )}
                         </div>
 
                         {record.otherServices && record.otherServices.length > 0 && (
@@ -604,16 +557,10 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                           {record.paidAtFrontDesk && record.status === "paid" && (
                             <span className="text-[11px] text-emerald-600">Collected at front desk</span>
                           )}
+                          {record.paymentReference && (
+                            <span className="text-[11px] text-slate-500 font-mono">Ref: {record.paymentReference}</span>
+                          )}
                         </div>
-
-                        {record.status !== "paid" && record.status !== "void" && (
-                          <button
-                            onClick={() => handleOpenBillingPayment(record)}
-                            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                          >
-                            Record Payment
-                          </button>
-                        )}
                       </div>
                     </div>
                   </article>
@@ -631,7 +578,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                     className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
                       currentPage === 1
                         ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
                     }`}
                   >
                     Previous
@@ -646,7 +593,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                     className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
                       currentPage === totalPages
                         ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
                     }`}
                   >
                     Next
@@ -657,72 +604,7 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
           </div>
         )}
       </section>
-
-      {billingPaymentModalOpen && selectedBillingRecord && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-semibold text-slate-900">Record Patient Payment</h3>
-                <p className="text-sm text-slate-500">
-                  Patient ID {selectedBillingRecord.patientId || "Unknown"} • Bill #{selectedBillingRecord.id.slice(0, 6).toUpperCase()}
-                </p>
-              </div>
-              <button
-                onClick={resetPaymentState}
-                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 text-xl"
-              >
-                ×
-              </button>
-            </div>
-            <div className="px-6 py-5 space-y-5">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <p className="text-xs uppercase text-slate-500 font-semibold tracking-wide mb-2">Bill Summary</p>
-                <div className="flex items-center justify-between text-slate-800">
-                  <span className="text-sm">Total amount due</span>
-                  <span className="text-2xl font-bold text-slate-900">{formatCurrency(selectedBillingRecord.totalAmount)}</span>
-                </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  Generated on {selectedBillingRecord.generatedAt ? new Date(selectedBillingRecord.generatedAt).toLocaleString() : "N/A"}
-                </p>
-              </div>
-              <div>
-                <PaymentMethodSection
-                  title="Payment method"
-                  paymentMethod={billingPaymentMethod}
-                  setPaymentMethod={(method) => setBillingPaymentMethod(method)}
-                  paymentData={billingPaymentData}
-                  setPaymentData={setBillingPaymentData}
-                  amountToPay={selectedBillingRecord.totalAmount}
-                  walletBalance={undefined}
-                  methods={["cash", "card", "upi", "wallet"]}
-                />
-                {billingPaymentMethod === "wallet" && (
-                  <p className="text-xs text-amber-600 mt-2">
-                    Ensure the patient has sufficient wallet balance before confirming.
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
-              <button
-                onClick={resetPaymentState}
-                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all"
-                disabled={processingBillingPayment}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmBillingPayment}
-                disabled={processingBillingPayment}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-60"
-              >
-                {processingBillingPayment ? "Recording..." : `Record ${formatCurrency(selectedBillingRecord.totalAmount)}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
+

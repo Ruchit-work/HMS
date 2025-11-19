@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { normalizeTime } from "@/utils/timeSlots"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
 const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {
   if (!doctorId || !date || !time) return null
-  return `${doctorId}_${date}_${time}`.replace(/[:\s]/g, "-")
+  const normalizedTime = normalizeTime(time)
+  return `${doctorId}_${date}_${normalizedTime}`.replace(/[:\s]/g, "-")
 }
 
 export async function POST(request: Request) {
+  // Authenticate request - requires patient role
+  const auth = await authenticateRequest(request, "patient")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   const initResult = initFirebaseAdmin("patient-book-appointment")
   if (!initResult.ok) {
     return NextResponse.json({ error: "Server not configured for admin" }, { status: 500 })
@@ -28,7 +37,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Missing doctor/time information" }, { status: 400 })
       }
 
-      const slotId = getSlotDocId(appointmentData.doctorId, appointmentData.appointmentDate, appointmentData.appointmentTime)
+      // Ensure patientUid matches authenticated user
+      if (appointmentData.patientUid && appointmentData.patientUid !== auth.user?.uid) {
+        return NextResponse.json({ error: "You can only book appointments for yourself" }, { status: 403 })
+      }
+      // Set patientUid from authenticated user
+      appointmentData.patientUid = auth.user?.uid
+
+      // Normalize appointment time to 24-hour format for consistent storage
+      const normalizedAppointmentTime = normalizeTime(appointmentData.appointmentTime)
+      appointmentData.appointmentTime = normalizedAppointmentTime
+
+      const slotId = getSlotDocId(appointmentData.doctorId, appointmentData.appointmentDate, normalizedAppointmentTime)
       if (!slotId) {
         return NextResponse.json({ error: "Invalid slot information" }, { status: 400 })
       }
@@ -53,7 +73,7 @@ export async function POST(request: Request) {
           appointmentId,
           doctorId: appointmentData.doctorId,
           appointmentDate: appointmentData.appointmentDate,
-          appointmentTime: appointmentData.appointmentTime,
+          appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
           createdAt: nowIso,
         })
       })
@@ -65,7 +85,6 @@ export async function POST(request: Request) {
       const appointmentId: string | undefined = body?.appointmentId
       const appointmentDate: string | undefined = body?.appointmentDate
       const appointmentTime: string | undefined = body?.appointmentTime
-      const patientUid: string | undefined = body?.patientUid
 
       if (!appointmentId || !appointmentDate || !appointmentTime) {
         return NextResponse.json({ error: "Missing reschedule parameters" }, { status: 400 })
@@ -79,12 +98,15 @@ export async function POST(request: Request) {
         }
 
         const appointment = appointmentSnap.data() as Record<string, any>
-        if (patientUid && appointment.patientUid && appointment.patientUid !== patientUid) {
+        // Verify patient can only reschedule their own appointments
+        if (appointment.patientUid && appointment.patientUid !== auth.user?.uid) {
           throw new Error("UNAUTHORIZED")
         }
 
         const doctorId = appointment.doctorId
-        const newSlotId = getSlotDocId(doctorId, appointmentDate, appointmentTime)
+        // Normalize time to 24-hour format
+        const normalizedNewTime = normalizeTime(appointmentTime)
+        const newSlotId = getSlotDocId(doctorId, appointmentDate, normalizedNewTime)
         if (!newSlotId) {
           throw new Error("INVALID_SLOT")
         }
@@ -95,7 +117,9 @@ export async function POST(request: Request) {
           throw new Error("SLOT_ALREADY_BOOKED")
         }
 
-        const oldSlotId = getSlotDocId(doctorId, appointment.appointmentDate, appointment.appointmentTime)
+        // Normalize old time for comparison
+        const normalizedOldTime = normalizeTime(appointment.appointmentTime || "")
+        const oldSlotId = getSlotDocId(doctorId, appointment.appointmentDate, normalizedOldTime)
         if (oldSlotId) {
           const oldSlotRef = firestore.collection(SLOT_COLLECTION).doc(oldSlotId)
           transaction.delete(oldSlotRef)
@@ -103,7 +127,7 @@ export async function POST(request: Request) {
 
         transaction.update(appointmentRef, {
           appointmentDate,
-          appointmentTime,
+          appointmentTime: normalizedNewTime, // Always store in 24-hour format
           updatedAt: new Date().toISOString(),
         })
 
@@ -111,7 +135,7 @@ export async function POST(request: Request) {
           appointmentId,
           doctorId,
           appointmentDate,
-          appointmentTime,
+          appointmentTime: normalizedNewTime, // Always store in 24-hour format
           createdAt: new Date().toISOString(),
         })
       })

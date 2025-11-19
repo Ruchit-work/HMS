@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { normalizeTime } from "@/utils/timeSlots"
 
 // Helper: Get day name from date
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
@@ -818,6 +819,9 @@ async function handleConfirmation(
 
   const doctorData = doctorDoc.data()!
 
+  // Normalize appointment time to 24-hour format for consistent storage
+  const normalizedAppointmentTime = normalizeTime(session.selectedTime!)
+
   // Create appointment
   const appointmentData = {
     patientId: session.patientId,
@@ -829,7 +833,7 @@ async function handleConfirmation(
     doctorName: `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim(),
     doctorSpecialization: doctorData.specialization || "",
     appointmentDate: session.selectedDate,
-    appointmentTime: session.selectedTime,
+    appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
     status: "confirmed",
     chiefComplaint: "General consultation",
     medicalHistory: "",
@@ -838,7 +842,8 @@ async function handleConfirmation(
     updatedAt: new Date().toISOString(),
     createdBy: "whatsapp",
   }
-  const slotDocId = `${session.selectedDoctorId}_${session.selectedDate}_${session.selectedTime}`.replace(/[:\s]/g, "-")
+  // Use normalized time for slot document ID
+  const slotDocId = `${session.selectedDoctorId}_${session.selectedDate}_${normalizedAppointmentTime}`.replace(/[:\s]/g, "-")
   let appointmentId = ""
 
   try {
@@ -857,7 +862,7 @@ async function handleConfirmation(
         appointmentId,
         doctorId: session.selectedDoctorId,
         appointmentDate: session.selectedDate,
-        appointmentTime: session.selectedTime,
+        appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
         createdAt: new Date().toISOString(),
       })
     })

@@ -6,8 +6,15 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 export async function POST(request: Request) {
+  // Authenticate request - requires doctor role
+  const auth = await authenticateRequest(request, "doctor")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const initResult = initFirebaseAdmin("send-recheckup-whatsapp API")
     if (!initResult.ok) {

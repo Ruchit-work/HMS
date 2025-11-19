@@ -1,7 +1,14 @@
 import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 export async function POST(req: NextRequest) {
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(req, "admin")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const initResult = initFirebaseAdmin("approve-schedule-request API")
     if (!initResult.ok) return Response.json({ error: 'Server not configured' }, { status: 500 })

@@ -16,9 +16,59 @@ export const DEFAULT_VISITING_HOURS: VisitingHours = {
   sunday: { isAvailable: false, slots: [] }
 }
 
+/**
+ * Normalize time string to 24-hour format (HH:MM)
+ * Handles various input formats:
+ * - "16:45" (already 24-hour) -> "16:45"
+ * - "16-45" (with dash) -> "16:45"
+ * - "4:45 PM" (12-hour) -> "16:45"
+ * - "4:45PM" (no space) -> "16:45"
+ * - "4:45 AM" -> "04:45"
+ */
+export function normalizeTime(time: string): string {
+  if (!time || typeof time !== "string") return time
+  
+  // Remove spaces and convert to uppercase
+  let normalized = time.trim().replace(/\s+/g, "").toUpperCase()
+  
+  // Check if it's already in 24-hour format (HH:MM or HH-MM)
+  if (normalized.includes("AM") || normalized.includes("PM")) {
+    // 12-hour format - convert to 24-hour
+    const match = normalized.match(/^(\d{1,2})[:\-]?(\d{2})\s*(AM|PM)$/)
+    if (match) {
+      let hours = parseInt(match[1], 10)
+      const minutes = parseInt(match[2], 10)
+      const period = match[3]
+      
+      if (period === "PM" && hours !== 12) {
+        hours += 12
+      } else if (period === "AM" && hours === 12) {
+        hours = 0
+      }
+      
+      return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+    }
+  } else {
+    // Already in 24-hour format, just normalize separators
+    normalized = normalized.replace(/-/g, ":")
+    // Ensure format is HH:MM
+    const parts = normalized.split(":")
+    if (parts.length === 2) {
+      const hours = parseInt(parts[0], 10)
+      const minutes = parseInt(parts[1], 10)
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+      }
+    }
+  }
+  
+  return normalized
+}
+
 // Convert time string to minutes since midnight
 export function timeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(':').map(Number)
+  const normalized = normalizeTime(time)
+  const [hours, minutes] = normalized.split(':').map(Number)
   return hours * 60 + minutes
 }
 
@@ -60,12 +110,16 @@ export function isTimeSlotAvailable(
   slotTime: string,
   existingAppointments: Appointment[]
 ): boolean {
-  const slotMinutes = timeToMinutes(slotTime)
+  // Normalize slot time before comparison
+  const normalizedSlotTime = normalizeTime(slotTime)
+  const slotMinutes = timeToMinutes(normalizedSlotTime)
   const SLOT_DURATION = 15 // minutes
   
   // Check if any existing appointment conflicts with this slot
   return !existingAppointments.some(apt => {
-    const aptMinutes = timeToMinutes(apt.appointmentTime)
+    // Normalize appointment time before comparison
+    const normalizedAptTime = normalizeTime(apt.appointmentTime || "")
+    const aptMinutes = timeToMinutes(normalizedAptTime)
     
     // Check if the new slot overlaps with existing appointment (within 15 min window)
     // An appointment blocks: [appointmentTime, appointmentTime + 15 minutes)

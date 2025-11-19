@@ -1,5 +1,5 @@
 'use client'
-import { db } from '@/firebase/config'
+import { db, auth } from '@/firebase/config'
 import { getDocs, where, query, collection, doc, deleteDoc, updateDoc } from 'firebase/firestore'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
@@ -112,9 +112,20 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 status: formValues.status
             }
 
+            // Get Firebase Auth token
+            const currentUser = auth.currentUser
+            if (!currentUser) {
+                throw new Error("You must be logged in to create doctors")
+            }
+
+            const token = await currentUser.getIdToken()
+
             const response = await fetch('/api/admin/create-doctor', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({ doctorData, password: formValues.password })
             })
 
@@ -223,9 +234,20 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             
             // First, delete from Firebase Auth
             try {
+                // Get Firebase Auth token
+                const currentUser = auth.currentUser
+                if (!currentUser) {
+                    throw new Error("You must be logged in to delete users")
+                }
+
+                const token = await currentUser.getIdToken()
+
                 const authDeleteResponse = await fetch('/api/admin/delete-user', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ uid: deleteDoctor.id, userType: 'Doctor' })
                 })
                 
@@ -336,9 +358,20 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             
             // Delete from Firebase Auth first
             try {
+                // Get Firebase Auth token
+                const currentUser = auth.currentUser
+                if (!currentUser) {
+                    throw new Error("You must be logged in to delete users")
+                }
+
+                const token = await currentUser.getIdToken()
+
                 const authDeleteResponse = await fetch('/api/admin/delete-user', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ uid: doctorId, userType: 'Doctor' })
                 })
                 

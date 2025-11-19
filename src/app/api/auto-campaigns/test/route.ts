@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server"
 import { getHealthAwarenessDaysForDate } from "@/server/healthAwarenessDays"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 /**
  * GET /api/auto-campaigns/test
@@ -13,6 +14,12 @@ import { getHealthAwarenessDaysForDate } from "@/server/healthAwarenessDays"
  * Returns: List of health awareness days for the specified date
  */
 export async function GET(request: Request) {
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(request, "admin")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const url = new URL(request.url)
     const dateParam = url.searchParams.get("date") || "today"

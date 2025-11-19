@@ -5,12 +5,19 @@
 
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 /**
  * GET /api/auto-campaigns/check
  * Returns diagnostic information about the auto-campaigns system configuration
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(request, "admin")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const diagnostics: {
       groqApiKey: boolean

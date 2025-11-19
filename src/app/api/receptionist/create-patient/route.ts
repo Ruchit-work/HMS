@@ -1,5 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 const buildWelcomeMessage = (firstName?: string, patientId?: string) => {
   const friendlyName = firstName?.trim() || "there"
@@ -8,6 +9,18 @@ const buildWelcomeMessage = (firstName?: string, patientId?: string) => {
 }
 
 export async function POST(request: Request) {
+  // Authenticate request - requires receptionist or admin role
+  const auth = await authenticateRequest(request)
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
+    return Response.json(
+      { error: "Access denied. This endpoint requires receptionist or admin role." },
+      { status: 403 }
+    )
+  }
+
   try {
     const initResult = initFirebaseAdmin("create-patient API")
     if (!initResult.ok) {

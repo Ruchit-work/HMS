@@ -6,7 +6,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import AdminProtected from "@/components/AdminProtected"
 import { Campaign, CampaignAudience, CampaignStatus, createCampaign, slugify, updateCampaign } from "@/utils/campaigns"
 import { collection, getDocs, orderBy, query, Timestamp } from "firebase/firestore"
-import { db } from "@/firebase/config"
+import { db, auth } from "@/firebase/config"
 import SuccessToast from "@/components/ui/SuccessToast"
 import { formatDateTime } from "@/utils/date"
 
@@ -96,7 +96,21 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const checkCronStatus = async () => {
     try {
       setLoadingCronStatus(true)
-      const response = await fetch("/api/auto-campaigns/status")
+
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to check cron status")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const response = await fetch("/api/auto-campaigns/status", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
       const data = await response.json()
       if (data.success) {
         setCronStatus(data)
@@ -253,9 +267,20 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const handleDelete = async (id?: string) => {
     if (!id) return
     try {
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to delete campaigns")
+      }
+
+      const token = await currentUser.getIdToken()
+
       const response = await fetch("/api/campaigns/delete", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ id }),
       })
       const data = await response.json()
@@ -526,9 +551,22 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                     type="button"
                     onClick={async () => {
                       try {
+                        // Get Firebase Auth token
+                        const currentUser = auth.currentUser
+                        if (!currentUser) {
+                          throw new Error("You must be logged in to generate campaigns")
+                        }
+
+                        const token = await currentUser.getIdToken()
+
                         setSuccessMessage("Checking today's health awareness days...")
                         // First check what health awareness days are for today
-                        const checkResponse = await fetch("/api/auto-campaigns/test?date=today")
+                        const checkResponse = await fetch("/api/auto-campaigns/test?date=today", {
+                          headers: {
+                            "Authorization": `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                        })
                         const checkData = await checkResponse.json()
                         
                         if (checkData.healthDaysFound === 0) {
@@ -539,7 +577,12 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                         setSuccessMessage(`Found ${checkData.healthDaysFound} health awareness day(s) for today: ${checkData.healthDays.map((d: any) => d.name).join(", ")}. Generating campaigns...`)
                         
                         const sendWhatsApp = sendWhatsAppOnManualGenerate ? "true" : "false"
-                        const response = await fetch(`/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=${sendWhatsApp}`)
+                        const response = await fetch(`/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=${sendWhatsApp}`, {
+                          headers: {
+                            "Authorization": `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                        })
                         const data = await response.json()
                         if (data.success) {
                           if (data.campaignsGenerated === 0) {
@@ -572,11 +615,25 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                 type="button"
                 onClick={async () => {
                   try {
+                    // Get Firebase Auth token
+                    const currentUser = auth.currentUser
+                    if (!currentUser) {
+                      throw new Error("You must be logged in to generate campaigns")
+                    }
+
+                    const token = await currentUser.getIdToken()
+
                     setSuccessMessage("Generating random awareness day campaign...")
 
                     const sendWhatsApp = sendWhatsAppOnManualGenerate ? "true" : "false"
                     const response = await fetch(
-                      `/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=${sendWhatsApp}&random=true`
+                      `/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=${sendWhatsApp}&random=true`,
+                      {
+                        headers: {
+                          "Authorization": `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                      }
                     )
                     const data = await response.json()
                     if (data.success) {

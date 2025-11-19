@@ -1,4 +1,5 @@
 import admin from 'firebase-admin'
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -20,6 +21,12 @@ if (!admin.apps.length) {
 }
 
 export async function POST(request) {
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(request, "admin")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     // Check if Firebase Admin SDK is properly initialized
     if (!process.env.FIREBASE_PROJECT_ID || 

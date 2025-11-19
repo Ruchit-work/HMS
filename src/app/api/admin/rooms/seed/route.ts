@@ -1,8 +1,15 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import type { RoomType } from "@/types/patient"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
-export async function POST() {
+export async function POST(request: Request) {
+  // Authenticate request - requires admin role
+  const auth = await authenticateRequest(request, "admin")
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+
   try {
     const initResult = initFirebaseAdmin("rooms-seed API")
     if (!initResult.ok) {

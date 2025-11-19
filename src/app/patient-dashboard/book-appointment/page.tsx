@@ -222,11 +222,27 @@ function BookAppointmentContent() {
       const PARTIAL_PAYMENT_AMOUNT = Math.ceil(CONSULTATION_FEE * 0.1)
       const REMAINING_AMOUNT = CONSULTATION_FEE - PARTIAL_PAYMENT_AMOUNT
       const AMOUNT_TO_PAY = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
+      
+      // Check slot availability BEFORE payment deduction
+      if (!rescheduleMode) {
+        const slotCheckResponse = await fetch(
+          `/api/appointments/check-slot?doctorId=${selectedDoctor}&date=${appointmentData.date}&time=${appointmentData.time}`
+        )
+        if (!slotCheckResponse.ok) {
+          const slotData = await slotCheckResponse.json().catch(() => ({}))
+          throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
+        }
+        const slotData = await slotCheckResponse.json().catch(() => ({}))
+        if (!slotData?.available) {
+          throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
+        }
+      }
+      
       // Fetch latest patient profile to reflect any inline edits done during booking
       const latestPatientDoc = await getDoc(doc(db, "patients", user.uid))
       const latestUserData = latestPatientDoc.exists() ? (latestPatientDoc.data() as UserData) : userData
       
-      // If paying by wallet, deduct from wallet first
+      // If paying by wallet, deduct from wallet AFTER slot check
       let walletDeducted = false
       if (!rescheduleMode && formData.paymentMethod === 'wallet') {
         await updateDoc(doc(db, 'patients', user.uid), {
