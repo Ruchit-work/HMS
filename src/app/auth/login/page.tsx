@@ -260,8 +260,18 @@ function LoginContent() {
         return
       }
 
+      // ⚠️ TEMPORARILY DISABLED: 2FA for testing (using trial Twilio account with single phone)
+      // TODO: Uncomment this section when ready for production 2FA
+      // if (STAFF_ROLES.includes(roleInfo.role)) {
+      //   await beginMfaFlow(user, roleInfo)
+      //   return
+      // }
+
+      // ✅ ALLOWING DIRECT LOGIN FOR STAFF (admin, doctor, receptionist) - FOR TESTING ONLY
+      // Remove this block and uncomment the 2FA block above when ready for production
       if (STAFF_ROLES.includes(roleInfo.role)) {
-        await beginMfaFlow(user, roleInfo)
+        setLoading(false)
+        dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
         return
       }
 

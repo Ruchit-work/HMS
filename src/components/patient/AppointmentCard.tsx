@@ -303,12 +303,12 @@ export default function AppointmentCard({
                     } else {
                       // Fallback to plain text if parsing fails
                       return (
-                        <div>
-                          <span className="text-gray-600 font-medium">💊 Prescribed Medicine:</span>
+                    <div>
+                      <span className="text-gray-600 font-medium">💊 Prescribed Medicine:</span>
                           <p className="text-gray-900 mt-1 bg-white p-3 rounded border whitespace-pre-line text-sm">
-                            {appointment.medicine}
-                          </p>
-                        </div>
+                        {appointment.medicine}
+                      </p>
+                    </div>
                       )
                     }
                   })()}

@@ -314,7 +314,6 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
         paginatedItems: paginatedAppointments,
         goToPage,
         setPageSize,
-        resetPage,
     } = useTablePagination(filteredAppointments, {
         initialPageSize: 10,
         resetOnFilterChange: true,

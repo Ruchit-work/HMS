@@ -135,25 +135,27 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
           return
         }
 
+        // ⚠️ TEMPORARILY DISABLED: MFA verification for staff roles (for testing with trial Twilio account)
+        // TODO: Uncomment this section when ready for production 2FA
         // Verify MFA for staff roles
-        if (
-          userRoleData.role === "admin" ||
-          userRoleData.role === "doctor" ||
-          userRoleData.role === "receptionist"
-        ) {
-          const tokenResult = await currentUser.getIdTokenResult(true)
-          const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-          const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-          const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+        // if (
+        //   userRoleData.role === "admin" ||
+        //   userRoleData.role === "doctor" ||
+        //   userRoleData.role === "receptionist"
+        // ) {
+        //   const tokenResult = await currentUser.getIdTokenResult(true)
+        //   const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+        //   const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+        //   const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
 
-          if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-            await signOut(auth)
-            const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
-            router.replace(loginPath)
-            setLoading(false)
-            return
-          }
-        }
+        //   if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+        //     await signOut(auth)
+        //     const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
+        //     router.replace(loginPath)
+        //     setLoading(false)
+        //     return
+        //   }
+        // }
 
         // If route requires specific role and user has different role
         if (requiredRole && requiredRole !== userRoleData.role) {
@@ -193,22 +195,24 @@ export function usePublicRoute() {
         // User is logged in - check their role and redirect to dashboard using cached data
         const userRoleData = await getUserRole(currentUser.uid)
         if (userRoleData) {
-        if (
-          userRoleData.role === "admin" ||
-          userRoleData.role === "doctor" ||
-          userRoleData.role === "receptionist"
-        ) {
-            const tokenResult = await currentUser.getIdTokenResult(true)
-            const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-            const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-            const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+        // ⚠️ TEMPORARILY DISABLED: MFA check for staff roles in public routes (for testing with trial Twilio account)
+        // TODO: Uncomment this section when ready for production 2FA
+        // if (
+        //   userRoleData.role === "admin" ||
+        //   userRoleData.role === "doctor" ||
+        //   userRoleData.role === "receptionist"
+        // ) {
+        //     const tokenResult = await currentUser.getIdTokenResult(true)
+        //     const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+        //     const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+        //     const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
 
-            if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-              // MFA not complete yet - allow login page to handle OTP flow
-              setLoading(false)
-              return
-            }
-          }
+        //     if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+        //       // MFA not complete yet - allow login page to handle OTP flow
+        //       setLoading(false)
+        //       return
+        //     }
+        // }
 
           router.replace(`/${userRoleData.role}-dashboard`)
         } else {
