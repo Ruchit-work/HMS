@@ -13,6 +13,8 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { normalizeTime } from "@/utils/timeSlots"
 
+const VERIFY_TOKEN = process.env.META_WHATSAPP_VERIFY_TOKEN || "harmony_verify_token_97431d8b"
+
 // Helper: Get day name from date
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
 function getDayName(date: Date): string {
@@ -39,6 +41,23 @@ interface BookingSession {
   recheckupAppointmentId?: string // Original appointment ID for re-checkup
   createdAt: Date
   updatedAt: Date
+}
+
+/**
+ * GET /api/whatsapp/webhook
+ * Used by Meta to verify the webhook endpoint
+ */
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const mode = searchParams.get("hub.mode")
+  const token = searchParams.get("hub.verify_token")
+  const challenge = searchParams.get("hub.challenge")
+
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    return new NextResponse(challenge || "", { status: 200 })
+  }
+
+  return new NextResponse("Verification failed", { status: 403 })
 }
 
 /**
