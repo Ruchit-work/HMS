@@ -11,7 +11,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendTextMessage, sendButtonMessage, sendListMessage, sendFlowMessage } from "@/server/metaWhatsApp"
 import { normalizeTime } from "@/utils/timeSlots"
 
-const VERIFY_TOKEN = process.env.META_WHATSAPP_VERIFY_TOKEN || "your_verify_token_here"
+const VERIFY_TOKEN = process.env.META_WHATSAPP_VERIFY_TOKEN || "harmony_verify_token_97431d8b"
 
 // Helper: Get day name from date
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
