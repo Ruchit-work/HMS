@@ -183,7 +183,7 @@ async function handleBookingConversation(phone: string, message: string): Promis
   // Get or create booking session
   const sessionRef = db.collection("whatsappBookingSessions").doc(phone)
   const sessionDoc = await sessionRef.get()
-  let session: BookingSession = sessionDoc.exists
+  const session: BookingSession = sessionDoc.exists
     ? { ...sessionDoc.data() as BookingSession, phone }
     : {
         phone,
