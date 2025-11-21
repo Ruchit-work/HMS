@@ -265,6 +265,13 @@ export default function Home() {
               </svg>
               <span className="text-xs sm:text-sm font-medium break-all">+1 (555) 123-4567</span>
             </div>
+            <div className="hidden sm:block w-1 h-1 bg-gray-400 rounded-full"></div>
+            <Link
+              href="/privacy"
+              className="text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+            >
+              Privacy & Policy
+            </Link>
           </div>
           <p className="text-gray-500 text-xs sm:text-sm px-2 break-words">
             © 2024 Hospital Management System. All rights reserved.

@@ -160,7 +160,7 @@ export default function Footer() {
               © {currentYear} HMS Hospital. All rights reserved.
             </p>
             <div className="flex flex-wrap justify-center gap-6 text-sm">
-              <a href="#" className="hover:text-teal-400 transition-colors">Privacy Policy</a>
+              <Link href="/privacy" className="hover:text-teal-400 transition-colors">Privacy Policy</Link>
               <a href="#" className="hover:text-teal-400 transition-colors">Terms of Service</a>
               <a href="#" className="hover:text-teal-400 transition-colors">Refund Policy</a>
               <a href="#" className="hover:text-teal-400 transition-colors">Sitemap</a>
