@@ -390,6 +390,88 @@ export async function sendButtonMessage(
 }
 
 /**
+ * Send a template message via Meta WhatsApp
+ * Templates must be pre-approved by Meta before use
+ */
+export async function sendTemplateMessage(
+  to: string,
+  templateName: string,
+  languageCode: string = "en_US",
+  templateComponents?: Array<{
+    type: string
+    parameters?: Array<{
+      type: string
+      text?: string
+      image?: { link: string }
+    }>
+  }>
+): Promise<SendMessageResponse> {
+  if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
+    return {
+      success: false,
+      error: "Meta WhatsApp credentials not configured. Check META_WHATSAPP_ACCESS_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID",
+    }
+  }
+
+  const phoneNumber = formatPhoneNumber(to)
+  if (!phoneNumber) {
+    return {
+      success: false,
+      error: "Invalid phone number",
+    }
+  }
+
+  const payload: MetaWhatsAppMessage = {
+    messaging_product: "whatsapp",
+    to: phoneNumber,
+    type: "template",
+    template: {
+      name: templateName,
+      language: {
+        code: languageCode,
+      },
+      ...(templateComponents && { components: templateComponents }),
+    },
+  }
+
+  try {
+    const response = await fetch(
+      `${META_API_BASE_URL}/${META_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error("[Meta WhatsApp] Error sending template:", data)
+      return {
+        success: false,
+        error: data.error?.message || "Failed to send template message",
+        errorCode: data.error?.code,
+      }
+    }
+
+    return {
+      success: true,
+      messageId: data.messages?.[0]?.id,
+    }
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Exception:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    }
+  }
+}
+
+/**
  * Send a list message (for doctor selection, etc.)
  */
 export async function sendListMessage(
