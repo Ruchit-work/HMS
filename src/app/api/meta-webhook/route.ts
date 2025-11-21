@@ -4,7 +4,7 @@ export async function GET(req: Request) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+  if (mode === "subscribe" && token === process.env.META_WHATSAPP_ACCESS_TOKEN) {
     return new Response(challenge, { status: 200 });
   }
 
@@ -40,15 +40,15 @@ export async function POST(req: Request) {
 }
 
 async function sendWhatsAppMessage(rawTo: string, message: string) {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const token = process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.META_WHATSAPP_VERIFY_TOKEN;
 
   if (!phoneNumberId || !token) {
     console.error("Missing WhatsApp credentials: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_TOKEN");
     return;
   }
 
-  const to = formatPhoneNumber(rawTo);
+  const to = rawTo.startsWith("+") ? rawTo : `+${rawTo}`;
   const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
 
   const response = await fetch(url, {
