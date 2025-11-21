@@ -93,6 +93,7 @@ export async function sendFlowMessage(
         parameters: {
           flow_token: flowToken,
           flow_id: flowId,
+          flow_message_version: "3",
           flow_cta: "Book Appointment",
           flow_action: "navigate",
           flow_action_payload: flowData || {},
