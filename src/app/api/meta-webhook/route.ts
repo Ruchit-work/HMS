@@ -23,10 +23,13 @@ export async function POST(req: Request) {
 
     if (message) {
       const from = message.from;
-      const text = message.text?.body;
+      const text = message.text?.body ?? "";
 
-      // 🔥 Auto reply
-      await sendWhatsAppMessage(from, `How can I help you? You said: ${text}`);
+      const reply = text
+        ? `How can I help you? You said: ${text}`
+        : "Hi! How can I assist you today?";
+
+      await sendWhatsAppMessage(from, reply);
     }
 
     return new Response("EVENT_RECEIVED", { status: 200 });
@@ -36,13 +39,22 @@ export async function POST(req: Request) {
   }
 }
 
-async function sendWhatsAppMessage(to: string, message: string) {
-  const url = `https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+async function sendWhatsAppMessage(rawTo: string, message: string) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.WHATSAPP_TOKEN;
 
-  await fetch(url, {
+  if (!phoneNumberId || !token) {
+    console.error("Missing WhatsApp credentials: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_TOKEN");
+    return;
+  }
+
+  const to = formatPhoneNumber(rawTo);
+  const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -51,4 +63,18 @@ async function sendWhatsAppMessage(to: string, message: string) {
       text: { body: message },
     }),
   });
+
+  const data = await response.json();
+  if (!response.ok) {
+    console.error("Error sending WhatsApp message:", data);
+  } else {
+    console.log("Outbound WhatsApp message sent:", data);
+  }
+}
+
+function formatPhoneNumber(phone: string) {
+  if (!phone) return phone;
+  const trimmed = phone.trim();
+  if (trimmed.startsWith("+")) return trimmed;
+  return `+${trimmed}`;
 }
