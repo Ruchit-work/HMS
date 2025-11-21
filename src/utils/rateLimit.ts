@@ -205,12 +205,6 @@ export const RATE_LIMITS = {
     maxRequests: 60, // 60 requests per minute
   },
   
-  // WhatsApp webhook - lenient (but track for abuse)
-  WEBHOOK: {
-    windowMs: 60 * 1000, // 1 minute
-    maxRequests: 100, // 100 requests per minute
-  },
-  
   // Slot checking - moderate (prevent excessive checks)
   SLOT_CHECK: {
     windowMs: 60 * 1000, // 1 minute
