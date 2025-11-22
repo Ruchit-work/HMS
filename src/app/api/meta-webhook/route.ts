@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { sendFlowMessage, sendTextMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
+import { sendTextMessage, sendButtonMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime } from "@/utils/timeSlots"
 
@@ -44,12 +44,23 @@ export async function POST(req: Request) {
     const from = message.from
     const messageType = message.type
 
-    if (messageType === "flow") {
-      return await handleFlowCompletion(value)
+    // Handle button clicks
+    if (messageType === "interactive" && message.interactive?.type === "button_reply") {
+      const buttonId = message.interactive.button_reply?.id
+      if (buttonId === "book_appointment") {
+        await startBookingConversation(from)
+        return NextResponse.json({ success: true })
+      }
     }
 
+    // Handle text messages - check if user is in booking conversation
     if (messageType === "text") {
-      await handleIncomingText(from, message.text?.body ?? "")
+      const text = message.text?.body ?? ""
+      const isInBooking = await handleBookingConversation(from, text)
+      if (!isInBooking) {
+        // Not in booking, send welcome button
+        await handleIncomingText(from, text)
+      }
       return NextResponse.json({ success: true })
     }
 
@@ -69,112 +80,379 @@ export async function POST(req: Request) {
 }
 
 async function handleIncomingText(phone: string, text: string) {
-  const flowId = process.env.META_WHATSAPP_FLOW_ID
-
-  if (!flowId) {
-    await sendTextMessage(
-      phone,
-      "Hi! Our WhatsApp booking form isn’t configured yet. Please contact our reception at +91-XXXXXXXXXX."
-    )
-    return
-  }
-
-  const flowToken = `token_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
-  const flowResponse = await sendFlowMessage(
+  // Send button message instead of Flow directly
+  const buttonResponse = await sendButtonMessage(
     phone,
-    flowId,
-    flowToken,
-    "Book Your Appointment",
-    "Please fill out a few quick steps to schedule your visit.",
-    "Harmony Medical Services"
+    "Hi! 👋 Welcome to Harmony Medical Services.\n\nWould you like to book an appointment? Click the button below to get started.",
+    "Harmony Medical Services",
+    "book_appointment",
+    "Book Appointment"
   )
 
-  if (!flowResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send Flow:", flowResponse.error)
+  if (!buttonResponse.success) {
+    console.error("[Meta WhatsApp] Failed to send button:", buttonResponse.error)
     await sendTextMessage(
       phone,
-      "We’re having trouble opening the booking form. Please try again in a moment or contact reception."
+      "Hi! 👋 Welcome to Harmony Medical Services.\n\nTo book an appointment, please contact our reception at +91-XXXXXXXXXX."
+    )
+  }
+}
+
+// Booking conversation states
+type BookingState = "idle" | "selecting_doctor" | "selecting_date" | "selecting_time" | "entering_symptoms" | "confirming"
+
+interface BookingSession {
+  state: BookingState
+  doctorId?: string
+  appointmentDate?: string
+  appointmentTime?: string
+  symptoms?: string
+  createdAt: string
+  updatedAt: string
+}
+
+async function startBookingConversation(phone: string) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+
+  // Check if patient exists
+  const patient = await findPatientByPhone(db, normalizedPhone)
+  if (!patient) {
+    await sendTextMessage(
+      phone,
+      "❌ We couldn't find your patient profile. Please contact reception to register before booking.\n\nPhone: +91-XXXXXXXXXX"
     )
     return
   }
+
+  // Get available doctors
+  const doctorsSnapshot = await db.collection("doctors").where("status", "==", "active").limit(10).get()
+  if (doctorsSnapshot.empty) {
+    await sendTextMessage(phone, "❌ No doctors available at the moment. Please contact reception.")
+    return
+  }
+
+  const doctors = doctorsSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }))
+
+  // Create booking session
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  await sessionRef.set({
+    state: "selecting_doctor",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })
+
+  // Send doctor list
+  let doctorList = "👨‍⚕️ *Select a Doctor:*\n\n"
+  doctors.forEach((doc: any, index: number) => {
+    const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
+    const specialization = doc.specialization || "General"
+    doctorList += `${index + 1}. ${name} - ${specialization}\n`
+  })
+  doctorList += "\nPlease reply with the number (1-10) of the doctor you'd like to book with."
+
+  await sendTextMessage(phone, doctorList)
+}
+
+async function handleBookingConversation(phone: string, text: string): Promise<boolean> {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const sessionDoc = await sessionRef.get()
+
+  if (!sessionDoc.exists) {
+    return false // Not in booking conversation
+  }
+
+  const session = sessionDoc.data() as BookingSession
+  const trimmedText = text.trim().toLowerCase()
+
+  // Handle cancel/reset
+  if (trimmedText === "cancel" || trimmedText === "reset" || trimmedText === "start over") {
+    await sessionRef.delete()
+    await sendTextMessage(phone, "Booking cancelled. Type 'Book' or click the button to start again.")
+    return true
+  }
+
+  switch (session.state) {
+    case "selecting_doctor":
+      return await handleDoctorSelection(db, phone, normalizedPhone, sessionRef, text, session)
+    case "selecting_date":
+      return await handleDateSelection(db, phone, normalizedPhone, sessionRef, text, session)
+    case "selecting_time":
+      return await handleTimeSelection(db, phone, normalizedPhone, sessionRef, text, session)
+    case "entering_symptoms":
+      return await handleSymptomsEntry(db, phone, normalizedPhone, sessionRef, text, session)
+    case "confirming":
+      return await handleConfirmation(db, phone, normalizedPhone, sessionRef, text, session)
+    default:
+      await sessionRef.delete()
+      return false
+  }
+}
+
+async function handleDoctorSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const doctorNum = parseInt(text)
+  if (isNaN(doctorNum) || doctorNum < 1 || doctorNum > 10) {
+    await sendTextMessage(phone, "❌ Please enter a number between 1 and 10.")
+    return true
+  }
+
+  const doctorsSnapshot = await db.collection("doctors").where("status", "==", "active").limit(10).get()
+  const doctors = doctorsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+
+  if (doctorNum > doctors.length) {
+    await sendTextMessage(phone, "❌ Invalid selection. Please try again.")
+    return true
+  }
+
+  const selectedDoctor = doctors[doctorNum - 1] as any
+  await sessionRef.update({
+    state: "selecting_date",
+    doctorId: selectedDoctor.id,
+    updatedAt: new Date().toISOString(),
+  })
 
   await sendTextMessage(
     phone,
-    "I've sent you our booking form. Please tap it to complete your appointment request."
+    `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 *Select Date:*\nPlease enter your preferred date in YYYY-MM-DD format (e.g., 2025-01-15)\n\nOr type "today" or "tomorrow"`
   )
+  return true
 }
 
-async function handleFlowCompletion(value: any): Promise<Response> {
-  const db = admin.firestore()
-  const message = value.messages?.[0]
+async function handleDateSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  let selectedDate = ""
+  const trimmedText = text.trim().toLowerCase()
 
-  if (!message?.flow) {
-    return NextResponse.json({ success: true })
+  if (trimmedText === "today") {
+    selectedDate = new Date().toISOString().split("T")[0]
+  } else if (trimmedText === "tomorrow") {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    selectedDate = tomorrow.toISOString().split("T")[0]
+  } else {
+    // Try to parse YYYY-MM-DD
+    const dateMatch = text.match(/(\d{4})-(\d{2})-(\d{2})/)
+    if (dateMatch) {
+      selectedDate = dateMatch[0]
+    } else {
+      await sendTextMessage(phone, "❌ Invalid date format. Please use YYYY-MM-DD (e.g., 2025-01-15)")
+      return true
+    }
   }
 
-  const from = formatPhoneNumber(message.from)
-  const flowResponse = message.flow
-  const flowData = flowResponse.response?.data || {}
-
-  const flowDoctorId = flowData.doctor_id || ""
-  const appointmentDate = flowData.appointment_date
-  const flowTimeSlot = flowData.appointment_time || ""
-  const appointmentTime = toClockTime(flowData.appointment_time)
-
-  const appointmentPayload = {
-    symptomCategory: flowData.symptom_category || "",
-    chiefComplaint: flowData.chief_complaint || "General consultation",
-    doctorId: "",
-    appointmentDate,
-    appointmentTime,
-    medicalHistory: flowData.medical_history || "",
-    paymentOption: flowData.payment_option || "",
-    paymentStatus: flowData.payment_status || "pending",
+  // Validate date is not in the past
+  const selected = new Date(selectedDate + "T00:00:00")
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (selected < today) {
+    await sendTextMessage(phone, "❌ Please select a date that is today or in the future.")
+    return true
   }
 
-  if (!appointmentPayload.appointmentDate || !appointmentPayload.appointmentTime) {
-    await sendTextMessage(
-      from,
-      "❌ We couldn’t read your preferred date or time. Please start again by typing “Book”."
-    )
-    return NextResponse.json({ success: true })
+  await sessionRef.update({
+    state: "selecting_time",
+    appointmentDate: selectedDate,
+    updatedAt: new Date().toISOString(),
+  })
+
+  // Get available time slots for the doctor
+  const timeSlots = generateTimeSlots()
+  let timeList = "🕐 *Select Time:*\n\n"
+  timeSlots.forEach((slot, index) => {
+    timeList += `${index + 1}. ${slot}\n`
+  })
+  timeList += "\nPlease reply with the number of your preferred time slot."
+
+  await sendTextMessage(phone, timeList)
+  return true
+}
+
+async function handleTimeSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const slotNum = parseInt(text)
+  const timeSlots = generateTimeSlots()
+
+  if (isNaN(slotNum) || slotNum < 1 || slotNum > timeSlots.length) {
+    await sendTextMessage(phone, `❌ Please enter a number between 1 and ${timeSlots.length}.`)
+    return true
   }
 
-  const patient = await findPatientByPhone(db, from)
-  if (!patient) {
-    await sendTextMessage(
-      from,
-      "We couldn’t find your patient profile. Please contact reception to register before booking."
-    )
-    return NextResponse.json({ success: true })
+  const selectedTime = timeSlots[slotNum - 1]
+  const normalizedTime = normalizeTime(selectedTime)
+
+  // Check if slot is already booked
+  const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+  const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+  const slotDoc = await slotRef.get()
+
+  if (slotDoc.exists) {
+    await sendTextMessage(phone, "❌ This time slot is already booked. Please select another time.")
+    return true
   }
 
-  const doctor = await resolveDoctorFromFlow(db, flowDoctorId)
-  if (!doctor) {
-    await sendTextMessage(
-      from,
-      "We couldn’t match your selected doctor. Please try booking again or contact reception."
-    )
-    return NextResponse.json({ success: true })
+  await sessionRef.update({
+    state: "entering_symptoms",
+    appointmentTime: normalizedTime,
+    updatedAt: new Date().toISOString(),
+  })
+
+  await sendTextMessage(
+    phone,
+    `✅ Selected: ${selectedTime}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
+  )
+  return true
+}
+
+async function handleSymptomsEntry(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const symptoms = text.trim().toLowerCase() === "skip" ? "" : text.trim()
+
+  await sessionRef.update({
+    state: "confirming",
+    symptoms: symptoms,
+    updatedAt: new Date().toISOString(),
+  })
+
+  // Get doctor and patient info for confirmation
+  const doctorDoc = await db.collection("doctors").doc(session.doctorId!).get()
+  const doctorData = doctorDoc.data()!
+  const patient = await findPatientByPhone(db, normalizedPhone)
+
+  const doctorName = `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
+  const patientName = patient ? `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim() : "Patient"
+  const dateDisplay = new Date(session.appointmentDate! + "T00:00:00").toLocaleDateString("en-IN", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+  const [h, m] = session.appointmentTime!.split(":").map(Number)
+  const timeDisplay = new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+
+  let confirmMsg = `📋 *Confirm Appointment:*\n\n`
+  confirmMsg += `👨‍⚕️ Doctor: ${doctorName}\n`
+  confirmMsg += `📅 Date: ${dateDisplay}\n`
+  confirmMsg += `🕐 Time: ${timeDisplay}\n`
+  if (symptoms) {
+    confirmMsg += `📝 Symptoms: ${symptoms}\n`
+  }
+  confirmMsg += `\nReply "confirm" to book or "cancel" to start over.`
+
+  await sendTextMessage(phone, confirmMsg)
+  return true
+}
+
+async function handleConfirmation(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const trimmedText = text.trim().toLowerCase()
+
+  if (trimmedText !== "confirm" && trimmedText !== "yes") {
+    await sendTextMessage(phone, "Booking cancelled. Type 'Book' to start again.")
+    await sessionRef.delete()
+    return true
   }
 
-  appointmentPayload.doctorId = doctor.id
-
+  // Create appointment
   try {
-    const appointmentId = await createAppointment(db, patient, doctor, appointmentPayload, from)
-    await sendBookingConfirmation(from, patient, doctor.data, appointmentPayload, appointmentId)
-    return NextResponse.json({ success: true, appointmentId })
-  } catch (error: any) {
-    console.error("[Meta WhatsApp] Failed to create appointment:", error)
-    const message =
-      error?.message === "SLOT_ALREADY_BOOKED"
-        ? "❌ That slot was just booked by someone else. Please open the form again and choose another time."
-        : "❌ Something went wrong while confirming your booking. Please try again later or contact our team."
+    const patient = await findPatientByPhone(db, normalizedPhone)
+    if (!patient) {
+      await sendTextMessage(phone, "❌ Patient record not found. Please contact reception.")
+      await sessionRef.delete()
+      return true
+    }
 
-    await sendTextMessage(from, message)
-    return NextResponse.json({ success: false })
+    const doctorDoc = await db.collection("doctors").doc(session.doctorId!).get()
+    if (!doctorDoc.exists) {
+      await sendTextMessage(phone, "❌ Doctor not found. Please try again.")
+      await sessionRef.delete()
+      return true
+    }
+
+    const doctorData = doctorDoc.data()!
+    const appointmentId = await createAppointment(
+      db,
+      patient,
+      { id: session.doctorId!, data: doctorData },
+      {
+        symptomCategory: "",
+        chiefComplaint: session.symptoms || "General consultation",
+        doctorId: session.doctorId!,
+        appointmentDate: session.appointmentDate!,
+        appointmentTime: session.appointmentTime!,
+        medicalHistory: "",
+        paymentOption: "cash",
+        paymentStatus: "pending",
+      },
+      normalizedPhone
+    )
+
+    await sendBookingConfirmation(normalizedPhone, patient, doctorData, session, appointmentId)
+    await sessionRef.delete()
+
+    return true
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Error creating appointment:", error)
+    if (error.message === "SLOT_ALREADY_BOOKED") {
+      await sendTextMessage(phone, "❌ That slot was just booked. Please try again.")
+    } else {
+      await sendTextMessage(phone, "❌ Error creating appointment. Please contact reception.")
+    }
+    await sessionRef.delete()
+    return true
   }
 }
+
+function generateTimeSlots(): string[] {
+  const slots: string[] = []
+  for (let hour = 9; hour <= 17; hour++) {
+    slots.push(`${hour.toString().padStart(2, "0")}:00`)
+    if (hour < 17) {
+      slots.push(`${hour.toString().padStart(2, "0")}:30`)
+    }
+  }
+  return slots
+}
+
 
 async function findPatientByPhone(db: FirebaseFirestore.Firestore, phone: string) {
   let snapshot = await db.collection("patients").where("phone", "==", phone).limit(1).get()
@@ -186,53 +464,6 @@ async function findPatientByPhone(db: FirebaseFirestore.Firestore, phone: string
   return { id: doc.id, data: doc.data() }
 }
 
-async function resolveDoctorFromFlow(
-  db: FirebaseFirestore.Firestore,
-  flowDoctorId: string
-): Promise<{ id: string; data: FirebaseFirestore.DocumentData } | null> {
-  if (!flowDoctorId) return null
-
-  // If Flow already passes a Firestore doc ID
-  const directDoc = await db.collection("doctors").doc(flowDoctorId).get()
-  if (directDoc.exists) {
-    return { id: directDoc.id, data: directDoc.data()! }
-  }
-
-  const docs = await db.collection("doctors").where("status", "==", "active").get()
-  if (docs.empty) return null
-
-  const normalizedFlow = normalizeString(flowDoctorId)
-  for (const doc of docs.docs) {
-    const data = doc.data()
-    const candidate = normalizeString(`${data.firstName || ""}${data.lastName || ""}`)
-    if (candidate.includes(normalizedFlow) || normalizedFlow.includes(candidate)) {
-      return { id: doc.id, data }
-    }
-  }
-
-  // fallback to first active doctor
-  const fallback = docs.docs[0]
-  return { id: fallback.id, data: fallback.data() }
-}
-
-function normalizeString(input: string) {
-  return (input || "").toLowerCase().replace(/[^a-z0-9]/g, "")
-}
-
-function toClockTime(slot: string) {
-  if (!slot) return ""
-  if (slot.includes(":")) return slot
-  if (slot.startsWith("slot_")) {
-    const raw = slot.replace("slot_", "")
-    if (raw.length === 4) {
-      return `${raw.substring(0, 2)}:${raw.substring(2, 4)}`
-    }
-  }
-  if (slot.length === 4) {
-    return `${slot.substring(0, 2)}:${slot.substring(2, 4)}`
-  }
-  return slot
-}
 
 async function createAppointment(
   db: FirebaseFirestore.Firestore,
@@ -307,18 +538,18 @@ async function sendBookingConfirmation(
   phone: string,
   patient: { id: string; data: FirebaseFirestore.DocumentData },
   doctorData: FirebaseFirestore.DocumentData,
-  payload: { appointmentDate: string; appointmentTime: string },
+  session: BookingSession,
   appointmentId: string
 ) {
   const doctorName = `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
   const patientName = `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim()
-  const dateDisplay = new Date(payload.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
+  const dateDisplay = new Date(session.appointmentDate! + "T00:00:00").toLocaleDateString("en-IN", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   })
-  const [h, m] = payload.appointmentTime.split(":").map(Number)
+  const [h, m] = session.appointmentTime!.split(":").map(Number)
   const timeDisplay = new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
     hour: "numeric",
     minute: "2-digit",
@@ -336,7 +567,9 @@ Your appointment has been booked successfully:
 • 📅 Date: ${dateDisplay}
 • 🕒 Time: ${timeDisplay}
 • 📋 Appointment ID: ${appointmentId}
+${session.symptoms ? `• 📝 Symptoms: ${session.symptoms}` : ""}
 
 If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
   )
 }
+

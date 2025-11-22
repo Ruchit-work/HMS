@@ -68,6 +68,20 @@ export async function sendFlowMessage(
     }
   }
 
+  // Build parameters object
+  const parameters: Record<string, any> = {
+    flow_token: flowToken,
+    flow_id: flowId,
+    flow_message_version: "3",
+    flow_cta: "Book Appointment",
+    flow_action: "navigate",
+  }
+
+  // Only add flow_action_payload if we have valid data
+  if (flowData && typeof flowData === "object" && flowData !== null && Object.keys(flowData).length > 0) {
+    parameters.flow_action_payload = flowData
+  }
+
   const payload = {
     messaging_product: "whatsapp",
     to: phoneNumber,
@@ -90,14 +104,7 @@ export async function sendFlowMessage(
         : undefined,
       action: {
         name: "flow",
-        parameters: {
-          flow_token: flowToken,
-          flow_id: flowId,
-          flow_message_version: "3",
-          flow_cta: "Book Appointment",
-          flow_action: "navigate",
-          flow_action_payload: flowData || {},
-        },
+        parameters,
       },
     },
   }
@@ -122,6 +129,96 @@ export async function sendFlowMessage(
       return {
         success: false,
         error: data.error?.message || "Failed to send flow message",
+        errorCode: data.error?.code,
+      }
+    }
+
+    return {
+      success: true,
+      messageId: data.messages?.[0]?.id,
+    }
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Exception:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    }
+  }
+}
+
+/**
+ * Send a button message via Meta WhatsApp
+ */
+export async function sendButtonMessage(
+  to: string,
+  bodyText: string,
+  footerText?: string,
+  buttonId: string = "book_appointment",
+  buttonTitle: string = "Book Appointment"
+): Promise<SendMessageResponse> {
+  if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
+    return {
+      success: false,
+      error: "Meta WhatsApp credentials not configured",
+    }
+  }
+
+  const phoneNumber = formatPhoneNumber(to)
+  if (!phoneNumber) {
+    return {
+      success: false,
+      error: "Invalid phone number",
+    }
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: phoneNumber,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: {
+        text: bodyText,
+      },
+      footer: footerText
+        ? {
+            text: footerText,
+          }
+        : undefined,
+      action: {
+        buttons: [
+          {
+            type: "reply",
+            reply: {
+              id: buttonId,
+              title: buttonTitle,
+            },
+          },
+        ],
+      },
+    },
+  }
+
+  try {
+    const response = await fetch(
+      `${META_API_BASE_URL}/${META_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error("[Meta WhatsApp] Error sending button:", data)
+      return {
+        success: false,
+        error: data.error?.message || "Failed to send button message",
         errorCode: data.error?.code,
       }
     }
