@@ -3,7 +3,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
 export async function GET(
   request: Request,
-  { params }: { params: { appointmentId: string } }
+  { params }: { params: Promise<{ appointmentId: string }> }
 ) {
   try {
     const initResult = initFirebaseAdmin("appointment-pdf-api")
@@ -12,7 +12,7 @@ export async function GET(
     }
 
     const db = admin.firestore()
-    const appointmentId = params.appointmentId
+    const { appointmentId } = await params
 
     // Get PDF from Firestore
     const pdfDoc = await db.collection("appointmentPDFs").doc(appointmentId).get()
