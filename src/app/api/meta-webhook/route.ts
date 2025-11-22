@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, sendFlowMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { normalizeTime } from "@/utils/timeSlots"
+import { normalizeTime, isDoctorAvailableOnDate, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import { isDateBlocked as isDateBlockedFromRaw, normalizeBlockedDates } from "@/utils/blockedDates"
 import { generateAppointmentConfirmationPDFBase64 } from "@/utils/appointmentConfirmationPDF"
 import { Appointment } from "@/types/patient"
 
@@ -248,11 +249,35 @@ async function handleFlowCompletion(value: any): Promise<Response> {
 
   // Extract data from Flow (adjust field names based on your Flow structure)
   const flowDoctorId = flowData.doctor_id || flowData.doctor || ""
-  const appointmentDate = flowData.appointment_date || flowData.date || ""
+  let appointmentDate = flowData.appointment_date || flowData.date || ""
   const flowTimeSlot = flowData.appointment_time || flowData.time || flowData.time_slot || ""
   const symptoms = flowData.symptom_category || flowData.symptoms || flowData.chief_complaint || ""
   const paymentMethod = flowData.payment_option || flowData.payment_method || "cash"
   const paymentType = flowData.payment_type || "full"
+
+  // Normalize date format from DatePicker (handles various formats)
+  // DatePicker typically returns YYYY-MM-DD format
+  if (appointmentDate) {
+    // Remove time portion if present (e.g., "2025-01-15T00:00:00Z" -> "2025-01-15")
+    appointmentDate = appointmentDate.split("T")[0].split(" ")[0]
+    
+    // Validate date format (should be YYYY-MM-DD)
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/
+    if (!datePattern.test(appointmentDate)) {
+      // Try to parse and reformat if not in correct format
+      try {
+        const parsedDate = new Date(appointmentDate)
+        if (!isNaN(parsedDate.getTime())) {
+          const year = parsedDate.getFullYear()
+          const month = String(parsedDate.getMonth() + 1).padStart(2, "0")
+          const day = String(parsedDate.getDate()).padStart(2, "0")
+          appointmentDate = `${year}-${month}-${day}`
+        }
+      } catch (e) {
+        console.error("[Meta WhatsApp] Error parsing date from Flow:", appointmentDate, e)
+      }
+    }
+  }
 
   // Convert time slot format if needed
   let appointmentTime = ""
@@ -356,6 +381,17 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   }
 
   const doctorData = doctorDoc.data()!
+  
+  // Check if date is blocked (system-wide like Sunday OR doctor-specific)
+  const availabilityCheck = checkDateAvailability(appointmentDate, doctorData)
+  if (availabilityCheck.isBlocked) {
+    await sendTextMessage(
+      from,
+      `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease try booking again by selecting a different date.`
+    )
+    return NextResponse.json({ success: true })
+  }
+  
   const consultationFee = doctorData.consultationFee || 500
   const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
   const amountToPay = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
@@ -575,7 +611,7 @@ async function handleDateSelection(
         selectedDate = dateMatch[0]
       } else {
         // Invalid format, send date picker
-        await sendDatePicker(phone)
+        await sendDatePicker(phone, session.doctorId)
         return true
       }
     }
@@ -586,8 +622,25 @@ async function handleDateSelection(
     today.setHours(0, 0, 0, 0)
     if (selected < today) {
       await sendTextMessage(phone, "❌ Please select a date that is today or in the future.")
-      await sendDatePicker(phone)
+      await sendDatePicker(phone, session.doctorId)
       return true
+    }
+
+    // Check if date is blocked (system-wide like Sunday OR doctor-specific)
+    if (session.doctorId) {
+      const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
+      if (doctorDoc.exists) {
+        const doctorData = doctorDoc.data()!
+        const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
+        if (availabilityCheck.isBlocked) {
+          await sendTextMessage(
+            phone,
+            `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
+          )
+          await sendDatePicker(phone, session.doctorId)
+          return true
+        }
+      }
     }
 
     // Check if user already has an appointment on this date
@@ -607,7 +660,7 @@ async function handleDateSelection(
           phone,
           `❌ *Appointment Already Booked*\n\nYou already have an appointment booked for ${selectedDate}${existingTime ? ` at ${existingTime}` : ""}.\n\nPlease select a different date.`
         )
-        await sendDatePicker(phone)
+        await sendDatePicker(phone, session.doctorId)
         return true
       }
     }
@@ -624,27 +677,52 @@ async function handleDateSelection(
   }
 
   // No text provided, send date picker
-  await sendDatePicker(phone)
+  await sendDatePicker(phone, session.doctorId)
   return true
 }
 
-async function sendDatePicker(phone: string) {
-  const dateOptions = generateDateOptions()
+async function sendDatePicker(phone: string, doctorId?: string) {
+  const db = admin.firestore()
+  let doctorData: any = null
   
+  // Fetch doctor data if doctor ID is provided to check blocked dates
+  if (doctorId) {
+    const doctorDoc = await db.collection("doctors").doc(doctorId).get()
+    if (doctorDoc.exists) {
+      doctorData = doctorDoc.data()!
+    }
+  }
+  
+  const dateOptions = generateDateOptions(doctorData)
+  
+  // If all dates are filtered out (all blocked), show error message
+  if (dateOptions.length === 0) {
+    await sendTextMessage(
+      phone,
+      "❌ *No Available Dates*\n\nAll dates are currently blocked or unavailable.\n\nPlease contact reception at +91-XXXXXXXXXX for assistance."
+    )
+    return
+  }
+  
+  // Split date options into sections if more than 10 (WhatsApp list limit is 10 rows per section)
+  const sections = []
+  for (let i = 0; i < dateOptions.length; i += 10) {
+    sections.push({
+      title: i === 0 ? "Available Dates" : "More Dates",
+      rows: dateOptions.slice(i, i + 10),
+    })
+  }
+
   const listResponse = await sendListMessage(
     phone,
-    "📅 *Select Appointment Date*\n\nChoose your preferred date:",
-    "Select Date",
-    [
-      {
-        title: "Available Dates",
-        rows: dateOptions,
-      },
-    ],
+    "📅 *Select Appointment Date*\n\nTap the button below to see all available dates:",
+    "📅 Pick a Date",
+    sections,
     "Harmony Medical Services"
   )
 
   if (!listResponse.success) {
+    console.error("[Meta WhatsApp] Failed to send date picker list:", listResponse.error)
     // Fallback to text-based selection
     await sendTextMessage(
       phone,
@@ -675,7 +753,47 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     today.setHours(0, 0, 0, 0)
     if (selected < today) {
       await sendTextMessage(phone, "❌ Please select a date that is today or in the future.")
+      await sendDatePicker(phone, session.doctorId)
       return
+    }
+
+    // Check if date is blocked (system-wide like Sunday OR doctor-specific)
+    if (session.doctorId) {
+      const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
+      if (doctorDoc.exists) {
+        const doctorData = doctorDoc.data()!
+        const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
+        if (availabilityCheck.isBlocked) {
+          await sendTextMessage(
+            phone,
+            `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
+          )
+          await sendDatePicker(phone, session.doctorId)
+          return
+        }
+      }
+    }
+
+    // Check if user already has an appointment on this date
+    const patient = await findPatientByPhone(db, normalizedPhone)
+    if (patient) {
+      const existingAppointments = await db
+        .collection("appointments")
+        .where("patientId", "==", patient.id)
+        .where("appointmentDate", "==", selectedDate)
+        .where("status", "in", ["pending", "confirmed"])
+        .get()
+
+      if (!existingAppointments.empty) {
+        const existingAppt = existingAppointments.docs[0].data()
+        const existingTime = existingAppt.appointmentTime || ""
+        await sendTextMessage(
+          phone,
+          `❌ *Appointment Already Booked*\n\nYou already have an appointment booked for ${selectedDate}${existingTime ? ` at ${existingTime}` : ""}.\n\nPlease select a different date.`
+        )
+        await sendDatePicker(phone, session.doctorId)
+        return
+      }
     }
 
     await sessionRef.update({
@@ -685,7 +803,7 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     })
 
     // Send time picker
-    await sendTimePicker(phone, session.doctorId!, session.appointmentDate!)
+    await sendTimePicker(phone, session.doctorId!, selectedDate)
     return
   }
 
@@ -771,7 +889,7 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
   
   if (availableSlots.length === 0) {
     await sendTextMessage(phone, "❌ No time slots available for this date. Please select another date.")
-    await sendDatePicker(phone)
+    await sendDatePicker(phone, doctorId)
     return
   }
 
@@ -803,15 +921,25 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
   }
 }
 
-function generateDateOptions(): Array<{ id: string; title: string; description?: string }> {
+function generateDateOptions(doctorData?: any): Array<{ id: string; title: string; description?: string }> {
   const options: Array<{ id: string; title: string; description?: string }> = []
   const today = new Date()
   
-  // Generate next 14 days
+  // Generate next 14 days and filter out blocked dates
   for (let i = 0; i < 14; i++) {
     const date = new Date(today)
     date.setDate(today.getDate() + i)
     const dateStr = date.toISOString().split("T")[0]
+    
+    // Check if date is blocked (system-wide like Sunday OR doctor-specific)
+    if (doctorData) {
+      const availabilityCheck = checkDateAvailability(dateStr, doctorData)
+      if (availabilityCheck.isBlocked) {
+        // Skip blocked dates - don't include them in the list
+        continue
+      }
+    }
+    
     const dayName = date.toLocaleDateString("en-IN", { weekday: "short" })
     const dateDisplay = date.toLocaleDateString("en-IN", {
       day: "numeric",
@@ -1155,6 +1283,49 @@ function generateTimeSlots(): string[] {
   return slots
 }
 
+/**
+ * Check if a date is blocked (system-wide like Sunday OR doctor-specific blocked dates)
+ * @param dateStr - Date string in YYYY-MM-DD format
+ * @param doctorData - Doctor data from Firestore
+ * @returns Object with isBlocked boolean and reason string if blocked
+ */
+function checkDateAvailability(dateStr: string, doctorData: any): { isBlocked: boolean; reason?: string } {
+  if (!dateStr) return { isBlocked: false }
+
+  const selectedDate = new Date(dateStr + "T00:00:00")
+  
+  // Check if date is a system-wide blocked day (e.g., Sunday)
+  const visitingHours = doctorData?.visitingHours || DEFAULT_VISITING_HOURS
+  const dayName = getDayName(selectedDate)
+  const daySchedule = visitingHours[dayName]
+  
+  if (!daySchedule?.isAvailable || !daySchedule?.slots || daySchedule.slots.length === 0) {
+    return { 
+      isBlocked: true, 
+      reason: `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} is a blocked day. Please select another date.` 
+    }
+  }
+
+  // Check if date is in doctor's specific blocked dates
+  const blockedDates: any[] = Array.isArray(doctorData?.blockedDates) ? doctorData.blockedDates : []
+  if (blockedDates.length > 0) {
+    if (isDateBlockedFromRaw(dateStr, blockedDates)) {
+      // Find the reason for the blocked date
+      const normalizedDates = normalizeBlockedDates(blockedDates)
+      const blockedDate = blockedDates.find((bd: any) => {
+        const normalizedDate = bd?.date ? String(bd.date).slice(0, 10) : ""
+        return normalizedDate === dateStr
+      })
+      const reason = blockedDate?.reason || "Doctor not available"
+      return { 
+        isBlocked: true, 
+        reason: `This date is blocked: ${reason}. Please select another date.` 
+      }
+    }
+  }
+
+  return { isBlocked: false }
+}
 
 async function findPatientByPhone(db: FirebaseFirestore.Firestore, phone: string) {
   let snapshot = await db.collection("patients").where("phone", "==", phone).limit(1).get()
