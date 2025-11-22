@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { sendTextMessage, sendButtonMessage, sendListMessage, sendDocumentMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
+import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime } from "@/utils/timeSlots"
 import { generateAppointmentConfirmationPDFBase64 } from "@/utils/appointmentConfirmationPDF"
@@ -53,6 +53,10 @@ export async function POST(req: Request) {
         await startBookingConversation(from)
         return NextResponse.json({ success: true })
       }
+      if (buttonId === "help_center") {
+        await handleHelpCenter(from)
+        return NextResponse.json({ success: true })
+      }
     }
 
     // Handle list selections (date/time pickers)
@@ -68,6 +72,24 @@ export async function POST(req: Request) {
       const text = message.text?.body ?? ""
       const isInBooking = await handleBookingConversation(from, text)
       if (!isInBooking) {
+        const trimmedText = text.trim().toLowerCase()
+        
+        // Check for "thanks" message
+        if (trimmedText === "thanks" || trimmedText === "thank you" || trimmedText === "thankyou" || trimmedText.includes("thank")) {
+          await sendTextMessage(
+            from,
+            "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥"
+          )
+          return NextResponse.json({ success: true })
+        }
+        
+        // Check for greetings (hello, hi, hy, etc.)
+        const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
+        if (greetings.some(greeting => trimmedText === greeting || trimmedText.startsWith(greeting + " "))) {
+          await handleGreeting(from)
+          return NextResponse.json({ success: true })
+        }
+        
         // Not in booking, send welcome button
         await handleIncomingText(from, text)
       }
@@ -87,6 +109,37 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
+}
+
+async function handleGreeting(phone: string) {
+  // Send greeting with two buttons
+  const buttonResponse = await sendMultiButtonMessage(
+    phone,
+    "Hello! 👋\n\nHow can I help you today?",
+    [
+      { id: "book_appointment", title: "📅 Book Appointment" },
+      { id: "help_center", title: "🆘 Help Center" },
+    ],
+    "Harmony Medical Services"
+  )
+
+  if (!buttonResponse.success) {
+    console.error("[Meta WhatsApp] Failed to send greeting buttons:", buttonResponse.error)
+    // Fallback to text message
+    await sendTextMessage(
+      phone,
+      "Hello! 👋\n\nHow can I help you today?\n\n• Type 'Book' to book an appointment\n• Type 'Help' for assistance\n\nOr contact our reception at +91-XXXXXXXXXX"
+    )
+  }
+}
+
+async function handleHelpCenter(phone: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
+  
+  await sendTextMessage(
+    phone,
+    `🆘 *Help Center*\n\nWe're here to help you!\n\n📞 *Contact Us:*\nPhone: +91-XXXXXXXXXX\nEmail: support@harmonymedical.com\n\n🌐 *Visit Our Website:*\n${baseUrl}\n\n⏰ *Support Hours:*\nMonday - Saturday: 9:00 AM - 6:00 PM\nSunday: 10:00 AM - 2:00 PM\n\nFor urgent medical assistance, please visit our emergency department or call emergency services.`
+  )
 }
 
 async function handleIncomingText(phone: string, text: string) {
@@ -131,15 +184,11 @@ async function startBookingConversation(phone: string) {
   // Check if patient exists
   const patient = await findPatientByPhone(db, normalizedPhone)
   if (!patient) {
-    // Get base URL for signup link
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : "https://hospitalmanagementsystem-hazel.vercel.app"
-    const signupUrl = `${baseUrl}/auth/signup?role=patient`
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
     
     await sendTextMessage(
       phone,
-      `❌ We couldn't find your patient profile.\n\n📝 *Please register first to book appointments:*\n\n${signupUrl}\n\nOr contact reception:\nPhone: +91-XXXXXXXXXX\n\nAfter registration, you can book appointments via WhatsApp! 🏥`
+      `❌ We couldn't find your patient profile.\n\n📝 *Please register first to book appointments:*\n\n${baseUrl}\n\nOr contact reception:\nPhone: +91-XXXXXXXXXX\n\nAfter registration, you can book appointments via WhatsApp! 🏥`
     )
     return
   }
@@ -762,15 +811,11 @@ async function handleConfirmation(
   try {
     const patient = await findPatientByPhone(db, normalizedPhone)
     if (!patient) {
-      // Get base URL for signup link
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : "https://hospitalmanagementsystem-hazel.vercel.app"
-      const signupUrl = `${baseUrl}/auth/signup?role=patient`
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
       
       await sendTextMessage(
         phone,
-        `❌ Patient record not found.\n\n📝 *Please register first:*\n\n${signupUrl}\n\nOr contact reception for assistance.`
+        `❌ Patient record not found.\n\n📝 *Please register first:*\n\n${baseUrl}\n\nOr contact reception for assistance.`
       )
       await sessionRef.delete()
       return true
@@ -1021,13 +1066,23 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
     })
 
     // Create PDF URL
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : "https://your-domain.com"
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
     
     const pdfUrl = `${baseUrl}/api/appointments/${appointmentId}/confirmation-pdf`
     
+    // Verify PDF URL is accessible before sending
+    try {
+      const testResponse = await fetch(pdfUrl, { method: "HEAD" })
+      if (!testResponse.ok) {
+        throw new Error(`PDF URL not accessible: ${testResponse.status}`)
+      }
+    } catch (urlError: any) {
+      console.error("[Meta WhatsApp] PDF URL verification failed:", urlError)
+      // Still try to send, but log the issue
+    }
+    
     // Send PDF document via WhatsApp
+    console.log("[Meta WhatsApp] Attempting to send PDF:", { phone, pdfUrl, appointmentId })
     const docResult = await sendDocumentMessage(
       phone,
       pdfUrl,
@@ -1036,11 +1091,23 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
     )
 
     if (!docResult.success) {
-      console.error("[Meta WhatsApp] Failed to send PDF:", docResult.error)
+      console.error("[Meta WhatsApp] Failed to send PDF:", {
+        error: docResult.error,
+        errorCode: docResult.errorCode,
+        pdfUrl,
+        appointmentId,
+      })
       // Fallback: send message with link to download
       await sendTextMessage(
         phone,
-        `📄 Download your appointment confirmation PDF:\n${pdfUrl}\n\nThis link is valid for 7 days.`
+        `📄 *Download Your Appointment Confirmation*\n\nYour appointment confirmation PDF is ready:\n\n${pdfUrl}\n\nThis link is valid for 7 days.\n\nTap the link above to download your PDF.`
+      )
+    } else {
+      console.log("[Meta WhatsApp] PDF sent successfully:", { messageId: docResult.messageId, appointmentId })
+      // Send a follow-up message confirming PDF was sent
+      await sendTextMessage(
+        phone,
+        "📄 Your appointment confirmation PDF has been sent above. Please check your WhatsApp messages."
       )
     }
   } catch (error: any) {

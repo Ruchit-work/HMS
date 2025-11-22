@@ -147,6 +147,97 @@ export async function sendFlowMessage(
 }
 
 /**
+ * Send a button message with multiple buttons via Meta WhatsApp
+ * Meta WhatsApp supports up to 3 buttons
+ */
+export async function sendMultiButtonMessage(
+  to: string,
+  bodyText: string,
+  buttons: Array<{ id: string; title: string }>,
+  footerText?: string
+): Promise<SendMessageResponse> {
+  if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
+    return {
+      success: false,
+      error: "Meta WhatsApp credentials not configured",
+    }
+  }
+
+  const phoneNumber = formatPhoneNumber(to)
+  if (!phoneNumber) {
+    return {
+      success: false,
+      error: "Invalid phone number",
+    }
+  }
+
+  // Limit to 3 buttons (Meta WhatsApp maximum)
+  const buttonsToSend = buttons.slice(0, 3).map((btn) => ({
+    type: "reply" as const,
+    reply: {
+      id: btn.id,
+      title: btn.title,
+    },
+  }))
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: phoneNumber,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: {
+        text: bodyText,
+      },
+      footer: footerText
+        ? {
+            text: footerText,
+          }
+        : undefined,
+      action: {
+        buttons: buttonsToSend,
+      },
+    },
+  }
+
+  try {
+    const response = await fetch(
+      `${META_API_BASE_URL}/${META_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error("[Meta WhatsApp] Error sending multi-button:", data)
+      return {
+        success: false,
+        error: data.error?.message || "Failed to send button message",
+        errorCode: data.error?.code,
+      }
+    }
+
+    return {
+      success: true,
+      messageId: data.messages?.[0]?.id,
+    }
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Exception:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    }
+  }
+}
+
+/**
  * Send a button message via Meta WhatsApp
  */
 export async function sendButtonMessage(
