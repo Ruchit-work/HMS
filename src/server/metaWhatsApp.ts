@@ -237,6 +237,169 @@ export async function sendButtonMessage(
 }
 
 /**
+ * Send a list message via Meta WhatsApp
+ */
+export async function sendListMessage(
+  to: string,
+  bodyText: string,
+  buttonText: string,
+  sections: Array<{
+    title: string
+    rows: Array<{
+      id: string
+      title: string
+      description?: string
+    }>
+  }>,
+  footerText?: string
+): Promise<SendMessageResponse> {
+  if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
+    return {
+      success: false,
+      error: "Meta WhatsApp credentials not configured",
+    }
+  }
+
+  const phoneNumber = formatPhoneNumber(to)
+  if (!phoneNumber) {
+    return {
+      success: false,
+      error: "Invalid phone number",
+    }
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: phoneNumber,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: {
+        text: bodyText,
+      },
+      footer: footerText
+        ? {
+            text: footerText,
+          }
+        : undefined,
+      action: {
+        button: buttonText,
+        sections: sections,
+      },
+    },
+  }
+
+  try {
+    const response = await fetch(
+      `${META_API_BASE_URL}/${META_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error("[Meta WhatsApp] Error sending list:", data)
+      return {
+        success: false,
+        error: data.error?.message || "Failed to send list message",
+        errorCode: data.error?.code,
+      }
+    }
+
+    return {
+      success: true,
+      messageId: data.messages?.[0]?.id,
+    }
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Exception:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    }
+  }
+}
+
+/**
+ * Send a document via Meta WhatsApp
+ * Note: Meta requires the document to be hosted on a publicly accessible URL
+ */
+export async function sendDocumentMessage(
+  to: string,
+  documentUrl: string,
+  filename: string,
+  caption?: string
+): Promise<SendMessageResponse> {
+  if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
+    return {
+      success: false,
+      error: "Meta WhatsApp credentials not configured",
+    }
+  }
+
+  const phoneNumber = formatPhoneNumber(to)
+  if (!phoneNumber) {
+    return {
+      success: false,
+      error: "Invalid phone number",
+    }
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to: phoneNumber,
+    type: "document",
+    document: {
+      link: documentUrl,
+      filename: filename,
+      caption: caption,
+    },
+  }
+
+  try {
+    const response = await fetch(
+      `${META_API_BASE_URL}/${META_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      console.error("[Meta WhatsApp] Error sending document:", data)
+      return {
+        success: false,
+        error: data.error?.message || "Failed to send document",
+        errorCode: data.error?.code,
+      }
+    }
+
+    return {
+      success: true,
+      messageId: data.messages?.[0]?.id,
+    }
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Exception:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    }
+  }
+}
+
+/**
  * Send a text message via Meta WhatsApp
  */
 export async function sendTextMessage(
