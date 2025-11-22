@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
+import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, sendFlowMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime } from "@/utils/timeSlots"
 import { generateAppointmentConfirmationPDFBase64 } from "@/utils/appointmentConfirmationPDF"
@@ -46,11 +46,16 @@ export async function POST(req: Request) {
     const from = message.from
     const messageType = message.type
 
+    // Handle Flow completion (when user completes the Flow form)
+    if (messageType === "flow") {
+      return await handleFlowCompletion(value)
+    }
+
     // Handle button clicks
     if (messageType === "interactive" && message.interactive?.type === "button_reply") {
       const buttonId = message.interactive.button_reply?.id
       if (buttonId === "book_appointment") {
-        await startBookingConversation(from)
+        await startBookingWithFlow(from)
         return NextResponse.json({ success: true })
       }
       if (buttonId === "help_center") {
@@ -110,6 +115,7 @@ export async function POST(req: Request) {
     )
   }
 }
+
 
 async function handleGreeting(phone: string) {
   // Send greeting with two buttons
@@ -177,6 +183,241 @@ interface BookingSession {
   updatedAt: string
 }
 
+async function startBookingWithFlow(phone: string) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const flowId = process.env.META_WHATSAPP_FLOW_ID
+
+  // Check if patient exists
+  const patient = await findPatientByPhone(db, normalizedPhone)
+  if (!patient) {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
+    
+    await sendTextMessage(
+      phone,
+      `❌ We couldn't find your patient profile.\n\n📝 *Please register first to book appointments:*\n\n${baseUrl}\n\nOr contact reception:\nPhone: +91-XXXXXXXXXX\n\nAfter registration, you can book appointments via WhatsApp! 🏥`
+    )
+    return
+  }
+
+  // If Flow ID is configured, use Flow (better UI)
+  if (flowId) {
+    const flowToken = `token_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+    const flowResponse = await sendFlowMessage(
+      phone,
+      flowId,
+      flowToken,
+      "Book Your Appointment",
+      "Please fill out the form below to schedule your appointment with our doctors.",
+      "Harmony Medical Services"
+    )
+
+    if (flowResponse.success) {
+      console.log("[Meta WhatsApp] Flow sent successfully:", flowResponse.messageId)
+      return
+    } else {
+      console.error("[Meta WhatsApp] Failed to send Flow, falling back to text-based booking:", flowResponse.error)
+      // Fallback to text-based booking if Flow fails
+      await startBookingConversation(phone)
+      return
+    }
+  }
+
+  // No Flow ID configured, use text-based booking
+  await startBookingConversation(phone)
+}
+
+async function handleFlowCompletion(value: any): Promise<Response> {
+  const db = admin.firestore()
+  const message = value.messages?.[0]
+
+  if (!message?.flow) {
+    return NextResponse.json({ success: true })
+  }
+
+  const from = formatPhoneNumber(message.from)
+  const flowResponse = message.flow
+  const flowData = flowResponse.response?.data || {}
+
+  console.log("[Meta WhatsApp] Flow completion received:", {
+    from,
+    flowId: flowResponse.id,
+    flowToken: flowResponse.token,
+    flowData: JSON.stringify(flowData, null, 2),
+  })
+
+  // Extract data from Flow (adjust field names based on your Flow structure)
+  const flowDoctorId = flowData.doctor_id || flowData.doctor || ""
+  const appointmentDate = flowData.appointment_date || flowData.date || ""
+  const flowTimeSlot = flowData.appointment_time || flowData.time || flowData.time_slot || ""
+  const symptoms = flowData.symptom_category || flowData.symptoms || flowData.chief_complaint || ""
+  const paymentMethod = flowData.payment_option || flowData.payment_method || "cash"
+  const paymentType = flowData.payment_type || "full"
+
+  // Convert time slot format if needed
+  let appointmentTime = ""
+  if (flowTimeSlot) {
+    if (flowTimeSlot.includes(":")) {
+      appointmentTime = flowTimeSlot
+    } else if (flowTimeSlot.startsWith("slot_")) {
+      const timeStr = flowTimeSlot.replace("slot_", "")
+      if (timeStr.length === 4) {
+        appointmentTime = `${timeStr.substring(0, 2)}:${timeStr.substring(2, 4)}`
+      }
+    } else if (flowTimeSlot.length === 4) {
+      appointmentTime = `${flowTimeSlot.substring(0, 2)}:${flowTimeSlot.substring(2, 4)}`
+    } else {
+      appointmentTime = flowTimeSlot
+    }
+  }
+
+  if (!appointmentDate || !appointmentTime) {
+    await sendTextMessage(
+      from,
+      "❌ Missing appointment information. Please try booking again by clicking 'Book Appointment'."
+    )
+    return NextResponse.json({ success: true })
+  }
+
+  // Find patient
+  const patient = await findPatientByPhone(db, from)
+  if (!patient) {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
+    await sendTextMessage(
+      from,
+      `❌ Patient record not found.\n\n📝 *Please register first:*\n\n${baseUrl}\n\nOr contact reception for assistance.`
+    )
+    return NextResponse.json({ success: true })
+  }
+
+  // Check if user already has an appointment on this date
+  const existingAppointments = await db
+    .collection("appointments")
+    .where("patientId", "==", patient.id)
+    .where("appointmentDate", "==", appointmentDate)
+    .where("status", "in", ["pending", "confirmed"])
+    .get()
+
+  if (!existingAppointments.empty) {
+    const existingAppt = existingAppointments.docs[0].data()
+    const existingTime = existingAppt.appointmentTime || ""
+    await sendTextMessage(
+      from,
+      `❌ *Appointment Already Booked*\n\nYour appointment for ${appointmentDate}${existingTime ? ` at ${existingTime}` : ""} is already booked.\n\nPlease select a different date to book another appointment.`
+    )
+    return NextResponse.json({ success: true })
+  }
+
+  // Resolve doctor from Flow data
+  let doctorId = ""
+  if (flowDoctorId) {
+    // Try direct doc ID first
+    const directDoc = await db.collection("doctors").doc(flowDoctorId).get()
+    if (directDoc.exists) {
+      doctorId = directDoc.id
+    } else {
+      // Try to match by name
+      const doctorsSnapshot = await db.collection("doctors").where("status", "==", "active").limit(20).get()
+      const doctors = doctorsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+
+      const matchedDoctor = doctors.find((doc: any) => {
+        const fullName = `${doc.firstName || ""} ${doc.lastName || ""}`.toLowerCase().replace(/\s+/g, "_")
+        const flowIdLower = flowDoctorId.toLowerCase()
+        return flowIdLower.includes(fullName) || fullName.includes(flowIdLower.replace("doctor_", ""))
+      }) as any
+
+      if (matchedDoctor) {
+        doctorId = matchedDoctor.id
+      } else if (doctors.length > 0) {
+        // Fallback to first active doctor
+        doctorId = doctors[0].id
+      }
+    }
+  }
+
+  if (!doctorId) {
+    await sendTextMessage(
+      from,
+      "❌ Doctor not found. Please try booking again."
+    )
+    return NextResponse.json({ success: true })
+  }
+
+  const doctorDoc = await db.collection("doctors").doc(doctorId).get()
+  if (!doctorDoc.exists) {
+    await sendTextMessage(
+      from,
+      "❌ Doctor not found. Please try booking again."
+    )
+    return NextResponse.json({ success: true })
+  }
+
+  const doctorData = doctorDoc.data()!
+  const consultationFee = doctorData.consultationFee || 500
+  const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
+  const amountToPay = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
+  const normalizedTime = normalizeTime(appointmentTime)
+
+  // Create appointment
+  try {
+    const appointmentId = await createAppointment(
+      db,
+      patient,
+      { id: doctorId, data: doctorData },
+      {
+        symptomCategory: "",
+        chiefComplaint: symptoms || "General consultation",
+        doctorId: doctorId,
+        appointmentDate: appointmentDate,
+        appointmentTime: normalizedTime,
+        medicalHistory: "",
+        paymentOption: paymentMethod,
+        paymentStatus: "pending",
+      },
+      from
+    )
+
+    // Send confirmation
+    await sendBookingConfirmation(
+      from,
+      patient,
+      doctorData,
+      {
+        state: "confirming" as BookingState,
+        doctorId: doctorId,
+        appointmentDate: appointmentDate,
+        appointmentTime: normalizedTime,
+        symptoms: symptoms,
+        paymentMethod: paymentMethod as "card" | "upi" | "cash" | "wallet",
+        paymentType: paymentType as "full" | "partial",
+        consultationFee: consultationFee,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      appointmentId
+    )
+
+    return NextResponse.json({ success: true, appointmentId })
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Error creating appointment from Flow:", error)
+    if (error.message === "SLOT_ALREADY_BOOKED") {
+      await sendTextMessage(
+        from,
+        "❌ That slot was just booked by another patient. Please try booking again."
+      )
+    } else {
+      await sendTextMessage(
+        from,
+        "❌ Error creating appointment. Please contact reception at +91-XXXXXXXXXX"
+      )
+    }
+    return NextResponse.json({ success: false })
+  }
+}
+
 async function startBookingConversation(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
@@ -238,10 +479,18 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
   const session = sessionDoc.data() as BookingSession
   const trimmedText = text.trim().toLowerCase()
 
-  // Handle cancel/reset
-  if (trimmedText === "cancel" || trimmedText === "reset" || trimmedText === "start over") {
+  // Handle cancel/stop/abort - check for various cancel keywords
+  const cancelKeywords = [
+    "cancel", "stop", "abort", "quit", "exit", "no", "nevermind", 
+    "never mind", "don't", "dont", "skip", "end", "finish"
+  ]
+  
+  if (cancelKeywords.some(keyword => trimmedText === keyword || trimmedText.includes(keyword))) {
     await sessionRef.delete()
-    await sendTextMessage(phone, "Booking cancelled. Type 'Book' or click the button to start again.")
+    await sendTextMessage(
+      phone,
+      "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
+    )
     return true
   }
 
@@ -341,7 +590,29 @@ async function handleDateSelection(
       return true
     }
 
-    // Date is valid, proceed to time selection
+    // Check if user already has an appointment on this date
+    const patient = await findPatientByPhone(db, normalizedPhone)
+    if (patient) {
+      const existingAppointments = await db
+        .collection("appointments")
+        .where("patientId", "==", patient.id)
+        .where("appointmentDate", "==", selectedDate)
+        .where("status", "in", ["pending", "confirmed"])
+        .get()
+
+      if (!existingAppointments.empty) {
+        const existingAppt = existingAppointments.docs[0].data()
+        const existingTime = existingAppt.appointmentTime || ""
+        await sendTextMessage(
+          phone,
+          `❌ *Appointment Already Booked*\n\nYou already have an appointment booked for ${selectedDate}${existingTime ? ` at ${existingTime}` : ""}.\n\nPlease select a different date.`
+        )
+        await sendDatePicker(phone)
+        return true
+      }
+    }
+
+    // Date is valid and no existing appointment, proceed to time selection
     await sessionRef.update({
       state: "selecting_time",
       appointmentDate: selectedDate,
