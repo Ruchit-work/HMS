@@ -64,12 +64,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true })
       }
       
-      // Handle "choose date" button
-      if (buttonId === "date_choose_other") {
-        await handleChooseAnotherDate(from)
-        return NextResponse.json({ success: true })
-      }
-      
       // Handle date quick buttons (including "date_show_all")
       if (buttonId.startsWith("date_")) {
         await handleDateButtonClick(from, buttonId)
@@ -862,11 +856,11 @@ async function handleDoctorSelection(
       })
 
       const confirmMsg = language === "gujarati"
-        ? `✅ પસંદ કર્યું: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 કૃપા કરીને નીચેના બટનથી તારીખ પસંદ કરો.`
-        : `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 Tap the button below to pick a date.`
+        ? `✅ પસંદ કર્યું: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 ઉપલબ્ધ તારીખો નીચે દર્શાવવામાં આવી છે.`
+        : `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 Pick one of the available dates below.`
 
       await sendTextMessage(phone, confirmMsg)
-      await sendDateSelectionButton(phone, selectedDoctor.id, language)
+      await sendDatePicker(phone, selectedDoctor.id, language, false)
       return true
     }
   }
@@ -976,62 +970,6 @@ async function handleDateSelection(
   // No text provided, send date picker
   await sendDatePicker(phone, session.doctorId, language)
   return true
-}
-
-async function sendDateSelectionButton(phone: string, doctorId: string, language: Language = "english") {
-  const buttons = [
-    {
-      id: "date_choose_other",
-      title: language === "gujarati" ? "📅 તારીખ પસંદ કરો" : "📅 Select Date",
-    },
-  ]
-
-  const prompt = language === "gujarati"
-    ? "📅 *અપોઇન્ટમેન્ટ તારીખ પસંદ કરો*\n\n નીચેનો બટન ટેપ કરીને ઉપલબ્ધ તારીખો જુઓ."
-    : "📅 *Select Appointment Date*\n\nTap the button below to view all available dates."
-
-  const buttonResponse = await sendMultiButtonMessage(
-    phone,
-    prompt,
-    buttons,
-    "Harmony Medical Services"
-  )
-
-  if (!buttonResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send date selection button, falling back to date picker:", buttonResponse.error)
-    await sendDatePicker(phone, doctorId, language, false)
-  }
-}
-
-async function handleChooseAnotherDate(phone: string) {
-  const db = admin.firestore()
-  const normalizedPhone = formatPhoneNumber(phone)
-  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-  const sessionDoc = await sessionRef.get()
-  
-  if (!sessionDoc.exists) {
-    return
-  }
-  
-  const session = sessionDoc.data() as BookingSession
-  const language = session.language || "english"
-  
-  if (!session.doctorId) {
-    const errorMsg = language === "gujarati"
-      ? "❌ કૃપા કરીને પહેલા ડૉક્ટર પસંદ કરો."
-      : "❌ Please select a doctor first."
-    await sendTextMessage(phone, errorMsg)
-    await sendDoctorPicker(phone, language)
-    return
-  }
-  
-  await sessionRef.update({
-    state: "selecting_date",
-    updatedAt: new Date().toISOString(),
-  })
-
-  // Show full date list (radio-style) without quick buttons
-  await sendDatePicker(phone, session.doctorId, language, false)
 }
 
 async function sendDatePicker(phone: string, doctorId?: string, language: Language = "english", showButtons: boolean = true) {
@@ -1253,11 +1191,11 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     })
 
     const confirmMsg = language === "gujarati"
-      ? `✅ પસંદ કર્યું: ${doctorName}\n\n📅 તારીખ પસંદ કરવા માટે નીચેનો બટન ટેપ કરો:`
-      : `✅ Selected: ${doctorName}\n\n📅 Tap the button below to pick a date.`
+      ? `✅ પસંદ કર્યું: ${doctorName}\n\n📅 ઉપલબ્ધ તારીખોની સૂચિ નીચે દર્શાવવામાં આવી છે.`
+      : `✅ Selected: ${doctorName}\n\n📅 Pick one of the available dates below.`
 
     await sendTextMessage(phone, confirmMsg)
-    await sendDateSelectionButton(phone, selectedDoctorId, language)
+    await sendDatePicker(phone, selectedDoctorId, language, false)
     return
   }
 
