@@ -64,6 +64,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true })
       }
       
+      // Handle combined date+time buttons (datetime_combo_*)
+      if (buttonId.startsWith("datetime_combo_")) {
+        await handleDateTimeComboClick(from, buttonId)
+        return NextResponse.json({ success: true })
+      }
+      
       // Handle date quick buttons (including "date_show_all")
       if (buttonId.startsWith("date_")) {
         await handleDateButtonClick(from, buttonId)
@@ -843,11 +849,11 @@ async function handleDoctorSelection(
       })
 
       const confirmMsg = language === "gujarati"
-        ? `✅ પસંદ કર્યું: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 હવે તમારી પસંદીદા અપોઇન્ટમેન્ટ તારીખ પસંદ કરો:`
-        : `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 Now select your preferred appointment date:`
+        ? `✅ પસંદ કર્યું: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 હવે તમારી પસંદીદા તારીખ અને સમય પસંદ કરો:`
+        : `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 Now select your preferred date and time:`
 
       await sendTextMessage(phone, confirmMsg)
-      await sendDatePicker(phone, selectedDoctor.id, language)
+      await sendDateTimeComboPicker(phone, selectedDoctor.id, language)
       return true
     }
   }
@@ -949,6 +955,7 @@ async function handleDateSelection(
       updatedAt: new Date().toISOString(),
     })
 
+    // Show Morning/Afternoon buttons for the selected date
     await sendTimePicker(phone, session.doctorId!, selectedDate, language)
     return true
   }
@@ -956,6 +963,232 @@ async function handleDateSelection(
   // No text provided, send date picker
   await sendDatePicker(phone, session.doctorId, language)
   return true
+}
+
+async function sendDateTimeComboPicker(phone: string, doctorId: string, language: Language = "english") {
+  const db = admin.firestore()
+  const today = new Date().toISOString().split("T")[0]
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowStr = tomorrow.toISOString().split("T")[0]
+  
+  // Get doctor data to check blocked dates
+  let doctorData: any = null
+  if (doctorId) {
+    const doctorDoc = await db.collection("doctors").doc(doctorId).get()
+    if (doctorDoc.exists) {
+      doctorData = doctorDoc.data()!
+    }
+  }
+  
+  const quickButtons: Array<{ id: string; title: string }> = []
+  
+  // Check if today is available
+  const todayCheck = !doctorData || !checkDateAvailability(today, doctorData).isBlocked
+  if (todayCheck) {
+    quickButtons.push({
+      id: "datetime_combo_today_morning",
+      title: language === "gujarati" ? "🌅 આજે સવાર (9AM-1PM)" : "🌅 Today Morning (9AM-1PM)",
+    })
+    quickButtons.push({
+      id: "datetime_combo_today_afternoon",
+      title: language === "gujarati" ? "☀️ આજે બપોર (2PM-5PM)" : "☀️ Today Afternoon (2PM-5PM)",
+    })
+  }
+  
+  // Check if tomorrow is available
+  const tomorrowCheck = !doctorData || !checkDateAvailability(tomorrowStr, doctorData).isBlocked
+  if (tomorrowCheck && quickButtons.length < 3) {
+    quickButtons.push({
+      id: "datetime_combo_tomorrow_morning",
+      title: language === "gujarati" ? "🌅 આવતીકાલ સવાર (9AM-1PM)" : "🌅 Tomorrow Morning (9AM-1PM)",
+    })
+    if (quickButtons.length < 3) {
+      quickButtons.push({
+        id: "datetime_combo_tomorrow_afternoon",
+        title: language === "gujarati" ? "☀️ આવતીકાલ બપોર (2PM-5PM)" : "☀️ Tomorrow Afternoon (2PM-5PM)",
+      })
+    }
+  }
+  
+  // Add "Choose Another Date" button if we have space (max 3 buttons)
+  if (quickButtons.length < 3) {
+    quickButtons.push({
+      id: "datetime_combo_choose_date",
+      title: language === "gujarati" ? "📅 બીજી તારીખ પસંદ કરો" : "📅 Choose Another Date",
+    })
+  }
+  
+  if (quickButtons.length === 0) {
+    const noDatesMsg = language === "gujarati"
+      ? "❌ *કોઈ તારીખ ઉપલબ્ધ નથી*\n\nબધી તારીખો હાલમાં અવરોધિત અથવા ઉપલબ્ધ નથી.\n\nકૃપા કરીને સહાયતા માટે રિસેપ્શનને +91-XXXXXXXXXX પર કૉલ કરો."
+      : "❌ *No Available Dates*\n\nAll dates are currently blocked or unavailable.\n\nPlease contact reception at +91-XXXXXXXXXX for assistance."
+    await sendTextMessage(phone, noDatesMsg)
+    return
+  }
+  
+  const comboMsg = language === "gujarati"
+    ? "📅 *તારીખ અને સમય પસંદ કરો*\n\nઝડપી પસંદગી માટે નીચેના બટનમાંથી પસંદ કરો:\n• પહેલું ઉપલબ્ધ સ્લોટ આપમેળે પસંદ થશે"
+    : "📅 *Select Date & Time*\n\nChoose from quick options below:\n• First available slot will be auto-selected"
+  
+  const buttonResponse = await sendMultiButtonMessage(
+    phone,
+    comboMsg,
+    quickButtons,
+    "Harmony Medical Services"
+  )
+  
+  if (!buttonResponse.success) {
+    console.error("[Meta WhatsApp] Failed to send date+time combo buttons, falling back to date picker:", buttonResponse.error)
+    await sendDatePicker(phone, doctorId, language)
+  }
+}
+
+async function handleDateTimeComboClick(phone: string, buttonId: string) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const sessionDoc = await sessionRef.get()
+  
+  if (!sessionDoc.exists) {
+    return
+  }
+  
+  const session = sessionDoc.data() as BookingSession
+  const language = session.language || "english"
+  
+  // If "Choose Another Date" clicked, show date picker
+  if (buttonId === "datetime_combo_choose_date") {
+    await sendDatePicker(phone, session.doctorId, language)
+    return
+  }
+  
+  // Parse button ID: datetime_combo_today_morning, datetime_combo_today_afternoon, etc.
+  const parts = buttonId.replace("datetime_combo_", "").split("_")
+  const dateType = parts[0] // "today" or "tomorrow"
+  const timePeriod = parts[1] // "morning" or "afternoon"
+  
+  // Determine the date
+  let selectedDate = ""
+  if (dateType === "today") {
+    selectedDate = new Date().toISOString().split("T")[0]
+  } else if (dateType === "tomorrow") {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    selectedDate = tomorrow.toISOString().split("T")[0]
+  } else {
+    await sendDateTimeComboPicker(phone, session.doctorId!, language)
+    return
+  }
+  
+  // Validate date is not blocked
+  if (session.doctorId) {
+    const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
+    if (doctorDoc.exists) {
+      const doctorData = doctorDoc.data()!
+      const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
+      if (availabilityCheck.isBlocked) {
+        const errorMsg = language === "gujarati"
+          ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${availabilityCheck.reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
+          : `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
+        await sendTextMessage(phone, errorMsg)
+        await sendDateTimeComboPicker(phone, session.doctorId, language)
+        return
+      }
+    }
+  }
+  
+  // Get available slots for the selected time period
+  const timeSlots = generateTimeSlots()
+  let selectedSlots: string[] = []
+  
+  if (timePeriod === "morning") {
+    // Morning slots: 9:00 AM to 1:00 PM (09:00 to 13:00)
+    selectedSlots = timeSlots.filter(slot => {
+      const hour = parseInt(slot.split(":")[0])
+      return hour >= 9 && hour <= 13
+    })
+  } else if (timePeriod === "afternoon") {
+    // Afternoon slots: 2:00 PM to 5:00 PM (14:00 to 17:00)
+    selectedSlots = timeSlots.filter(slot => {
+      const hour = parseInt(slot.split(":")[0])
+      return hour >= 14 && hour <= 17
+    })
+  }
+  
+  if (selectedSlots.length === 0) {
+    const errorMsg = language === "gujarati"
+      ? "❌ આ સમય અવધિ માટે કોઈ સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજો સમય પસંદ કરો."
+      : "❌ No slots available for this time period. Please select another time."
+    await sendTextMessage(phone, errorMsg)
+    await sendDateTimeComboPicker(phone, session.doctorId!, language)
+    return
+  }
+  
+  // Check which slots are actually available (not booked) and find the FIRST available slot
+  let firstAvailableSlot: { id: string; title: string; time: string } | null = null
+  
+  // Sort slots in chronological order to find the first available
+  const sortedSlots = [...selectedSlots].sort((a, b) => {
+    const [hA, mA] = a.split(":").map(Number)
+    const [hB, mB] = b.split(":").map(Number)
+    return hA * 60 + mA - (hB * 60 + mB)
+  })
+  
+  for (const slot of sortedSlots) {
+    const normalizedTime = normalizeTime(slot)
+    const slotDocId = `${session.doctorId}_${selectedDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+    const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+    const slotDoc = await slotRef.get()
+    
+    if (!slotDoc.exists) {
+      // Found first available slot - book it automatically
+      firstAvailableSlot = {
+        id: `time_${slot}`,
+        title: slot,
+        time: normalizedTime,
+      }
+      break // Stop at first available slot
+    }
+  }
+  
+  if (!firstAvailableSlot) {
+    // No slots available in this time period
+    const errorMsg = language === "gujarati"
+      ? "❌ આ સમય અવધિ માટે બધા સ્લોટ બુક થયેલા છે. કૃપા કરીને બીજો સમય પસંદ કરો."
+      : "❌ All slots for this time period are booked. Please select another time."
+    await sendTextMessage(phone, errorMsg)
+    await sendDateTimeComboPicker(phone, session.doctorId!, language)
+    return
+  }
+  
+  // Automatically book the first available slot
+  await sessionRef.update({
+    state: "entering_symptoms",
+    appointmentDate: selectedDate,
+    appointmentTime: firstAvailableSlot.time,
+    updatedAt: new Date().toISOString(),
+  })
+  
+  // Format time for display (e.g., "09:15" -> "9:15 AM")
+  const [hours, minutes] = firstAvailableSlot.title.split(":").map(Number)
+  const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+  const ampm = hours >= 12 ? "PM" : "AM"
+  const displayTime = `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
+  
+  const dateDisplay = dateType === "today" 
+    ? (language === "gujarati" ? "આજે" : "Today")
+    : (language === "gujarati" ? "આવતીકાલ" : "Tomorrow")
+  
+  const periodName = timePeriod === "morning"
+    ? (language === "gujarati" ? "સવાર" : "Morning")
+    : (language === "gujarati" ? "બપોર" : "Afternoon")
+  
+  const symptomsMsg = language === "gujarati"
+    ? `✅ ${dateDisplay} ${periodName} માટે પહેલું ઉપલબ્ધ સ્લોટ પસંદ કર્યું: ${displayTime}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
+    : `✅ First available ${dateDisplay.toLowerCase()} ${periodName.toLowerCase()} slot selected: ${displayTime}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
+  
+  await sendTextMessage(phone, symptomsMsg)
 }
 
 async function sendDatePicker(phone: string, doctorId?: string, language: Language = "english", showButtons: boolean = true) {
@@ -1177,11 +1410,11 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     })
 
     const confirmMsg = language === "gujarati"
-      ? `✅ પસંદ કર્યું: ${doctorName}\n\n📅 હવે તમારી પસંદીદા અપોઇન્ટમેન્ટ તારીખ પસંદ કરો:`
-      : `✅ Selected: ${doctorName}\n\n📅 Now select your preferred appointment date:`
+      ? `✅ પસંદ કર્યું: ${doctorName}\n\n📅 હવે તમારી પસંદીદા તારીખ અને સમય પસંદ કરો:`
+      : `✅ Selected: ${doctorName}\n\n📅 Now select your preferred date and time:`
 
     await sendTextMessage(phone, confirmMsg)
-    await sendDatePicker(phone, selectedDoctorId, language)
+    await sendDateTimeComboPicker(phone, selectedDoctorId, language)
     return
   }
 
@@ -1412,11 +1645,25 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   const sessionDoc = await sessionRef.get()
 
   if (!sessionDoc.exists) {
+    console.error("[Meta WhatsApp] Session not found for time button click:", normalizedPhone)
     return
   }
 
   const session = sessionDoc.data() as BookingSession
   const language = session.language || "english"
+
+  // Validate required session data
+  if (!session.doctorId || !session.appointmentDate) {
+    console.error("[Meta WhatsApp] Missing doctorId or appointmentDate in session:", {
+      doctorId: session.doctorId,
+      appointmentDate: session.appointmentDate,
+    })
+    const errorMsg = language === "gujarati"
+      ? "❌ સત્ર મળ્યું નથી. કૃપા કરીને ફરીથી પ્રયાસ કરો."
+      : "❌ Session not found. Please try again."
+    await sendTextMessage(phone, errorMsg)
+    return
+  }
 
   // Note: "See All Times" button has been removed - only Morning/Afternoon buttons are shown
 
@@ -1430,20 +1677,27 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       const hour = parseInt(slot.split(":")[0])
       return hour >= 9 && hour <= 13
     })
+    console.log("[Meta WhatsApp] Morning button clicked, found slots:", selectedSlots.length)
   } else if (buttonId === "time_quick_afternoon") {
     // Afternoon slots: 2:00 PM to 5:00 PM (14:00 to 17:00)
     selectedSlots = timeSlots.filter(slot => {
       const hour = parseInt(slot.split(":")[0])
       return hour >= 14 && hour <= 17
     })
+    console.log("[Meta WhatsApp] Afternoon button clicked, found slots:", selectedSlots.length)
+  } else {
+    console.error("[Meta WhatsApp] Unknown button ID:", buttonId)
+    await sendTimePicker(phone, session.doctorId, session.appointmentDate, language)
+    return
   }
 
   if (selectedSlots.length === 0) {
+    console.error("[Meta WhatsApp] No slots found for time period:", buttonId)
     const errorMsg = language === "gujarati"
       ? "❌ આ સમય અવધિ માટે કોઈ સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજો સમય પસંદ કરો."
       : "❌ No slots available for this time period. Please select another time."
     await sendTextMessage(phone, errorMsg)
-    await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
+    await sendTimePicker(phone, session.doctorId, session.appointmentDate, language)
     return
   }
 
@@ -1457,8 +1711,15 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     return hA * 60 + mA - (hB * 60 + mB)
   })
   
+  console.log("[Meta WhatsApp] Checking availability for", sortedSlots.length, "slots on", session.appointmentDate)
+  
   for (const slot of sortedSlots) {
     const normalizedTime = normalizeTime(slot)
+    if (!normalizedTime) {
+      console.warn("[Meta WhatsApp] Failed to normalize time slot:", slot)
+      continue
+    }
+    
     const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
     const slotRef = db.collection("appointmentSlots").doc(slotDocId)
     const slotDoc = await slotRef.get()
@@ -1470,26 +1731,40 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
         title: slot,
         time: normalizedTime,
       }
+      console.log("[Meta WhatsApp] ✅ Found first available slot:", firstAvailableSlot.title, "->", firstAvailableSlot.time)
       break // Stop at first available slot
+    } else {
+      console.log("[Meta WhatsApp] Slot already booked:", slot, "->", normalizedTime)
     }
   }
 
   if (!firstAvailableSlot) {
     // No slots available in this time period
+    console.error("[Meta WhatsApp] ❌ All slots booked for period:", buttonId, "on", session.appointmentDate)
     const errorMsg = language === "gujarati"
       ? "❌ આ સમય અવધિ માટે બધા સ્લોટ બુક થયેલા છે. કૃપા કરીને બીજો સમય પસંદ કરો."
       : "❌ All slots for this time period are booked. Please select another time."
     await sendTextMessage(phone, errorMsg)
-    await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
+    await sendTimePicker(phone, session.doctorId, session.appointmentDate, language)
     return
   }
 
   // Automatically book the first available slot
-  await sessionRef.update({
-    state: "entering_symptoms",
-    appointmentTime: firstAvailableSlot.time,
-    updatedAt: new Date().toISOString(),
-  })
+  try {
+    await sessionRef.update({
+      state: "entering_symptoms",
+      appointmentTime: firstAvailableSlot.time,
+      updatedAt: new Date().toISOString(),
+    })
+    console.log("[Meta WhatsApp] ✅ Session updated with time slot:", firstAvailableSlot.time)
+  } catch (error) {
+    console.error("[Meta WhatsApp] ❌ Failed to update session:", error)
+    const errorMsg = language === "gujarati"
+      ? "❌ ભૂલ: સત્ર અપડેટ કરી શકાયું નથી. કૃપા કરીને ફરીથી પ્રયાસ કરો."
+      : "❌ Error: Failed to update session. Please try again."
+    await sendTextMessage(phone, errorMsg)
+    return
+  }
 
   const periodName = buttonId === "time_quick_morning" 
     ? (language === "gujarati" ? "સવાર" : "Morning")
@@ -1497,6 +1772,15 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   
   // Format time for display (e.g., "09:15" -> "9:15 AM")
   const [hours, minutes] = firstAvailableSlot.title.split(":").map(Number)
+  if (isNaN(hours) || isNaN(minutes)) {
+    console.error("[Meta WhatsApp] Invalid time format:", firstAvailableSlot.title)
+    const errorMsg = language === "gujarati"
+      ? "❌ ભૂલ: અમાન્ય સમય ફોર્મેટ."
+      : "❌ Error: Invalid time format."
+    await sendTextMessage(phone, errorMsg)
+    return
+  }
+  
   const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
   const ampm = hours >= 12 ? "PM" : "AM"
   const displayTime = `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
@@ -1505,7 +1789,12 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     ? `✅ ${periodName} માટે પહેલું ઉપલબ્ધ સ્લોટ પસંદ કર્યું: ${displayTime}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
     : `✅ First available ${periodName.toLowerCase()} slot selected: ${displayTime}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
   
-  await sendTextMessage(phone, symptomsMsg)
+  const msgResult = await sendTextMessage(phone, symptomsMsg)
+  if (!msgResult.success) {
+    console.error("[Meta WhatsApp] Failed to send confirmation message:", msgResult.error)
+  } else {
+    console.log("[Meta WhatsApp] ✅ Confirmation message sent successfully")
+  }
 }
 
 async function sendTimePicker(phone: string, doctorId: string, appointmentDate: string, language: Language = "english", showButtons: boolean = true) {
@@ -1575,6 +1864,13 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
         ? "🕐 *સમય પસંદ કરો*\n\nઝડપી પસંદગી માટે નીચેના બટનમાંથી પસંદ કરો:\n• સવાર (Morning) - પહેલું ઉપલબ્ધ સ્લોટ આપમેળે પસંદ થશે\n• બપોર (Afternoon) - પહેલું ઉપલબ્ધ સ્લોટ આપમેળે પસંદ થશે"
         : "🕐 *Select Appointment Time*\n\nChoose from quick options below:\n• Morning - First available slot will be auto-selected\n• Afternoon - First available slot will be auto-selected"
 
+      console.log("[Meta WhatsApp] Sending time period buttons:", {
+        phone,
+        buttonCount: quickButtons.length,
+        buttons: quickButtons.map(b => b.id),
+        date: appointmentDate,
+      })
+
       const buttonResponse = await sendMultiButtonMessage(
         phone,
         timeMsg,
@@ -1583,10 +1879,30 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
       )
 
       if (buttonResponse.success) {
+        console.log("[Meta WhatsApp] ✅ Time period buttons sent successfully")
         return // Buttons sent successfully
       } else {
-        console.error("[Meta WhatsApp] Failed to send time buttons, falling back to list:", buttonResponse.error)
-        // Fallback to list if buttons fail
+        console.error("[Meta WhatsApp] ❌ Failed to send time buttons:", {
+          error: buttonResponse.error,
+          errorCode: buttonResponse.errorCode,
+          phone,
+        })
+        // Retry once before falling back to list
+        console.log("[Meta WhatsApp] Retrying time buttons...")
+        const retryResponse = await sendMultiButtonMessage(
+          phone,
+          language === "gujarati" ? "સમય પસંદ કરો:" : "Select Time:",
+          quickButtons,
+          "HMS"
+        )
+        
+        if (retryResponse.success) {
+          console.log("[Meta WhatsApp] ✅ Time buttons sent successfully on retry")
+          return
+        } else {
+          console.error("[Meta WhatsApp] ❌ Retry also failed, falling back to list:", retryResponse.error)
+          // Fallback to list if buttons fail
+        }
       }
     }
   }
