@@ -1502,8 +1502,42 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
   })
 
   // WhatsApp list messages have a maximum of 10 rows TOTAL across all sections
-  // Limit to first 10 available slots
-  const slotsToShow = sortedSlots.slice(0, 10)
+  // Distribute slots between morning (9 AM - 1 PM) and afternoon (2 PM - 5 PM) parts
+  // Separate slots into morning and afternoon
+  const morningSlots = sortedSlots.filter(slot => {
+    const hour = parseInt(slot.title.split(":")[0])
+    return hour >= 9 && hour <= 13 // 9 AM to 1 PM
+  })
+  
+  const afternoonSlots = sortedSlots.filter(slot => {
+    const hour = parseInt(slot.title.split(":")[0])
+    return hour >= 14 && hour <= 17 // 2 PM to 5 PM
+  })
+  
+  // Distribute 10 slots between both parts (5 from morning, 5 from afternoon)
+  // If one part has fewer slots, show more from the other part
+  const maxSlots = 10
+  let slotsToShow: typeof sortedSlots = []
+  
+  if (morningSlots.length > 0 && afternoonSlots.length > 0) {
+    // Both parts have slots - distribute evenly
+    const morningCount = Math.min(morningSlots.length, Math.ceil(maxSlots / 2))
+    const afternoonCount = Math.min(afternoonSlots.length, maxSlots - morningCount)
+    
+    slotsToShow = [
+      ...morningSlots.slice(0, morningCount),
+      ...afternoonSlots.slice(0, afternoonCount)
+    ]
+  } else if (morningSlots.length > 0) {
+    // Only morning slots available
+    slotsToShow = morningSlots.slice(0, maxSlots)
+  } else if (afternoonSlots.length > 0) {
+    // Only afternoon slots available
+    slotsToShow = afternoonSlots.slice(0, maxSlots)
+  } else {
+    // Fallback: just take first 10
+    slotsToShow = sortedSlots.slice(0, maxSlots)
+  }
 
   // Format slots for list message - match doctor picker format exactly
   // Ensure title is max 24 chars, description max 72 chars
@@ -1970,12 +2004,27 @@ async function handleConfirmation(
 
 function generateTimeSlots(): string[] {
   const slots: string[] = []
-  for (let hour = 9; hour <= 17; hour++) {
+  
+  // First part: 9:00 AM to 1:00 PM (09:00 to 13:00)
+  // Generate slots: 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00
+  for (let hour = 9; hour <= 13; hour++) {
+    slots.push(`${hour.toString().padStart(2, "0")}:00`)
+    if (hour < 13) { // Don't add :30 for 13:00 since 13:30 is lunch
+      slots.push(`${hour.toString().padStart(2, "0")}:30`)
+    }
+  }
+  
+  // Lunch break: 1:00 PM to 2:00 PM (13:00 to 14:00) - no slots
+  
+  // Second part: 2:00 PM to 5:00 PM (14:00 to 17:00)
+  // Generate slots: 14:00, 14:30, 15:00, 15:30, 16:00, 16:30, 17:00
+  for (let hour = 14; hour <= 17; hour++) {
     slots.push(`${hour.toString().padStart(2, "0")}:00`)
     if (hour < 17) {
       slots.push(`${hour.toString().padStart(2, "0")}:30`)
     }
   }
+  
   return slots
 }
 
