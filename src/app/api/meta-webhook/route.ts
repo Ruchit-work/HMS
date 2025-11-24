@@ -1482,8 +1482,8 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     if (!slotDoc.exists) {
       availableSlots.push({
         id: `time_${slot}`,
-        title: slot, // Just the time like "09:00", "09:30", etc.
-        description: "", // Empty for cleaner look in interactive list (radio button style)
+        title: slot, // Time in 24-hour format like "09:00", "09:30", etc.
+        description: "Available", // Add description to match doctor picker format
       })
     }
   }
@@ -1497,66 +1497,8 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     return
   }
 
-  // If showButtons is true, send quick action buttons first
-  if (showButtons && availableSlots.length > 0) {
-    // Group slots into time periods
-    const morningSlots = availableSlots.filter(s => {
-      const hour = parseInt(s.title.split(":")[0])
-      return hour >= 9 && hour < 12
-    })
-    
-    const afternoonSlots = availableSlots.filter(s => {
-      const hour = parseInt(s.title.split(":")[0])
-      return hour >= 12 && hour < 17
-    })
-
-    const quickButtons: Array<{ id: string; title: string }> = []
-    
-    // Add Morning button if slots available
-    if (morningSlots.length > 0) {
-      quickButtons.push({
-        id: "time_quick_morning",
-        title: language === "gujarati" ? "🌅 સવાર (9AM-12PM)" : "🌅 Morning (9AM-12PM)",
-      })
-    }
-    
-    // Add Afternoon button if slots available
-    if (afternoonSlots.length > 0 && quickButtons.length < 2) {
-      quickButtons.push({
-        id: "time_quick_afternoon",
-        title: language === "gujarati" ? "☀️ બપોર (12PM-5PM)" : "☀️ Afternoon (12PM-5PM)",
-      })
-    }
-    
-    // Add "See All Times" button ONLY if we have exactly 2 quick buttons (Morning + Afternoon)
-    // If only one period is available, don't show "See All" button
-    if (quickButtons.length === 2) {
-      quickButtons.push({
-        id: "time_show_all",
-        title: language === "gujarati" ? "📋 બધા સમય (See All)" : "📋 See All Times",
-      })
-    }
-
-    if (quickButtons.length > 0) {
-      const timeMsg = language === "gujarati"
-        ? "🕐 *સમય પસંદ કરો*\n\nઝડપી પસંદગી માટે નીચેના બટનમાંથી પસંદ કરો અથવા બધા સમય જોવા માટે 'See All Times' પસંદ કરો:"
-        : "🕐 *Select Appointment Time*\n\nChoose from quick options below or tap 'See All Times' to view all available time slots:"
-
-      const buttonResponse = await sendMultiButtonMessage(
-        phone,
-        timeMsg,
-        quickButtons,
-        "Harmony Medical Services"
-      )
-
-      if (buttonResponse.success) {
-        return // Buttons sent successfully
-      } else {
-        console.error("[Meta WhatsApp] Failed to send time buttons, falling back to list:", buttonResponse.error)
-        // Fallback to list
-      }
-    }
-  }
+  // Skip quick buttons - always use interactive list like doctor selection
+  // This provides a better UX matching the doctor picker
 
   // Format time slots for interactive list message (radio button style)
   // Sort slots chronologically for better UX
@@ -1566,12 +1508,34 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     return hA * 60 + mA - (hB * 60 + mB)
   })
 
-  // Format slots for list message - just the time, clean and simple
-  const formattedSlots = sortedSlots.map(slot => ({
-    id: slot.id,
-    title: slot.title, // Just the time like "09:00", "09:30", etc.
-    description: "", // Empty description for cleaner look
-  }))
+  // Format slots for list message - match doctor picker format exactly
+  // Ensure title is max 24 chars, description max 72 chars
+  const formattedSlots = sortedSlots.map(slot => {
+    const timeStr = slot.title // "09:00" format
+    // Format time for title display (09:00 -> 9:00 AM)
+    const [hours, minutes] = timeStr.split(":").map(Number)
+    const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+    const ampm = hours >= 12 ? "PM" : "AM"
+    const displayTime = `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
+    
+    // Title: just the time (max 24 chars) - this will show as "9:00 AM" format
+    let title = displayTime
+    if (title.length > 24) {
+      title = title.substring(0, 21) + "..."
+    }
+    
+    // Description: "Available" to match doctor format (has specialization as description)
+    let description = language === "gujarati" ? "ઉપલબ્ધ" : "Available"
+    if (description.length > 72) {
+      description = description.substring(0, 69) + "..."
+    }
+    
+    return {
+      id: slot.id, // Keep "time_09:00" format for backend
+      title: title, // Display format like "9:00 AM"
+      description: description, // Simple description to match doctor format
+    }
+  })
 
   // Split into sections if more than 10 (WhatsApp list limit is 10 rows per section)
   const sections = []
@@ -1593,9 +1557,16 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     ? "🕐 *સમય પસંદ કરો*\n\nતમારો પસંદીદા સમય પસંદ કરો:"
     : "🕐 *Select Time*\n\nChoose your preferred time slot:"
 
-  // Button text max 20 chars
+  // Button text max 20 chars - keep it short and simple
   const buttonText = language === "gujarati" ? "સમય પસંદ કરો" : "Select Time"
   const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 20) : buttonText
+
+  console.log("[Meta WhatsApp] Sending time slot list message:", {
+    phone,
+    slotCount: formattedSlots.length,
+    sectionCount: sections.length,
+    buttonText: truncatedButtonText,
+  })
 
   const listResponse = await sendListMessage(
     phone,
@@ -1618,7 +1589,7 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     const simplifiedSlots = formattedSlots.map(slot => ({
       id: slot.id,
       title: slot.title.length > 24 ? slot.title.substring(0, 21) + "..." : slot.title,
-      description: "",
+      description: "Available", // Keep description to avoid WhatsApp rejection
     }))
 
     const simplifiedSections = []
@@ -1638,18 +1609,15 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     )
 
     if (!retryResponse.success) {
-      console.error("[Meta WhatsApp] Retry also failed:", retryResponse.error)
-      // Only fallback to text if both attempts fail
-      const timeListMsg = language === "gujarati" ? "🕐 *સમય પસંદ કરો:*\n\n" : "🕐 *Select Time:*\n\n"
-      let timeList = timeListMsg
-      sortedSlots.forEach((slot, index) => {
-        timeList += `${index + 1}. ${slot.title}\n`
+      console.error("[Meta WhatsApp] Both attempts failed to send time slot list:", {
+        originalError: listResponse.error,
+        retryError: retryResponse.error,
       })
-      const promptMsg = language === "gujarati"
-        ? "\nકૃપા કરીને તમારા પસંદીદા સમય સ્લોટનો નંબર રિપ્લાય કરો."
-        : "\nPlease reply with the number of your preferred time slot."
-      timeList += promptMsg
-      await sendTextMessage(phone, timeList)
+      // Send error message instead of text fallback
+      const errorMsg = language === "gujarati"
+        ? "❌ ક્ષમા કરો, અમે સમય સ્લોટ પસંદ કરવા માટે સૂચિ બતાવી શક્યા નથી. કૃપા કરીને પાછળથી પ્રયાસ કરો અથવા રિસેપ્શનનો સંપર્ક કરો."
+        : "❌ Sorry, we couldn't display the time slot selection. Please try again later or contact reception."
+      await sendTextMessage(phone, errorMsg)
     } else {
       console.log("[Meta WhatsApp] ✅ Time slot list sent successfully on retry")
     }
