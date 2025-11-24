@@ -64,6 +64,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true })
       }
       
+      if (buttonId === "booking_confirm" || buttonId === "booking_cancel") {
+        await handleConfirmationButtonClick(from, buttonId === "booking_confirm" ? "confirm" : "cancel")
+        return NextResponse.json({ success: true })
+      }
+
       // Handle date quick buttons (including "date_show_all")
       if (buttonId.startsWith("date_")) {
         await handleDateButtonClick(from, buttonId)
@@ -195,6 +200,10 @@ const translations: Translations = {
     english: "🌐 *Select Language*\n\nPlease choose your preferred language:",
     gujarati: "🌐 *ભાષા પસંદ કરો*\n\nકૃપા કરીને તમારી પ્રિય ભાષા પસંદ કરો:",
   },
+  registrationFullName: {
+    english: "🆕 *Create Patient Profile*\n\nPlease enter your full name (e.g., John Doe).",
+    gujarati: "🆕 *દર્દી પ્રોફાઇલ બનાવો*\n\nકૃપા કરીને તમારું સંપૂર્ણ નામ દાખલ કરો (ઉદાહરણ: રાજેશ પટેલ).",
+  },
   doctorSelection: {
     english: "👨‍⚕️ *Select a Doctor*\n\nChoose your preferred doctor:",
     gujarati: "👨‍⚕️ *ડૉક્ટર પસંદ કરો*\n\nતમારો પસંદીદા ડૉક્ટર પસંદ કરો:",
@@ -241,12 +250,299 @@ function formatTranslation(template: string, vars: Record<string, string | numbe
   return result
 }
 
+function capitalizeName(value: string): string {
+  if (!value) return ""
+  return value
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
+}
+
+async function ensureDefaultDoctor(
+  db: FirebaseFirestore.Firestore,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  session: BookingSession | null,
+  phone: string,
+  language: Language
+) {
+  if (session?.doctorId) {
+    const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
+    if (doctorDoc.exists) {
+      return { id: doctorDoc.id, data: doctorDoc.data()! }
+    }
+  }
+
+  const doctorsSnapshot = await db.collection("doctors").where("status", "==", "active").limit(1).get()
+  if (doctorsSnapshot.empty) {
+    const msg =
+      language === "gujarati"
+        ? "❌ હાલમાં કોઈ ડૉક્ટર ઉપલબ્ધ નથી. કૃપા કરીને થોડા સમય પછી ફરી પ્રયત્ન કરો અથવા રિસેપ્શનનો સંપર્ક કરો."
+        : "❌ No doctors are available right now. Please try again later or contact reception."
+    await sendTextMessage(phone, msg)
+    return null
+  }
+
+  const doctorDoc = doctorsSnapshot.docs[0]
+  await sessionRef.update({
+    doctorId: doctorDoc.id,
+    updatedAt: new Date().toISOString(),
+  })
+
+  return { id: doctorDoc.id, data: doctorDoc.data()! }
+}
+
+async function moveToDateSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  language: Language
+) {
+  const sessionSnap = await sessionRef.get()
+  const session = sessionSnap.exists ? (sessionSnap.data() as BookingSession) : null
+  const doctorInfo = await ensureDefaultDoctor(db, sessionRef, session, phone, language)
+  if (!doctorInfo) {
+    return
+  }
+
+  await sessionRef.update({
+    state: "selecting_date",
+    updatedAt: new Date().toISOString(),
+  })
+
+  const introMsg =
+    language === "gujarati"
+      ? "📅 ચાલો તમારી મુલાકાત માટે તારીખ પસંદ કરીએ. ઉપલબ્ધ તારીખો નીચે બતાવવામાં આવશે."
+      : "📅 Let’s pick your appointment date. Available dates will be shown next."
+  await sendTextMessage(phone, introMsg)
+
+  await sendDatePicker(phone, doctorInfo.id, language, true)
+}
+
+async function sendConfirmationButtons(
+  phone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  session: BookingSession
+) {
+  const db = admin.firestore()
+  const language = session.language || "english"
+
+  if (!session.appointmentDate || !session.appointmentTime) {
+    const msg =
+      language === "gujarati"
+        ? "❌ તારીખ અથવા સમય મળ્યો નથી. કૃપા કરીને ફરીથી તારીખ પસંદ કરો."
+        : "❌ Missing date or time. Please select the date again."
+    await sendTextMessage(phone, msg)
+    await sessionRef.update({ state: "selecting_date" })
+    return
+  }
+
+  const doctorInfo = await ensureDefaultDoctor(db, sessionRef, session, phone, language)
+  if (!doctorInfo) {
+    return
+  }
+
+  const consultationFee = doctorInfo.data.consultationFee || 500
+  await sessionRef.update({
+    state: "confirming",
+    consultationFee,
+    paymentMethod: "cash",
+    paymentType: "full",
+    paymentAmount: 0,
+    remainingAmount: consultationFee,
+    updatedAt: new Date().toISOString(),
+  })
+
+  const dateDisplay = new Date(session.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+  const [hours, minutes] = session.appointmentTime.split(":").map(Number)
+  const timeDisplay = new Date(2000, 0, 1, hours, minutes).toLocaleTimeString("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+
+  const doctorName = `${doctorInfo.data.firstName || ""} ${doctorInfo.data.lastName || ""}`.trim()
+
+  const message =
+    language === "gujarati"
+      ? `📋 *અપોઇન્ટમેન્ટની વિગતો*\n\n📅 તારીખ: ${dateDisplay}\n🕒 સમય: ${timeDisplay}\n👨‍⚕️ ડૉક્ટર: ${doctorName || "ઉપલબ્ધ ડૉક્ટર"}\n\nકૃપા કરીને ખાતરી કરો.`
+      : `📋 *Appointment Details*\n\n📅 Date: ${dateDisplay}\n🕒 Time: ${timeDisplay}\n👨‍⚕️ Doctor: ${doctorName || "Available Doctor"}\n\nPlease confirm to continue.`
+
+  const buttons = [
+    {
+      id: "booking_confirm",
+      title: language === "gujarati" ? "✅ ખાતરી કરો" : "✅ Confirm",
+    },
+    {
+      id: "booking_cancel",
+      title: language === "gujarati" ? "❌ રદ કરો" : "❌ Cancel",
+    },
+  ]
+
+  const buttonResponse = await sendMultiButtonMessage(phone, message, buttons, "Harmony Medical Services")
+
+  if (!buttonResponse.success) {
+    console.error("[Meta WhatsApp] Failed to send confirmation buttons:", buttonResponse.error)
+    const fallback =
+      language === "gujarati"
+        ? `${message}\n\nકૃપા કરીને "confirm" અથવા "cancel" લખી જવાબ આપો.`
+        : `${message}\n\nPlease reply with "confirm" or "cancel".`
+    await sendTextMessage(phone, fallback)
+  }
+}
+
+async function processBookingConfirmation(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  session: BookingSession,
+  action: "confirm" | "cancel"
+) {
+  const language = session.language || "english"
+
+  if (action === "cancel") {
+    await sessionRef.delete()
+    const msg =
+      language === "gujarati"
+        ? "❌ બુકિંગ રદ કરાયું. તમે જ્યારે ઇચ્છો ત્યારે ફરીથી 'Book Appointment' લખીને શરૂ કરી શકો છો."
+        : "❌ Booking cancelled. You can start again anytime by typing 'Book Appointment'."
+    await sendTextMessage(phone, msg)
+    return
+  }
+
+  if (!session.appointmentDate || !session.appointmentTime) {
+    const errorMsg =
+      language === "gujarati"
+        ? "❌ તારીખ અથવા સમય મળ્યો નથી. કૃપા કરીને ફરીથી શરૂઆત કરો."
+        : "❌ Missing date or time. Please start over."
+    await sendTextMessage(phone, errorMsg)
+    await sessionRef.delete()
+    return
+  }
+
+  const patient = await findPatientByPhone(db, normalizedPhone)
+  if (!patient) {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
+    const msg =
+      language === "gujarati"
+        ? `❌ દર્દી રેકોર્ડ મળ્યો નથી.\n\n📝 કૃપા કરીને પહેલા નોંધણી કરો:\n${baseUrl}`
+        : `❌ Patient record not found.\n\n📝 Please register first:\n${baseUrl}`
+    await sendTextMessage(phone, msg)
+    await sessionRef.delete()
+    return
+  }
+
+  const doctorInfo = await ensureDefaultDoctor(db, sessionRef, session, phone, language)
+  if (!doctorInfo) {
+    await sessionRef.delete()
+    return
+  }
+
+  const doctorData = doctorInfo.data
+  const consultationFee = session.consultationFee || doctorData.consultationFee || 500
+  const paymentMethod = session.paymentMethod || "cash"
+  const paymentAmount = session.paymentAmount ?? (paymentMethod === "cash" ? 0 : consultationFee)
+  const remainingAmount =
+    session.remainingAmount ?? (paymentMethod === "cash" ? consultationFee : Math.max(consultationFee - paymentAmount, 0))
+  const paymentStatus: "pending" | "paid" = paymentMethod === "cash" ? "pending" : remainingAmount <= 0 ? "paid" : "pending"
+
+  try {
+    const appointmentId = await createAppointment(
+      db,
+      patient,
+      { id: doctorInfo.id, data: doctorData },
+      {
+        symptomCategory: "",
+        chiefComplaint: "General consultation",
+        doctorId: doctorInfo.id,
+        appointmentDate: session.appointmentDate,
+        appointmentTime: session.appointmentTime,
+        medicalHistory: "",
+        paymentOption: paymentMethod,
+        paymentStatus,
+        paymentType: "full",
+        consultationFee,
+        paymentAmount,
+        remainingAmount,
+      },
+      normalizedPhone
+    )
+
+    await sendBookingConfirmation(
+      normalizedPhone,
+      patient,
+      doctorData,
+      {
+        state: "confirming",
+        doctorId: doctorInfo.id,
+        appointmentDate: session.appointmentDate,
+        appointmentTime: session.appointmentTime,
+        paymentMethod,
+        paymentType: "full",
+        consultationFee,
+        paymentAmount,
+        remainingAmount,
+      } as BookingSession,
+      appointmentId
+    )
+
+    await sessionRef.delete()
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Error creating appointment:", error)
+    if (error.message === "SLOT_ALREADY_BOOKED") {
+      const msg =
+        language === "gujarati"
+          ? "❌ આ સમય સ્લોટ હમણાં જ બુક થયો છે. કૃપા કરીને બીજો સમય પસંદ કરો."
+          : "❌ That slot was just booked. Please choose another time."
+      await sendTextMessage(phone, msg)
+      await sessionRef.update({ state: "selecting_time" })
+    } else {
+      await sendTextMessage(
+        phone,
+        language === "gujarati"
+          ? "❌ બુકિંગ દરમિયાન ભૂલ આવી. કૃપા કરીને થોડા સમય પછી ફરી પ્રયાસ કરો."
+          : "❌ We hit an error while booking. Please try again shortly."
+      )
+      await sessionRef.delete()
+    }
+  }
+}
+
+async function handleConfirmationButtonClick(phone: string, action: "confirm" | "cancel") {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const sessionSnap = await sessionRef.get()
+
+  if (!sessionSnap.exists) {
+    await sendTextMessage(
+      phone,
+      action === "confirm"
+        ? "❌ Session expired. Please start booking again."
+        : "✅ Already cancelled. You can start a new booking anytime."
+    )
+    return
+  }
+
+  const session = sessionSnap.data() as BookingSession
+  await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, action)
+}
+
+
 // Booking conversation states
 type BookingState = "idle" | "selecting_language" | "selecting_doctor" | "selecting_date" | "selecting_time" | "entering_symptoms" | "selecting_payment" | "confirming"
 
 interface BookingSession {
   state: BookingState
   language?: "gujarati" | "english" // Selected language for the booking session
+  needsRegistration?: boolean
   doctorId?: string
   appointmentDate?: string
   appointmentTime?: string
@@ -256,6 +552,13 @@ interface BookingSession {
   consultationFee?: number
   paymentAmount?: number
   remainingAmount?: number
+  registrationData?: {
+    firstName?: string
+    lastName?: string
+    email?: string
+    dateOfBirth?: string
+    gender?: string
+  }
   createdAt: string
   updatedAt: string
 }
@@ -574,6 +877,7 @@ async function startBookingConversation(phone: string) {
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   await sessionRef.set({
     state: "selecting_language",
+    needsRegistration: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   })
@@ -681,15 +985,24 @@ async function handleLanguageSelection(
     return true
   }
 
-  // Update session with selected language and move to doctor selection
+  // Update session with selected language
   await sessionRef.update({
     language: selectedLanguage,
-    state: "selecting_doctor",
     updatedAt: new Date().toISOString(),
   })
 
-  // Send doctor picker
-  await sendDoctorPicker(phone, selectedLanguage)
+  const needsRegistration = session.needsRegistration ?? false
+
+  if (needsRegistration) {
+    await sessionRef.update({
+      state: "registering_full_name",
+      registrationData: session.registrationData || {},
+    })
+    await sendTextMessage(phone, getTranslation("registrationFullName", selectedLanguage))
+    return true
+  }
+
+  await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
   return true
 }
 
@@ -1139,6 +1452,81 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
   }
 }
 
+async function sendTimeSlotListForPeriod(
+  phone: string,
+  slots: Array<{ raw: string; normalized: string }>,
+  language: Language,
+  periodLabel: string
+) {
+  if (slots.length === 0) {
+    return
+  }
+
+  const chunkSize = 10
+  const totalChunks = Math.ceil(slots.length / chunkSize)
+
+  for (let i = 0; i < slots.length; i += chunkSize) {
+    const chunk = slots.slice(i, i + chunkSize)
+    const chunkIndex = Math.floor(i / chunkSize)
+
+    const rows = chunk.map((slot) => {
+      const [hours, minutes] = slot.raw.split(":").map(Number)
+      const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+      const ampm = hours >= 12 ? "PM" : "AM"
+      const displayTime = `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
+
+      return {
+        id: `time_${slot.raw}`,
+        title: displayTime.length > 24 ? displayTime.slice(0, 24) : displayTime,
+        description: language === "gujarati" ? "ઉપલબ્ધ" : "Available",
+      }
+    })
+
+    const listTitle =
+      totalChunks > 1
+        ? `${periodLabel} (${chunkIndex + 1}/${totalChunks})`
+        : periodLabel
+
+    const listResponse = await sendListMessage(
+      phone,
+      language === "gujarati"
+        ? `🕐 *સમય પસંદ કરો*\n\n${periodLabel} માટે ઉપલબ્ધ સમય સ્લોટમાંથી પસંદ કરો.`
+        : `🕐 *Select Time*\n\nChoose your preferred slot for ${periodLabel}.`,
+      language === "gujarati" ? "સમય પસંદ કરો" : "Select Time",
+      [
+        {
+          title: listTitle,
+          rows,
+        },
+      ],
+      "Harmony Medical Services"
+    )
+
+    if (!listResponse.success) {
+      console.error("[Meta WhatsApp] Failed to send time slot list chunk:", {
+        error: listResponse.error,
+        chunkIndex,
+      })
+
+      let fallback = language === "gujarati"
+        ? `🕐 *સમય સ્લોટ્સ (${listTitle})*\n`
+        : `🕐 *Time Slots (${listTitle})*\n`
+
+      chunk.forEach((slot) => {
+        const [hours, minutes] = slot.raw.split(":").map(Number)
+        const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+        const ampm = hours >= 12 ? "PM" : "AM"
+        fallback += `• ${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}\n`
+      })
+      fallback += language === "gujarati"
+        ? "\nકૃપા કરીને તમારા પસંદીના સમય (ઉદાહરણ: 10:30) લખી જવાબ આપો."
+        : "\nPlease reply with your preferred time (e.g., 10:30)."
+
+      await sendTextMessage(phone, fallback)
+    }
+  }
+}
+
 async function handleListSelection(phone: string, selectedId: string, selectedTitle: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
@@ -1287,15 +1675,16 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     }
 
     await sessionRef.update({
-      state: "entering_symptoms",
       appointmentTime: normalizedTime,
       updatedAt: new Date().toISOString(),
     })
 
-    const symptomsMsg = language === "gujarati"
-      ? `✅ પસંદ કર્યું: ${selectedTime}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
-      : `✅ Selected: ${selectedTime}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
-    await sendTextMessage(phone, symptomsMsg)
+    const updatedSession: BookingSession = {
+      ...session,
+      appointmentTime: normalizedTime,
+    }
+
+    await sendConfirmationButtons(phone, sessionRef, updatedSession)
     return
   }
 
@@ -1485,10 +1874,10 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     return
   }
 
-  // Check which slots are actually available (not booked) and find the FIRST available slot
-  let firstAvailableSlot: { id: string; title: string; time: string } | null = null
+  // Gather available slots in this period
+  const availableSlotsForPeriod: Array<{ raw: string; normalized: string }> = []
   
-  // Sort slots in chronological order to find the first available
+  // Sort slots in chronological order
   const sortedSlots = [...selectedSlots].sort((a, b) => {
     const [hA, mA] = a.split(":").map(Number)
     const [hB, mB] = b.split(":").map(Number)
@@ -1517,20 +1906,13 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     const slotDoc = await slotRef.get()
     
     if (!slotDoc.exists) {
-      // Found first available slot - book it automatically
-      firstAvailableSlot = {
-        id: `time_${slot}`,
-        title: slot,
-        time: normalizedTime,
-      }
-      console.log("[Meta WhatsApp] ✅ Found first available slot:", firstAvailableSlot.title, "->", firstAvailableSlot.time)
-      break // Stop at first available slot
+      availableSlotsForPeriod.push({ raw: slot, normalized: normalizedTime })
     } else {
       console.log("[Meta WhatsApp] Slot already booked:", slot, "->", normalizedTime)
     }
   }
 
-  if (!firstAvailableSlot) {
+  if (availableSlotsForPeriod.length === 0) {
     // No slots available in this time period
     console.error("[Meta WhatsApp] ❌ All slots booked for period:", buttonId, "on", session.appointmentDate)
     const errorMsg = language === "gujarati"
@@ -1541,52 +1923,16 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     return
   }
 
-  // Automatically book the first available slot
-  try {
-    await sessionRef.update({
-      state: "entering_symptoms",
-      appointmentTime: firstAvailableSlot.time,
-      updatedAt: new Date().toISOString(),
-    })
-    console.log("[Meta WhatsApp] ✅ Session updated with time slot:", firstAvailableSlot.time)
-  } catch (error) {
-    console.error("[Meta WhatsApp] ❌ Failed to update session:", error)
-    const errorMsg = language === "gujarati"
-      ? "❌ ભૂલ: સત્ર અપડેટ કરી શકાયું નથી. કૃપા કરીને ફરીથી પ્રયાસ કરો."
-      : "❌ Error: Failed to update session. Please try again."
-    await sendTextMessage(phone, errorMsg)
-    return
-  }
+  const periodLabel =
+    buttonId === "time_quick_morning"
+      ? language === "gujarati"
+        ? "સવાર 9:00 - 1:00"
+        : "Morning 9:00 - 1:00"
+      : language === "gujarati"
+      ? "બપોર 2:00 - 5:00"
+      : "Afternoon 2:00 - 5:00"
 
-  const periodName = buttonId === "time_quick_morning" 
-    ? (language === "gujarati" ? "સવાર" : "Morning")
-    : (language === "gujarati" ? "બપોર" : "Afternoon")
-  
-  // Format time for display (e.g., "09:15" -> "9:15 AM")
-  const [hours, minutes] = firstAvailableSlot.title.split(":").map(Number)
-  if (isNaN(hours) || isNaN(minutes)) {
-    console.error("[Meta WhatsApp] Invalid time format:", firstAvailableSlot.title)
-    const errorMsg = language === "gujarati"
-      ? "❌ ભૂલ: અમાન્ય સમય ફોર્મેટ."
-      : "❌ Error: Invalid time format."
-    await sendTextMessage(phone, errorMsg)
-    return
-  }
-  
-  const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
-  const ampm = hours >= 12 ? "PM" : "AM"
-  const displayTime = `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
-  
-  const symptomsMsg = language === "gujarati"
-    ? `✅ ${periodName} માટે પહેલું ઉપલબ્ધ સ્લોટ પસંદ કર્યું: ${displayTime}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
-    : `✅ First available ${periodName.toLowerCase()} slot selected: ${displayTime}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
-  
-  const msgResult = await sendTextMessage(phone, symptomsMsg)
-  if (!msgResult.success) {
-    console.error("[Meta WhatsApp] Failed to send confirmation message:", msgResult.error)
-  } else {
-    console.log("[Meta WhatsApp] ✅ Confirmation message sent successfully")
-  }
+  await sendTimeSlotListForPeriod(phone, availableSlotsForPeriod, language, periodLabel)
 }
 
 async function sendTimePicker(phone: string, doctorId: string, appointmentDate: string, language: Language = "english", showButtons: boolean = true) {
@@ -1914,17 +2260,47 @@ async function handleTimeSelection(
 ): Promise<boolean> {
   const language = session.language || "english"
   
-  // Fallback: if user types a number, treat it as time slot selection
-  const slotNum = parseInt(text)
   const timeSlots = generateTimeSlots()
+  const trimmed = text.trim().toLowerCase()
 
-  if (isNaN(slotNum) || slotNum < 1 || slotNum > timeSlots.length) {
-    // Resend time picker
+  let selectedTime = ""
+
+  // Try numeric selection (legacy fallback)
+  const slotNum = parseInt(trimmed)
+  if (!isNaN(slotNum) && slotNum >= 1 && slotNum <= timeSlots.length) {
+    selectedTime = timeSlots[slotNum - 1]
+  }
+
+  // Try direct time input (e.g., 10:30 or 1030)
+  if (!selectedTime) {
+    const timeMatch = trimmed.match(/(\d{1,2})([:.\s]?)(\d{2})/)
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1])
+      const minutes = parseInt(timeMatch[3])
+      if (trimmed.includes("pm") && hours < 12) {
+        hours += 12
+      }
+      if (trimmed.includes("am") && hours === 12) {
+        hours = 0
+      }
+      if (!isNaN(hours) && minutes >= 0 && minutes < 60) {
+        const candidate = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+        if (timeSlots.includes(candidate)) {
+          selectedTime = candidate
+        }
+      }
+    }
+  }
+
+  if (!selectedTime) {
+    const errorMsg = language === "gujarati"
+      ? "❌ કૃપા કરીને માન્ય સમય પસંદ કરો (ઉદાહરણ: 10:30)."
+      : "❌ Please choose a valid time slot (e.g., 10:30)."
+    await sendTextMessage(phone, errorMsg)
     await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
     return true
   }
 
-  const selectedTime = timeSlots[slotNum - 1]
   const normalizedTime = normalizeTime(selectedTime)
 
   const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
@@ -1955,15 +2331,16 @@ async function handleTimeSelection(
   }
 
   await sessionRef.update({
-    state: "entering_symptoms",
     appointmentTime: normalizedTime,
     updatedAt: new Date().toISOString(),
   })
 
-  const symptomsMsg = language === "gujarati"
-    ? `✅ પસંદ કર્યું: ${selectedTime}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
-    : `✅ Selected: ${selectedTime}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
-  await sendTextMessage(phone, symptomsMsg)
+  const updatedSession: BookingSession = {
+    ...session,
+    appointmentTime: normalizedTime,
+  }
+
+  await sendConfirmationButtons(phone, sessionRef, updatedSession)
   return true
 }
 

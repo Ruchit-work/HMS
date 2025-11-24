@@ -16,7 +16,7 @@ function LoginContent() {
   const searchParams = useSearchParams()
   const role = searchParams.get("role") as DashboardRole | null
   
-  const [email, setEmail] = useState("")
+  const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -236,6 +236,37 @@ function LoginContent() {
     await auth.signOut()
   }
 
+  const resolveIdentifierToEmail = async (input: string, roleHint: DashboardRole | null) => {
+    if (!input.trim()) {
+      throw new Error("Please enter your email address or phone number.")
+    }
+    if (input.includes("@")) {
+      return input.trim().toLowerCase()
+    }
+
+    const response = await fetch("/api/auth/lookup-identifier", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        identifier: input,
+        role: roleHint,
+      }),
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(data?.error || "Unable to find an account for that phone number.")
+    }
+
+    if (!data?.email) {
+      throw new Error("Account lookup failed. Please try your email address.")
+    }
+
+    return String(data.email).trim().toLowerCase()
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -243,7 +274,8 @@ function LoginContent() {
     setLoading(true)
     
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const loginEmail = await resolveIdentifierToEmail(identifier, role)
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, password)
       const user = userCredential.user
       const roleInfo = await determineUserRole(user)
 
@@ -435,28 +467,28 @@ function LoginContent() {
           {/* Login Form */}
           {!mfaRequired ? (
             <form onSubmit={handleLogin} className="space-y-5">
-              <div>
+          <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Email Address
+                  Email Address or Phone Number
                   <span className="text-red-500 ml-1">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
                     placeholder={
                       role === "doctor"
-                        ? "doctor@hospital.com"
+                        ? "doctor@hospital.com / +91 98765 43210"
                         : role === "admin"
-                        ? "admin@hospital.com"
+                        ? "admin@hospital.com / +91 98765 43210"
                         : role === "receptionist"
-                        ? "receptionist@hospital.com"
+                        ? "receptionist@hospital.com / +91 98765 43210"
                         : role === "patient"
-                        ? "patient@email.com"
-                        : "your@email.com"
+                        ? "patient@email.com / 9876543210"
+                        : "Email or phone"
                     }
                     required
                   />
