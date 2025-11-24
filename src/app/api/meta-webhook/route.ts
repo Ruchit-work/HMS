@@ -301,7 +301,7 @@ async function moveToDateSelection(
       : "📅 Let’s pick your appointment date. Available dates will be shown next."
   await sendTextMessage(phone, introMsg)
 
-  await sendDatePicker(phone, doctorInfo.id, language, true)
+  await sendDatePicker(phone, doctorInfo.id, language)
 }
 
 async function sendConfirmationButtons(
@@ -1091,7 +1091,7 @@ async function handleDateSelection(
   return true
 }
 
-async function sendDatePicker(phone: string, doctorId?: string, language: Language = "english", showButtons: boolean = true) {
+async function sendDatePicker(phone: string, doctorId?: string, language: Language = "english") {
   const db = admin.firestore()
   let doctorData: any = null
   
@@ -1103,70 +1103,6 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
     }
   }
   
-  // If showButtons is true, send quick action buttons first
-  if (showButtons) {
-    const today = new Date().toISOString().split("T")[0]
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowStr = tomorrow.toISOString().split("T")[0]
-    const dayAfter = new Date()
-    dayAfter.setDate(dayAfter.getDate() + 2)
-    const dayAfterStr = dayAfter.toISOString().split("T")[0]
-
-    // Check which quick dates are available
-    const availableQuickDates: Array<{ id: string; title: string; date: string }> = []
-    
-    if (!doctorData || !checkDateAvailability(today, doctorData).isBlocked) {
-      availableQuickDates.push({
-        id: `date_${today}`,
-        title: language === "gujarati" ? "📅 આજે (Today)" : "📅 Today",
-        date: today,
-      })
-    }
-    
-    if (!doctorData || !checkDateAvailability(tomorrowStr, doctorData).isBlocked) {
-      availableQuickDates.push({
-        id: `date_${tomorrowStr}`,
-        title: language === "gujarati" ? "📅 આવતીકાલ (Tomorrow)" : "📅 Tomorrow",
-        date: tomorrowStr,
-      })
-    }
-
-    // If we have at least one quick date, show buttons
-    if (availableQuickDates.length > 0) {
-      const quickButtons = availableQuickDates.map(qd => ({
-        id: qd.id,
-        title: qd.title,
-      }))
-      
-      // Add "See All Dates" button (max 3 buttons allowed)
-      if (quickButtons.length < 3) {
-        quickButtons.push({
-          id: "date_show_all",
-          title: language === "gujarati" ? "📋 બધી તારીખો (See All)" : "📋 See All Dates",
-        })
-      }
-
-      const dateMsg = language === "gujarati"
-        ? "📅 *અપોઇન્ટમેન્ટ તારીખ પસંદ કરો*\n\nઝડપી પસંદગી માટે નીચેના બટનમાંથી પસંદ કરો અથવા બધી તારીખો જોવા માટે 'See All Dates' પસંદ કરો:"
-        : "📅 *Select Appointment Date*\n\nChoose from quick options below or tap 'See All Dates' to view all available dates:"
-
-      const buttonResponse = await sendMultiButtonMessage(
-        phone,
-        dateMsg,
-        quickButtons,
-        "Harmony Medical Services"
-      )
-
-      if (buttonResponse.success) {
-        return // Buttons sent successfully
-      } else {
-        console.error("[Meta WhatsApp] Failed to send date buttons, falling back to list:", buttonResponse.error)
-        // Fallback to list
-      }
-    }
-  }
-
   // If buttons failed or not requested, show list message
   const dateOptions = generateDateOptions(doctorData)
   
@@ -1486,7 +1422,7 @@ async function handleDateButtonClick(phone: string, buttonId: string) {
 
   // If "See All" button clicked, show list
   if (buttonId === "date_show_all") {
-    await sendDatePicker(phone, session.doctorId, language, false) // false = show list, not buttons
+    await sendDatePicker(phone, session.doctorId, language)
     return
   }
 
