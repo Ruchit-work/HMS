@@ -1057,24 +1057,71 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
   }]
 
   const dateMsg = language === "gujarati"
-    ? "📅 *અપોઇન્ટમેન્ટ તારીખ પસંદ કરો*\n\nઉપલબ્ધ તારીખો જોવા માટે નીચેનું બટન ટેપ કરો:"
-    : "📅 *Select Appointment Date*\n\nTap the button below to see all available dates:"
+    ? "📅 *અપોઇન્ટમેન્ટ તારીખ પસંદ કરો*\n\nતમારો પસંદીદા તારીખ પસંદ કરો:"
+    : "📅 *Select Appointment Date*\n\nChoose your preferred date:"
+
+  // Button text max 20 chars
+  const buttonText = language === "gujarati" ? "📅 તારીખ પસંદ કરો" : "📅 Pick a Date"
+  const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 20) : buttonText
+
+  console.log("[Meta WhatsApp] Sending date picker list message:", {
+    phone,
+    dateCount: datesToShow.length,
+    buttonText: truncatedButtonText,
+  })
 
   const listResponse = await sendListMessage(
     phone,
     dateMsg,
-    language === "gujarati" ? "📅 તારીખ પસંદ કરો" : "📅 Pick a Date",
+    truncatedButtonText,
     sections,
     "Harmony Medical Services"
   )
 
   if (!listResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send date picker list:", listResponse.error)
-    // Fallback to text-based selection
-    const fallbackMsg = language === "gujarati"
-      ? "📅 *તારીખ પસંદ કરો:*\n\nકૃપા કરીને તમારી પસંદીદા તારીખ દાખલ કરો:\n• આજે માટે 'today' ટાઇપ કરો\n• આવતીકાલ માટે 'tomorrow' ટાઇપ કરો\n• અથવા YYYY-MM-DD સ્વરૂપમાં તારીખ દાખલ કરો (દા.ત., 2025-01-15)"
-      : "📅 *Select Date:*\n\nPlease enter your preferred date:\n• Type 'today' for today\n• Type 'tomorrow' for tomorrow\n• Or enter date as YYYY-MM-DD (e.g., 2025-01-15)"
-    await sendTextMessage(phone, fallbackMsg)
+    console.error("[Meta WhatsApp] Failed to send date picker list:", {
+      error: listResponse.error,
+      errorCode: listResponse.errorCode,
+      phone: phone,
+      dateCount: datesToShow.length,
+    })
+    
+    // Retry with simplified format
+    console.log("[Meta WhatsApp] Retrying date picker list with simplified format...")
+    const simplifiedDates = datesToShow.map(date => ({
+      id: date.id,
+      title: date.title.length > 24 ? date.title.substring(0, 21) + "..." : date.title,
+      description: date.description || "Available",
+    }))
+
+    const simplifiedSections = [{
+      title: "Dates",
+      rows: simplifiedDates,
+    }]
+
+    const retryResponse = await sendListMessage(
+      phone,
+      language === "gujarati" ? "તારીખ પસંદ કરો:" : "Select Date:",
+      "Select",
+      simplifiedSections,
+      "HMS"
+    )
+
+    if (!retryResponse.success) {
+      console.error("[Meta WhatsApp] Both attempts failed to send date picker list:", {
+        originalError: listResponse.error,
+        retryError: retryResponse.error,
+      })
+      // Send error message instead of text fallback
+      const errorMsg = language === "gujarati"
+        ? "❌ ક્ષમા કરો, અમે તારીખ પસંદ કરવા માટે સૂચિ બતાવી શક્યા નથી. કૃપા કરીને પાછળથી પ્રયાસ કરો અથવા રિસેપ્શનનો સંપર્ક કરો."
+        : "❌ Sorry, we couldn't display the date selection. Please try again later or contact reception."
+      await sendTextMessage(phone, errorMsg)
+    } else {
+      console.log("[Meta WhatsApp] ✅ Date picker list sent successfully on retry")
+    }
+  } else {
+    console.log("[Meta WhatsApp] ✅ Date picker list sent successfully")
   }
 }
 
@@ -1371,27 +1418,23 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   const session = sessionDoc.data() as BookingSession
   const language = session.language || "english"
 
-  // If "See All" button clicked, show list
-  if (buttonId === "time_show_all") {
-    await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language, false) // false = show list, not buttons
-    return
-  }
+  // Note: "See All Times" button has been removed - only Morning/Afternoon buttons are shown
 
   // Get available slots for the selected time period
   const timeSlots = generateTimeSlots()
   let selectedSlots: string[] = []
 
   if (buttonId === "time_quick_morning") {
-    // Morning slots: 9:00 to 11:30
+    // Morning slots: 9:00 AM to 1:00 PM (09:00 to 13:00)
     selectedSlots = timeSlots.filter(slot => {
       const hour = parseInt(slot.split(":")[0])
-      return hour >= 9 && hour < 12
+      return hour >= 9 && hour <= 13
     })
   } else if (buttonId === "time_quick_afternoon") {
-    // Afternoon slots: 12:00 to 17:00
+    // Afternoon slots: 2:00 PM to 5:00 PM (14:00 to 17:00)
     selectedSlots = timeSlots.filter(slot => {
       const hour = parseInt(slot.split(":")[0])
-      return hour >= 12 && hour < 17
+      return hour >= 14 && hour <= 17
     })
   }
 
@@ -1452,9 +1495,15 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     ? (language === "gujarati" ? "સવાર" : "Morning")
     : (language === "gujarati" ? "બપોર" : "Afternoon")
   
+  // Format time for display (e.g., "09:15" -> "9:15 AM")
+  const [hours, minutes] = firstAvailableSlot.title.split(":").map(Number)
+  const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+  const ampm = hours >= 12 ? "PM" : "AM"
+  const displayTime = `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
+  
   const symptomsMsg = language === "gujarati"
-    ? `✅ ${periodName} માટે પહેલું ઉપલબ્ધ સ્લોટ પસંદ કર્યું: ${firstAvailableSlot.title}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
-    : `✅ First available ${periodName.toLowerCase()} slot selected: ${firstAvailableSlot.title}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
+    ? `✅ ${periodName} માટે પહેલું ઉપલબ્ધ સ્લોટ પસંદ કર્યું: ${displayTime}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
+    : `✅ First available ${periodName.toLowerCase()} slot selected: ${displayTime}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
   
   await sendTextMessage(phone, symptomsMsg)
 }
@@ -1490,8 +1539,57 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     return
   }
 
-  // Skip quick buttons - always use interactive list like doctor selection
-  // This provides a better UX matching the doctor picker
+  // Show Morning/Afternoon buttons first (default behavior)
+  if (showButtons && availableSlots.length > 0) {
+    // Group slots into time periods
+    const morningSlots = availableSlots.filter(s => {
+      const hour = parseInt(s.title.split(":")[0])
+      return hour >= 9 && hour <= 13 // 9 AM to 1 PM
+    })
+    
+    const afternoonSlots = availableSlots.filter(s => {
+      const hour = parseInt(s.title.split(":")[0])
+      return hour >= 14 && hour <= 17 // 2 PM to 5 PM
+    })
+
+    const quickButtons: Array<{ id: string; title: string }> = []
+    
+    // Add Morning button if slots available
+    if (morningSlots.length > 0) {
+      quickButtons.push({
+        id: "time_quick_morning",
+        title: language === "gujarati" ? "🌅 સવાર (9AM-1PM)" : "🌅 Morning (9AM-1PM)",
+      })
+    }
+    
+    // Add Afternoon button if slots available
+    if (afternoonSlots.length > 0 && quickButtons.length < 3) {
+      quickButtons.push({
+        id: "time_quick_afternoon",
+        title: language === "gujarati" ? "☀️ બપોર (2PM-5PM)" : "☀️ Afternoon (2PM-5PM)",
+      })
+    }
+    
+    if (quickButtons.length > 0) {
+      const timeMsg = language === "gujarati"
+        ? "🕐 *સમય પસંદ કરો*\n\nઝડપી પસંદગી માટે નીચેના બટનમાંથી પસંદ કરો:\n• સવાર (Morning) - પહેલું ઉપલબ્ધ સ્લોટ આપમેળે પસંદ થશે\n• બપોર (Afternoon) - પહેલું ઉપલબ્ધ સ્લોટ આપમેળે પસંદ થશે"
+        : "🕐 *Select Appointment Time*\n\nChoose from quick options below:\n• Morning - First available slot will be auto-selected\n• Afternoon - First available slot will be auto-selected"
+
+      const buttonResponse = await sendMultiButtonMessage(
+        phone,
+        timeMsg,
+        quickButtons,
+        "Harmony Medical Services"
+      )
+
+      if (buttonResponse.success) {
+        return // Buttons sent successfully
+      } else {
+        console.error("[Meta WhatsApp] Failed to send time buttons, falling back to list:", buttonResponse.error)
+        // Fallback to list if buttons fail
+      }
+    }
+  }
 
   // Format time slots for interactive list message (radio button style)
   // Sort slots chronologically for better UX
@@ -2004,26 +2102,31 @@ async function handleConfirmation(
 
 function generateTimeSlots(): string[] {
   const slots: string[] = []
+  const SLOT_DURATION = 15 // 15-minute intervals
   
   // First part: 9:00 AM to 1:00 PM (09:00 to 13:00)
-  // Generate slots: 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00
-  for (let hour = 9; hour <= 13; hour++) {
-    slots.push(`${hour.toString().padStart(2, "0")}:00`)
-    if (hour < 13) { // Don't add :30 for 13:00 since 13:30 is lunch
-      slots.push(`${hour.toString().padStart(2, "0")}:30`)
+  // Generate slots every 15 minutes: 09:00, 09:15, 09:30, 09:45, 10:00, ..., 12:45
+  for (let hour = 9; hour < 13; hour++) {
+    for (let minute = 0; minute < 60; minute += SLOT_DURATION) {
+      slots.push(`${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`)
     }
   }
+  
+  // Add 13:00 (1:00 PM) as the last morning slot
+  slots.push("13:00")
   
   // Lunch break: 1:00 PM to 2:00 PM (13:00 to 14:00) - no slots
   
   // Second part: 2:00 PM to 5:00 PM (14:00 to 17:00)
-  // Generate slots: 14:00, 14:30, 15:00, 15:30, 16:00, 16:30, 17:00
-  for (let hour = 14; hour <= 17; hour++) {
-    slots.push(`${hour.toString().padStart(2, "0")}:00`)
-    if (hour < 17) {
-      slots.push(`${hour.toString().padStart(2, "0")}:30`)
+  // Generate slots every 15 minutes: 14:00, 14:15, 14:30, 14:45, 15:00, ..., 16:45
+  for (let hour = 14; hour < 17; hour++) {
+    for (let minute = 0; minute < 60; minute += SLOT_DURATION) {
+      slots.push(`${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`)
     }
   }
+  
+  // Add 17:00 (5:00 PM) as the last afternoon slot
+  slots.push("17:00")
   
   return slots
 }
