@@ -775,7 +775,7 @@ async function sendDoctorPicker(phone: string, language: "english" | "gujarati" 
       const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
       const specialization = doc.specialization || "General"
       // Use just name if too long, or truncate
-      let title = name.length > 24 ? name.substring(0, 21) + "..." : name
+      const title = name.length > 24 ? name.substring(0, 21) + "..." : name
       return {
         id: `doctor_${doc.id}`,
         title: title,
