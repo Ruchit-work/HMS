@@ -988,11 +988,11 @@ async function sendDateTimeComboPicker(phone: string, doctorId: string, language
   if (todayCheck) {
     quickButtons.push({
       id: "datetime_combo_today_morning",
-      title: language === "gujarati" ? "🌅 આજે સવાર (9AM-1PM)" : "🌅 Today Morning (9AM-1PM)",
+      title: language === "gujarati" ? "🌅 આજે સવાર 9-1" : "🌅 Today Morn 9-1",
     })
     quickButtons.push({
       id: "datetime_combo_today_afternoon",
-      title: language === "gujarati" ? "☀️ આજે બપોર (2PM-5PM)" : "☀️ Today Afternoon (2PM-5PM)",
+      title: language === "gujarati" ? "☀️ આજે બપોર 2-5" : "☀️ Today Aft 2-5",
     })
   }
   
@@ -1001,12 +1001,12 @@ async function sendDateTimeComboPicker(phone: string, doctorId: string, language
   if (tomorrowCheck && quickButtons.length < 3) {
     quickButtons.push({
       id: "datetime_combo_tomorrow_morning",
-      title: language === "gujarati" ? "🌅 આવતીકાલ સવાર (9AM-1PM)" : "🌅 Tomorrow Morning (9AM-1PM)",
+      title: language === "gujarati" ? "🌅 આવતીકાલ સવાર 9-1" : "🌅 Tomorrow Morn 9-1",
     })
     if (quickButtons.length < 3) {
       quickButtons.push({
         id: "datetime_combo_tomorrow_afternoon",
-        title: language === "gujarati" ? "☀️ આવતીકાલ બપોર (2PM-5PM)" : "☀️ Tomorrow Afternoon (2PM-5PM)",
+        title: language === "gujarati" ? "☀️ આવતીકાલ બપોર 2-5" : "☀️ Tomorrow Aft 2-5",
       })
     }
   }
@@ -1847,7 +1847,7 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     if (morningSlots.length > 0) {
       quickButtons.push({
         id: "time_quick_morning",
-        title: language === "gujarati" ? "🌅 સવાર (9AM-1PM)" : "🌅 Morning (9AM-1PM)",
+        title: language === "gujarati" ? "🌅 સવાર 9-1" : "🌅 Morning 9-1",
       })
     }
     
@@ -1855,7 +1855,7 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     if (afternoonSlots.length > 0 && quickButtons.length < 3) {
       quickButtons.push({
         id: "time_quick_afternoon",
-        title: language === "gujarati" ? "☀️ બપોર (2PM-5PM)" : "☀️ Afternoon (2PM-5PM)",
+        title: language === "gujarati" ? "☀️ બપોર 2-5" : "☀️ Afternoon 2-5",
       })
     }
     
