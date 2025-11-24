@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { deleteCampaign } from "@/utils/campaigns"
+import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
 /**
  * POST /api/campaigns/delete
@@ -15,6 +15,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    const initResult = initFirebaseAdmin("delete-campaign API")
+    if (!initResult.ok) {
+      return NextResponse.json(
+        { success: false, error: "Server not configured" },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json().catch(() => ({}))
     const { id } = body
 
@@ -25,7 +33,23 @@ export async function POST(request: Request) {
       )
     }
 
-    await deleteCampaign(id)
+    // Use Firebase Admin SDK to delete the campaign
+    const db = admin.firestore()
+    const campaignRef = db.collection("campaigns").doc(id)
+    
+    // Check if campaign exists
+    const campaignDoc = await campaignRef.get()
+    if (!campaignDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: "Campaign not found" },
+        { status: 404 }
+      )
+    }
+
+    // Delete the campaign
+    await campaignRef.delete()
+
+    console.log(`[Campaign Delete] ✅ Campaign ${id} deleted successfully`)
 
     return NextResponse.json({
       success: true,
