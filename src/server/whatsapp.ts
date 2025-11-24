@@ -1,65 +1,24 @@
-import twilio from "twilio"
-import type { MessageListInstanceCreateOptions } from "twilio/lib/rest/api/v2010/account/message"
+// MIGRATED TO META WHATSAPP - Twilio code kept for rollback reference
+// All WhatsApp messaging now uses Meta WhatsApp Business API
+
+import { sendTextMessage as metaSendTextMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/whatsapp"
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID
-const authToken = process.env.TWILIO_AUTH_TOKEN
-const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM
-
-let cachedClient: twilio.Twilio | null | undefined
-
-function getClient(): twilio.Twilio | null {
-  if (cachedClient !== undefined) {
-    return cachedClient
-  }
-
-  if (!accountSid || !authToken) {
-    console.warn("Twilio credentials are missing; WhatsApp message skipped.")
-    cachedClient = null
-    return cachedClient
-  }
-
-  try {
-    cachedClient = twilio(accountSid, authToken)
-  } catch (error) {
-    console.warn("Unable to initialize Twilio client", error)
-    cachedClient = null
-  }
-
-  return cachedClient
-}
-
-function normalizeSender(): string | null {
-  if (!whatsappFrom) {
-    console.warn("TWILIO_WHATSAPP_FROM not set; WhatsApp message skipped.")
-    return null
-  }
-
-  return whatsappFrom.startsWith("whatsapp:") ? whatsappFrom : `whatsapp:${whatsappFrom}`
-}
+// Twilio credentials kept in env but not used (for rollback if needed)
+// const accountSid = process.env.TWILIO_ACCOUNT_SID
+// const authToken = process.env.TWILIO_AUTH_TOKEN
+// const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM
 
 /**
- * Fetch message status from Twilio
+ * Fetch message status from Meta WhatsApp
+ * Note: Meta doesn't provide real-time status fetching like Twilio
+ * This function is kept for compatibility but returns limited info
  */
-export async function getMessageStatus(sid: string): Promise<{ status?: string; errorCode?: number; errorMessage?: string; dateSent?: Date; dateUpdated?: Date } | null> {
-  const client = getClient()
-  if (!client) {
-    return null
-  }
-
-  try {
-    const message = await client.messages(sid).fetch()
-    return {
-      status: message.status,
-      errorCode: message.errorCode,
-      errorMessage: message.errorMessage,
-      dateSent: message.dateSent,
-      dateUpdated: message.dateUpdated,
-    }
-  } catch (error) {
-    console.error("[WhatsApp] Failed to fetch message status:", error)
-    return null
-  }
+export async function getMessageStatus(messageId: string): Promise<{ status?: string; errorCode?: number; errorMessage?: string; dateSent?: Date; dateUpdated?: Date } | null> {
+  // Meta WhatsApp status is tracked via webhooks, not direct API calls
+  // For compatibility, we return null (status tracking happens via webhook)
+  console.warn("[WhatsApp] Message status fetching not available with Meta WhatsApp. Status is tracked via webhooks.")
+  return null
 }
 
 export interface WhatsAppButton {
@@ -69,113 +28,99 @@ export interface WhatsAppButton {
   phone?: string
 }
 
+/**
+ * Send WhatsApp notification via Meta WhatsApp Business API
+ * This replaces the previous Twilio implementation
+ * 
+ * @param options - Notification options
+ * @returns Promise with send result
+ */
 export async function sendWhatsAppNotification(options: {
   to?: string | null | undefined
   fallbackRecipients?: Array<string | null | undefined>
   message: string
   mediaUrl?: string | string[]
   buttons?: WhatsAppButton[]
-  contentSid?: string // Content SID for approved WhatsApp template
-  contentVariables?: Record<string, string> // Variables for template (e.g., {{variable_name}} or numbered "1", "2", etc.)
+  contentSid?: string // Content SID for approved WhatsApp template (Meta uses template names instead)
+  contentVariables?: Record<string, string> // Variables for template
 }): Promise<{ success: boolean; sid?: string; status?: string; error?: string; errorCode?: number; rateLimitReached?: boolean }> {
-  const client = getClient()
-  const sender = normalizeSender()
-
-  if (!client) {
-    const error = "Twilio client not configured - check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN"
-    console.error("[WhatsApp]", error)
-    return { success: false, error }
-  }
-
-  if (!sender) {
-    const error = "Twilio WhatsApp sender not configured - check TWILIO_WHATSAPP_FROM"
-    console.error("[WhatsApp]", error)
-    return { success: false, error }
-  }
-
+  // Find valid recipient from primary or fallback recipients
   const recipients = [options.to, ...(options.fallbackRecipients ?? [])]
-  const recipient = recipients
-    .map((value) => formatWhatsAppRecipient(value ?? undefined))
-    .find((value): value is string => Boolean(value))
+  let recipientPhone: string | null = null
 
-  if (!recipient) {
+  for (const recipient of recipients) {
+    if (!recipient) continue
+    
+    // Normalize phone number - remove whatsapp: prefix if present
+    const formatted = formatWhatsAppRecipient(recipient)
+    if (formatted) {
+      // Remove whatsapp: prefix for Meta WhatsApp (it doesn't need it)
+      recipientPhone = formatted.replace(/^whatsapp:/i, "")
+      break
+    }
+  }
+
+  if (!recipientPhone) {
     const error = "No valid recipient for WhatsApp notification"
-    console.error("[WhatsApp]", error)
+    console.error("[Meta WhatsApp]", error)
     return { success: false, error }
   }
 
   try {
-    const payload: MessageListInstanceCreateOptions = {
-      from: sender,
-      to: recipient,
-    }
+    // Format message body with buttons if provided
+    let messageBody = options.message
 
-    // Use approved WhatsApp template with Content SID if provided
-    if (options.contentSid && options.contentVariables) {
-      console.log(`[WhatsApp] Using approved template with Content SID: ${options.contentSid}`)
-      payload.contentSid = options.contentSid
-      payload.contentVariables = JSON.stringify(options.contentVariables)
-    } else {
-      // Fallback to plain text with formatted buttons
-      let messageBody = options.message
-      
-      // Add buttons as clickable links in the message
-      if (options.buttons && Array.isArray(options.buttons) && options.buttons.length > 0) {
-        const buttons = options.buttons
-        messageBody += "\n\n"
-        buttons.forEach((button, index) => {
-          if (button.type === "url" && button.url) {
-            messageBody += `🔗 *${button.title}*\n${button.url}\n`
-          } else if (button.type === "phone" && button.phone) {
-            const cleanPhone = button.phone.replace(/[^\d+]/g, "")
-            messageBody += `📞 *${button.title}*\n${cleanPhone}\n`
-          } else if (button.type === "text") {
-            messageBody += `📋 *${button.title}*\n`
-          }
-          if (index < buttons.length - 1) {
-            messageBody += "\n"
-          }
-        })
-      }
-      
-      messageBody += "\n\n_This is an automated message from Harmony Medical Services._"
-      payload.body = messageBody
-    }
-
-    if (options.mediaUrl) {
-      payload.mediaUrl = Array.isArray(options.mediaUrl) ? options.mediaUrl : [options.mediaUrl]
-    }
-
-    const response = await client.messages.create(payload)
-    
-    if (response.status === 'failed' || response.errorCode) {
-      console.error("[WhatsApp] Message failed:", {
-        errorCode: response.errorCode,
-        errorMessage: response.errorMessage,
-        status: response.status,
+    // Add buttons as clickable links in the message (Meta doesn't support inline buttons in plain text)
+    if (options.buttons && Array.isArray(options.buttons) && options.buttons.length > 0) {
+      messageBody += "\n\n"
+      options.buttons.forEach((button, index) => {
+        if (button.type === "url" && button.url) {
+          messageBody += `🔗 *${button.title}*\n${button.url}\n`
+        } else if (button.type === "phone" && button.phone) {
+          const cleanPhone = button.phone.replace(/[^\d+]/g, "")
+          messageBody += `📞 *${button.title}*\n${cleanPhone}\n`
+        } else if (button.type === "text") {
+          messageBody += `📋 *${button.title}*\n`
+        }
+        if (index < options.buttons!.length - 1) {
+          messageBody += "\n"
+        }
       })
     }
-    
-    return { success: true, sid: response.sid, status: response.status, error: response.errorMessage || undefined }
-  } catch (error: any) {
-    const err = error instanceof Error ? error.message : "Unknown Twilio error"
-    console.error("[WhatsApp] Failed to send WhatsApp message:", err)
-    
-    // Check for rate limit errors
-    if (
-      error.code === 63038 ||
-      error.status === 429 ||
-      error.message?.includes("daily messages limit") ||
-      error.message?.includes("exceeded the 50 daily") ||
-      error.message?.includes("Too Many Requests")
-    ) {
+
+    messageBody += "\n\n_This is an automated message from Harmony Medical Services._"
+
+    // Send via Meta WhatsApp
+    const result = await metaSendTextMessage(recipientPhone, messageBody)
+
+    if (result.success) {
+      console.log(`[Meta WhatsApp] ✅ Message sent successfully to ${recipientPhone}, Message ID: ${result.messageId}`)
+      return {
+        success: true,
+        sid: result.messageId, // Use messageId as sid for compatibility
+        status: "sent", // Meta doesn't provide immediate status
+      }
+    } else {
+      // Check for rate limit errors
+      const isRateLimit = result.errorCode === 4 || result.error?.includes("rate limit") || result.error?.includes("429")
+      
+      // Log detailed error information
+      console.error(`[Meta WhatsApp] ❌ Failed to send message to ${recipientPhone}:`, {
+        error: result.error,
+        errorCode: result.errorCode,
+        isRateLimit,
+      })
+      
       return {
         success: false,
-        error: "Daily message limit reached (50 messages/day). Limit resets at midnight UTC (5:30 AM IST).",
-        errorCode: error.code || 63038,
-        rateLimitReached: true,
+        error: result.error || "Failed to send WhatsApp message",
+        errorCode: result.errorCode,
+        rateLimitReached: isRateLimit,
       }
     }
+  } catch (error: any) {
+    const err = error instanceof Error ? error.message : "Unknown Meta WhatsApp error"
+    console.error("[Meta WhatsApp] Failed to send WhatsApp message:", err)
     
     return { success: false, error: err, errorCode: error.code }
   }

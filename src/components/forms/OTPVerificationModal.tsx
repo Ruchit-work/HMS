@@ -86,11 +86,24 @@ export default function OTPVerificationModal({
       const res = await verifyOTP(fullPhone, otp)
       if (res.success) {
         setOtpVerified(true)
-        onVerified?.()
+        // Call onVerified and wait for it to complete
+        // Wrap in try-catch to handle any errors from onVerified
+        try {
+          await onVerified?.()
+        } catch (error: any) {
+          // If onVerified fails, reset the verification state and show error
+          setOtpVerified(false)
+          setError(error?.message || "Failed to complete verification. Please try again.")
+          console.error("Error in onVerified callback:", error)
+        }
       } else {
         const msg = res.error || "Invalid OTP"
         setError(res.remainingAttempts !== undefined ? `${msg} (${res.remainingAttempts} attempts remaining)` : msg)
       }
+    } catch (error: any) {
+      // Handle unexpected errors
+      setError(error?.message || "Failed to verify OTP. Please try again.")
+      setOtpVerified(false)
     } finally {
       setVerifyingOTP(false)
     }

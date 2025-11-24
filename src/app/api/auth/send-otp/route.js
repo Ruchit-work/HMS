@@ -1,4 +1,3 @@
-import twilio from "twilio";
 import admin from "firebase-admin";
 
 // Initialize Firebase Admin SDK
@@ -17,20 +16,11 @@ if (!admin.apps.length) {
   });
 }
 
-// Initialize Twilio client
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER; //  Twilio phone number
-
-// Helper to get Twilio client
-function getTwilioClient() {
-  if (!accountSid || !authToken) {
-    throw new Error(
-      "Twilio credentials not configured. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables."
-    );
-  }
-  return twilio(accountSid, authToken);
-}
+// MIGRATED TO META WHATSAPP - Twilio code kept for rollback reference
+// Twilio credentials kept in env but not used (for rollback if needed)
+// const accountSid = process.env.TWILIO_ACCOUNT_SID;
+// const authToken = process.env.TWILIO_AUTH_TOKEN;
+// const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
 
 // Generate 6-digit OTP
 function generateOTP() {
@@ -76,10 +66,11 @@ export async function POST(request) {
       );
     }
 
-    // Check if Twilio is configured
-    if (!twilioPhoneNumber) {
+    // Check if Meta WhatsApp is configured
+    const metaAccessToken = process.env.META_WHATSAPP_ACCESS_TOKEN;
+    if (!metaAccessToken) {
       return Response.json(
-        { error: "Twilio phone number not configured. Please set TWILIO_PHONE_NUMBER environment variable." },
+        { error: "Meta WhatsApp not configured. Please set META_WHATSAPP_ACCESS_TOKEN environment variable." },
         { status: 500 }
       );
     }
@@ -100,27 +91,39 @@ export async function POST(request) {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Send OTP via Twilio SMS
-    const client = getTwilioClient();
-    const message = await client.messages.create({
-      body: `Your HMS verification code is: ${otp}. This code will expire in 10 minutes. Do not share this code with anyone.`,
-      from: twilioPhoneNumber,
-      to: cleanedPhone, // Phone number with country code (e.g., +1234567890)
-    });
+    // Send OTP via Meta WhatsApp
+    const { sendTextMessage } = await import("@/server/metaWhatsApp");
+    const otpMessage = `🔐 *Your HMS Verification Code*\n\nYour verification code is: *${otp}*\n\nThis code will expire in 10 minutes.\n\n⚠️ *Do not share this code with anyone.*\n\nIf you didn't request this code, please ignore this message.`;
+    
+    const result = await sendTextMessage(cleanedPhone, otpMessage);
+
+    if (!result.success) {
+      // Log audit event for failure
+      const { logAuthEvent } = await import("@/utils/auditLog");
+      await logAuthEvent("otp_failed", request, undefined, undefined, undefined, result.error || "Failed to send OTP", {
+        errorCode: result.errorCode,
+      });
+
+      return Response.json(
+        { error: result.error || "Failed to send OTP. Please try again." },
+        { status: 500 }
+      );
+    }
 
     // Log audit event
     const { logAuthEvent } = await import("@/utils/auditLog");
     await logAuthEvent("otp_sent", request, undefined, undefined, undefined, undefined, {
       phoneNumber: cleanedPhone,
-      messageSid: message.sid,
+      messageId: result.messageId,
+      method: "whatsapp", // Note: now using WhatsApp instead of SMS
     });
 
     // Return success (don't return OTP in response for security)
     return Response.json({
       success: true,
-      message: "OTP sent successfully",
-      messageSid: message.sid,
-      // In production, don't return messageSid or any OTP-related info
+      message: "OTP sent successfully via WhatsApp",
+      messageId: result.messageId,
+      // In production, don't return messageId or any OTP-related info
     });
   } catch (error) {
     console.error("Error sending OTP:", error);
@@ -131,16 +134,21 @@ export async function POST(request) {
       errorCode: error?.code,
     });
 
-    // Handle Twilio-specific errors
-    if (error.code === 21211) {
+    // Handle Meta WhatsApp-specific errors
+    if (error.code === 100 || error.message?.includes("Invalid phone number")) {
       return Response.json(
         { error: "Invalid phone number. Please check and try again." },
         { status: 400 }
       );
-    } else if (error.code === 21614) {
+    } else if (error.code === 131047) {
       return Response.json(
-        { error: "This phone number is not registered with Twilio. Please contact support." },
+        { error: "This phone number is not registered with WhatsApp Business. Please contact support." },
         { status: 400 }
+      );
+    } else if (error.code === 4 || error.message?.includes("rate limit")) {
+      return Response.json(
+        { error: "Too many requests. Please wait a moment and try again." },
+        { status: 429 }
       );
     }
 

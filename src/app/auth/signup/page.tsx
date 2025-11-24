@@ -247,22 +247,43 @@ function SignUpContent() {
         const whatsappTo = withPlus.startsWith("whatsapp:")
           ? withPlus
           : `whatsapp:${withPlus}`;
-        const message = `Hi ${
-          values.firstName || "there"
-        }! Your HMS patient account is ready. Your Patient ID is ${patientId}.`;
+        const message = `🎉 *Account Successfully Created!*
+
+Hi ${values.firstName || "there"},
+
+Welcome to Harmony Medical Services! Your patient account has been successfully created.
+
+📋 *Account Details:*
+• Patient ID: ${patientId}
+• Name: ${values.firstName || ""} ${values.lastName || ""}
+• Email: ${values.email || ""}
+${values.phone ? `• Phone: ${values.phone}` : ""}
+
+✅ You can now:
+• Book appointments with our doctors
+• View your medical history
+• Access your patient dashboard
+• Receive appointment reminders via WhatsApp
+
+If you need any assistance, reply here or call us at +91-XXXXXXXXXX.
+
+Thank you for choosing Harmony Medical Services! 🏥`;
         try {
           const result = await sendWhatsAppMessage({ to: whatsappTo, message });
           if (!result.success) {
-            console.warn(
-              "WhatsApp patient signup message failed",
-              result.error
-            );
+            console.error("[Signup WhatsApp] ❌ Failed to send account creation message:", {
+              phone: whatsappTo,
+              error: result.error,
+              status: result.status,
+            });
+          } else {
+            console.log("[Signup WhatsApp] ✅ Account creation message sent successfully to:", whatsappTo);
           }
         } catch (err) {
-          console.warn(
-            "Failed to send WhatsApp message on patient signup",
-            err
-          );
+          console.error("[Signup WhatsApp] ❌ Exception sending account creation message:", {
+            phone: whatsappTo,
+            error: err,
+          });
         }
       }
 
@@ -554,7 +575,14 @@ function SignUpContent() {
           countryCode={pendingPatientValues.countryCode}
           onVerified={async () => {
             if (pendingPatientValues) {
-              await createAccountAfterOTP(pendingPatientValues);
+              try {
+                await createAccountAfterOTP(pendingPatientValues);
+              } catch (error: any) {
+                // Error is already handled in createAccountAfterOTP, but we need to rethrow
+                // so the modal can handle it properly
+                console.error("Account creation failed:", error);
+                throw error; // Re-throw so modal can catch and show error
+              }
             }
           }}
           onChangePhone={() => {

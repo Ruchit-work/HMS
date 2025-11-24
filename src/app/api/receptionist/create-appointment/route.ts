@@ -9,9 +9,55 @@ import { logAppointmentEvent } from "@/utils/auditLog"
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
   const friendlyName = patientName.trim().split(" ")[0] || "there"
+  const fullName = patientName.trim() || "Patient"
   const doctorName: string = appointmentData.doctorName || "our doctor"
+  const doctorSpecialization: string = appointmentData.doctorSpecialization || ""
   const schedule = formatAppointmentDateTime(appointmentData.appointmentDate, appointmentData.appointmentTime)
-  const message = `Hi ${friendlyName}, your appointment with ${doctorName} on ${schedule} is confirmed. Reply here if you need any help.`
+  const appointmentId = appointmentData.appointmentId || appointmentData.id || "N/A"
+  const paymentMethod = appointmentData.paymentMethod || appointmentData.paymentOption || "Cash"
+  const paymentAmount = appointmentData.paymentAmount || appointmentData.totalConsultationFee || 0
+  const paymentStatus = appointmentData.paymentStatus || "pending"
+  
+  const dateDisplay = new Date(appointmentData.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+  
+  const timeStr = appointmentData.appointmentTime || ""
+  const [h, m] = timeStr.split(":").map(Number)
+  const timeDisplay = !isNaN(h) && !isNaN(m) 
+    ? new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+    : timeStr
+  
+  const message = `🎉 *Appointment Successfully Booked!*
+
+Hi ${fullName},
+
+Your appointment has been confirmed and booked successfully by our receptionist.
+
+📋 *Appointment Details:*
+• 👨‍⚕️ Doctor: ${doctorName}${doctorSpecialization ? ` (${doctorSpecialization})` : ""}
+• 📅 Date: ${dateDisplay}
+• 🕒 Time: ${timeDisplay}
+• 📋 Appointment ID: ${appointmentId}
+${appointmentData.chiefComplaint ? `• 📝 Reason: ${appointmentData.chiefComplaint}` : ""}
+
+💳 *Payment Information:*
+• Method: ${paymentMethod}
+• Amount: ₹${paymentAmount}
+• Status: ${paymentStatus === "paid" ? "✅ Paid" : "⏳ Pending"}
+
+✅ Your appointment is confirmed and visible in our system.
+
+If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
+
+See you soon! 🏥`
 
   // Try multiple phone number fields
   const phoneCandidates = [
@@ -21,11 +67,27 @@ const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => 
     appointmentData.phone,
   ].filter(Boolean)
 
-  await sendWhatsAppNotification({
+  if (phoneCandidates.length === 0) {
+    console.warn("[Appointment WhatsApp] No phone number found for patient:", appointmentData.patientName)
+    return
+  }
+
+  const result = await sendWhatsAppNotification({
     to: phoneCandidates[0] || null,
     fallbackRecipients: phoneCandidates.slice(1),
     message,
   })
+
+  if (!result.success) {
+    console.error("[Appointment WhatsApp] Failed to send appointment confirmation:", {
+      patientName,
+      phone: phoneCandidates[0],
+      error: result.error,
+      errorCode: result.errorCode,
+    })
+  } else {
+    console.log("[Appointment WhatsApp] ✅ Appointment confirmation sent successfully to:", phoneCandidates[0])
+  }
 }
 
 export async function POST(request: Request) {
@@ -175,9 +237,13 @@ export async function POST(request: Request) {
     if (patientPhone && patientPhone.trim() !== "") {
       sendAppointmentWhatsApp({
         ...appointmentData,
+        ...docData,
+        appointmentId: appointmentId,
+        id: appointmentId,
         patientPhone: patientPhone,
         patientName: docData.patientName,
         doctorName: docData.doctorName,
+        doctorSpecialization: docData.doctorSpecialization,
         appointmentDate: docData.appointmentDate,
         appointmentTime: docData.appointmentTime,
       }).catch((error) => {

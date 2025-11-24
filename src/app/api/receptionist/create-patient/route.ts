@@ -4,10 +4,32 @@ import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
 import { logUserEvent } from "@/utils/auditLog"
 
-const buildWelcomeMessage = (firstName?: string, patientId?: string) => {
+const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
   const friendlyName = firstName?.trim() || "there"
-  const idCopy = patientId ? ` Your patient ID is ${patientId}.` : ""
-  return `Hi ${friendlyName}, welcome to Harmony Medical Services.${idCopy} We'll share appointment updates here on WhatsApp.`
+  const fullName = `${firstName || ""} ${lastName || ""}`.trim() || "Patient"
+  const idCopy = patientId ? `• Patient ID: ${patientId}` : ""
+  const emailCopy = email ? `• Email: ${email}` : ""
+  
+  return `🎉 *Account Successfully Created!*
+
+Hi ${friendlyName},
+
+Welcome to Harmony Medical Services! Your patient account has been successfully created by our receptionist.
+
+📋 *Account Details:*
+${idCopy}
+• Name: ${fullName}
+${emailCopy}
+
+✅ You can now:
+• Book appointments with our doctors
+• View your medical history
+• Access your patient dashboard
+• Receive appointment updates and reminders via WhatsApp
+
+If you need any assistance, reply here or call us at +91-XXXXXXXXXX.
+
+Thank you for choosing Harmony Medical Services! 🏥`
 }
 
 export async function POST(request: Request) {
@@ -132,7 +154,7 @@ export async function POST(request: Request) {
       sendWhatsAppNotification({
         to: phoneCandidates[0],
         fallbackRecipients: phoneCandidates.slice(1),
-        message: buildWelcomeMessage(docData.firstName, patientId),
+        message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
       }).catch((error) => {
         console.error("[create-patient] WhatsApp notification failed:", error)
       })

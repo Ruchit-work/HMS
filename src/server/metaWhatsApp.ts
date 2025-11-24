@@ -538,10 +538,26 @@ export async function sendTextMessage(
 
     if (!response.ok) {
       console.error("[Meta WhatsApp] Error sending message:", data)
+      
+      // Provide more helpful error messages
+      let errorMessage = data.error?.message || "Failed to send message"
+      const errorCode = data.error?.code
+      
+      // Handle specific error codes
+      if (errorCode === 190 || errorMessage?.includes("Malformed access token") || errorMessage?.includes("Invalid OAuth access token")) {
+        errorMessage = "Access token is invalid or expired. Please generate a new token from Meta Business Manager."
+      } else if (errorCode === 131047) {
+        errorMessage = "Recipient phone number is not registered with WhatsApp."
+      } else if (errorCode === 131048) {
+        errorMessage = "Recipient has not opted in to receive messages from your business."
+      } else if (errorCode === 4 || errorCode === 80007) {
+        errorMessage = "Rate limit exceeded. Please wait before sending more messages."
+      }
+      
       return {
         success: false,
-        error: data.error?.message || "Failed to send message",
-        errorCode: data.error?.code,
+        error: errorMessage,
+        errorCode: errorCode,
       }
     }
 

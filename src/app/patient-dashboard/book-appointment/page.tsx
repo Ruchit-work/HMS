@@ -61,12 +61,17 @@ function BookAppointmentContent() {
       patientLastName?: string
       patientPhone?: string | null
       doctorName?: string
+      doctorSpecialization?: string
       appointmentDate: string
       appointmentTime: string
       transactionId: string
+      appointmentId?: string
       paymentAmount: number
+      paymentType?: "full" | "partial"
+      chiefComplaint?: string
     }) => {
-      const friendlyName = [opts.patientFirstName, opts.patientLastName].filter(Boolean).join(" ") || "there"
+      const fullName = [opts.patientFirstName, opts.patientLastName].filter(Boolean).join(" ") || "there"
+      const friendlyName = opts.patientFirstName || "there"
 
       let doctorLabel = opts.doctorName?.trim() || ""
       if (doctorLabel) {
@@ -76,12 +81,51 @@ function BookAppointmentContent() {
         doctorLabel = "our doctor"
       }
 
-      const whenText = formatAppointmentDateTime(opts.appointmentDate, opts.appointmentTime)
-      const amountCopy = opts.paymentAmount
-        ? ` Payment received: ₹${new Intl.NumberFormat("en-IN").format(opts.paymentAmount)}.`
-        : ""
-      const txnCopy = opts.transactionId ? ` Transaction ID: ${opts.transactionId}.` : ""
-      const message = `Hi ${friendlyName}, your appointment with ${doctorLabel} on ${whenText} is confirmed.${amountCopy}${txnCopy}`
+      const dateDisplay = new Date(opts.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+      
+      const timeStr = opts.appointmentTime || ""
+      const [h, m] = timeStr.split(":").map(Number)
+      const timeDisplay = !isNaN(h) && !isNaN(m) 
+        ? new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : timeStr
+
+      const appointmentId = opts.appointmentId || opts.transactionId || "N/A"
+      const doctorSpecialization = opts.doctorSpecialization ? ` (${opts.doctorSpecialization})` : ""
+      const paymentTypeText = opts.paymentType === "partial" ? "Partial" : "Full"
+
+      const message = `🎉 *Appointment Successfully Booked!*
+
+Hi ${fullName},
+
+Your appointment has been confirmed and booked successfully.
+
+📋 *Appointment Details:*
+• 👨‍⚕️ Doctor: ${doctorLabel}${doctorSpecialization}
+• 📅 Date: ${dateDisplay}
+• 🕒 Time: ${timeDisplay}
+• 📋 Appointment ID: ${appointmentId}
+${opts.chiefComplaint ? `• 📝 Reason: ${opts.chiefComplaint}` : ""}
+
+💳 *Payment Information:*
+• Amount Paid: ₹${new Intl.NumberFormat("en-IN").format(opts.paymentAmount || 0)}
+• Payment Type: ${paymentTypeText}
+• Status: ✅ Paid
+• Transaction ID: ${opts.transactionId || "N/A"}
+
+✅ Your appointment is confirmed and visible in your patient dashboard.
+
+If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
+
+See you soon! 🏥`
 
       await sendWhatsAppSafely(opts.patientPhone ?? null, message)
     },
@@ -349,15 +393,23 @@ function BookAppointmentContent() {
         return
       }
 
+      // Get appointment ID from response if available
+      const responseData = await response.json().catch(() => ({}))
+      const appointmentId = responseData?.id || responseData?.appointmentId || transactionId
+      
       await sendAppointmentConfirmationMessage({
         patientFirstName: latestUserData.firstName,
         patientLastName: latestUserData.lastName,
         patientPhone: (latestUserData as any).phoneNumber || (latestUserData as any).phone || null,
         doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
+        doctorSpecialization: selectedDoctorData.specialization || "",
         appointmentDate: appointmentData.date,
         appointmentTime: appointmentData.time,
         transactionId,
+        appointmentId: appointmentId,
         paymentAmount: AMOUNT_TO_PAY,
+        paymentType: paymentType,
+        chiefComplaint: appointmentData.problem,
       })
 
       // Show success modal with appointment details
