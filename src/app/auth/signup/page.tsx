@@ -242,8 +242,10 @@ function SignUpContent() {
         values.phone || ""
       }`.trim();
       
+      // Define fullName outside if block so it's accessible in else block
+      const fullName = `${values.firstName || ""} ${values.lastName || ""}`.trim() || "Patient";
+      
       if (combinedPhone) {
-        const fullName = `${values.firstName || ""} ${values.lastName || ""}`.trim() || "Patient";
         const friendlyName = values.firstName?.trim() || "there";
         
         const message = `🎉 *Account Successfully Created!*
