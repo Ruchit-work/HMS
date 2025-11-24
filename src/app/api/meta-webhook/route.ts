@@ -461,7 +461,21 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   if (availabilityCheck.isBlocked) {
     await sendTextMessage(
       from,
-      `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease try booking again by selecting a different date.`
+      `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease try booking again by clicking 'Book Appointment' and selecting a different date.`
+    )
+    return NextResponse.json({ success: true })
+  }
+  
+  // Check if time slot is already booked
+  const normalizedTime = normalizeTime(appointmentTime)
+  const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+  const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+  const slotDoc = await slotRef.get()
+  
+  if (slotDoc.exists) {
+    await sendTextMessage(
+      from,
+      `❌ *Time Slot Already Booked*\n\nThe time slot ${appointmentTime} on ${appointmentDate} is already booked.\n\nPlease try booking again by clicking 'Book Appointment' and selecting a different time.`
     )
     return NextResponse.json({ success: true })
   }
@@ -469,7 +483,6 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   const consultationFee = doctorData.consultationFee || 500
   const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
   const amountToPay = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
-  const normalizedTime = normalizeTime(appointmentTime)
 
   // Create appointment
   try {
@@ -1469,8 +1482,8 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     if (!slotDoc.exists) {
       availableSlots.push({
         id: `time_${slot}`,
-        title: slot,
-        description: "Available",
+        title: slot, // Just the time like "09:00", "09:30", etc.
+        description: "", // Empty for cleaner look in interactive list (radio button style)
       })
     }
   }
@@ -1545,40 +1558,103 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     }
   }
 
-  // If buttons failed or not requested, show list message
+  // Format time slots for interactive list message (radio button style)
+  // Sort slots chronologically for better UX
+  const sortedSlots = [...availableSlots].sort((a, b) => {
+    const [hA, mA] = a.title.split(":").map(Number)
+    const [hB, mB] = b.title.split(":").map(Number)
+    return hA * 60 + mA - (hB * 60 + mB)
+  })
+
+  // Format slots for list message - just the time, clean and simple
+  const formattedSlots = sortedSlots.map(slot => ({
+    id: slot.id,
+    title: slot.title, // Just the time like "09:00", "09:30", etc.
+    description: "", // Empty description for cleaner look
+  }))
+
   // Split into sections if more than 10 (WhatsApp list limit is 10 rows per section)
   const sections = []
-  for (let i = 0; i < availableSlots.length; i += 10) {
+  for (let i = 0; i < formattedSlots.length; i += 10) {
+    const sectionTitle = i === 0 
+      ? (language === "gujarati" ? "સમય પસંદ કરો" : "Available Times")
+      : (language === "gujarati" ? "વધુ સમય" : "More Times")
+    
+    // Ensure section title doesn't exceed 24 chars
+    const truncatedSectionTitle = sectionTitle.length > 24 ? sectionTitle.substring(0, 24) : sectionTitle
+    
     sections.push({
-      title: i === 0 ? (language === "gujarati" ? "ઉપલબ્ધ સમય સ્લોટ" : "Available Time Slots") : (language === "gujarati" ? "વધુ સમય સ્લોટ" : "More Time Slots"),
-      rows: availableSlots.slice(i, i + 10),
+      title: truncatedSectionTitle,
+      rows: formattedSlots.slice(i, i + 10),
     })
   }
 
   const timeMsg = language === "gujarati"
     ? "🕐 *સમય પસંદ કરો*\n\nતમારો પસંદીદા સમય પસંદ કરો:"
-    : "🕐 *Select Appointment Time*\n\nChoose your preferred time slot:"
+    : "🕐 *Select Time*\n\nChoose your preferred time slot:"
+
+  // Button text max 20 chars
+  const buttonText = language === "gujarati" ? "સમય પસંદ કરો" : "Select Time"
+  const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 20) : buttonText
 
   const listResponse = await sendListMessage(
     phone,
     timeMsg,
-    language === "gujarati" ? "સમય પસંદ કરો" : "Select Time",
+    truncatedButtonText,
     sections,
     "Harmony Medical Services"
   )
 
   if (!listResponse.success) {
-    // Fallback to text-based selection
-    const timeListMsg = language === "gujarati" ? "🕐 *સમય પસંદ કરો:*\n\n" : "🕐 *Select Time:*\n\n"
-    let timeList = timeListMsg
-    timeSlots.forEach((slot, index) => {
-      timeList += `${index + 1}. ${slot}\n`
+    console.error("[Meta WhatsApp] Failed to send time slot list message:", {
+      error: listResponse.error,
+      errorCode: listResponse.errorCode,
+      phone: phone,
+      slotCount: formattedSlots.length,
     })
-    const promptMsg = language === "gujarati"
-      ? "\nકૃપા કરીને તમારા પસંદીદા સમય સ્લોટનો નંબર રિપ્લાય કરો."
-      : "\nPlease reply with the number of your preferred time slot."
-    timeList += promptMsg
-    await sendTextMessage(phone, timeList)
+    
+    // Retry with simplified format
+    console.log("[Meta WhatsApp] Retrying time slot list with simplified format...")
+    const simplifiedSlots = formattedSlots.map(slot => ({
+      id: slot.id,
+      title: slot.title.length > 24 ? slot.title.substring(0, 21) + "..." : slot.title,
+      description: "",
+    }))
+
+    const simplifiedSections = []
+    for (let i = 0; i < simplifiedSlots.length; i += 10) {
+      simplifiedSections.push({
+        title: i === 0 ? "Times" : "More",
+        rows: simplifiedSlots.slice(i, i + 10),
+      })
+    }
+
+    const retryResponse = await sendListMessage(
+      phone,
+      language === "gujarati" ? "સમય પસંદ કરો:" : "Select Time:",
+      "Select",
+      simplifiedSections,
+      "HMS"
+    )
+
+    if (!retryResponse.success) {
+      console.error("[Meta WhatsApp] Retry also failed:", retryResponse.error)
+      // Only fallback to text if both attempts fail
+      const timeListMsg = language === "gujarati" ? "🕐 *સમય પસંદ કરો:*\n\n" : "🕐 *Select Time:*\n\n"
+      let timeList = timeListMsg
+      sortedSlots.forEach((slot, index) => {
+        timeList += `${index + 1}. ${slot.title}\n`
+      })
+      const promptMsg = language === "gujarati"
+        ? "\nકૃપા કરીને તમારા પસંદીદા સમય સ્લોટનો નંબર રિપ્લાય કરો."
+        : "\nPlease reply with the number of your preferred time slot."
+      timeList += promptMsg
+      await sendTextMessage(phone, timeList)
+    } else {
+      console.log("[Meta WhatsApp] ✅ Time slot list sent successfully on retry")
+    }
+  } else {
+    console.log("[Meta WhatsApp] ✅ Time slot list sent successfully")
   }
 }
 

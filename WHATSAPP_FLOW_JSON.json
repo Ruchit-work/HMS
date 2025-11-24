@@ -1,0 +1,307 @@
+{
+  "version": "7.2",
+  "screens": [
+    {
+      "id": "SYMPTOM_SCREEN",
+      "title": "Why are you visiting?",
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "flow_path",
+            "children": [
+              {
+                "type": "Dropdown",
+                "label": "Select symptom category (optional)",
+                "name": "symptom_category",
+                "required": false,
+                "data-source": [
+                  { "id": "fever", "title": "Fever" },
+                  { "id": "headache", "title": "Headache" },
+                  { "id": "cough", "title": "Cough/Cold" },
+                  { "id": "diabetes", "title": "Diabetes" },
+                  { "id": "heart", "title": "Heart Related" },
+                  { "id": "general", "title": "General Checkup" },
+                  { "id": "unknown", "title": "Not sure" }
+                ]
+              },
+              {
+                "type": "TextInput",
+                "label": "Chief complaint / Reason for visit",
+                "name": "chief_complaint",
+                "required": true,
+                "placeholder": "Describe your symptoms or reason for appointment"
+              },
+              {
+                "type": "Footer",
+                "label": "Next →",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": { "name": "DOCTOR_SCREEN", "type": "screen" },
+                  "payload": {
+                    "symptom_category": "${form.symptom_category}",
+                    "chief_complaint": "${form.chief_complaint}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DOCTOR_SCREEN",
+      "title": "Select Doctor",
+      "data": {
+        "symptom_category": { "__example__": "fever", "type": "string" },
+        "chief_complaint": { "__example__": "Fever and cough for 3 days", "type": "string" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "flow_path",
+            "children": [
+              { "type": "TextHeading", "text": "Choose your doctor" },
+              {
+                "type": "Dropdown",
+                "label": "Doctor",
+                "name": "doctor_id",
+                "required": true,
+                "data-source": [
+                  { "id": "doctor_1", "title": "Dr. Smith - General Care" },
+                  { "id": "doctor_2", "title": "Dr. Rohan - Heart Specialist" },
+                  { "id": "doctor_3", "title": "Dr. Meera - Pediatrics" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next →",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": { "name": "DATETIME_SCREEN", "type": "screen" },
+                  "payload": {
+                    "symptom_category": "${data.symptom_category}",
+                    "chief_complaint": "${data.chief_complaint}",
+                    "doctor_id": "${form.doctor_id}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DATETIME_SCREEN",
+      "title": "Select Date & Time",
+      "data": {
+        "symptom_category": { "__example__": "fever", "type": "string" },
+        "chief_complaint": { "__example__": "Fever and cough", "type": "string" },
+        "doctor_id": { "__example__": "doctor_1", "type": "string" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "flow_path",
+            "children": [
+              {
+                "type": "DatePicker",
+                "label": "Choose appointment date",
+                "name": "appointment_date",
+                "required": true,
+                "min-date": "today",
+                "description": "Note: Sundays and blocked dates are not available. You'll be notified if selected date is unavailable."
+              },
+              {
+                "type": "Dropdown",
+                "label": "Select time slot",
+                "name": "appointment_time",
+                "required": true,
+                "description": "Available slots only. Booked slots will show error on submission.",
+                "data-source": [
+                  { "id": "09:00", "title": "09:00 AM" },
+                  { "id": "09:30", "title": "09:30 AM" },
+                  { "id": "10:00", "title": "10:00 AM" },
+                  { "id": "10:30", "title": "10:30 AM" },
+                  { "id": "11:00", "title": "11:00 AM" },
+                  { "id": "11:30", "title": "11:30 AM" },
+                  { "id": "12:00", "title": "12:00 PM" },
+                  { "id": "12:30", "title": "12:30 PM" },
+                  { "id": "13:00", "title": "01:00 PM" },
+                  { "id": "13:30", "title": "01:30 PM" },
+                  { "id": "14:00", "title": "02:00 PM" },
+                  { "id": "14:30", "title": "02:30 PM" },
+                  { "id": "15:00", "title": "03:00 PM" },
+                  { "id": "15:30", "title": "03:30 PM" },
+                  { "id": "16:00", "title": "04:00 PM" },
+                  { "id": "16:30", "title": "04:30 PM" },
+                  { "id": "17:00", "title": "05:00 PM" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next →",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": { "name": "HISTORY_SCREEN", "type": "screen" },
+                  "payload": {
+                    "symptom_category": "${data.symptom_category}",
+                    "chief_complaint": "${data.chief_complaint}",
+                    "doctor_id": "${data.doctor_id}",
+                    "appointment_date": "${form.appointment_date}",
+                    "appointment_time": "${form.appointment_time}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "HISTORY_SCREEN",
+      "title": "Medical History",
+      "data": {
+        "symptom_category": { "__example__": "fever", "type": "string" },
+        "chief_complaint": { "__example__": "Fever and cough", "type": "string" },
+        "doctor_id": { "__example__": "doctor_1", "type": "string" },
+        "appointment_date": { "__example__": "2025-11-25", "type": "string" },
+        "appointment_time": { "__example__": "09:00", "type": "string" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "flow_path",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "Medical history (optional)"
+              },
+              {
+                "type": "TextInput",
+                "label": "Any existing conditions or medications",
+                "name": "medical_history",
+                "required": false,
+                "placeholder": "e.g., Diabetes, Hypertension, etc."
+              },
+              {
+                "type": "Footer",
+                "label": "Next →",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": { "name": "PAYMENT_METHOD", "type": "screen" },
+                  "payload": {
+                    "symptom_category": "${data.symptom_category}",
+                    "chief_complaint": "${data.chief_complaint}",
+                    "doctor_id": "${data.doctor_id}",
+                    "appointment_date": "${data.appointment_date}",
+                    "appointment_time": "${data.appointment_time}",
+                    "medical_history": "${form.medical_history}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PAYMENT_METHOD",
+      "title": "Payment Method",
+      "data": {
+        "symptom_category": { "__example__": "fever", "type": "string" },
+        "chief_complaint": { "__example__": "Fever and cough", "type": "string" },
+        "doctor_id": { "__example__": "doctor_1", "type": "string" },
+        "appointment_date": { "__example__": "2025-11-25", "type": "string" },
+        "appointment_time": { "__example__": "09:00", "type": "string" },
+        "medical_history": { "__example__": "None", "type": "string" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "flow_path",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "Select payment method"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Payment option",
+                "name": "payment_option",
+                "required": true,
+                "data-source": [
+                  { "id": "cash", "title": "💵 Cash (Pay at hospital)" },
+                  { "id": "upi", "title": "📱 UPI (Google Pay, PhonePe)" },
+                  { "id": "card", "title": "💳 Credit/Debit Card" },
+                  { "id": "wallet", "title": "💰 Wallet Payment" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next →",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": { "name": "CONFIRM_SCREEN", "type": "screen" },
+                  "payload": {
+                    "symptom_category": "${data.symptom_category}",
+                    "chief_complaint": "${data.chief_complaint}",
+                    "doctor_id": "${data.doctor_id}",
+                    "appointment_date": "${data.appointment_date}",
+                    "appointment_time": "${data.appointment_time}",
+                    "medical_history": "${data.medical_history}",
+                    "payment_option": "${form.payment_option}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONFIRM_SCREEN",
+      "title": "Booking Submitted",
+      "terminal": true,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Thank you! Booking submitted."
+          },
+          {
+            "type": "TextBody",
+            "text": "We've received your appointment request. You'll receive a confirmation message shortly with all the details."
+          },
+          {
+            "type": "Footer",
+            "label": "Finish",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "symptom_category": "${data.symptom_category}",
+                "chief_complaint": "${data.chief_complaint}",
+                "doctor_id": "${data.doctor_id}",
+                "appointment_date": "${data.appointment_date}",
+                "appointment_time": "${data.appointment_time}",
+                "medical_history": "${data.medical_history}",
+                "payment_option": "${data.payment_option}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
