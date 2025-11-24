@@ -64,13 +64,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true })
       }
       
-      // Handle quick today buttons
-      if (buttonId === "time_today_morning" || buttonId === "time_today_afternoon") {
-        await handleTodayQuickButton(from, buttonId)
-        return NextResponse.json({ success: true })
-      }
-      
-      // Handle "choose another date" button
+      // Handle "choose date" button
       if (buttonId === "date_choose_other") {
         await handleChooseAnotherDate(from)
         return NextResponse.json({ success: true })
@@ -266,6 +260,8 @@ interface BookingSession {
   paymentMethod?: "card" | "upi" | "cash" | "wallet"
   paymentType?: "full" | "partial"
   consultationFee?: number
+  paymentAmount?: number
+  remainingAmount?: number
   createdAt: string
   updatedAt: string
 }
@@ -495,6 +491,11 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   const consultationFee = doctorData.consultationFee || 500
   const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
   const amountToPay = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
+  const isCash = paymentMethod === "cash"
+  const collectedAmount = isCash ? 0 : amountToPay
+  const remainingAmount = Math.max(consultationFee - collectedAmount, 0)
+  const paymentStatus: "pending" | "paid" =
+    !isCash && remainingAmount === 0 ? "paid" : "pending"
 
   // Create appointment
   try {
@@ -510,7 +511,11 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         appointmentTime: normalizedTime,
         medicalHistory: "",
         paymentOption: paymentMethod,
-        paymentStatus: "pending",
+        paymentStatus,
+        paymentType: paymentType as "full" | "partial",
+        consultationFee,
+        paymentAmount: collectedAmount,
+        remainingAmount,
       },
       from
     )
@@ -529,6 +534,8 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         paymentMethod: paymentMethod as "card" | "upi" | "cash" | "wallet",
         paymentType: paymentType as "full" | "partial",
         consultationFee: consultationFee,
+        paymentAmount: collectedAmount,
+        remainingAmount,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -855,11 +862,11 @@ async function handleDoctorSelection(
       })
 
       const confirmMsg = language === "gujarati"
-        ? `✅ પસંદ કર્યું: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 આજે ઝડપી સમય પસંદ કરો અથવા બીજી તારીખ પસંદ કરો:`
-        : `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 Pick a quick time for today or choose another date:`
+        ? `✅ પસંદ કર્યું: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 કૃપા કરીને નીચેના બટનથી તારીખ પસંદ કરો.`
+        : `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 Tap the button below to pick a date.`
 
       await sendTextMessage(phone, confirmMsg)
-      await sendTodayQuickOptions(phone, selectedDoctor.id, language)
+      await sendDateSelectionButton(phone, selectedDoctor.id, language)
       return true
     }
   }
@@ -971,89 +978,29 @@ async function handleDateSelection(
   return true
 }
 
-async function sendTodayQuickOptions(phone: string, doctorId: string, language: Language = "english") {
-  const db = admin.firestore()
-  const today = new Date().toISOString().split("T")[0]
-  
-  // Get doctor data to check blocked dates
-  let doctorData: any = null
-  if (doctorId) {
-    const doctorDoc = await db.collection("doctors").doc(doctorId).get()
-    if (doctorDoc.exists) {
-      doctorData = doctorDoc.data()!
-    }
-  }
-  
-  const todayBlocked = doctorData ? checkDateAvailability(today, doctorData).isBlocked : false
-  if (todayBlocked) {
-    await sendDatePicker(phone, doctorId, language)
-    return
-  }
-  
-  const quickButtons: Array<{ id: string; title: string }> = [
-    {
-      id: "time_today_morning",
-      title: language === "gujarati" ? "🌅 આજે 9-1" : "🌅 Today 9-1",
-    },
-    {
-      id: "time_today_afternoon",
-      title: language === "gujarati" ? "☀️ આજે 2-5" : "☀️ Today 2-5",
-    },
+async function sendDateSelectionButton(phone: string, doctorId: string, language: Language = "english") {
+  const buttons = [
     {
       id: "date_choose_other",
-      title: language === "gujarati" ? "📅 બીજી તારીખ" : "📅 Other Date",
+      title: language === "gujarati" ? "📅 તારીખ પસંદ કરો" : "📅 Select Date",
     },
   ]
-  
-  const comboMsg = language === "gujarati"
-    ? "📅 *આજનો સમય પસંદ કરો*\n\nઝડપી વિકલ્પમાંથી પસંદ કરો અથવા બીજી તારીખ પસંદ કરો."
-    : "📅 *Pick a time for today*\n\nChoose a quick option or pick another date."
-  
+
+  const prompt = language === "gujarati"
+    ? "📅 *અપોઇન્ટમેન્ટ તારીખ પસંદ કરો*\n\n નીચેનો બટન ટેપ કરીને ઉપલબ્ધ તારીખો જુઓ."
+    : "📅 *Select Appointment Date*\n\nTap the button below to view all available dates."
+
   const buttonResponse = await sendMultiButtonMessage(
     phone,
-    comboMsg,
-    quickButtons,
+    prompt,
+    buttons,
     "Harmony Medical Services"
   )
-  
+
   if (!buttonResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send today quick buttons, falling back to date picker:", buttonResponse.error)
-    await sendDatePicker(phone, doctorId, language)
+    console.error("[Meta WhatsApp] Failed to send date selection button, falling back to date picker:", buttonResponse.error)
+    await sendDatePicker(phone, doctorId, language, false)
   }
-}
-
-async function handleTodayQuickButton(phone: string, buttonId: string) {
-  const db = admin.firestore()
-  const normalizedPhone = formatPhoneNumber(phone)
-  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-  const sessionDoc = await sessionRef.get()
-  
-  if (!sessionDoc.exists) {
-    return
-  }
-  
-  const session = sessionDoc.data() as BookingSession
-  const language = session.language || "english"
-  
-  if (!session.doctorId) {
-    const errorMsg = language === "gujarati"
-      ? "❌ કૃપા કરીને પહેલા ડૉક્ટર પસંદ કરો."
-      : "❌ Please select a doctor first."
-    await sendTextMessage(phone, errorMsg)
-    await sendDoctorPicker(phone, language)
-    return
-  }
-  
-  const today = new Date().toISOString().split("T")[0]
-
-  await sessionRef.update({
-    appointmentDate: today,
-    state: "selecting_time",
-    updatedAt: new Date().toISOString(),
-  })
-  
-  const mappedButtonId = buttonId === "time_today_morning" ? "time_quick_morning" : "time_quick_afternoon"
-  await handleTimeButtonClick(phone, mappedButtonId)
 }
 
 async function handleChooseAnotherDate(phone: string) {
@@ -1306,11 +1253,11 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     })
 
     const confirmMsg = language === "gujarati"
-      ? `✅ પસંદ કર્યું: ${doctorName}\n\n📅 આજે ઝડપી સમય પસંદ કરો અથવા બીજી તારીખ પસંદ કરો:`
-      : `✅ Selected: ${doctorName}\n\n📅 Pick a quick time for today or choose another date:`
+      ? `✅ પસંદ કર્યું: ${doctorName}\n\n📅 તારીખ પસંદ કરવા માટે નીચેનો બટન ટેપ કરો:`
+      : `✅ Selected: ${doctorName}\n\n📅 Tap the button below to pick a date.`
 
     await sendTextMessage(phone, confirmMsg)
-    await sendTodayQuickOptions(phone, selectedDoctorId, language)
+    await sendDateSelectionButton(phone, selectedDoctorId, language)
     return
   }
 
@@ -1567,6 +1514,8 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   const timeSlots = generateTimeSlots()
   let selectedSlots: string[] = []
 
+  const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
+
   if (buttonId === "time_quick_morning") {
     // Morning slots: 9:00 AM to 1:00 PM (09:00 to 13:00)
     selectedSlots = timeSlots.filter(slot => {
@@ -1614,6 +1563,14 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     if (!normalizedTime) {
       console.warn("[Meta WhatsApp] Failed to normalize time slot:", slot)
       continue
+    }
+
+    if (isToday) {
+      const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+      if (slotDateTime.getTime() <= Date.now()) {
+        console.log("[Meta WhatsApp] Skipping past slot:", normalizedTime)
+        continue
+      }
     }
     
     const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
@@ -1700,6 +1657,8 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
   // Check which slots are available (filter out already booked slots)
   const availableSlots: Array<{ id: string; title: string; description?: string }> = []
   
+  const isToday = appointmentDate === new Date().toISOString().split("T")[0]
+
   for (const slot of timeSlots) {
     const normalizedTime = normalizeTime(slot)
     const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
@@ -1707,6 +1666,12 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     const slotDoc = await slotRef.get()
     
     if (!slotDoc.exists) {
+      if (isToday) {
+        const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
+        if (slotDateTime.getTime() <= Date.now()) {
+          continue
+        }
+      }
       availableSlots.push({
         id: `time_${slot}`,
         title: slot, // Time in 24-hour format like "09:00", "09:30", etc.
@@ -2023,6 +1988,19 @@ async function handleTimeSelection(
   const selectedTime = timeSlots[slotNum - 1]
   const normalizedTime = normalizeTime(selectedTime)
 
+  const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
+  if (isToday) {
+    const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+    if (slotDateTime.getTime() <= Date.now()) {
+      const errorMsg = language === "gujarati"
+        ? "❌ આ સમય પસાર થઈ ગયો છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો."
+        : "❌ That time has already passed. Please pick a future slot."
+      await sendTextMessage(phone, errorMsg)
+      await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
+      return true
+    }
+  }
+
   // Check if slot is already booked
   const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
   const slotRef = db.collection("appointmentSlots").doc(slotDocId)
@@ -2271,12 +2249,16 @@ async function handleConfirmation(
     const consultationFee = session.consultationFee || doctorData.consultationFee || 500
     const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
     
-    // Determine payment status based on method and type
-    let paymentStatus = "pending"
-    if (session.paymentMethod === "cash") {
-      paymentStatus = "pending" // Cash is paid at hospital
-    } else if (session.paymentMethod === "card" || session.paymentMethod === "upi" || session.paymentMethod === "wallet") {
-      paymentStatus = "pending" // Will be processed (can be updated later when payment is actually processed)
+    const paymentMethod = session.paymentMethod || "cash"
+    const paymentType = session.paymentType || "full"
+    const isCash = paymentMethod === "cash"
+    const collectedAmount = isCash ? 0 : (paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee)
+    const remainingAmount = Math.max(consultationFee - collectedAmount, 0)
+
+    // Determine payment status based on method and amount collected
+    let paymentStatus: "pending" | "paid" = "pending"
+    if (!isCash && remainingAmount === 0) {
+      paymentStatus = "paid"
     }
 
     const appointmentId = await createAppointment(
@@ -2290,13 +2272,26 @@ async function handleConfirmation(
         appointmentDate: session.appointmentDate!,
         appointmentTime: session.appointmentTime!,
         medicalHistory: "",
-        paymentOption: session.paymentMethod,
+        paymentOption: paymentMethod,
         paymentStatus: paymentStatus,
+        paymentType,
+        consultationFee,
+        paymentAmount: collectedAmount,
+        remainingAmount,
       },
       normalizedPhone
     )
 
-    await sendBookingConfirmation(normalizedPhone, patient, doctorData, session, appointmentId)
+    const sessionForConfirmation: BookingSession = {
+      ...session,
+      paymentMethod,
+      paymentType,
+      consultationFee,
+      paymentAmount: collectedAmount,
+      remainingAmount,
+    }
+
+    await sendBookingConfirmation(normalizedPhone, patient, doctorData, sessionForConfirmation, appointmentId)
     await sessionRef.delete()
 
     return true
@@ -2411,6 +2406,10 @@ async function createAppointment(
     medicalHistory: string
     paymentOption: string
     paymentStatus: string
+    paymentType: "full" | "partial"
+    consultationFee: number
+    paymentAmount: number
+    remainingAmount: number
   },
   phone: string
 ) {
@@ -2448,7 +2447,11 @@ async function createAppointment(
       medicalHistory: payload.medicalHistory,
       paymentMethod: payload.paymentOption,
       paymentStatus: payload.paymentStatus,
-      paymentAmount: 0,
+      paymentType: payload.paymentType,
+      consultationFee: payload.consultationFee,
+      totalConsultationFee: payload.consultationFee,
+      paymentAmount: payload.paymentAmount,
+      remainingAmount: payload.remainingAmount,
       status: payload.paymentStatus === "user_confirmed" ? "confirmed" : "pending",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -2501,7 +2504,20 @@ async function sendBookingConfirmation(
 
   const consultationFee = session.consultationFee || doctorData.consultationFee || 500
   const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
-  const amountToPay = session.paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
+  const defaultAmount =
+    session.paymentType === "partial"
+      ? PARTIAL_PAYMENT_AMOUNT
+      : consultationFee
+  const amountCollected =
+    session.paymentAmount !== undefined
+      ? session.paymentAmount
+      : session.paymentMethod === "cash"
+      ? 0
+      : defaultAmount
+  const remainingAmount =
+    session.remainingAmount !== undefined
+      ? session.remainingAmount
+      : Math.max(consultationFee - amountCollected, 0)
 
   // Send confirmation message
   await sendTextMessage(
@@ -2516,7 +2532,7 @@ Your appointment has been booked successfully:
 • 🕒 Time: ${timeDisplay}
 • 📋 Appointment ID: ${appointmentId}
 ${session.symptoms ? `• 📝 Symptoms: ${session.symptoms}` : ""}
-• 💳 Payment: ${session.paymentMethod?.toUpperCase()} - ${session.paymentType === "partial" ? `₹${amountToPay} (₹${consultationFee - amountToPay} at hospital)` : `₹${amountToPay}`}
+• 💳 Payment: ${session.paymentMethod?.toUpperCase() || "CASH"} - ₹${amountCollected}${remainingAmount > 0 ? ` (₹${remainingAmount} due at hospital)` : " (paid)"}
 
 ✅ Your appointment is now visible in our system. Admin and receptionist can see it.
 
@@ -2547,8 +2563,8 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
       paymentStatus: appointmentData.paymentStatus || "pending",
       paymentType: session.paymentType || "full",
       totalConsultationFee: consultationFee,
-      paymentAmount: amountToPay,
-      remainingAmount: session.paymentType === "partial" ? consultationFee - amountToPay : 0,
+      paymentAmount: amountCollected,
+      remainingAmount,
       paidAt: appointmentData.paidAt || "",
       createdAt: appointmentData.createdAt || new Date().toISOString(),
       updatedAt: appointmentData.updatedAt || new Date().toISOString(),

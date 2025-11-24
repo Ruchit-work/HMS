@@ -134,7 +134,14 @@ export async function GET(request: Request) {
       appointmentsDocs = appointmentsSnapshot.docs
         .filter((doc) => {
           const data = doc.data()
-          return Number(data?.paymentAmount || 0) > 0
+          const paymentAmount = Number(data?.paymentAmount || 0)
+          const totalConsultationFee = Number(data?.totalConsultationFee || 0)
+          const isPending =
+            (data?.paymentStatus && data.paymentStatus !== "paid") ||
+            (!data?.paidAt && paymentAmount <= 0)
+          const isCashPending =
+            isPending && totalConsultationFee > 0 && (data?.paymentMethod === "cash" || !data?.paymentMethod)
+          return paymentAmount > 0 || isCashPending
         })
         .sort((a, b) => {
           const aData = a.data()
@@ -155,7 +162,14 @@ export async function GET(request: Request) {
         appointmentsDocs = allAppointmentsSnapshot.docs
           .filter((doc) => {
             const data = doc.data()
-            return Number(data?.paymentAmount || 0) > 0
+            const paymentAmount = Number(data?.paymentAmount || 0)
+            const totalConsultationFee = Number(data?.totalConsultationFee || 0)
+            const isPending =
+              (data?.paymentStatus && data.paymentStatus !== "paid") ||
+              (!data?.paidAt && paymentAmount <= 0)
+            const isCashPending =
+              isPending && totalConsultationFee > 0 && (data?.paymentMethod === "cash" || !data?.paymentMethod)
+            return paymentAmount > 0 || isCashPending
           })
           .sort((a, b) => {
             const aData = a.data()
@@ -174,9 +188,9 @@ export async function GET(request: Request) {
       const data = docSnap.data() || {}
       const paymentAmount = Number(data.paymentAmount || 0)
       const totalConsultationFee = Number(data.totalConsultationFee || 0)
-
-      // Skip if no payment amount
-      if (paymentAmount <= 0) continue
+      if (paymentAmount <= 0 && totalConsultationFee <= 0) {
+        continue
+      }
 
       let patientName = data.patientName || null
       let patientUid = data.patientUid || null
@@ -215,11 +229,13 @@ export async function GET(request: Request) {
       let status: "pending" | "paid" | "void" | "cancelled" = "paid"
       if (data.status === "cancelled") {
         status = "cancelled"
-      } else if (data.paymentStatus === "pending" || !data.paidAt) {
+      } else if (data.paymentStatus === "pending" || !data.paidAt || paymentAmount <= 0) {
         status = "pending"
       } else if (data.paymentStatus === "paid" || data.paidAt) {
         status = "paid"
       }
+
+      const billedAmount = paymentAmount > 0 ? paymentAmount : totalConsultationFee
 
       records.push({
         id: docSnap.id,
@@ -231,8 +247,8 @@ export async function GET(request: Request) {
         patientName,
         doctorId: String(data.doctorId || ""),
         doctorName: data.doctorName || null,
-        consultationFee: totalConsultationFee,
-        totalAmount: paymentAmount,
+        consultationFee: totalConsultationFee || paymentAmount,
+        totalAmount: billedAmount,
         generatedAt: data.paidAt || data.createdAt || new Date().toISOString(),
         status,
         paymentMethod: data.paymentMethod || undefined,
@@ -241,7 +257,12 @@ export async function GET(request: Request) {
         transactionId: data.transactionId || null,
         paidAtFrontDesk: false,
         paymentType: data.paymentType || "full",
-        remainingAmount: Number(data.remainingAmount || 0),
+        remainingAmount:
+          status === "pending"
+            ? billedAmount - paymentAmount > 0
+              ? billedAmount - paymentAmount
+              : billedAmount || totalConsultationFee
+            : Number(data.remainingAmount || 0),
       })
     }
 
