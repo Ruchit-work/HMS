@@ -204,10 +204,6 @@ const translations: Translations = {
     english: "🆕 *Create Patient Profile*\n\nPlease enter your full name (e.g., John Doe).",
     gujarati: "🆕 *દર્દી પ્રોફાઇલ બનાવો*\n\nકૃપા કરીને તમારું સંપૂર્ણ નામ દાખલ કરો (ઉદાહરણ: રાજેશ પટેલ).",
   },
-  doctorSelection: {
-    english: "👨‍⚕️ *Select a Doctor*\n\nChoose your preferred doctor:",
-    gujarati: "👨‍⚕️ *ડૉક્ટર પસંદ કરો*\n\nતમારો પસંદીદા ડૉક્ટર પસંદ કરો:",
-  },
   dateSelection: {
     english: "📅 *Select Appointment Date*\n\nTap the button below to see all available dates:",
     gujarati: "📅 *અપોઇન્ટમેન્ટ તારીખ પસંદ કરો*\n\nઉપલબ્ધ તારીખો જોવા માટે નીચેનું બટન ટેપ કરો:",
@@ -215,18 +211,6 @@ const translations: Translations = {
   timeSelection: {
     english: "🕐 *Select Appointment Time*\n\nChoose your preferred time slot:",
     gujarati: "🕐 *સમય પસંદ કરો*\n\nતમારો પસંદીદા સમય પસંદ કરો:",
-  },
-  symptomsEntry: {
-    english: "📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type \"skip\" if you don't want to add symptoms now)",
-    gujarati: "📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો \"skip\" ટાઇપ કરી શકો છો)",
-  },
-  paymentMethod: {
-    english: "💳 *Select Payment Method*\n\nConsultation Fee: ₹{fee}\n\nChoose your preferred payment method:",
-    gujarati: "💳 *ચુકવણીની પદ્ધતિ પસંદ કરો*\n\nસલાહ ફી: ₹{fee}\n\nતમારી પસંદીદા ચુકવણી પદ્ધતિ પસંદ કરો:",
-  },
-  paymentType: {
-    english: "💳 *Payment Type*\n\nPayment Method: {method}\nConsultation Fee: ₹{fee}\n\nChoose payment type:",
-    gujarati: "💳 *ચુકવણીનો પ્રકાર*\n\nચુકવણી પદ્ધતિ: {method}\nસલાહ ફી: ₹{fee}\n\nચુકવણીનો પ્રકાર પસંદ કરો:",
   },
   confirmAppointment: {
     english: "📋 *Confirm Appointment:*\n\n",
@@ -537,7 +521,12 @@ async function handleConfirmationButtonClick(phone: string, action: "confirm" | 
 
 
 // Booking conversation states
-type BookingState = "idle" | "selecting_language" | "selecting_doctor" | "selecting_date" | "selecting_time" | "entering_symptoms" | "selecting_payment" | "confirming"
+type BookingState =
+  | "idle"
+  | "selecting_language"
+  | "selecting_date"
+  | "selecting_time"
+  | "confirming"
 
 interface BookingSession {
   state: BookingState
@@ -945,16 +934,10 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
   switch (session.state) {
     case "selecting_language":
       return await handleLanguageSelection(db, phone, normalizedPhone, sessionRef, text, session)
-    case "selecting_doctor":
-      return await handleDoctorSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_date":
       return await handleDateSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_time":
       return await handleTimeSelection(db, phone, normalizedPhone, sessionRef, text, session)
-    case "entering_symptoms":
-      return await handleSymptomsEntry(db, phone, normalizedPhone, sessionRef, text, session)
-    case "selecting_payment":
-      return await handlePaymentSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "confirming":
       return await handleConfirmation(db, phone, normalizedPhone, sessionRef, text, session)
     default:
@@ -1003,183 +986,6 @@ async function handleLanguageSelection(
   }
 
   await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
-  return true
-}
-
-async function sendDoctorPicker(phone: string, language: "english" | "gujarati" = "english") {
-  const db = admin.firestore()
-  
-  // Get available doctors
-  const doctorsSnapshot = await db.collection("doctors").where("status", "==", "active").limit(10).get()
-  if (doctorsSnapshot.empty) {
-    const noDoctorsMsg = language === "gujarati" 
-      ? "❌ આ સમયે કોઈ ડૉક્ટર ઉપલબ્ધ નથી. કૃપા કરીને રિસેપ્શનનો સંપર્ક કરો."
-      : "❌ No doctors available at the moment. Please contact reception."
-    await sendTextMessage(phone, noDoctorsMsg)
-    return
-  }
-
-  const doctors = doctorsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-
-  // Create doctor options for list message
-  // WhatsApp List message limits:
-  // - Row title: max 24 characters
-  // - Row description: max 72 characters
-  // - Section title: max 24 characters
-  // - Button text: max 20 characters
-  const doctorOptions = doctors.map((doc: any, index: number) => {
-    const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
-    const specialization = doc.specialization || "General"
-    
-    // Truncate title to 24 chars (WhatsApp limit)
-    let title = `${name} - ${specialization}`
-    if (title.length > 24) {
-      // Try to fit name and specialization
-      const namePart = name.length > 15 ? name.substring(0, 15) + "..." : name
-      title = `${namePart} - ${specialization.substring(0, 24 - namePart.length - 3)}`
-      if (title.length > 24) {
-        title = title.substring(0, 24)
-      }
-    }
-    
-    // Truncate description to 72 chars (WhatsApp limit)
-    let description = specialization
-    if (description.length > 72) {
-      description = description.substring(0, 72)
-    }
-    
-    return {
-      id: `doctor_${doc.id}`,
-      title: title,
-      description: description,
-    }
-  })
-
-  // WhatsApp list message limit: 10 rows TOTAL (not per section)
-  // Already limited to 10 doctors by .limit(10) query above
-  // Create single section with all doctor options (max 10)
-  const sections = [{
-    title: language === "gujarati" ? "ડૉક્ટરો" : "Available Doctors",
-    rows: doctorOptions,
-  }]
-
-  const doctorMsg = language === "gujarati"
-    ? "👨‍⚕️ *ડૉક્ટર પસંદ કરો*\n\nતમારો પસંદીદા ડૉક્ટર પસંદ કરો:"
-    : "👨‍⚕️ *Select a Doctor*\n\nChoose your preferred doctor:"
-
-  // Button text max 20 chars
-  const buttonText = language === "gujarati" ? "ડૉક્ટર પસંદ કરો" : "Select Doctor"
-  const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 20) : buttonText
-
-  const listResponse = await sendListMessage(
-    phone,
-    doctorMsg,
-    truncatedButtonText,
-    sections,
-    "Harmony Medical Services"
-  )
-
-  if (!listResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send doctor list message:", {
-      error: listResponse.error,
-      errorCode: listResponse.errorCode,
-      phone: phone,
-      doctorCount: doctors.length,
-    })
-    
-    // Retry once with simplified format
-    console.log("[Meta WhatsApp] Retrying doctor list with simplified format...")
-    const simplifiedOptions = doctors.map((doc: any) => {
-      const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
-      const specialization = doc.specialization || "General"
-      // Use just name if too long, or truncate
-      const title = name.length > 24 ? name.substring(0, 21) + "..." : name
-      return {
-        id: `doctor_${doc.id}`,
-        title: title,
-        description: specialization.length > 72 ? specialization.substring(0, 72) : specialization,
-      }
-    })
-    
-    const simplifiedSections = []
-    for (let i = 0; i < simplifiedOptions.length; i += 10) {
-      simplifiedSections.push({
-        title: i === 0 ? "Doctors" : "More",
-        rows: simplifiedOptions.slice(i, i + 10),
-      })
-    }
-    
-    const retryResponse = await sendListMessage(
-      phone,
-      language === "gujarati" ? "ડૉક્ટર પસંદ કરો:" : "Select a Doctor:",
-      "Select",
-      simplifiedSections,
-      "HMS"
-    )
-    
-    if (!retryResponse.success) {
-      console.error("[Meta WhatsApp] Retry also failed:", retryResponse.error)
-      // Only fallback to text if both attempts fail
-      const fallbackMsg = language === "gujarati"
-        ? "👨‍⚕️ *ડૉક્ટર પસંદ કરો:*\n\n"
-        : "👨‍⚕️ *Select a Doctor:*\n\n"
-      
-      let doctorList = fallbackMsg
-      doctors.forEach((doc: any, index: number) => {
-        const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
-        const specialization = doc.specialization || "General"
-        doctorList += `${index + 1}. ${name} - ${specialization}\n`
-      })
-      
-      const promptMsg = language === "gujarati"
-        ? "\nકૃપા કરીને તમે બુક કરવા માંગો છો તે ડૉક્ટરનો નંબર (1-10) રિપ્લાય કરો."
-        : "\nPlease reply with the number (1-10) of the doctor you'd like to book with."
-      
-      await sendTextMessage(phone, doctorList + promptMsg)
-    } else {
-      console.log("[Meta WhatsApp] ✅ Doctor list sent successfully on retry")
-    }
-  } else {
-    console.log("[Meta WhatsApp] ✅ Doctor list sent successfully")
-  }
-}
-
-async function handleDoctorSelection(
-  db: FirebaseFirestore.Firestore,
-  phone: string,
-  normalizedPhone: string,
-  sessionRef: FirebaseFirestore.DocumentReference,
-  text: string,
-  session: BookingSession
-): Promise<boolean> {
-  const language = session.language || "english"
-  
-  // Try to parse as number first (fallback for text input)
-  const doctorNum = parseInt(text)
-  if (!isNaN(doctorNum) && doctorNum >= 1 && doctorNum <= 10) {
-    const doctorsSnapshot = await db.collection("doctors").where("status", "==", "active").limit(10).get()
-    const doctors = doctorsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-
-    if (doctorNum <= doctors.length) {
-      const selectedDoctor = doctors[doctorNum - 1] as any
-      await sessionRef.update({
-        state: "selecting_date",
-        doctorId: selectedDoctor.id,
-        updatedAt: new Date().toISOString(),
-      })
-
-      const confirmMsg = language === "gujarati"
-        ? `✅ પસંદ કર્યું: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 ઉપલબ્ધ તારીખો નીચે દર્શાવવામાં આવી છે.`
-        : `✅ Selected: ${selectedDoctor.firstName} ${selectedDoctor.lastName}\n\n📅 Pick one of the available dates below.`
-
-      await sendTextMessage(phone, confirmMsg)
-      await sendDatePicker(phone, selectedDoctor.id, language, false)
-      return true
-    }
-  }
-
-  // Invalid input, resend doctor picker
-  await sendDoctorPicker(phone, language)
   return true
 }
 
@@ -1469,6 +1275,11 @@ async function sendTimeSlotListForPeriod(
     const chunk = slots.slice(i, i + chunkSize)
     const chunkIndex = Math.floor(i / chunkSize)
 
+    const baseTitle =
+      language === "gujarati"
+        ? periodLabel.replace("સવાર", "સવાર સ્લોટ્સ").replace("બપોર", "બપોર સ્લોટ્સ")
+        : periodLabel.replace("Morning", "Morning Slots").replace("Afternoon", "Afternoon Slots")
+
     const rows = chunk.map((slot) => {
       const [hours, minutes] = slot.raw.split(":").map(Number)
       const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
@@ -1482,10 +1293,14 @@ async function sendTimeSlotListForPeriod(
       }
     })
 
-    const listTitle =
+    let listTitle =
       totalChunks > 1
-        ? `${periodLabel} (${chunkIndex + 1}/${totalChunks})`
-        : periodLabel
+        ? `${baseTitle} ${chunkIndex + 1}/${totalChunks}`
+        : baseTitle
+
+    if (listTitle.length > 24) {
+      listTitle = listTitle.slice(0, 24)
+    }
 
     const listResponse = await sendListMessage(
       phone,
@@ -1545,45 +1360,10 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     const selectedLanguage = selectedId.replace("lang_", "") as "english" | "gujarati"
     await sessionRef.update({
       language: selectedLanguage,
-      state: "selecting_doctor",
       updatedAt: new Date().toISOString(),
     })
 
-    // Send doctor list picker
-    await sendDoctorPicker(phone, selectedLanguage)
-    return
-  }
-
-  // Check if it's a doctor selection (ID starts with "doctor_")
-  if (selectedId.startsWith("doctor_")) {
-    const selectedDoctorId = selectedId.replace("doctor_", "")
-    
-    // Verify doctor exists
-    const doctorDoc = await db.collection("doctors").doc(selectedDoctorId).get()
-    if (!doctorDoc.exists) {
-      const errorMsg = language === "gujarati"
-        ? "❌ ડૉક્ટર મળ્યો નથી. કૃપા કરીને ફરીથી પ્રયાસ કરો."
-        : "❌ Doctor not found. Please try again."
-      await sendTextMessage(phone, errorMsg)
-      await sendDoctorPicker(phone, language)
-      return
-    }
-
-    const doctorData = doctorDoc.data()!
-    const doctorName = `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
-
-    await sessionRef.update({
-      state: "selecting_date",
-      doctorId: selectedDoctorId,
-      updatedAt: new Date().toISOString(),
-    })
-
-    const confirmMsg = language === "gujarati"
-      ? `✅ પસંદ કર્યું: ${doctorName}\n\n📅 ઉપલબ્ધ તારીખોની સૂચિ નીચે દર્શાવવામાં આવી છે.`
-      : `✅ Selected: ${doctorName}\n\n📅 Pick one of the available dates below.`
-
-    await sendTextMessage(phone, confirmMsg)
-    await sendDatePicker(phone, selectedDoctorId, language, false)
+    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
     return
   }
 
@@ -1688,33 +1468,6 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     return
   }
 
-  // Check if it's a payment method selection (ID starts with "pay_")
-  if (selectedId.startsWith("pay_")) {
-    const paymentMethod = selectedId.replace("pay_", "") as "card" | "upi" | "cash" | "wallet"
-    const consultationFee = session.consultationFee || 500
-    const paymentAmount = paymentMethod === "cash" ? 0 : consultationFee
-    const remainingAmount = Math.max(consultationFee - paymentAmount, 0)
-
-    await sessionRef.update({
-      paymentMethod,
-      paymentType: "full",
-      paymentAmount,
-      remainingAmount,
-      state: "confirming",
-      updatedAt: new Date().toISOString(),
-    })
-
-    const updatedSession: BookingSession = {
-      ...session,
-      paymentMethod,
-      paymentType: "full",
-      paymentAmount,
-      remainingAmount,
-    }
-
-    await showBookingConfirmation(phone, sessionRef, updatedSession)
-    return
-  }
 }
 
 // Handler for date button clicks (Today, Tomorrow, See All)
@@ -2344,158 +2097,6 @@ async function handleTimeSelection(
   return true
 }
 
-async function handleSymptomsEntry(
-  db: FirebaseFirestore.Firestore,
-  phone: string,
-  normalizedPhone: string,
-  sessionRef: FirebaseFirestore.DocumentReference,
-  text: string,
-  session: BookingSession
-): Promise<boolean> {
-  const symptoms = text.trim().toLowerCase() === "skip" ? "" : text.trim()
-
-  // Get doctor info to get consultation fee
-  const doctorDoc = await db.collection("doctors").doc(session.doctorId!).get()
-  const doctorData = doctorDoc.data()!
-  const consultationFee = doctorData.consultationFee || 500
-
-  await sessionRef.update({
-    state: "selecting_payment",
-    symptoms: symptoms,
-    consultationFee: consultationFee,
-    updatedAt: new Date().toISOString(),
-  })
-
-  // Send payment method picker
-  await sendPaymentMethodPicker(phone, consultationFee)
-  return true
-}
-
-async function handlePaymentSelection(
-  db: FirebaseFirestore.Firestore,
-  phone: string,
-  normalizedPhone: string,
-  sessionRef: FirebaseFirestore.DocumentReference,
-  text: string,
-  session: BookingSession
-): Promise<boolean> {
-  // If text is provided, try to parse it as payment method (fallback)
-  const trimmedText = text.trim().toLowerCase()
-  
-  if (trimmedText === "card" || trimmedText === "upi" || trimmedText === "cash" || trimmedText === "wallet") {
-    const consultationFee = session.consultationFee || 500
-    const paymentAmount = trimmedText === "cash" ? 0 : consultationFee
-    const remainingAmount = Math.max(consultationFee - paymentAmount, 0)
-
-    await sessionRef.update({
-      paymentMethod: trimmedText as "card" | "upi" | "cash" | "wallet",
-      paymentType: "full",
-      paymentAmount,
-      remainingAmount,
-      state: "confirming",
-      updatedAt: new Date().toISOString(),
-    })
-
-    const updatedSession: BookingSession = {
-      ...session,
-      paymentMethod: trimmedText as "card" | "upi" | "cash" | "wallet",
-      paymentType: "full",
-      paymentAmount,
-      remainingAmount,
-    }
-
-    await showBookingConfirmation(phone, sessionRef, updatedSession)
-    return true
-  }
-
-  // Invalid input, resend payment picker
-  await sendPaymentMethodPicker(phone, session.consultationFee || 500)
-  return true
-}
-
-async function sendPaymentMethodPicker(phone: string, consultationFee: number) {
-  const paymentOptions = [
-    { id: "pay_card", title: "💳 Card Payment", description: "Credit/Debit Card" },
-    { id: "pay_upi", title: "📱 UPI Payment", description: "Google Pay, PhonePe, etc." },
-    { id: "pay_cash", title: "💵 Cash Payment", description: "Pay at hospital" },
-    { id: "pay_wallet", title: "💰 Wallet Payment", description: "Use wallet balance" },
-  ]
-
-  const listResponse = await sendListMessage(
-    phone,
-    `💳 *Select Payment Method*\n\nConsultation Fee: ₹${consultationFee}\n\nChoose your preferred payment method:`,
-    "Select Payment",
-    [
-      {
-        title: "Payment Methods",
-        rows: paymentOptions,
-      },
-    ],
-    "Harmony Medical Services"
-  )
-
-  if (!listResponse.success) {
-    // Fallback to text-based selection
-    await sendTextMessage(
-      phone,
-      `💳 *Select Payment Method*\n\nConsultation Fee: ₹${consultationFee}\n\nPlease reply with:\n• "card" for Card Payment\n• "upi" for UPI Payment\n• "cash" for Cash Payment\n• "wallet" for Wallet Payment`
-    )
-  }
-}
-
-async function showBookingConfirmation(
-  phone: string,
-  sessionRef: FirebaseFirestore.DocumentReference,
-  session: BookingSession
-) {
-  const db = admin.firestore()
-  const normalizedPhone = formatPhoneNumber(phone)
-
-  // Get doctor and patient info
-  const doctorDoc = await db.collection("doctors").doc(session.doctorId!).get()
-  const doctorData = doctorDoc.data()!
-  const patient = await findPatientByPhone(db, normalizedPhone)
-
-  const doctorName = `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
-  const patientName = patient ? `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim() : "Patient"
-  const dateDisplay = new Date(session.appointmentDate! + "T00:00:00").toLocaleDateString("en-IN", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-  const [h, m] = session.appointmentTime!.split(":").map(Number)
-  const timeDisplay = new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  })
-
-  const consultationFee = session.consultationFee || 500
-  const paymentMethodLabel = session.paymentMethod === "card" ? "Card" : session.paymentMethod === "upi" ? "UPI" : session.paymentMethod === "cash" ? "Cash" : "Wallet"
-  const paidNow = session.paymentAmount ?? (session.paymentMethod === "cash" ? 0 : consultationFee)
-  const dueLater = session.remainingAmount ?? Math.max(consultationFee - paidNow, 0)
-
-  let confirmMsg = `📋 *Confirm Appointment:*\n\n`
-  confirmMsg += `👨‍⚕️ Doctor: ${doctorName}\n`
-  confirmMsg += `📅 Date: ${dateDisplay}\n`
-  confirmMsg += `🕐 Time: ${timeDisplay}\n`
-  if (session.symptoms) {
-    confirmMsg += `📝 Symptoms: ${session.symptoms}\n`
-  }
-  confirmMsg += `\n💳 Payment:\n`
-  confirmMsg += `   Method: ${paymentMethodLabel}\n`
-  confirmMsg += `   Pay Now: ₹${paidNow}\n`
-  if (dueLater > 0) {
-    confirmMsg += `   Due at Hospital: ₹${dueLater}\n`
-  } else {
-    confirmMsg += `   Remaining: ₹0 (paid)\n`
-  }
-  confirmMsg += `\nReply "confirm" to book or "cancel" to start over.`
-
-  await sendTextMessage(phone, confirmMsg)
-}
-
 async function handleConfirmation(
   db: FirebaseFirestore.Firestore,
   phone: string,
@@ -2826,7 +2427,6 @@ Your appointment has been booked successfully:
 • 📅 Date: ${dateDisplay}
 • 🕒 Time: ${timeDisplay}
 • 📋 Appointment ID: ${appointmentId}
-${session.symptoms ? `• 📝 Symptoms: ${session.symptoms}` : ""}
 • 💳 Payment: ${session.paymentMethod?.toUpperCase() || "CASH"} - ₹${amountCollected}${remainingAmount > 0 ? ` (₹${remainingAmount} due at hospital)` : " (paid)"}
 
 ✅ Your appointment is now visible in our system. Admin and receptionist can see it.
