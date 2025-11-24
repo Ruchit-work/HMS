@@ -3,7 +3,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/rateLimit"
-import { logAppointmentEvent } from "@/utils/auditLog"
+import { sendWhatsAppNotification } from "@/server/whatsapp"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -92,19 +92,95 @@ export async function POST(request: Request) {
         })
       })
 
-      // Log successful appointment booking
-      await logAppointmentEvent(
-        "appointment_booked",
-        request,
-        auth.user?.uid,
-        auth.user?.email || undefined,
-        auth.user?.role,
-        appointmentId,
-        appointmentData.doctorId,
-        appointmentData.patientId || auth.user?.uid,
-        undefined,
-        { appointmentDate: appointmentData.appointmentDate, appointmentTime: normalizedAppointmentTime }
-      )
+      // Send WhatsApp notification after successful appointment creation
+      try {
+        // Fetch patient data to get phone number if not in appointmentData
+        let patientPhone = appointmentData.patientPhone || appointmentData.patientPhoneNumber || ""
+        if (!patientPhone || patientPhone.trim() === "") {
+          try {
+            const patientDoc = await firestore.collection("patients").doc(auth.user?.uid || "").get()
+            if (patientDoc.exists) {
+              const patientData = patientDoc.data()
+              patientPhone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || patientData?.mobile || ""
+            }
+          } catch (error) {
+            console.error("[patient/book-appointment] Error fetching patient phone:", error)
+          }
+        }
+
+        if (patientPhone && patientPhone.trim() !== "") {
+          // Use the same message format as receptionist booking
+          const patientName = appointmentData.patientName || "there"
+          const fullName = patientName.trim() || "Patient"
+          const doctorName = appointmentData.doctorName || "our doctor"
+          const doctorSpecialization = appointmentData.doctorSpecialization || ""
+          const appointmentIdStr = appointmentId || "N/A"
+          const paymentMethod = appointmentData.paymentMethod || "Cash"
+          const paymentAmount = appointmentData.paymentAmount || appointmentData.totalConsultationFee || 0
+          const paymentStatus = appointmentData.paymentStatus || "pending"
+          
+          const dateDisplay = new Date(appointmentData.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+          
+          const timeStr = normalizedAppointmentTime || ""
+          const [h, m] = timeStr.split(":").map(Number)
+          const timeDisplay = !isNaN(h) && !isNaN(m) 
+            ? new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              })
+            : timeStr
+          
+          const message = `🎉 *Appointment Successfully Booked!*
+
+Hi ${fullName},
+
+Your appointment has been confirmed and booked successfully.
+
+📋 *Appointment Details:*
+• 👨‍⚕️ Doctor: ${doctorName}${doctorSpecialization ? ` (${doctorSpecialization})` : ""}
+• 📅 Date: ${dateDisplay}
+• 🕒 Time: ${timeDisplay}
+• 📋 Appointment ID: ${appointmentIdStr}
+${appointmentData.chiefComplaint ? `• 📝 Reason: ${appointmentData.chiefComplaint}` : ""}
+
+💳 *Payment Information:*
+• Method: ${paymentMethod}
+• Amount: ₹${paymentAmount}
+• Status: ${paymentStatus === "paid" ? "✅ Paid" : "⏳ Pending"}
+
+✅ Your appointment is confirmed and visible in your patient dashboard.
+
+If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
+
+See you soon! 🏥`
+
+          const result = await sendWhatsAppNotification({
+            to: patientPhone,
+            message,
+          })
+
+          if (result.success) {
+            console.log("[patient/book-appointment] ✅ WhatsApp message sent successfully to:", patientPhone)
+          } else {
+            console.error("[patient/book-appointment] ❌ Failed to send WhatsApp message:", {
+              phone: patientPhone,
+              error: result.error,
+              errorCode: result.errorCode,
+            })
+          }
+        } else {
+          console.warn("[patient/book-appointment] ⚠️ No phone number found, WhatsApp message not sent. Patient:", appointmentData.patientName)
+        }
+      } catch (whatsappError) {
+        console.error("[patient/book-appointment] ❌ Error sending WhatsApp notification:", whatsappError)
+        // Don't fail the appointment booking if WhatsApp fails
+      }
 
       return NextResponse.json({ success: true, id: appointmentId })
     }
@@ -169,21 +245,6 @@ export async function POST(request: Request) {
         })
       })
 
-      // Log successful appointment reschedule
-      const rescheduledAppointment = (await firestore.collection("appointments").doc(appointmentId).get()).data() as Record<string, any>
-      await logAppointmentEvent(
-        "appointment_rescheduled",
-        request,
-        auth.user?.uid,
-        auth.user?.email || undefined,
-        auth.user?.role,
-        appointmentId,
-        rescheduledAppointment?.doctorId,
-        rescheduledAppointment?.patientId || auth.user?.uid,
-        undefined,
-        { oldDate: rescheduledAppointment?.appointmentDate, newDate: appointmentDate, oldTime: normalizeTime(rescheduledAppointment?.appointmentTime || ""), newTime: normalizedNewTime }
-      )
-
       return NextResponse.json({ success: true })
     }
 
@@ -191,21 +252,6 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[patient/book-appointment]", error)
     const message = (error as Error).message
-    
-    // Log failed appointment operation
-    if (auth.success && auth.user) {
-      await logAppointmentEvent(
-        "appointment_failed",
-        request,
-        auth.user.uid,
-        auth.user.email || undefined,
-        auth.user.role,
-        undefined,
-        undefined,
-        undefined,
-        message
-      )
-    }
     
     if (message === "SLOT_ALREADY_BOOKED") {
       return NextResponse.json({ error: "This slot was just booked. Please choose another time." }, { status: 409 })

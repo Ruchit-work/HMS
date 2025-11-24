@@ -683,21 +683,51 @@ async function sendDoctorPicker(phone: string, language: "english" | "gujarati" 
   const doctors = doctorsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
 
   // Create doctor options for list message
+  // WhatsApp List message limits:
+  // - Row title: max 24 characters
+  // - Row description: max 72 characters
+  // - Section title: max 24 characters
+  // - Button text: max 20 characters
   const doctorOptions = doctors.map((doc: any, index: number) => {
     const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
     const specialization = doc.specialization || "General"
+    
+    // Truncate title to 24 chars (WhatsApp limit)
+    let title = `${name} - ${specialization}`
+    if (title.length > 24) {
+      // Try to fit name and specialization
+      const namePart = name.length > 15 ? name.substring(0, 15) + "..." : name
+      title = `${namePart} - ${specialization.substring(0, 24 - namePart.length - 3)}`
+      if (title.length > 24) {
+        title = title.substring(0, 24)
+      }
+    }
+    
+    // Truncate description to 72 chars (WhatsApp limit)
+    let description = specialization
+    if (description.length > 72) {
+      description = description.substring(0, 72)
+    }
+    
     return {
       id: `doctor_${doc.id}`,
-      title: `${name} - ${specialization}`,
-      description: specialization,
+      title: title,
+      description: description,
     }
   })
 
   // Split into sections if more than 10 (WhatsApp list limit is 10 rows per section)
   const sections = []
   for (let i = 0; i < doctorOptions.length; i += 10) {
+    const sectionTitle = i === 0 
+      ? (language === "gujarati" ? "ડૉક્ટરો" : "Available Doctors")
+      : (language === "gujarati" ? "વધુ ડૉક્ટરો" : "More Doctors")
+    
+    // Ensure section title is max 24 chars
+    const truncatedTitle = sectionTitle.length > 24 ? sectionTitle.substring(0, 24) : sectionTitle
+    
     sections.push({
-      title: i === 0 ? "Available Doctors" : "More Doctors",
+      title: truncatedTitle,
       rows: doctorOptions.slice(i, i + 10),
     })
   }
@@ -706,32 +736,80 @@ async function sendDoctorPicker(phone: string, language: "english" | "gujarati" 
     ? "👨‍⚕️ *ડૉક્ટર પસંદ કરો*\n\nતમારો પસંદીદા ડૉક્ટર પસંદ કરો:"
     : "👨‍⚕️ *Select a Doctor*\n\nChoose your preferred doctor:"
 
+  // Button text max 20 chars
+  const buttonText = language === "gujarati" ? "ડૉક્ટર પસંદ કરો" : "Select Doctor"
+  const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 20) : buttonText
+
   const listResponse = await sendListMessage(
     phone,
     doctorMsg,
-    "👨‍⚕️ Select Doctor",
+    truncatedButtonText,
     sections,
     "Harmony Medical Services"
   )
 
   if (!listResponse.success) {
-    // Fallback to text-based selection (with language support)
-    const fallbackMsg = language === "gujarati"
-      ? "👨‍⚕️ *ડૉક્ટર પસંદ કરો:*\n\n"
-      : "👨‍⚕️ *Select a Doctor:*\n\n"
-    
-    let doctorList = fallbackMsg
-    doctors.forEach((doc: any, index: number) => {
-      const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
-      const specialization = doc.specialization || "General"
-      doctorList += `${index + 1}. ${name} - ${specialization}\n`
+    console.error("[Meta WhatsApp] Failed to send doctor list message:", {
+      error: listResponse.error,
+      errorCode: listResponse.errorCode,
+      phone: phone,
+      doctorCount: doctors.length,
     })
     
-    const promptMsg = language === "gujarati"
-      ? "\nકૃપા કરીને તમે બુક કરવા માંગો છો તે ડૉક્ટરનો નંબર (1-10) રિપ્લાય કરો."
-      : "\nPlease reply with the number (1-10) of the doctor you'd like to book with."
+    // Retry once with simplified format
+    console.log("[Meta WhatsApp] Retrying doctor list with simplified format...")
+    const simplifiedOptions = doctors.map((doc: any) => {
+      const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
+      const specialization = doc.specialization || "General"
+      // Use just name if too long, or truncate
+      let title = name.length > 24 ? name.substring(0, 21) + "..." : name
+      return {
+        id: `doctor_${doc.id}`,
+        title: title,
+        description: specialization.length > 72 ? specialization.substring(0, 72) : specialization,
+      }
+    })
     
-    await sendTextMessage(phone, doctorList + promptMsg)
+    const simplifiedSections = []
+    for (let i = 0; i < simplifiedOptions.length; i += 10) {
+      simplifiedSections.push({
+        title: i === 0 ? "Doctors" : "More",
+        rows: simplifiedOptions.slice(i, i + 10),
+      })
+    }
+    
+    const retryResponse = await sendListMessage(
+      phone,
+      language === "gujarati" ? "ડૉક્ટર પસંદ કરો:" : "Select a Doctor:",
+      "Select",
+      simplifiedSections,
+      "HMS"
+    )
+    
+    if (!retryResponse.success) {
+      console.error("[Meta WhatsApp] Retry also failed:", retryResponse.error)
+      // Only fallback to text if both attempts fail
+      const fallbackMsg = language === "gujarati"
+        ? "👨‍⚕️ *ડૉક્ટર પસંદ કરો:*\n\n"
+        : "👨‍⚕️ *Select a Doctor:*\n\n"
+      
+      let doctorList = fallbackMsg
+      doctors.forEach((doc: any, index: number) => {
+        const name = `${doc.firstName || ""} ${doc.lastName || ""}`.trim()
+        const specialization = doc.specialization || "General"
+        doctorList += `${index + 1}. ${name} - ${specialization}\n`
+      })
+      
+      const promptMsg = language === "gujarati"
+        ? "\nકૃપા કરીને તમે બુક કરવા માંગો છો તે ડૉક્ટરનો નંબર (1-10) રિપ્લાય કરો."
+        : "\nPlease reply with the number (1-10) of the doctor you'd like to book with."
+      
+      await sendTextMessage(phone, doctorList + promptMsg)
+    } else {
+      console.log("[Meta WhatsApp] ✅ Doctor list sent successfully on retry")
+    }
+  } else {
+    console.log("[Meta WhatsApp] ✅ Doctor list sent successfully")
   }
 }
 
@@ -1320,25 +1398,35 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     return
   }
 
-  // Check which slots are actually available (not booked)
-  const availableSlots: Array<{ id: string; title: string; time: string }> = []
+  // Check which slots are actually available (not booked) and find the FIRST available slot
+  let firstAvailableSlot: { id: string; title: string; time: string } | null = null
   
-  for (const slot of selectedSlots) {
+  // Sort slots in chronological order to find the first available
+  const sortedSlots = [...selectedSlots].sort((a, b) => {
+    const [hA, mA] = a.split(":").map(Number)
+    const [hB, mB] = b.split(":").map(Number)
+    return hA * 60 + mA - (hB * 60 + mB)
+  })
+  
+  for (const slot of sortedSlots) {
     const normalizedTime = normalizeTime(slot)
     const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
     const slotRef = db.collection("appointmentSlots").doc(slotDocId)
     const slotDoc = await slotRef.get()
     
     if (!slotDoc.exists) {
-      availableSlots.push({
+      // Found first available slot - book it automatically
+      firstAvailableSlot = {
         id: `time_${slot}`,
         title: slot,
         time: normalizedTime,
-      })
+      }
+      break // Stop at first available slot
     }
   }
 
-  if (availableSlots.length === 0) {
+  if (!firstAvailableSlot) {
+    // No slots available in this time period
     const errorMsg = language === "gujarati"
       ? "❌ આ સમય અવધિ માટે બધા સ્લોટ બુક થયેલા છે. કૃપા કરીને બીજો સમય પસંદ કરો."
       : "❌ All slots for this time period are booked. Please select another time."
@@ -1347,52 +1435,22 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     return
   }
 
-  // If only one slot available, select it automatically
-  if (availableSlots.length === 1) {
-    const selectedSlot = availableSlots[0]
-    await sessionRef.update({
-      state: "entering_symptoms",
-      appointmentTime: selectedSlot.time,
-      updatedAt: new Date().toISOString(),
-    })
+  // Automatically book the first available slot
+  await sessionRef.update({
+    state: "entering_symptoms",
+    appointmentTime: firstAvailableSlot.time,
+    updatedAt: new Date().toISOString(),
+  })
 
-    const symptomsMsg = language === "gujarati"
-      ? `✅ પસંદ કર્યું: ${selectedSlot.title}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
-      : `✅ Selected: ${selectedSlot.title}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
-    await sendTextMessage(phone, symptomsMsg)
-    return
-  }
-
-  // Multiple slots available, show them as a list
-  const sections = [{
-    title: language === "gujarati" ? "ઉપલબ્ધ સમય" : "Available Times",
-    rows: availableSlots.map(slot => ({
-      id: slot.id,
-      title: slot.title,
-      description: "Available",
-    })),
-  }]
-
-  const timeMsg = language === "gujarati"
-    ? `🕐 *સમય પસંદ કરો*\n\n${buttonId === "time_quick_morning" ? "સવાર" : "બપોર"} માટે ઉપલબ્ધ સમય પસંદ કરો:`
-    : `🕐 *Select Time*\n\nChoose from available ${buttonId === "time_quick_morning" ? "morning" : "afternoon"} slots:`
-
-  const listResponse = await sendListMessage(
-    phone,
-    timeMsg,
-    language === "gujarati" ? "સમય પસંદ કરો" : "Select Time",
-    sections,
-    "Harmony Medical Services"
-  )
-
-  if (!listResponse.success) {
-    // Fallback to text
-    let timeList = timeMsg + "\n\n"
-    availableSlots.forEach((slot, index) => {
-      timeList += `${index + 1}. ${slot.title}\n`
-    })
-    await sendTextMessage(phone, timeList)
-  }
+  const periodName = buttonId === "time_quick_morning" 
+    ? (language === "gujarati" ? "સવાર" : "Morning")
+    : (language === "gujarati" ? "બપોર" : "Afternoon")
+  
+  const symptomsMsg = language === "gujarati"
+    ? `✅ ${periodName} માટે પહેલું ઉપલબ્ધ સ્લોટ પસંદ કર્યું: ${firstAvailableSlot.title}\n\n📋 *લક્ષણો/મુલાકાતનું કારણ:*\nકૃપા કરીને તમારા લક્ષણો અથવા અપોઇન્ટમેન્ટનું કારણ વર્ણન કરો.\n\n(જો તમે હમણાં લક્ષણો ઉમેરવા નહીં માંગતા હો તો "skip" ટાઇપ કરી શકો છો)`
+    : `✅ First available ${periodName.toLowerCase()} slot selected: ${firstAvailableSlot.title}\n\n📋 *Symptoms/Reason for Visit:*\nPlease describe your symptoms or reason for the appointment.\n\n(You can type "skip" if you don't want to add symptoms now)`
+  
+  await sendTextMessage(phone, symptomsMsg)
 }
 
 async function sendTimePicker(phone: string, doctorId: string, appointmentDate: string, language: Language = "english", showButtons: boolean = true) {
@@ -1457,8 +1515,9 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
       })
     }
     
-    // Add "See All Times" button (max 3 buttons)
-    if (quickButtons.length < 3) {
+    // Add "See All Times" button ONLY if we have exactly 2 quick buttons (Morning + Afternoon)
+    // If only one period is available, don't show "See All" button
+    if (quickButtons.length === 2) {
       quickButtons.push({
         id: "time_show_all",
         title: language === "gujarati" ? "📋 બધા સમય (See All)" : "📋 See All Times",

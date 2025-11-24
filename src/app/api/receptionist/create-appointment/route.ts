@@ -4,7 +4,6 @@ import { formatAppointmentDateTime } from "@/utils/date"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/rateLimit"
-import { logAppointmentEvent } from "@/utils/auditLog"
 
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
@@ -235,54 +234,30 @@ export async function POST(request: Request) {
 
     // Send WhatsApp notification only if we have a phone number (don't block on this)
     if (patientPhone && patientPhone.trim() !== "") {
-      sendAppointmentWhatsApp({
-        ...appointmentData,
-        ...docData,
-        appointmentId: appointmentId,
-        id: appointmentId,
-        patientPhone: patientPhone,
-        patientName: docData.patientName,
-        doctorName: docData.doctorName,
-        doctorSpecialization: docData.doctorSpecialization,
-        appointmentDate: docData.appointmentDate,
-        appointmentTime: docData.appointmentTime,
-      }).catch((error) => {
-        console.error("[create-appointment] WhatsApp notification failed:", error)
-      })
+      try {
+        await sendAppointmentWhatsApp({
+          ...appointmentData,
+          ...docData,
+          appointmentId: appointmentId,
+          id: appointmentId,
+          patientPhone: patientPhone,
+          patientName: docData.patientName,
+          doctorName: docData.doctorName,
+          doctorSpecialization: docData.doctorSpecialization,
+          appointmentDate: docData.appointmentDate,
+          appointmentTime: docData.appointmentTime,
+        })
+        console.log("[create-appointment] ✅ WhatsApp message sent successfully to:", patientPhone)
+      } catch (error) {
+        console.error("[create-appointment] ❌ WhatsApp notification failed:", error)
+      }
+    } else {
+      console.warn("[create-appointment] ⚠️ No phone number found, WhatsApp message not sent. Patient:", docData.patientName)
     }
-
-    // Log successful appointment booking
-    await logAppointmentEvent(
-      "appointment_booked",
-      request,
-      auth.user?.uid,
-      auth.user?.email || undefined,
-      auth.user?.role,
-      appointmentId || undefined,
-      docData.doctorId ? String(docData.doctorId) : undefined,
-      appointmentData.patientId ? String(appointmentData.patientId) : undefined,
-      undefined,
-      { appointmentDate: docData.appointmentDate, appointmentTime: normalizedAppointmentTime, createdBy: "receptionist" }
-    )
 
     return Response.json({ success: true, id: appointmentId })
   } catch (error: any) {
     console.error("create-appointment error:", error)
-    
-    // Log failed appointment creation (note: request body may have already been consumed)
-    if (auth.success && auth.user) {
-      await logAppointmentEvent(
-        "appointment_failed",
-        request,
-        auth.user.uid,
-        auth.user.email || undefined,
-        auth.user.role,
-        undefined,
-        undefined,
-        undefined,
-        error?.message || "Failed to create appointment"
-      )
-    }
     
     if (error?.message === "SLOT_ALREADY_BOOKED") {
       return Response.json({ error: "This time slot has already been booked. Please select another slot." }, { status: 409 })

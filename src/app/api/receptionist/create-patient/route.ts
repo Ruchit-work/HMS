@@ -2,7 +2,6 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
-import { logUserEvent } from "@/utils/auditLog"
 
 const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
   const friendlyName = firstName?.trim() || "there"
@@ -143,34 +142,55 @@ export async function POST(request: Request) {
     // Store patient doc with ID = authUid (so patient dashboard can load by user.uid)
     await db.collection("patients").doc(authUid).set(docData, { merge: true })
 
+    // Try multiple phone number fields and formats
     const phoneCandidates = [
       patientData.phone,
-      `${patientData.phoneCountryCode || ""}${patientData.phoneNumber || ""}`,
       patientData.phoneNumber,
-    ].filter((phone) => phone && phone.trim() !== "")
+      `${patientData.phoneCountryCode || ""}${patientData.phoneNumber || ""}`,
+      docData.phone, // Also check stored phone in docData
+    ].filter((phone) => phone && typeof phone === "string" && phone.trim() !== "")
 
     // Send WhatsApp notification only if we have a phone number (don't block on this)
     if (phoneCandidates.length > 0) {
-      sendWhatsAppNotification({
-        to: phoneCandidates[0],
-        fallbackRecipients: phoneCandidates.slice(1),
-        message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
-      }).catch((error) => {
-        console.error("[create-patient] WhatsApp notification failed:", error)
+      try {
+        const result = await sendWhatsAppNotification({
+          to: phoneCandidates[0],
+          fallbackRecipients: phoneCandidates.slice(1),
+          message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
+        })
+        if (result.success) {
+          console.log("[create-patient] ✅ WhatsApp message sent successfully to:", phoneCandidates[0])
+        } else {
+          console.error("[create-patient] ❌ WhatsApp notification failed:", {
+            phone: phoneCandidates[0],
+            error: result.error,
+            errorCode: result.errorCode,
+          })
+          // Try fallback recipients if primary failed
+          if (phoneCandidates.length > 1 && result.errorCode !== 4) { // Don't retry on rate limit
+            for (let i = 1; i < phoneCandidates.length; i++) {
+              const fallbackResult = await sendWhatsAppNotification({
+                to: phoneCandidates[i],
+                message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
+              })
+              if (fallbackResult.success) {
+                console.log("[create-patient] ✅ WhatsApp message sent successfully to fallback number:", phoneCandidates[i])
+                break
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[create-patient] ❌ Error sending WhatsApp notification:", error)
+      }
+    } else {
+      console.warn("[create-patient] ⚠️ No phone number found, WhatsApp message not sent. Patient:", docData.firstName, docData.lastName, "Phone fields checked:", {
+        phone: patientData.phone,
+        phoneNumber: patientData.phoneNumber,
+        phoneCountryCode: patientData.phoneCountryCode,
+        docDataPhone: docData.phone,
       })
     }
-
-    // Log user creation event
-    await logUserEvent(
-      "user_created",
-      request,
-      authUid,
-      "patient",
-      auth.user?.uid,
-      auth.user?.email || undefined,
-      auth.user?.role,
-      { patientId, email: docData.email, phone: docData.phone }
-    )
 
     return Response.json({ success: true, id: authUid, authUid, patientId })
   } catch (error: any) {

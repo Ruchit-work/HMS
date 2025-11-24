@@ -237,54 +237,76 @@ function SignUpContent() {
         createdBy: "self",
       });
 
+      // Send WhatsApp notification after successful account creation
       const combinedPhone = `${values.countryCode || ""}${
         values.phone || ""
       }`.trim();
+      
       if (combinedPhone) {
-        const withPlus = combinedPhone.startsWith("+")
-          ? combinedPhone
-          : `+${combinedPhone}`;
-        const whatsappTo = withPlus.startsWith("whatsapp:")
-          ? withPlus
-          : `whatsapp:${withPlus}`;
+        const fullName = `${values.firstName || ""} ${values.lastName || ""}`.trim() || "Patient";
+        const friendlyName = values.firstName?.trim() || "there";
+        
         const message = `🎉 *Account Successfully Created!*
 
-Hi ${values.firstName || "there"},
+Hi ${friendlyName},
 
 Welcome to Harmony Medical Services! Your patient account has been successfully created.
 
 📋 *Account Details:*
 • Patient ID: ${patientId}
-• Name: ${values.firstName || ""} ${values.lastName || ""}
+• Name: ${fullName}
 • Email: ${values.email || ""}
-${values.phone ? `• Phone: ${values.phone}` : ""}
+${values.phone ? `• Phone: ${combinedPhone}` : ""}
 
 ✅ You can now:
 • Book appointments with our doctors
 • View your medical history
 • Access your patient dashboard
-• Receive appointment reminders via WhatsApp
+• Receive appointment updates and reminders via WhatsApp
 
 If you need any assistance, reply here or call us at +91-XXXXXXXXXX.
 
 Thank you for choosing Harmony Medical Services! 🏥`;
+
         try {
-          const result = await sendWhatsAppMessage({ to: whatsappTo, message });
-          if (!result.success) {
-            console.error("[Signup WhatsApp] ❌ Failed to send account creation message:", {
-              phone: whatsappTo,
-              error: result.error,
-              status: result.status,
-            });
+          // Format phone properly - ensure it starts with +
+          const phoneToSend = combinedPhone.startsWith("+")
+            ? combinedPhone
+            : `+${combinedPhone}`;
+            
+          // Use public API endpoint for patient signup (no authentication required)
+          const response = await fetch("/api/patient/send-whatsapp", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              to: phoneToSend,
+              message,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            console.log("[Signup WhatsApp] ✅ Account creation message sent successfully to:", phoneToSend);
           } else {
-            console.log("[Signup WhatsApp] ✅ Account creation message sent successfully to:", whatsappTo);
+            console.error("[Signup WhatsApp] ❌ Failed to send account creation message:", {
+              phone: phoneToSend,
+              error: data.error || "Unknown error",
+              errorCode: data.errorCode,
+              status: response.status,
+            });
           }
         } catch (err) {
           console.error("[Signup WhatsApp] ❌ Exception sending account creation message:", {
-            phone: whatsappTo,
-            error: err,
+            phone: combinedPhone,
+            error: err instanceof Error ? err.message : String(err),
           });
+          // Don't fail account creation if WhatsApp fails
         }
+      } else {
+        console.warn("[Signup WhatsApp] ⚠️ No phone number provided, WhatsApp message not sent. Patient:", fullName);
       }
 
       const redirectMessage = `Patient account created successfully! Your Patient ID is ${patientId}. Redirecting to login...`;
