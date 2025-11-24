@@ -1364,27 +1364,28 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
   // Check if it's a payment method selection (ID starts with "pay_")
   if (selectedId.startsWith("pay_")) {
     const paymentMethod = selectedId.replace("pay_", "") as "card" | "upi" | "cash" | "wallet"
-    await sessionRef.update({
-      paymentMethod: paymentMethod,
-      updatedAt: new Date().toISOString(),
-    })
+    const consultationFee = session.consultationFee || 500
+    const paymentAmount = paymentMethod === "cash" ? 0 : consultationFee
+    const remainingAmount = Math.max(consultationFee - paymentAmount, 0)
 
-    // Now ask for payment type (full or partial)
-    await sendPaymentTypePicker(phone, session.consultationFee || 500, paymentMethod)
-    return
-  }
-
-  // Check if it's a payment type selection (ID starts with "paytype_")
-  if (selectedId.startsWith("paytype_")) {
-    const paymentType = selectedId.replace("paytype_", "") as "full" | "partial"
     await sessionRef.update({
-      paymentType: paymentType,
+      paymentMethod,
+      paymentType: "full",
+      paymentAmount,
+      remainingAmount,
       state: "confirming",
       updatedAt: new Date().toISOString(),
     })
 
-    // Show confirmation with all details
-    await showBookingConfirmation(phone, sessionRef, session)
+    const updatedSession: BookingSession = {
+      ...session,
+      paymentMethod,
+      paymentType: "full",
+      paymentAmount,
+      remainingAmount,
+    }
+
+    await showBookingConfirmation(phone, sessionRef, updatedSession)
     return
   }
 }
@@ -2067,11 +2068,28 @@ async function handlePaymentSelection(
   const trimmedText = text.trim().toLowerCase()
   
   if (trimmedText === "card" || trimmedText === "upi" || trimmedText === "cash" || trimmedText === "wallet") {
+    const consultationFee = session.consultationFee || 500
+    const paymentAmount = trimmedText === "cash" ? 0 : consultationFee
+    const remainingAmount = Math.max(consultationFee - paymentAmount, 0)
+
     await sessionRef.update({
       paymentMethod: trimmedText as "card" | "upi" | "cash" | "wallet",
+      paymentType: "full",
+      paymentAmount,
+      remainingAmount,
+      state: "confirming",
       updatedAt: new Date().toISOString(),
     })
-    await sendPaymentTypePicker(phone, session.consultationFee || 500, trimmedText as "card" | "upi" | "cash" | "wallet")
+
+    const updatedSession: BookingSession = {
+      ...session,
+      paymentMethod: trimmedText as "card" | "upi" | "cash" | "wallet",
+      paymentType: "full",
+      paymentAmount,
+      remainingAmount,
+    }
+
+    await showBookingConfirmation(phone, sessionRef, updatedSession)
     return true
   }
 
@@ -2110,47 +2128,6 @@ async function sendPaymentMethodPicker(phone: string, consultationFee: number) {
   }
 }
 
-async function sendPaymentTypePicker(phone: string, consultationFee: number, paymentMethod: string) {
-  const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1) // 10% upfront
-  const REMAINING_AMOUNT = consultationFee - PARTIAL_PAYMENT_AMOUNT
-
-  const paymentTypeOptions = [
-    {
-      id: "paytype_full",
-      title: `💰 Full Payment - ₹${consultationFee}`,
-      description: "Pay complete amount now",
-    },
-    {
-      id: "paytype_partial",
-      title: `💵 Partial Payment - ₹${PARTIAL_PAYMENT_AMOUNT}`,
-      description: `Pay ₹${PARTIAL_PAYMENT_AMOUNT} now, ₹${REMAINING_AMOUNT} at hospital`,
-    },
-  ]
-
-  const methodLabel = paymentMethod === "card" ? "Card" : paymentMethod === "upi" ? "UPI" : paymentMethod === "cash" ? "Cash" : "Wallet"
-
-  const listResponse = await sendListMessage(
-    phone,
-    `💳 *Payment Type*\n\nPayment Method: ${methodLabel}\nConsultation Fee: ₹${consultationFee}\n\nChoose payment type:`,
-    "Select Type",
-    [
-      {
-        title: "Payment Options",
-        rows: paymentTypeOptions,
-      },
-    ],
-    "Harmony Medical Services"
-  )
-
-  if (!listResponse.success) {
-    // Fallback to text-based selection
-    await sendTextMessage(
-      phone,
-      `💳 *Payment Type*\n\nPayment Method: ${methodLabel}\nConsultation Fee: ₹${consultationFee}\n\nPlease reply with:\n• "full" to pay ₹${consultationFee} now\n• "partial" to pay ₹${PARTIAL_PAYMENT_AMOUNT} now (₹${REMAINING_AMOUNT} at hospital)`
-    )
-  }
-}
-
 async function showBookingConfirmation(
   phone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
@@ -2180,10 +2157,9 @@ async function showBookingConfirmation(
   })
 
   const consultationFee = session.consultationFee || 500
-  const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
-  const amountToPay = session.paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
   const paymentMethodLabel = session.paymentMethod === "card" ? "Card" : session.paymentMethod === "upi" ? "UPI" : session.paymentMethod === "cash" ? "Cash" : "Wallet"
-  const paymentTypeLabel = session.paymentType === "partial" ? `Partial (₹${amountToPay} now, ₹${consultationFee - amountToPay} at hospital)` : "Full"
+  const paidNow = session.paymentAmount ?? (session.paymentMethod === "cash" ? 0 : consultationFee)
+  const dueLater = session.remainingAmount ?? Math.max(consultationFee - paidNow, 0)
 
   let confirmMsg = `📋 *Confirm Appointment:*\n\n`
   confirmMsg += `👨‍⚕️ Doctor: ${doctorName}\n`
@@ -2194,8 +2170,12 @@ async function showBookingConfirmation(
   }
   confirmMsg += `\n💳 Payment:\n`
   confirmMsg += `   Method: ${paymentMethodLabel}\n`
-  confirmMsg += `   Type: ${paymentTypeLabel}\n`
-  confirmMsg += `   Amount: ₹${amountToPay}\n`
+  confirmMsg += `   Pay Now: ₹${paidNow}\n`
+  if (dueLater > 0) {
+    confirmMsg += `   Due at Hospital: ₹${dueLater}\n`
+  } else {
+    confirmMsg += `   Remaining: ₹0 (paid)\n`
+  }
   confirmMsg += `\nReply "confirm" to book or "cancel" to start over.`
 
   await sendTextMessage(phone, confirmMsg)

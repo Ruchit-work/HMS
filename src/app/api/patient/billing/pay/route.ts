@@ -181,6 +181,8 @@ export async function POST(req: Request) {
           paymentMethod: method,
           paidAt: nowIso,
           transactionId: transactionId,
+          remainingAmount: 0,
+          status: "confirmed",
           updatedAt: nowIso,
         })
       }
