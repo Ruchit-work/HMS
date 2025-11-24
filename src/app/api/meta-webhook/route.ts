@@ -729,21 +729,13 @@ async function sendDoctorPicker(phone: string, language: "english" | "gujarati" 
     }
   })
 
-  // Split into sections if more than 10 (WhatsApp list limit is 10 rows per section)
-  const sections = []
-  for (let i = 0; i < doctorOptions.length; i += 10) {
-    const sectionTitle = i === 0 
-      ? (language === "gujarati" ? "ડૉક્ટરો" : "Available Doctors")
-      : (language === "gujarati" ? "વધુ ડૉક્ટરો" : "More Doctors")
-    
-    // Ensure section title is max 24 chars
-    const truncatedTitle = sectionTitle.length > 24 ? sectionTitle.substring(0, 24) : sectionTitle
-    
-    sections.push({
-      title: truncatedTitle,
-      rows: doctorOptions.slice(i, i + 10),
-    })
-  }
+  // WhatsApp list message limit: 10 rows TOTAL (not per section)
+  // Already limited to 10 doctors by .limit(10) query above
+  // Create single section with all doctor options (max 10)
+  const sections = [{
+    title: language === "gujarati" ? "ડૉક્ટરો" : "Available Doctors",
+    rows: doctorOptions,
+  }]
 
   const doctorMsg = language === "gujarati"
     ? "👨‍⚕️ *ડૉક્ટર પસંદ કરો*\n\nતમારો પસંદીદા ડૉક્ટર પસંદ કરો:"
@@ -1054,14 +1046,15 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
     return
   }
   
-  // Split date options into sections if more than 10 (WhatsApp list limit is 10 rows per section)
-  const sections = []
-  for (let i = 0; i < dateOptions.length; i += 10) {
-    sections.push({
-      title: i === 0 ? (language === "gujarati" ? "ઉપલબ્ધ તારીખો" : "Available Dates") : (language === "gujarati" ? "વધુ તારીખો" : "More Dates"),
-      rows: dateOptions.slice(i, i + 10),
-    })
-  }
+  // WhatsApp list message limit: 10 rows TOTAL (not per section)
+  // Limit dates to first 10 available
+  const datesToShow = dateOptions.slice(0, 10)
+  
+  // Create single section with max 10 date options
+  const sections = [{
+    title: language === "gujarati" ? "ઉપલબ્ધ તારીખો" : "Available Dates",
+    rows: datesToShow,
+  }]
 
   const dateMsg = language === "gujarati"
     ? "📅 *અપોઇન્ટમેન્ટ તારીખ પસંદ કરો*\n\nઉપલબ્ધ તારીખો જોવા માટે નીચેનું બટન ટેપ કરો:"
@@ -1508,9 +1501,13 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     return hA * 60 + mA - (hB * 60 + mB)
   })
 
+  // WhatsApp list messages have a maximum of 10 rows TOTAL across all sections
+  // Limit to first 10 available slots
+  const slotsToShow = sortedSlots.slice(0, 10)
+
   // Format slots for list message - match doctor picker format exactly
   // Ensure title is max 24 chars, description max 72 chars
-  const formattedSlots = sortedSlots.map(slot => {
+  const formattedSlots = slotsToShow.map(slot => {
     const timeStr = slot.title // "09:00" format
     // Format time for title display (09:00 -> 9:00 AM)
     const [hours, minutes] = timeStr.split(":").map(Number)
@@ -1537,21 +1534,12 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
     }
   })
 
-  // Split into sections if more than 10 (WhatsApp list limit is 10 rows per section)
-  const sections = []
-  for (let i = 0; i < formattedSlots.length; i += 10) {
-    const sectionTitle = i === 0 
-      ? (language === "gujarati" ? "સમય પસંદ કરો" : "Available Times")
-      : (language === "gujarati" ? "વધુ સમય" : "More Times")
-    
-    // Ensure section title doesn't exceed 24 chars
-    const truncatedSectionTitle = sectionTitle.length > 24 ? sectionTitle.substring(0, 24) : sectionTitle
-    
-    sections.push({
-      title: truncatedSectionTitle,
-      rows: formattedSlots.slice(i, i + 10),
-    })
-  }
+  // WhatsApp list message limit: 10 rows TOTAL (not per section)
+  // Create single section with max 10 rows
+  const sections = [{
+    title: language === "gujarati" ? "સમય પસંદ કરો" : "Available Times",
+    rows: formattedSlots,
+  }]
 
   const timeMsg = language === "gujarati"
     ? "🕐 *સમય પસંદ કરો*\n\nતમારો પસંદીદા સમય પસંદ કરો:"
@@ -1584,7 +1572,7 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
       slotCount: formattedSlots.length,
     })
     
-    // Retry with simplified format
+    // Retry with simplified format - still limit to 10 rows total
     console.log("[Meta WhatsApp] Retrying time slot list with simplified format...")
     const simplifiedSlots = formattedSlots.map(slot => ({
       id: slot.id,
@@ -1592,13 +1580,11 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
       description: "Available", // Keep description to avoid WhatsApp rejection
     }))
 
-    const simplifiedSections = []
-    for (let i = 0; i < simplifiedSlots.length; i += 10) {
-      simplifiedSections.push({
-        title: i === 0 ? "Times" : "More",
-        rows: simplifiedSlots.slice(i, i + 10),
-      })
-    }
+    // Single section with max 10 rows (WhatsApp limit)
+    const simplifiedSections = [{
+      title: "Times",
+      rows: simplifiedSlots,
+    }]
 
     const retryResponse = await sendListMessage(
       phone,
