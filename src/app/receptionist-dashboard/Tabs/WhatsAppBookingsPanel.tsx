@@ -161,6 +161,20 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
     setSelectedBooking(null)
   }
 
+  const allowPatientInfoEdit = useMemo(() => {
+    if (!selectedBooking) return false
+    const name = (selectedBooking.patientName || "").trim().toLowerCase()
+    const email = (selectedBooking.patientEmail || "").trim()
+    const phone = (selectedBooking.patientPhone || "").trim()
+    return (
+      !email ||
+      !phone ||
+      name.length === 0 ||
+      name === "unknown" ||
+      name.includes("whatsapp patient")
+    )
+  }, [selectedBooking])
+
   const selectedDoctor = useMemo(() => {
     if (!formDoctorId) return null
     return doctors.find((d) => d.id === formDoctorId) || null
@@ -465,7 +479,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                         onClick={() => handleOpenEditModal(booking)}
                         className="text-purple-600 hover:text-purple-900"
                       >
-                        Assign Doctor
+                        Add Details
                       </button>
                     </td>
                   </tr>
@@ -479,12 +493,12 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
       {/* Edit Modal */}
       {editModalOpen && selectedBooking && (
         <>
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={handleCloseEditModal} />
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 transition-opacity" onClick={handleCloseEditModal} />
           <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Assign Doctor & Edit Booking</h3>
-                <p className="text-sm text-gray-500 mt-1">Update appointment details and assign a doctor</p>
+                <h3 className="text-lg font-semibold text-gray-900">Add Details & Assign Doctor</h3>
+                <p className="text-sm text-gray-500 mt-1">Complete patient details and assign a doctor before confirming</p>
               </div>
 
               <div className="p-6 space-y-4">
@@ -604,17 +618,34 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                     <input
                       type="text"
                       value={formPatientName}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      readOnly={!allowPatientInfoEdit}
+                      onChange={(e) => {
+                        if (allowPatientInfoEdit) setFormPatientName(e.target.value)
+                      }}
+                      className={
+                        allowPatientInfoEdit
+                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          : "w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      }
                     />
+                    {!allowPatientInfoEdit && (
+                      <p className="text-xs text-gray-500 mt-1">Existing patient info cannot be edited.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                     <input
                       type="tel"
                       value={formPatientPhone}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      readOnly={!allowPatientInfoEdit}
+                      onChange={(e) => {
+                        if (allowPatientInfoEdit) setFormPatientPhone(e.target.value)
+                      }}
+                      className={
+                        allowPatientInfoEdit
+                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          : "w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      }
                     />
                   </div>
                   <div>
@@ -622,8 +653,15 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                     <input
                       type="email"
                       value={formPatientEmail}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      readOnly={!allowPatientInfoEdit}
+                      onChange={(e) => {
+                        if (allowPatientInfoEdit) setFormPatientEmail(e.target.value)
+                      }}
+                      className={
+                        allowPatientInfoEdit
+                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          : "w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      }
                     />
                   </div>
                 </div>

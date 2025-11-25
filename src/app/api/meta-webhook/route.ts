@@ -449,9 +449,65 @@ async function processBookingConfirmation(
     return
   }
 
-  // WhatsApp bookings don't require doctor assignment - receptionist will assign later
-  const consultationFee = session.consultationFee || 500
   const paymentMethod = session.paymentMethod || "cash"
+  let consultationFee = session.consultationFee
+  let assignedDoctorId = session.doctorId || ""
+  let doctorDataForAppointment: { id: string; data: FirebaseFirestore.DocumentData } | null = null
+  let originalAppointmentData: FirebaseFirestore.DocumentData | null = null
+
+  if (session.isRecheckup && session.originalAppointmentId) {
+    try {
+      const originalAppointmentDoc = await db.collection("appointments").doc(session.originalAppointmentId).get()
+      if (originalAppointmentDoc.exists) {
+        originalAppointmentData = originalAppointmentDoc.data() || null
+        if (!assignedDoctorId && originalAppointmentData?.doctorId) {
+          assignedDoctorId = originalAppointmentData.doctorId
+        }
+        if (!consultationFee) {
+          consultationFee =
+            originalAppointmentData?.totalConsultationFee ||
+            originalAppointmentData?.consultationFee ||
+            undefined
+        }
+      }
+    } catch (error) {
+      console.error("[Meta WhatsApp] Failed to read original appointment for re-checkup:", error)
+    }
+  }
+
+  if (assignedDoctorId) {
+    try {
+      const doctorDoc = await db.collection("doctors").doc(assignedDoctorId).get()
+      if (doctorDoc.exists) {
+        doctorDataForAppointment = { id: assignedDoctorId, data: doctorDoc.data()! }
+        if (!consultationFee && doctorDoc.data()?.consultationFee) {
+          consultationFee = doctorDoc.data()?.consultationFee
+        }
+      }
+    } catch (error) {
+      console.error("[Meta WhatsApp] Failed to load doctor for re-checkup booking:", error)
+    }
+
+    if (!doctorDataForAppointment && originalAppointmentData) {
+      const originalDoctorName = originalAppointmentData.doctorName || ""
+      const [firstName, ...rest] = originalDoctorName.split(" ")
+      doctorDataForAppointment = {
+        id: assignedDoctorId,
+        data: {
+          firstName: firstName || originalDoctorName,
+          lastName: rest.join(" "),
+          specialization: originalAppointmentData.doctorSpecialization || "",
+          consultationFee:
+            consultationFee ||
+            originalAppointmentData.totalConsultationFee ||
+            originalAppointmentData.consultationFee ||
+            0,
+        },
+      }
+    }
+  }
+
+  consultationFee = consultationFee ?? 500
   const paymentAmount = session.paymentAmount ?? 0
   const remainingAmount = consultationFee
   const paymentStatus: "pending" | "paid" = "pending"
@@ -468,11 +524,11 @@ async function processBookingConfirmation(
     const appointmentId = await createAppointment(
       db,
       patient,
-      null, // No doctor assigned yet
+      doctorDataForAppointment,
       {
         symptomCategory: "",
         chiefComplaint,
-        doctorId: "", // Empty - will be assigned by receptionist
+        doctorId: assignedDoctorId,
         appointmentDate: session.appointmentDate,
         appointmentTime: session.appointmentTime,
         medicalHistory: "",
