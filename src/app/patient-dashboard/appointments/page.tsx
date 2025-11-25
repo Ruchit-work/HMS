@@ -302,7 +302,7 @@ export default function PatientAppointments() {
 
           {/* Page Header */}
           <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-4xl">
                   📋
@@ -312,9 +312,9 @@ export default function PatientAppointments() {
                   <p className="text-indigo-100 text-sm mt-1">View and manage all your appointments</p>
                 </div>
               </div>
-              <div>
-                <Link href="/patient-dashboard/book-appointment">
-                  <button className="group inline-flex items-center gap-3 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 active:scale-95">
+              <div className="w-full sm:w-auto">
+                <Link href="/patient-dashboard/book-appointment" className="block">
+                  <button className="w-full group inline-flex items-center justify-center gap-3 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 active:scale-95">
                     <svg className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
@@ -372,10 +372,10 @@ export default function PatientAppointments() {
 
           {/* Tabs */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6 shadow-sm">
-            <div className="flex border-b border-slate-200">
+            <div className="flex flex-col sm:flex-row border-b border-slate-200">
               <button
                 onClick={() => setActiveTab("confirmed")}
-                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
+                className={`w-full sm:flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
                   activeTab === "confirmed"
                     ? "bg-blue-50 text-blue-600 border-b-2 border-blue-600"
                     : "text-slate-600 hover:bg-slate-50"
@@ -385,7 +385,7 @@ export default function PatientAppointments() {
               </button>
               <button
                 onClick={() => setActiveTab("completed")}
-                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
+                className={`w-full sm:flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
                   activeTab === "completed"
                     ? "bg-green-50 text-green-600 border-b-2 border-green-600"
                     : "text-slate-600 hover:bg-slate-50"
@@ -395,7 +395,7 @@ export default function PatientAppointments() {
               </button>
               <button
                 onClick={() => setActiveTab("cancelled")}
-                className={`flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
+                className={`w-full sm:flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
                   activeTab === "cancelled"
                     ? "bg-red-50 text-red-600 border-b-2 border-red-600"
                     : "text-slate-600 hover:bg-slate-50"

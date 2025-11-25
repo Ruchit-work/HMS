@@ -1705,30 +1705,32 @@ export default function DoctorAppointments() {
                     onClick={() => toggleAccordion(appointment.id)}
                     className="p-5 cursor-pointer group"
                   >
-                    <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                       {/* Patient Avatar */}
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-full flex items-center justify-center text-xl sm:text-2xl font-bold text-teal-700 group-hover:scale-110 transition-transform flex-shrink-0">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto sm:mx-0 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-full flex items-center justify-center text-xl sm:text-2xl font-bold text-teal-700 group-hover:scale-110 transition-transform flex-shrink-0">
                         {appointment.patientName.charAt(0).toUpperCase()}
                       </div>
 
                       {/* Patient Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-bold text-lg text-slate-900 group-hover:text-teal-700 transition-colors">
+                      <div className="flex-1 min-w-0 text-center sm:text-left">
+                        <div className="flex flex-col items-center sm:items-start gap-2 mb-1 sm:flex-row sm:flex-wrap">
+                          <h3 className="font-bold text-lg text-slate-900 group-hover:text-teal-700 transition-colors leading-tight break-words">
                             {appointment.patientName}
                           </h3>
-                          {appointment.patientGender && (
-                            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                              {appointment.patientGender === "Male" ? "👨" : appointment.patientGender === "Female" ? "👩" : "👤"} {appointment.patientGender}
-                            </span>
-                          )}
-                          {appointment.patientBloodGroup && (
-                            <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded-full font-semibold">
-                              🩸 {appointment.patientBloodGroup}
-                            </span>
-                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {appointment.patientGender && (
+                              <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+                                {appointment.patientGender === "Male" ? "👨" : appointment.patientGender === "Female" ? "👩" : "👤"} {appointment.patientGender}
+                              </span>
+                            )}
+                            {appointment.patientBloodGroup && (
+                              <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded-full font-semibold">
+                                🩸 {appointment.patientBloodGroup}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-slate-600">
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-slate-600">
                           <span className="flex items-center gap-1">
                             <span>📅</span>
                             {new Date(appointment.appointmentDate).toLocaleDateString('en-US', { 
@@ -1751,7 +1753,7 @@ export default function DoctorAppointments() {
                       </div>
 
                       {/* Status Badge */}
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between sm:justify-end gap-3">
                         <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getStatusColor(appointment.status)}`}>
                           {appointment.status === "confirmed" ? "✓ Confirmed" : 
                            appointment.status === "completed" ? "✓ Completed" : 
@@ -2454,18 +2456,18 @@ export default function DoctorAppointments() {
                                     </div>
                                   ) : showAiPrescriptionSuggestion[appointment.id] && aiPrescription[appointment.id]?.medicine ? (
                                     <div className="mb-2 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-300 rounded p-2 shadow-sm">
-                                      <div className="flex items-start justify-between mb-1.5">
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-1.5">
+                                          <div className="flex items-center gap-1.5">
                                           <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                           </svg>
                                           <span className="text-xs font-semibold text-purple-700 uppercase">AI Generated</span>
                                         </div>
-                                        <div className="flex items-center gap-1.5">
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
                                           <button
                                             type="button"
                                             onClick={() => handleAcceptPrescription(appointment.id)}
-                                            className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded transition-all"
+                                              className="flex items-center justify-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded transition-all"
                                           >
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -2475,7 +2477,7 @@ export default function DoctorAppointments() {
                                           <button
                                             type="button"
                                             onClick={() => handleDeclinePrescription(appointment.id)}
-                                            className="flex items-center gap-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded transition-all"
+                                              className="flex items-center justify-center gap-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded transition-all"
                                           >
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
