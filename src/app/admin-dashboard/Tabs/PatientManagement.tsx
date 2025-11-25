@@ -249,9 +249,9 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
         if (search){
             const searchLower = search.toLowerCase()
             filtered = filtered.filter(patient =>
-                `${patient.firstName} ${patient.lastName}`.toLowerCase().includes(searchLower) ||
-                patient.email.toLowerCase().includes(searchLower) ||
-                patient.phone.toLowerCase().includes(searchLower) ||
+                `${patient.firstName || ""} ${patient.lastName || ""}`.toLowerCase().includes(searchLower) ||
+                (patient.email || "").toLowerCase().includes(searchLower) ||
+                (patient.phone || "").toLowerCase().includes(searchLower) ||
                 (patient.patientId ? patient.patientId.toLowerCase().includes(searchLower) : false)
             )
         }

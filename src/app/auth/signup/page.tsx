@@ -270,43 +270,43 @@ If you need any assistance, reply here or call us at +91-XXXXXXXXXX.
 
 Thank you for choosing Harmony Medical Services! 🏥`;
 
-        try {
-          // Format phone properly - ensure it starts with +
-          const phoneToSend = combinedPhone.startsWith("+")
-            ? combinedPhone
-            : `+${combinedPhone}`;
-            
-          // Use public API endpoint for patient signup (no authentication required)
-          const response = await fetch("/api/patient/send-whatsapp", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              to: phoneToSend,
-              message,
-            }),
-          });
+        // Fire-and-forget WhatsApp welcome message so account creation never blocks
+        ;(async () => {
+          try {
+            const phoneToSend = combinedPhone.startsWith("+")
+              ? combinedPhone
+              : `+${combinedPhone}`
 
-          const data = await response.json();
+            const response = await fetch("/api/patient/send-whatsapp", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                to: phoneToSend,
+                message,
+              }),
+            })
 
-          if (data.success) {
-            console.log("[Signup WhatsApp] ✅ Account creation message sent successfully to:", phoneToSend);
-          } else {
-            console.error("[Signup WhatsApp] ❌ Failed to send account creation message:", {
-              phone: phoneToSend,
-              error: data.error || "Unknown error",
-              errorCode: data.errorCode,
-              status: response.status,
-            });
+            const data = await response.json().catch(() => ({}))
+
+            if (data?.success) {
+              console.log("[Signup WhatsApp] ✅ Account creation message sent successfully to:", phoneToSend)
+            } else {
+              console.error("[Signup WhatsApp] ❌ Failed to send account creation message:", {
+                phone: phoneToSend,
+                error: data?.error || "Unknown error",
+                errorCode: data?.errorCode,
+                status: response.status,
+              })
+            }
+          } catch (err) {
+            console.error("[Signup WhatsApp] ❌ Exception sending account creation message:", {
+              phone: combinedPhone,
+              error: err instanceof Error ? err.message : String(err),
+            })
           }
-        } catch (err) {
-          console.error("[Signup WhatsApp] ❌ Exception sending account creation message:", {
-            phone: combinedPhone,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          // Don't fail account creation if WhatsApp fails
-        }
+        })()
       } else {
         console.warn("[Signup WhatsApp] ⚠️ No phone number provided, WhatsApp message not sent. Patient:", fullName);
       }
