@@ -563,6 +563,7 @@ interface BookingSession {
   state: BookingState
   language?: "gujarati" | "english" // Selected language for the booking session
   needsRegistration?: boolean
+  patientUid?: string
   doctorId?: string
   appointmentDate?: string
   appointmentTime?: string
@@ -582,6 +583,7 @@ interface BookingSession {
     email?: string
     dateOfBirth?: string
     gender?: string
+    patientId?: string
   }
   createdAt: string
   updatedAt: string
@@ -902,6 +904,7 @@ async function startBookingConversation(phone: string) {
   await sessionRef.set({
     state: "selecting_language",
     needsRegistration: false,
+    patientUid: patient.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   })
@@ -1030,18 +1033,55 @@ async function handleRegistrationPrompt(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   
-  // Create session for registration
-  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-  await sessionRef.set({
-    state: "selecting_language",
-    needsRegistration: true,
-    registrationData: {},
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  })
-  
-  // Send language picker
-  await sendLanguagePicker(phone)
+  try {
+    // Find or create patient record immediately (phone-only registration)
+    let patient = await findPatientByPhone(db, normalizedPhone)
+    if (!patient) {
+      const placeholderName = `WhatsApp Patient ${normalizedPhone.slice(-4)}`
+      const { patientUid } = await createPatientFromWhatsApp(db, normalizedPhone, placeholderName, "")
+      const patientDoc = await db.collection("patients").doc(patientUid).get()
+      if (patientDoc.exists) {
+        patient = { id: patientDoc.id, data: patientDoc.data()! }
+      }
+    }
+
+    if (!patient) {
+      await sendTextMessage(
+        phone,
+        "❌ We couldn't register you right now. Please try again or contact reception."
+      )
+      return
+    }
+
+    // Create/Update session with patient context and jump straight to language selection
+    const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+    await sessionRef.set({
+      state: "selecting_language",
+      needsRegistration: false,
+      patientUid: patient.id,
+      registrationData: {
+        firstName: patient.data.firstName || "",
+        lastName: patient.data.lastName || "",
+        patientId: patient.data.patientId || "",
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+
+    await sendTextMessage(
+      phone,
+      "✅ Registration received! We'll have our reception team collect any missing details later. Let's continue booking your appointment."
+    )
+
+    // Send language picker
+    await sendLanguagePicker(phone)
+  } catch (error) {
+    console.error("[Meta WhatsApp] Failed to auto-register patient:", error)
+    await sendTextMessage(
+      phone,
+      "❌ We couldn't register you right now. Please try again or contact reception."
+    )
+  }
 }
 
 async function handleRegistrationFullName(
@@ -1071,15 +1111,18 @@ async function handleRegistrationFullName(
   
   // Create minimal patient record (name + phone only)
   try {
-    await createPatientFromWhatsApp(db, normalizedPhone, firstName, lastName)
+    const { patientUid, patientId } = await createPatientFromWhatsApp(db, normalizedPhone, firstName, lastName)
     
     // Update session
     await sessionRef.update({
       state: "selecting_language",
       needsRegistration: false,
+      patientUid,
       registrationData: {
+        ...(session.registrationData || {}),
         firstName,
         lastName,
+        patientId,
       },
       updatedAt: new Date().toISOString(),
     })
@@ -1128,11 +1171,15 @@ async function createPatientFromWhatsApp(
   phone: string,
   firstName: string,
   lastName: string
-): Promise<string> {
+): Promise<{ patientUid: string; patientId: string }> {
   // Check if patient already exists
   const existing = await findPatientByPhone(db, phone)
   if (existing) {
-    return existing.id
+    const existingData = existing.data || {}
+    return {
+      patientUid: existing.id,
+      patientId: existingData.patientId || existing.id,
+    }
   }
   
   // Generate patient ID
@@ -1182,7 +1229,7 @@ async function createPatientFromWhatsApp(
   
   console.log("[Meta WhatsApp] Created patient via WhatsApp:", patientUid, phone)
   
-  return patientUid
+  return { patientUid, patientId }
 }
 
 async function handleDateSelection(
@@ -1615,6 +1662,8 @@ async function handleRecheckupPickDate(phone: string) {
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   const sessionDoc = await sessionRef.get()
+  const session = sessionDoc.exists ? (sessionDoc.data() as BookingSession) : undefined
+  const patient = await findPatientByPhone(db, normalizedPhone)
 
   if (!sessionDoc.exists) {
     // Create a new session for re-checkup
@@ -1623,7 +1672,13 @@ async function handleRecheckupPickDate(phone: string) {
       isRecheckup: true,
       language: "english",
       needsRegistration: false,
+      patientUid: patient?.id,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+  } else if (!session?.patientUid && patient) {
+    await sessionRef.update({
+      patientUid: patient.id,
       updatedAt: new Date().toISOString(),
     })
   }
@@ -2277,6 +2332,7 @@ async function handleConfirmation(
   session: BookingSession
 ): Promise<boolean> {
   const trimmedText = text.trim().toLowerCase()
+  const language = session.language || "english"
 
   if (trimmedText !== "confirm" && trimmedText !== "yes") {
     await sendTextMessage(phone, "Booking cancelled. Type 'Book' to start again.")
@@ -2293,14 +2349,51 @@ async function handleConfirmation(
 
   // Create appointment
   try {
-    const patient = await findPatientByPhone(db, normalizedPhone)
+    let patient: { id: string; data: FirebaseFirestore.DocumentData } | null = null
+
+    if (session.patientUid) {
+      const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+      if (patientDoc.exists) {
+        patient = { id: patientDoc.id, data: patientDoc.data()! }
+      }
+    }
+
+    if (!patient) {
+      patient = await findPatientByPhone(db, normalizedPhone)
+    }
+
+    if (!patient && session.registrationData?.firstName) {
+      try {
+        const recreated = await createPatientFromWhatsApp(
+          db,
+          normalizedPhone,
+          session.registrationData.firstName,
+          session.registrationData?.lastName || ""
+        )
+        const patientDoc = await db.collection("patients").doc(recreated.patientUid).get()
+        if (patientDoc.exists) {
+          patient = { id: patientDoc.id, data: patientDoc.data()! }
+          await sessionRef.update({
+            patientUid: recreated.patientUid,
+            registrationData: {
+              ...(session.registrationData || {}),
+              patientId: recreated.patientId,
+            },
+            updatedAt: new Date().toISOString(),
+          })
+        }
+      } catch (recreateError) {
+        console.error("[Meta WhatsApp] Failed to recreate patient record:", recreateError)
+      }
+    }
+
     if (!patient) {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
-      
-      await sendTextMessage(
-        phone,
-        `❌ Patient record not found.\n\n📝 *Please register first:*\n\n${baseUrl}\n\nOr contact reception for assistance.`
-      )
+      const msg =
+        language === "gujarati"
+          ? `❌ દર્દી રેકોર્ડ મળ્યો નથી.\n\n📝 કૃપા કરીને પહેલા નોંધણી કરો:\n${baseUrl}`
+          : `❌ Patient record not found.\n\n📝 *Please register first:*\n\n${baseUrl}\n\nOr contact reception for assistance.`
+      await sendTextMessage(phone, msg)
       await sessionRef.delete()
       return true
     }
