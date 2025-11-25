@@ -1,0 +1,511 @@
+"use client"
+
+import { useEffect, useMemo, useState, useCallback } from "react"
+import { collection, getDocs, query, where } from "firebase/firestore"
+import { db, auth } from "@/firebase/config"
+import { Appointment } from "@/types/patient"
+import RefreshButton from "@/components/ui/RefreshButton"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
+
+interface WhatsAppBookingsPanelProps {
+  onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
+}
+
+interface Doctor {
+  id: string
+  firstName: string
+  lastName: string
+  specialization: string
+  consultationFee?: number
+}
+
+export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookingsPanelProps) {
+  const [bookings, setBookings] = useState<Appointment[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedBooking, setSelectedBooking] = useState<Appointment | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [doctorsLoading, setDoctorsLoading] = useState(false)
+  const [updateLoading, setUpdateLoading] = useState(false)
+
+  // Form state
+  const [formDoctorId, setFormDoctorId] = useState("")
+  const [formPatientName, setFormPatientName] = useState("")
+  const [formPatientPhone, setFormPatientPhone] = useState("")
+  const [formPatientEmail, setFormPatientEmail] = useState("")
+  const [formAppointmentDate, setFormAppointmentDate] = useState("")
+  const [formAppointmentTime, setFormAppointmentTime] = useState("")
+  const [formChiefComplaint, setFormChiefComplaint] = useState("")
+  const [formMedicalHistory, setFormMedicalHistory] = useState("")
+  const [formConsultationFee, setFormConsultationFee] = useState("")
+  const [formPaymentAmount, setFormPaymentAmount] = useState("")
+  const [formPaymentMethod, setFormPaymentMethod] = useState<"card" | "upi" | "cash" | "wallet">("cash")
+
+  const notify = useCallback(
+    (payload: { type: "success" | "error"; message: string } | null) => {
+      onNotification?.(payload)
+    },
+    [onNotification]
+  )
+
+  const fetchBookings = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to access WhatsApp bookings")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const res = await fetch("/api/receptionist/whatsapp-bookings", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        const errorMessage = errorData?.error || errorData?.details || `HTTP ${res.status}: Failed to load WhatsApp bookings`
+        console.error("[WhatsAppBookingsPanel] API error:", res.status, errorData)
+        throw new Error(errorMessage)
+      }
+
+      const data = await res.json()
+      const appointments = Array.isArray(data?.appointments) ? data.appointments : []
+      setBookings(appointments)
+    } catch (error: any) {
+      console.error("[WhatsAppBookingsPanel] Failed to load WhatsApp bookings:", error)
+      setError(error?.message || "Failed to load WhatsApp bookings. Please check the console for details.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const fetchDoctors = useCallback(async () => {
+    try {
+      setDoctorsLoading(true)
+      const doctorsQuery = query(collection(db, "doctors"), where("status", "==", "active"))
+      const snapshot = await getDocs(doctorsQuery)
+      const doctorsList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Doctor[]
+      setDoctors(doctorsList)
+    } catch (error) {
+      console.error("Failed to load doctors", error)
+    } finally {
+      setDoctorsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchBookings()
+    fetchDoctors()
+  }, [fetchBookings, fetchDoctors])
+
+  const handleOpenEditModal = (booking: Appointment) => {
+    setSelectedBooking(booking)
+    setFormDoctorId(booking.doctorId || "")
+    setFormPatientName(booking.patientName || "")
+    setFormPatientPhone(booking.patientPhone || "")
+    setFormPatientEmail(booking.patientEmail || "")
+    setFormAppointmentDate(booking.appointmentDate || "")
+    setFormAppointmentTime(booking.appointmentTime || "")
+    setFormChiefComplaint(booking.chiefComplaint || "")
+    setFormMedicalHistory(booking.medicalHistory || "")
+    setFormConsultationFee(String(booking.totalConsultationFee || booking.consultationFee || 0))
+    setFormPaymentAmount(String(booking.paymentAmount || 0))
+    setFormPaymentMethod((booking.paymentMethod as "card" | "upi" | "cash" | "wallet") || "cash")
+    setEditModalOpen(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setEditModalOpen(false)
+    setSelectedBooking(null)
+  }
+
+  const selectedDoctor = useMemo(() => {
+    if (!formDoctorId) return null
+    return doctors.find((d) => d.id === formDoctorId) || null
+  }, [doctors, formDoctorId])
+
+  useEffect(() => {
+    if (selectedDoctor?.consultationFee) {
+      setFormConsultationFee(String(selectedDoctor.consultationFee))
+    }
+  }, [selectedDoctor])
+
+  const handleUpdateBooking = async () => {
+    if (!selectedBooking) return
+
+    if (!formDoctorId) {
+      notify({ type: "error", message: "Please select a doctor" })
+      return
+    }
+
+    if (!formPatientName.trim()) {
+      notify({ type: "error", message: "Patient name is required" })
+      return
+    }
+
+    if (!formAppointmentDate || !formAppointmentTime) {
+      notify({ type: "error", message: "Appointment date and time are required" })
+      return
+    }
+
+    setUpdateLoading(true)
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const updateData: any = {
+        doctorId: formDoctorId,
+        patientName: formPatientName.trim(),
+        patientPhone: formPatientPhone.trim(),
+        patientEmail: formPatientEmail.trim(),
+        appointmentDate: formAppointmentDate,
+        appointmentTime: formAppointmentTime,
+        chiefComplaint: formChiefComplaint.trim() || "General consultation",
+        medicalHistory: formMedicalHistory.trim(),
+        consultationFee: Number(formConsultationFee) || 0,
+        paymentAmount: Number(formPaymentAmount) || 0,
+        paymentMethod: formPaymentMethod,
+        paymentStatus: Number(formPaymentAmount) >= Number(formConsultationFee) ? "paid" : "pending",
+        markConfirmed: true,
+      }
+
+      const res = await fetch(`/api/receptionist/whatsapp-bookings/${selectedBooking.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updateData),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Failed to update booking")
+      }
+
+      notify({ type: "success", message: "Booking updated successfully!" })
+      handleCloseEditModal()
+      fetchBookings()
+    } catch (error: any) {
+      console.error("Failed to update booking", error)
+      notify({ type: "error", message: error?.message || "Failed to update booking" })
+    } finally {
+      setUpdateLoading(false)
+    }
+  }
+
+  const pendingCount = bookings.length
+
+  const summaryCards = useMemo(() => {
+    return [
+      {
+        label: "Pending Bookings",
+        value: pendingCount,
+        caption: "Awaiting doctor assignment",
+        tone: "from-amber-500 to-amber-600",
+        icon: "📱",
+      },
+    ]
+  }, [pendingCount])
+
+  if (loading && bookings.length === 0) {
+    return <LoadingSpinner message="Loading WhatsApp bookings..." />
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {summaryCards.map((card, idx) => (
+          <div
+            key={idx}
+            className={`bg-gradient-to-br ${card.tone} rounded-xl p-5 text-white shadow-lg`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white/80 text-sm font-medium">{card.label}</p>
+                <p className="text-3xl font-bold mt-1">{card.value}</p>
+                <p className="text-white/70 text-xs mt-1">{card.caption}</p>
+              </div>
+              <div className="text-4xl opacity-80">{card.icon}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-gray-900">WhatsApp Bookings</h2>
+        <RefreshButton onClick={fetchBookings} loading={loading} />
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
+          {error}
+        </div>
+      )}
+
+      {/* Bookings List */}
+      {bookings.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+          <span className="text-5xl block mb-3">📱</span>
+          <p className="text-gray-600 font-medium">No pending WhatsApp bookings</p>
+          <p className="text-sm text-gray-400 mt-1">New bookings from WhatsApp will appear here</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Patient
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date & Time
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Phone
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fee
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {bookings.map((booking) => (
+                  <tr key={booking.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{booking.patientName}</div>
+                      <div className="text-sm text-gray-500">{booking.patientEmail || "No email"}</div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {new Date(booking.appointmentDate).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </div>
+                      <div className="text-sm text-gray-500">{booking.appointmentTime}</div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {booking.patientPhone || "—"}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ₹{booking.totalConsultationFee || booking.consultationFee || 0}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+                        Pending
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => handleOpenEditModal(booking)}
+                        className="text-purple-600 hover:text-purple-900"
+                      >
+                        Assign Doctor
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editModalOpen && selectedBooking && (
+        <>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={handleCloseEditModal} />
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Assign Doctor & Edit Booking</h3>
+                <p className="text-sm text-gray-500 mt-1">Update appointment details and assign a doctor</p>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Doctor Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Doctor <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formDoctorId}
+                    onChange={(e) => setFormDoctorId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    disabled={doctorsLoading}
+                  >
+                    <option value="">Select a doctor</option>
+                    {doctors.map((doctor) => (
+                      <option key={doctor.id} value={doctor.id}>
+                        {doctor.firstName} {doctor.lastName} - {doctor.specialization}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Patient Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Patient Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formPatientName}
+                      onChange={(e) => setFormPatientName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={formPatientPhone}
+                      onChange={(e) => setFormPatientPhone(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={formPatientEmail}
+                      onChange={(e) => setFormPatientEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Appointment Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formAppointmentDate}
+                      onChange={(e) => setFormAppointmentDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Time <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={formAppointmentTime}
+                      onChange={(e) => setFormAppointmentTime(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Medical Details */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Chief Complaint</label>
+                  <textarea
+                    value={formChiefComplaint}
+                    onChange={(e) => setFormChiefComplaint(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Medical History</label>
+                  <textarea
+                    value={formMedicalHistory}
+                    onChange={(e) => setFormMedicalHistory(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Payment Details */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Consultation Fee <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={formConsultationFee}
+                      onChange={(e) => setFormConsultationFee(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
+                    <input
+                      type="number"
+                      value={formPaymentAmount}
+                      onChange={(e) => setFormPaymentAmount(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                    <select
+                      value={formPaymentMethod}
+                      onChange={(e) => setFormPaymentMethod(e.target.value as any)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="card">Card</option>
+                      <option value="upi">UPI</option>
+                      <option value="wallet">Wallet</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
+                <button
+                  onClick={handleCloseEditModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  disabled={updateLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateBooking}
+                  disabled={updateLoading || !formDoctorId || !formPatientName.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {updateLoading ? "Updating..." : "Update Booking"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+

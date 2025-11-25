@@ -14,12 +14,13 @@ import AppoinmentManagement from "@/app/admin-dashboard/Tabs/AppoinmentManagemen
 import AdmitRequestsPanel from "@/app/receptionist-dashboard/Tabs/AdmitRequestsPanel"
 import BillingHistoryPanel from "@/app/receptionist-dashboard/Tabs/BillingHistoryPanel"
 import BookAppointmentPanel from "@/app/receptionist-dashboard/Tabs/BookAppointmentPanel"
+import WhatsAppBookingsPanel from "@/app/receptionist-dashboard/Tabs/WhatsAppBookingsPanel"
 import ConfirmDialog from "@/components/ui/ConfirmDialog"
 
 export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"patients" | "doctors" | "appointments" | "book-appointment" | "admit-requests" | "billing">("patients")
+  const [activeTab, setActiveTab] = useState<"patients" | "doctors" | "appointments" | "book-appointment" | "admit-requests" | "billing" | "whatsapp-bookings">("patients")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [userName, setUserName] = useState<string>("")
@@ -132,6 +133,10 @@ export default function ReceptionistDashboard() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2-2 4 4m0 0l4-4m-4 4V3m-5 5H5a2 2 0 00-2 2v9a2 2 0 002 2h6" /></svg>
               Billing History
             </button>
+            <button onClick={() => { setActiveTab("whatsapp-bookings"); setSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === "whatsapp-bookings" ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" : "text-gray-600 hover:bg-gray-100"}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+              WhatsApp Bookings
+            </button>
             <button onClick={() => { if (!bookSubOpen){ setActiveTab("book-appointment") }; setBookSubOpen(!bookSubOpen) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === "book-appointment" ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" : "text-gray-600 hover:bg-gray-100"}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
               Book Appointment
@@ -169,6 +174,8 @@ export default function ReceptionistDashboard() {
                     ? "Admit Requests"
                     : activeTab === "billing"
                     ? "Billing History"
+                    : activeTab === "whatsapp-bookings"
+                    ? "WhatsApp Bookings"
                     : "Book Appointment"}
                 </h1>
                 <p className="text-sm sm:text-base text-gray-600 mt-1">
@@ -182,6 +189,8 @@ export default function ReceptionistDashboard() {
                     ? "Review hospitalization requests and assign rooms"
                     : activeTab === "billing"
                     ? "Track recent hospitalization billing activity"
+                    : activeTab === "whatsapp-bookings"
+                    ? "Manage WhatsApp booking requests and assign doctors"
                     : "Book a new appointment for a patient"}
                 </p>
               </div>
@@ -252,6 +261,13 @@ export default function ReceptionistDashboard() {
               <BookAppointmentPanel
                 patientMode={patientMode}
                 onPatientModeChange={setPatientMode}
+                onNotification={(payload) => setNotification(payload)}
+              />
+            </div>
+          )}
+          {activeTab === "whatsapp-bookings" && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <WhatsAppBookingsPanel
                 onNotification={(payload) => setNotification(payload)}
               />
             </div>

@@ -115,7 +115,7 @@ export interface Appointment {
   remainingAmount: number
   transactionId: string
   paidAt: string
-  status: "confirmed" | "completed" | "cancelled"
+  status: "pending" | "confirmed" | "completed" | "cancelled"
   createdAt: string
   updatedAt: string
   medicine?: string

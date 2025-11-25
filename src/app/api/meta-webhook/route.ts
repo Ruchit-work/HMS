@@ -283,13 +283,6 @@ async function moveToDateSelection(
   sessionRef: FirebaseFirestore.DocumentReference,
   language: Language
 ) {
-  const sessionSnap = await sessionRef.get()
-  const session = sessionSnap.exists ? (sessionSnap.data() as BookingSession) : null
-  const doctorInfo = await ensureDefaultDoctor(db, sessionRef, session, phone, language)
-  if (!doctorInfo) {
-    return
-  }
-
   await sessionRef.update({
     state: "selecting_date",
     updatedAt: new Date().toISOString(),
@@ -298,10 +291,11 @@ async function moveToDateSelection(
   const introMsg =
     language === "gujarati"
       ? "📅 ચાલો તમારી મુલાકાત માટે તારીખ પસંદ કરીએ. ઉપલબ્ધ તારીખો નીચે બતાવવામાં આવશે."
-      : "📅 Let’s pick your appointment date. Available dates will be shown next."
+      : "📅 Let's pick your appointment date. Available dates will be shown next."
   await sendTextMessage(phone, introMsg)
 
-  await sendDatePicker(phone, doctorInfo.id, language)
+  // No doctor needed for WhatsApp bookings - receptionist will assign later
+  await sendDatePicker(phone, undefined, language)
 }
 
 async function sendConfirmationButtons(
@@ -309,7 +303,6 @@ async function sendConfirmationButtons(
   sessionRef: FirebaseFirestore.DocumentReference,
   session: BookingSession
 ) {
-  const db = admin.firestore()
   const language = session.language || "english"
 
   if (!session.appointmentDate || !session.appointmentTime) {
@@ -322,12 +315,8 @@ async function sendConfirmationButtons(
     return
   }
 
-  const doctorInfo = await ensureDefaultDoctor(db, sessionRef, session, phone, language)
-  if (!doctorInfo) {
-    return
-  }
-
-  const consultationFee = doctorInfo.data.consultationFee || 500
+  // Set default consultation fee (receptionist will update after doctor assignment)
+  const consultationFee = 500
   await sessionRef.update({
     state: "confirming",
     consultationFee,
@@ -351,12 +340,10 @@ async function sendConfirmationButtons(
     hour12: true,
   })
 
-  const doctorName = `${doctorInfo.data.firstName || ""} ${doctorInfo.data.lastName || ""}`.trim()
-
   const message =
     language === "gujarati"
-      ? `📋 *અપોઇન્ટમેન્ટની વિગતો*\n\n📅 તારીખ: ${dateDisplay}\n🕒 સમય: ${timeDisplay}\n👨‍⚕️ ડૉક્ટર: ${doctorName || "ઉપલબ્ધ ડૉક્ટર"}\n\nકૃપા કરીને ખાતરી કરો.`
-      : `📋 *Appointment Details*\n\n📅 Date: ${dateDisplay}\n🕒 Time: ${timeDisplay}\n👨‍⚕️ Doctor: ${doctorName || "Available Doctor"}\n\nPlease confirm to continue.`
+      ? `📋 *અપોઇન્ટમેન્ટની વિગતો*\n\n📅 તારીખ: ${dateDisplay}\n🕒 સમય: ${timeDisplay}\n\nકૃપા કરીને ખાતરી કરો. ડૉક્ટર રિસેપ્શન દ્વારા સોંપવામાં આવશે.`
+      : `📋 *Appointment Details*\n\n📅 Date: ${dateDisplay}\n🕒 Time: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception.`
 
   const buttons = [
     {
@@ -423,29 +410,22 @@ async function processBookingConfirmation(
     return
   }
 
-  const doctorInfo = await ensureDefaultDoctor(db, sessionRef, session, phone, language)
-  if (!doctorInfo) {
-    await sessionRef.delete()
-    return
-  }
-
-  const doctorData = doctorInfo.data
-  const consultationFee = session.consultationFee || doctorData.consultationFee || 500
+  // WhatsApp bookings don't require doctor assignment - receptionist will assign later
+  const consultationFee = session.consultationFee || 500
   const paymentMethod = session.paymentMethod || "cash"
-  const paymentAmount = session.paymentAmount ?? (paymentMethod === "cash" ? 0 : consultationFee)
-  const remainingAmount =
-    session.remainingAmount ?? (paymentMethod === "cash" ? consultationFee : Math.max(consultationFee - paymentAmount, 0))
-  const paymentStatus: "pending" | "paid" = paymentMethod === "cash" ? "pending" : remainingAmount <= 0 ? "paid" : "pending"
+  const paymentAmount = session.paymentAmount ?? 0
+  const remainingAmount = consultationFee
+  const paymentStatus: "pending" | "paid" = "pending"
 
   try {
     const appointmentId = await createAppointment(
       db,
       patient,
-      { id: doctorInfo.id, data: doctorData },
+      null, // No doctor assigned yet
       {
         symptomCategory: "",
         chiefComplaint: "General consultation",
-        doctorId: doctorInfo.id,
+        doctorId: "", // Empty - will be assigned by receptionist
         appointmentDate: session.appointmentDate,
         appointmentTime: session.appointmentTime,
         medicalHistory: "",
@@ -456,16 +436,16 @@ async function processBookingConfirmation(
         paymentAmount,
         remainingAmount,
       },
-      normalizedPhone
+      normalizedPhone,
+      true // Mark as WhatsApp pending
     )
 
     await sendBookingConfirmation(
       normalizedPhone,
       patient,
-      doctorData,
+      null, // No doctor data yet
       {
         state: "confirming",
-        doctorId: doctorInfo.id,
         appointmentDate: session.appointmentDate,
         appointmentTime: session.appointmentTime,
         paymentMethod,
@@ -1082,7 +1062,7 @@ async function handleDateSelection(
     })
 
     // Show Morning/Afternoon buttons for the selected date
-    await sendTimePicker(phone, session.doctorId!, selectedDate, language)
+    await sendTimePicker(phone, undefined, selectedDate, language)
     return true
   }
 
@@ -1366,7 +1346,7 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     })
 
     // Send time picker
-    await sendTimePicker(phone, session.doctorId!, selectedDate, language)
+    await sendTimePicker(phone, undefined, selectedDate, language)
     return
   }
 
@@ -1375,20 +1355,27 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     const selectedTime = selectedId.replace("time_", "")
     const normalizedTime = normalizeTime(selectedTime)
 
-    // Check if slot is already booked
-    const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-    const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-    const slotDoc = await slotRef.get()
-
-    if (slotDoc.exists) {
-      const errorMsg = language === "gujarati"
-        ? "❌ આ સમય સ્લોટ પહેલેથી બુક થયેલ છે. કૃપા કરીને બીજો સમય પસંદ કરો."
-        : "❌ This time slot is already booked. Please select another time."
-      await sendTextMessage(phone, errorMsg)
-      // Resend time picker
-      await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
-      return
+    // Validate that the selected time is not in the past (for today's appointments)
+    const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
+    if (isToday) {
+      const now = new Date()
+      const currentTime = now.getTime()
+      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+      const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+      const slotTime = slotDateTime.getTime()
+      
+      // Reject if slot is in the past or less than 15 minutes away
+      if (slotTime <= minimumTime) {
+        const errorMsg = language === "gujarati"
+          ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
+          : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
+        await sendTextMessage(phone, errorMsg)
+        await sendTimePicker(phone, undefined, session.appointmentDate!, language)
+        return
+      }
     }
+
+    // Skip slot checking since no doctor is assigned yet - receptionist will check when assigning doctor
 
     await sessionRef.update({
       appointmentTime: normalizedTime,
@@ -1494,7 +1481,7 @@ async function handleDateButtonClick(phone: string, buttonId: string) {
     updatedAt: new Date().toISOString(),
   })
 
-  await sendTimePicker(phone, session.doctorId!, selectedDate, language)
+  await sendTimePicker(phone, undefined, selectedDate, language)
 }
 
 // Handler for time button clicks (Morning, Afternoon, See All)
@@ -1512,10 +1499,9 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   const session = sessionDoc.data() as BookingSession
   const language = session.language || "english"
 
-  // Validate required session data
-  if (!session.doctorId || !session.appointmentDate) {
-    console.error("[Meta WhatsApp] Missing doctorId or appointmentDate in session:", {
-      doctorId: session.doctorId,
+  // Validate required session data (doctorId no longer required)
+  if (!session.appointmentDate) {
+    console.error("[Meta WhatsApp] Missing appointmentDate in session:", {
       appointmentDate: session.appointmentDate,
     })
     const errorMsg = language === "gujarati"
@@ -1549,7 +1535,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     console.log("[Meta WhatsApp] Afternoon button clicked, found slots:", selectedSlots.length)
   } else {
     console.error("[Meta WhatsApp] Unknown button ID:", buttonId)
-    await sendTimePicker(phone, session.doctorId, session.appointmentDate, language)
+    await sendTimePicker(phone, undefined, session.appointmentDate, language)
     return
   }
 
@@ -1559,7 +1545,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       ? "❌ આ સમય અવધિ માટે કોઈ સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજો સમય પસંદ કરો."
       : "❌ No slots available for this time period. Please select another time."
     await sendTextMessage(phone, errorMsg)
-    await sendTimePicker(phone, session.doctorId, session.appointmentDate, language)
+    await sendTimePicker(phone, undefined, session.appointmentDate, language)
     return
   }
 
@@ -1583,22 +1569,21 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     }
 
     if (isToday) {
+      const now = new Date()
+      const currentTime = now.getTime()
+      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
       const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
-      if (slotDateTime.getTime() <= Date.now()) {
-        console.log("[Meta WhatsApp] Skipping past slot:", normalizedTime)
+      const slotTime = slotDateTime.getTime()
+      
+      // Reject if slot is in the past or less than 15 minutes away
+      if (slotTime <= minimumTime) {
+        console.log("[Meta WhatsApp] Skipping past/near slot:", normalizedTime, "Current time:", now.toISOString())
         continue
       }
     }
     
-    const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-    const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-    const slotDoc = await slotRef.get()
-    
-    if (!slotDoc.exists) {
-      availableSlotsForPeriod.push({ raw: slot, normalized: normalizedTime })
-    } else {
-      console.log("[Meta WhatsApp] Slot already booked:", slot, "->", normalizedTime)
-    }
+    // Skip slot checking since no doctor is assigned yet - show all slots, receptionist will check when assigning doctor
+    availableSlotsForPeriod.push({ raw: slot, normalized: normalizedTime })
   }
 
   if (availableSlotsForPeriod.length === 0) {
@@ -1608,7 +1593,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       ? "❌ આ સમય અવધિ માટે બધા સ્લોટ બુક થયેલા છે. કૃપા કરીને બીજો સમય પસંદ કરો."
       : "❌ All slots for this time period are booked. Please select another time."
     await sendTextMessage(phone, errorMsg)
-    await sendTimePicker(phone, session.doctorId, session.appointmentDate, language)
+    await sendTimePicker(phone, undefined, session.appointmentDate, language)
     return
   }
 
@@ -1624,34 +1609,51 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   await sendTimeSlotListForPeriod(phone, availableSlotsForPeriod, language, periodLabel)
 }
 
-async function sendTimePicker(phone: string, doctorId: string, appointmentDate: string, language: Language = "english", showButtons: boolean = true) {
+async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english", showButtons: boolean = true) {
   const db = admin.firestore()
   const timeSlots = generateTimeSlots()
   
-  // Check which slots are available (filter out already booked slots)
+  // Check which slots are available (filter out already booked slots only if doctor is assigned)
   const availableSlots: Array<{ id: string; title: string; description?: string }> = []
   
   const isToday = appointmentDate === new Date().toISOString().split("T")[0]
+  const now = new Date()
+  const currentTime = now.getTime()
+  // Add 15 minute buffer - don't allow booking slots less than 15 minutes from now
+  const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes in milliseconds
 
   for (const slot of timeSlots) {
     const normalizedTime = normalizeTime(slot)
-    const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-    const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-    const slotDoc = await slotRef.get()
     
-    if (!slotDoc.exists) {
-      if (isToday) {
-        const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
-        if (slotDateTime.getTime() <= Date.now()) {
-          continue
-        }
+    // Skip past slots for today (with 15 minute buffer)
+    if (isToday) {
+      const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
+      const slotTime = slotDateTime.getTime()
+      
+      // Reject if slot is in the past or less than 15 minutes away
+      if (slotTime <= minimumTime) {
+        console.log("[Meta WhatsApp] Skipping past/near slot:", normalizedTime, "Current time:", now.toISOString())
+        continue
       }
-      availableSlots.push({
-        id: `time_${slot}`,
-        title: slot, // Time in 24-hour format like "09:00", "09:30", etc.
-        description: "Available", // Add description to match doctor picker format
-      })
     }
+    
+    // Only check slot availability if doctor is assigned
+    if (doctorId) {
+      const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+      const slotDoc = await slotRef.get()
+      
+      if (slotDoc.exists) {
+        continue // Slot already booked for this doctor
+      }
+    }
+    
+    // Slot is available (either no doctor assigned yet, or not booked)
+    availableSlots.push({
+      id: `time_${slot}`,
+      title: slot, // Time in 24-hour format like "09:00", "09:30", etc.
+      description: "Available", // Add description to match doctor picker format
+    })
   }
   
   if (availableSlots.length === 0) {
@@ -1659,7 +1661,7 @@ async function sendTimePicker(phone: string, doctorId: string, appointmentDate: 
       ? "❌ આ તારીખ માટે કોઈ સમય સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજી તારીખ પસંદ કરો."
       : "❌ No time slots available for this date. Please select another date."
     await sendTextMessage(phone, noSlotsMsg)
-    await sendDatePicker(phone, doctorId, language)
+      await sendDatePicker(phone, undefined, language)
     return
   }
 
@@ -1986,7 +1988,7 @@ async function handleTimeSelection(
       ? "❌ કૃપા કરીને માન્ય સમય પસંદ કરો (ઉદાહરણ: 10:30)."
       : "❌ Please choose a valid time slot (e.g., 10:30)."
     await sendTextMessage(phone, errorMsg)
-    await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
+    await sendTimePicker(phone, undefined, session.appointmentDate!, language)
     return true
   }
 
@@ -1994,30 +1996,24 @@ async function handleTimeSelection(
 
   const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
   if (isToday) {
+    const now = new Date()
+    const currentTime = now.getTime()
+    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
     const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
-    if (slotDateTime.getTime() <= Date.now()) {
+    const slotTime = slotDateTime.getTime()
+    
+    // Reject if slot is in the past or less than 15 minutes away
+    if (slotTime <= minimumTime) {
       const errorMsg = language === "gujarati"
-        ? "❌ આ સમય પસાર થઈ ગયો છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો."
-        : "❌ That time has already passed. Please pick a future slot."
+        ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
+        : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
       await sendTextMessage(phone, errorMsg)
-      await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
+      await sendTimePicker(phone, undefined, session.appointmentDate!, language)
       return true
     }
   }
 
-  // Check if slot is already booked
-  const slotDocId = `${session.doctorId}_${session.appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-  const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-  const slotDoc = await slotRef.get()
-
-  if (slotDoc.exists) {
-    const errorMsg = language === "gujarati"
-      ? "❌ આ સમય સ્લોટ પહેલેથી બુક થયેલ છે. કૃપા કરીને બીજો સમય પસંદ કરો."
-      : "❌ This time slot is already booked. Please select another time."
-    await sendTextMessage(phone, errorMsg)
-    await sendTimePicker(phone, session.doctorId!, session.appointmentDate!, language)
-    return true
-  }
+  // Skip slot checking since no doctor is assigned yet - receptionist will check when assigning doctor
 
   await sessionRef.update({
     appointmentTime: normalizedTime,
@@ -2228,7 +2224,7 @@ async function findPatientByPhone(db: FirebaseFirestore.Firestore, phone: string
 async function createAppointment(
   db: FirebaseFirestore.Firestore,
   patient: { id: string; data: FirebaseFirestore.DocumentData },
-  doctor: { id: string; data: FirebaseFirestore.DocumentData },
+  doctor: { id: string; data: FirebaseFirestore.DocumentData } | null,
   payload: {
     symptomCategory: string
     chiefComplaint: string
@@ -2243,35 +2239,38 @@ async function createAppointment(
     paymentAmount: number
     remainingAmount: number
   },
-  phone: string
+  phone: string,
+  whatsappPending: boolean = false
 ) {
   const appointmentTime = normalizeTime(payload.appointmentTime)
-  const slotDocId = `${payload.doctorId}_${payload.appointmentDate}_${appointmentTime}`.replace(
-    /[:\s]/g,
-    "-"
-  )
-
   let appointmentId = ""
 
   await db.runTransaction(async (transaction) => {
-    const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-    const slotSnap = await transaction.get(slotRef)
-    if (slotSnap.exists) {
-      throw new Error("SLOT_ALREADY_BOOKED")
+    // Only create slot if doctor is assigned
+    if (doctor && payload.doctorId) {
+      const slotDocId = `${payload.doctorId}_${payload.appointmentDate}_${appointmentTime}`.replace(
+        /[:\s]/g,
+        "-"
+      )
+      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+      const slotSnap = await transaction.get(slotRef)
+      if (slotSnap.exists) {
+        throw new Error("SLOT_ALREADY_BOOKED")
+      }
     }
 
     const appointmentRef = db.collection("appointments").doc()
     appointmentId = appointmentRef.id
 
-    transaction.set(appointmentRef, {
+    const appointmentData: any = {
       patientId: patient.id,
       patientUid: patient.id,
       patientName: `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim(),
       patientEmail: patient.data.email || "",
       patientPhone: phone,
-      doctorId: payload.doctorId,
-      doctorName: `${doctor.data.firstName || ""} ${doctor.data.lastName || ""}`.trim(),
-      doctorSpecialization: doctor.data.specialization || "",
+      doctorId: payload.doctorId || "",
+      doctorName: doctor ? `${doctor.data.firstName || ""} ${doctor.data.lastName || ""}`.trim() : "",
+      doctorSpecialization: doctor ? (doctor.data.specialization || "") : "",
       appointmentDate: payload.appointmentDate,
       appointmentTime,
       symptomCategory: payload.symptomCategory,
@@ -2284,19 +2283,30 @@ async function createAppointment(
       totalConsultationFee: payload.consultationFee,
       paymentAmount: payload.paymentAmount,
       remainingAmount: payload.remainingAmount,
-      status: payload.paymentStatus === "user_confirmed" ? "confirmed" : "pending",
+      status: whatsappPending ? "whatsapp_pending" : (payload.paymentStatus === "user_confirmed" ? "confirmed" : "pending"),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdBy: "whatsapp_flow",
-    })
+      createdBy: whatsappPending ? "whatsapp" : "whatsapp_flow",
+      whatsappPending: whatsappPending,
+    }
 
-    transaction.set(slotRef, {
-      appointmentId,
-      doctorId: payload.doctorId,
-      appointmentDate: payload.appointmentDate,
-      appointmentTime,
-      createdAt: new Date().toISOString(),
-    })
+    transaction.set(appointmentRef, appointmentData)
+
+    // Only create slot if doctor is assigned
+    if (doctor && payload.doctorId) {
+      const slotDocId = `${payload.doctorId}_${payload.appointmentDate}_${appointmentTime}`.replace(
+        /[:\s]/g,
+        "-"
+      )
+      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+      transaction.set(slotRef, {
+        appointmentId,
+        doctorId: payload.doctorId,
+        appointmentDate: payload.appointmentDate,
+        appointmentTime,
+        createdAt: new Date().toISOString(),
+      })
+    }
   })
 
   return appointmentId
@@ -2305,7 +2315,7 @@ async function createAppointment(
 async function sendBookingConfirmation(
   phone: string,
   patient: { id: string; data: FirebaseFirestore.DocumentData },
-  doctorData: FirebaseFirestore.DocumentData,
+  doctorData: FirebaseFirestore.DocumentData | null,
   session: BookingSession,
   appointmentId: string
 ) {
@@ -2319,7 +2329,7 @@ async function sendBookingConfirmation(
   }
 
   const appointmentData = appointmentDoc.data()! as any
-  const doctorName = `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
+  const doctorName = doctorData ? `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim() : "To be assigned"
   const patientName = `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim()
   const dateDisplay = new Date(session.appointmentDate! + "T00:00:00").toLocaleDateString("en-IN", {
     weekday: "long",
@@ -2334,27 +2344,27 @@ async function sendBookingConfirmation(
     hour12: true,
   })
 
-  const consultationFee = session.consultationFee || doctorData.consultationFee || 500
-  const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
-  const defaultAmount =
-    session.paymentType === "partial"
-      ? PARTIAL_PAYMENT_AMOUNT
-      : consultationFee
-  const amountCollected =
-    session.paymentAmount !== undefined
-      ? session.paymentAmount
-      : session.paymentMethod === "cash"
-      ? 0
-      : defaultAmount
-  const remainingAmount =
-    session.remainingAmount !== undefined
-      ? session.remainingAmount
-      : Math.max(consultationFee - amountCollected, 0)
+  const consultationFee = session.consultationFee || (doctorData?.consultationFee) || 500
+  const amountCollected = session.paymentAmount !== undefined ? session.paymentAmount : 0
+  const remainingAmount = session.remainingAmount !== undefined ? session.remainingAmount : consultationFee
 
   // Send confirmation message
-  await sendTextMessage(
-    phone,
-    `🎉 *Appointment Confirmed!*
+  const isPending = !doctorData
+  const confirmationMsg = isPending
+    ? `🎉 *Appointment Request Received!*
+
+Hi ${patientName},
+
+Your appointment request has been received:
+• 📅 Date: ${dateDisplay}
+• 🕒 Time: ${timeDisplay}
+• 📋 Appointment ID: ${appointmentId}
+• 👨‍⚕️ Doctor: Will be assigned by reception
+
+✅ Our receptionist will confirm your appointment and assign a doctor shortly. You'll receive a confirmation message once processed.
+
+If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
+    : `🎉 *Appointment Confirmed!*
 
 Hi ${patientName},
 
@@ -2368,38 +2378,40 @@ Your appointment has been booked successfully:
 ✅ Your appointment is now visible in our system. Admin and receptionist can see it.
 
 If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
-  )
 
-  // Generate and send PDF
-  try {
-    const appointment: Appointment = {
-      id: appointmentId,
-      transactionId: appointmentId,
-      patientId: patient.id,
-      patientUid: patient.id,
-      patientName: patientName,
-      patientEmail: patient.data.email || "",
-      patientPhone: phone,
-      doctorId: session.doctorId!,
-      doctorName: doctorName,
-      doctorSpecialization: doctorData.specialization || "",
-      appointmentDate: session.appointmentDate!,
-      appointmentTime: session.appointmentTime!,
-      status: (appointmentData.status === "confirmed" || appointmentData.status === "completed" || appointmentData.status === "cancelled") 
-        ? appointmentData.status 
-        : "confirmed",
-      chiefComplaint: session.symptoms || "General consultation",
-      medicalHistory: "",
-      paymentMethod: session.paymentMethod || "cash",
-      paymentStatus: appointmentData.paymentStatus || "pending",
-      paymentType: session.paymentType || "full",
-      totalConsultationFee: consultationFee,
-      paymentAmount: amountCollected,
-      remainingAmount,
-      paidAt: appointmentData.paidAt || "",
-      createdAt: appointmentData.createdAt || new Date().toISOString(),
-      updatedAt: appointmentData.updatedAt || new Date().toISOString(),
-    }
+  await sendTextMessage(phone, confirmationMsg)
+
+  // Generate and send PDF only if doctor is assigned (not pending)
+  if (!isPending && doctorData) {
+    try {
+      const appointment: Appointment = {
+        id: appointmentId,
+        transactionId: appointmentId,
+        patientId: patient.id,
+        patientUid: patient.id,
+        patientName: patientName,
+        patientEmail: patient.data.email || "",
+        patientPhone: phone,
+        doctorId: session.doctorId || "",
+        doctorName: doctorName,
+        doctorSpecialization: doctorData.specialization || "",
+        appointmentDate: session.appointmentDate!,
+        appointmentTime: session.appointmentTime!,
+        status: (appointmentData.status === "confirmed" || appointmentData.status === "completed" || appointmentData.status === "cancelled") 
+          ? appointmentData.status 
+          : "confirmed",
+        chiefComplaint: session.symptoms || "General consultation",
+        medicalHistory: "",
+        paymentMethod: session.paymentMethod || "cash",
+        paymentStatus: appointmentData.paymentStatus || "pending",
+        paymentType: session.paymentType || "full",
+        totalConsultationFee: consultationFee,
+        paymentAmount: amountCollected,
+        remainingAmount,
+        paidAt: appointmentData.paidAt || "",
+        createdAt: appointmentData.createdAt || new Date().toISOString(),
+        updatedAt: appointmentData.updatedAt || new Date().toISOString(),
+      }
 
     // Generate PDF as base64
     const pdfBase64 = generateAppointmentConfirmationPDFBase64(appointment)
@@ -2459,13 +2471,14 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
         "📄 Your appointment confirmation PDF has been sent above. Please check your WhatsApp messages."
       )
     }
-  } catch (error: any) {
-    console.error("[Meta WhatsApp] Error generating/sending PDF:", error)
-    // Don't fail the booking if PDF fails
-    await sendTextMessage(
-      phone,
-      "📄 Your appointment confirmation is available in your patient dashboard."
-    )
+    } catch (error: any) {
+      console.error("[Meta WhatsApp] Error generating/sending PDF:", error)
+      // Don't fail the booking if PDF fails
+      await sendTextMessage(
+        phone,
+        "📄 Your appointment confirmation is available in your patient dashboard."
+      )
+    }
   }
 }
 
