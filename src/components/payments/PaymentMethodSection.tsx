@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo } from "react"
 
-export type PaymentMethodOption = "card" | "upi" | "cash" | "wallet"
+export type PaymentMethodOption = "card" | "upi" | "cash"
 type PaymentMethod = PaymentMethodOption | null
 
 export interface PaymentData {
@@ -21,7 +21,6 @@ interface PaymentMethodSectionProps {
   setPaymentData: (_data: PaymentData) => void
   amountToPay: number
   showPartialNote?: boolean
-  walletBalance?: number
   methods?: PaymentMethodOption[]
 }
 
@@ -33,7 +32,6 @@ export default function PaymentMethodSection({
   setPaymentData,
   amountToPay,
   showPartialNote = false,
-  walletBalance = 0,
   methods,
 }: PaymentMethodSectionProps) {
   const preventEnter: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
@@ -43,7 +41,7 @@ export default function PaymentMethodSection({
   }
 
   const availableMethods = useMemo<PaymentMethodOption[]>(
-    () => (methods && methods.length > 0 ? methods : ["card", "upi", "cash", "wallet"]),
+    () => (methods && methods.length > 0 ? methods : ["card", "upi", "cash"]),
     [methods]
   )
 
@@ -107,23 +105,6 @@ export default function PaymentMethodSection({
                 <div className="text-center">
                   <span className="text-2xl mb-1 block">💵</span>
                   <span className="text-sm font-semibold">Cash</span>
-                </div>
-              </button>
-            )}
-            {availableMethods.includes("wallet") && (
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("wallet")}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  paymentMethod === "wallet"
-                    ? "border-green-600 bg-green-50 shadow-md"
-                    : "border-gray-300 hover:border-gray-400"
-                }`}
-              >
-                <div className="text-center">
-                  <span className="text-2xl mb-1 block">🪙</span>
-                  <span className="text-sm font-semibold">Wallet</span>
-                  <div className="text-[11px] text-gray-500 mt-1">₹{Number(walletBalance || 0).toLocaleString()}</div>
                 </div>
               </button>
             )}
@@ -210,9 +191,6 @@ export default function PaymentMethodSection({
               <span className="text-sm font-medium text-gray-700">Amount to Pay:</span>
               <span className="text-xl font-bold text-blue-700">₹{amountToPay}</span>
             </div>
-            {paymentMethod === "wallet" && walletBalance !== undefined && amountToPay > (walletBalance || 0) && (
-              <p className="text-xs text-red-600 mt-1">Insufficient wallet balance</p>
-            )}
             {showPartialNote && (
               <p className="text-xs text-gray-500 mt-1">
                 Online amount and remaining will be shown on the confirmation.

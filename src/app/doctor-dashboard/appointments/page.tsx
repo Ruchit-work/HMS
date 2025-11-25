@@ -117,6 +117,7 @@ type CompletionFormEntry = {
   medicines: Array<{ name: string; dosage: string; frequency: string; duration: string }>
   notes: string
   recheckupRequired: boolean
+  recheckupNote?: string
 }
 
 const hasValidPrescriptionInput = (entry?: CompletionFormEntry) =>
@@ -662,6 +663,9 @@ export default function DoctorAppointments() {
       }
       const token = await currentUser.getIdToken()
 
+      // Debug: Log token info (without exposing full token)
+      console.log("[AI Diagnosis] Attempting API call with token (length:", token?.length || 0, ")")
+      
       const { data } = await axios.post(
         "/api/diagnosis",
         {
@@ -686,13 +690,47 @@ export default function DoctorAppointments() {
       setNotification({ type: "success", message: "AI diagnosis suggestion generated!" })
     } catch (error: unknown) {
       console.error("AI Diagnosis error:", error)
-      console.error("Error response:", (error as { response?: { data?: unknown; status?: number } }).response?.data)
-      console.error("Error status:", (error as { response?: { data?: unknown; status?: number } }).response?.status)
+      const errorResponse = (error as { response?: { data?: unknown; status?: number } }).response
+      console.error("Error response full:", errorResponse)
+      console.error("Error response data:", errorResponse?.data)
+      console.error("Error status:", errorResponse?.status)
       
-      const errorMessage = (error as { response?: { data?: { error?: string } } }).response?.data?.error || (error as Error).message || "Failed to get AI diagnosis"
+      // Extract error message from response
+      let errorMessage = "Failed to get AI diagnosis"
+      let errorDetails: any = null
+      
+      if (errorResponse?.data) {
+        if (typeof errorResponse.data === 'object') {
+          const data = errorResponse.data as { error?: string; details?: any }
+          errorMessage = data.error || errorMessage
+          errorDetails = data.details
+        } else if (typeof errorResponse.data === 'string') {
+          errorMessage = errorResponse.data
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      // Log detailed error info for debugging
+      console.error("Extracted error message:", errorMessage)
+      console.error("Error details:", errorDetails)
+      
+      // Provide more helpful error messages
+      if (errorResponse?.status === 403) {
+        if (errorMessage.includes("pending approval") || errorMessage.includes("pending")) {
+          errorMessage = "Your doctor account is pending approval. Please contact the administrator to approve your account."
+        } else if (errorMessage.includes("Access denied")) {
+          errorMessage = "Access denied. You need an active doctor account to use this feature. Please contact the administrator if you believe this is an error."
+        } else if (errorMessage.includes("doesn't have") || errorMessage.includes("not found")) {
+          errorMessage = "Doctor account not found. Please contact the administrator to verify your account setup."
+        } else {
+          errorMessage = `Access denied: ${errorMessage || "Please ensure your doctor account is active and approved."}`
+        }
+      }
+      
       setNotification({ 
         type: "error", 
-        message: `AI Diagnosis Error: ${errorMessage}` 
+        message: errorMessage
       })
     } finally {
       setLoadingAiDiagnosis({...loadingAiDiagnosis, [appointment.id]: false})
@@ -965,6 +1003,7 @@ export default function DoctorAppointments() {
             patientPhone: appointmentSnapshot.patientPhone,
             doctorName: appointmentSnapshot.doctorName || userData?.name || "Doctor",
             appointmentDate: appointmentSnapshot.appointmentDate,
+            recheckupNote: formData.recheckupNote || "",
           }),
         })
 
@@ -2756,27 +2795,56 @@ export default function DoctorAppointments() {
                                   />
                                 </div>
 
-                                <div className="flex items-center gap-2 pt-1">
-                                  <input
-                                    type="checkbox"
-                                    id={`recheckupRequired-${appointment.id}`}
-                                    checked={completionData[appointment.id]?.recheckupRequired || false}
-                                    onChange={(e) =>
-                                      setCompletionData((prev) => ({
-                                        ...prev,
-                                        [appointment.id]: {
-                                          ...prev[appointment.id],
-                                          recheckupRequired: e.target.checked,
-                                          medicines: prev[appointment.id]?.medicines || [],
-                                          notes: prev[appointment.id]?.notes || "",
-                                        },
-                                      }))
-                                    }
-                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                                  />
-                                  <label htmlFor={`recheckupRequired-${appointment.id}`} className="text-xs font-medium text-gray-700 cursor-pointer">
-                                    🔄 Re-checkup Required
-                                  </label>
+                                <div className="pt-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`recheckupRequired-${appointment.id}`}
+                                      checked={completionData[appointment.id]?.recheckupRequired || false}
+                                      onChange={(e) =>
+                                        setCompletionData((prev) => ({
+                                          ...prev,
+                                          [appointment.id]: {
+                                            ...prev[appointment.id],
+                                            recheckupRequired: e.target.checked,
+                                            medicines: prev[appointment.id]?.medicines || [],
+                                            notes: prev[appointment.id]?.notes || "",
+                                            recheckupNote: prev[appointment.id]?.recheckupNote || "",
+                                          },
+                                        }))
+                                      }
+                                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                                    />
+                                    <label htmlFor={`recheckupRequired-${appointment.id}`} className="text-xs font-medium text-gray-700 cursor-pointer">
+                                      🔄 Re-checkup Required
+                                    </label>
+                                  </div>
+                                  {completionData[appointment.id]?.recheckupRequired && (
+                                    <div className="mt-2">
+                                      <label htmlFor={`recheckupNote-${appointment.id}`} className="block text-xs font-medium text-gray-700 mb-1">
+                                        Re-checkup Note (Optional)
+                                      </label>
+                                      <textarea
+                                        id={`recheckupNote-${appointment.id}`}
+                                        value={completionData[appointment.id]?.recheckupNote || ""}
+                                        onChange={(e) =>
+                                          setCompletionData((prev) => ({
+                                            ...prev,
+                                            [appointment.id]: {
+                                              ...prev[appointment.id],
+                                              recheckupNote: e.target.value,
+                                              medicines: prev[appointment.id]?.medicines || [],
+                                              notes: prev[appointment.id]?.notes || "",
+                                              recheckupRequired: prev[appointment.id]?.recheckupRequired || false,
+                                            },
+                                          }))
+                                        }
+                                        rows={2}
+                                        placeholder="Enter note for re-checkup (e.g., 'Follow-up required in 2 weeks', 'Monitor blood pressure')"
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs resize-none"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div className="flex gap-2 pt-2">

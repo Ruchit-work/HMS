@@ -19,7 +19,7 @@ interface BookAppointmentFormProps {
   onSubmit: (data: {
     selectedDoctor: string
     appointmentData: AppointmentFormData
-    paymentMethod: "card" | "upi" | "cash" | "wallet"
+    paymentMethod: "card" | "upi" | "cash"
     paymentType: "full" | "partial"
     paymentData: PaymentData
   }) => Promise<void>
@@ -527,7 +527,6 @@ export default function BookAppointmentForm({
         if (paymentMethod === "upi") {
           return !!paymentData.upiId
         }
-        // If wallet, ensure sufficient balance will be validated upstream, allow proceed here
         return true
       default: return false
     }
@@ -574,7 +573,7 @@ export default function BookAppointmentForm({
     await onSubmit({
       selectedDoctor,
       appointmentData,
-      paymentMethod: paymentMethod as "card" | "upi" | "wallet",
+      paymentMethod: paymentMethod as "card" | "upi" | "cash",
       paymentType,
       paymentData
     })
@@ -1424,8 +1423,7 @@ export default function BookAppointmentForm({
                   setPaymentData={(d)=>setPaymentData(d as any)}
                   amountToPay={AMOUNT_TO_PAY}
                   showPartialNote={paymentType === 'partial'}
-                  walletBalance={Number((userData as any)?.walletBalance ?? 0)}
-                  methods={["card", "upi", "wallet"]}
+                  methods={["card", "upi"]}
                 />
               </div>
             </div>

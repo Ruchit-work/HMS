@@ -6,9 +6,11 @@ import { db, auth } from "@/firebase/config"
 import { Appointment } from "@/types/patient"
 import RefreshButton from "@/components/ui/RefreshButton"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
 
 interface WhatsAppBookingsPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
+  onPendingCountChange?: (_count: number) => void
 }
 
 interface Doctor {
@@ -19,7 +21,7 @@ interface Doctor {
   consultationFee?: number
 }
 
-export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookingsPanelProps) {
+export default function WhatsAppBookingsPanel({ onNotification, onPendingCountChange }: WhatsAppBookingsPanelProps) {
   const [bookings, setBookings] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,8 +40,39 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
   const [formAppointmentTime, setFormAppointmentTime] = useState("")
   const [formChiefComplaint, setFormChiefComplaint] = useState("")
   const [formMedicalHistory, setFormMedicalHistory] = useState("")
-  const [formPaymentAmount, setFormPaymentAmount] = useState("")
-  const [formPaymentMethod, setFormPaymentMethod] = useState<"card" | "upi" | "cash" | "wallet">("cash")
+  const [chiefComplaintSuggestions, setChiefComplaintSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  // Common chief complaint suggestions
+  const commonComplaints = [
+    "Fever",
+    "Cough",
+    "Headache",
+    "Body pain",
+    "Chest pain",
+    "Stomach pain",
+    "Back pain",
+    "Joint pain",
+    "Breathing difficulty",
+    "Nausea",
+    "Vomiting",
+    "Diarrhea",
+    "Constipation",
+    "Dizziness",
+    "Weakness",
+    "High blood pressure",
+    "Diabetes checkup",
+    "Thyroid problem",
+    "Skin rash",
+    "Eye problem",
+    "Ear pain",
+    "Throat pain",
+    "Cold",
+    "General checkup",
+    "Follow-up",
+    "Routine consultation",
+  ]
+  const [formPaymentMethod, setFormPaymentMethod] = useState<"card" | "upi" | "cash">("cash")
 
   const notify = useCallback(
     (payload: { type: "success" | "error"; message: string } | null) => {
@@ -77,9 +110,11 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
       const data = await res.json()
       const appointments = Array.isArray(data?.appointments) ? data.appointments : []
       setBookings(appointments)
+      onPendingCountChange?.(appointments.length)
     } catch (error: any) {
       console.error("[WhatsAppBookingsPanel] Failed to load WhatsApp bookings:", error)
       setError(error?.message || "Failed to load WhatsApp bookings. Please check the console for details.")
+      onPendingCountChange?.(0)
     } finally {
       setLoading(false)
     }
@@ -117,8 +152,7 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
     setFormAppointmentTime(booking.appointmentTime || "")
     setFormChiefComplaint(booking.chiefComplaint || "")
     setFormMedicalHistory(booking.medicalHistory || "")
-    setFormPaymentAmount(String(booking.paymentAmount || 0))
-    setFormPaymentMethod((booking.paymentMethod as "card" | "upi" | "cash" | "wallet") || "cash")
+    setFormPaymentMethod((booking.paymentMethod as "card" | "upi" | "cash") || "cash")
     setEditModalOpen(true)
   }
 
@@ -131,6 +165,117 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
     if (!formDoctorId) return null
     return doctors.find((d) => d.id === formDoctorId) || null
   }, [doctors, formDoctorId])
+
+  // Match chief complaint to symptom category for doctor recommendations
+  const matchedSymptomCategory = useMemo(() => {
+    if (!formChiefComplaint || formChiefComplaint.trim().length < 2) return null
+    
+    const complaint = formChiefComplaint.toLowerCase().trim()
+    
+    // Check each symptom category to find matches
+    for (const category of SYMPTOM_CATEGORIES) {
+      const categoryKeywords = category.label.toLowerCase()
+      // Check if complaint contains category keywords or vice versa
+      if (complaint.includes(categoryKeywords.split(' ')[0]) || 
+          categoryKeywords.includes(complaint.split(' ')[0])) {
+        return category
+      }
+      
+      // Check keywords that might match
+      const keywordMatches: Record<string, string> = {
+        'fever': 'monsoon_diseases',
+        'cough': 'respiratory_asthma',
+        'breathing': 'respiratory_asthma',
+        'chest': 'cardiac_issues',
+        'heart': 'cardiac_issues',
+        'stomach': 'gastrointestinal',
+        'pain': 'joint_arthritis',
+        'joint': 'joint_arthritis',
+        'diabetes': 'diabetes_complications',
+        'thyroid': 'thyroid_problems',
+        'skin': 'skin_allergies',
+        'rash': 'skin_allergies',
+        'eye': 'eye_problems',
+        'kidney': 'kidney_uti',
+        'uti': 'kidney_uti',
+        'checkup': 'general_checkup',
+        'routine': 'general_checkup',
+        'cancer': 'cancer_oncology',
+      }
+      
+      for (const [keyword, categoryId] of Object.entries(keywordMatches)) {
+        if (complaint.includes(keyword) && category.id === categoryId) {
+          return category
+        }
+      }
+    }
+    
+    return null
+  }, [formChiefComplaint])
+
+  // Filter doctors based on matched symptom category
+  const { recommendedDoctors, otherDoctors } = useMemo(() => {
+    if (!matchedSymptomCategory || doctors.length === 0) {
+      return { recommendedDoctors: [], otherDoctors: doctors }
+    }
+
+    const normalize = (str: string) => str.toLowerCase().replace(/[()\/]/g, " ").replace(/\s+/g, " ").trim()
+    
+    const specializationMappings: Record<string, string[]> = {
+      "general physician": ["family medicine", "family physician", "family medicine specialist", "general practitioner", "gp", "general practice"],
+      "gynecology": ["gynecologist", "obstetrician", "ob gyn", "obstetrician ob gyn", "gynecologist obstetrician", "women's health"],
+      "psychology": ["psychologist"],
+      "psychiatry": ["psychiatrist"],
+      "gastroenterology": ["gastroenterologist"],
+      "endocrinology": ["endocrinologist"],
+      "cardiology": ["cardiologist"],
+      "orthopedic surgery": ["orthopedic", "orthopedics", "orthopedic surgeon"],
+      "dermatology": ["dermatologist"],
+      "ophthalmology": ["ophthalmologist", "eye specialist"],
+      "pulmonology": ["pulmonologist", "chest specialist", "respiratory"],
+      "nephrology": ["nephrologist", "kidney specialist"],
+      "urology": ["urologist"],
+      "internal medicine": ["internal medicine", "internal medicine specialist"],
+      "hematology": ["hematologist"],
+      "rheumatology": ["rheumatologist"],
+      "allergy specialist": ["allergy specialist", "allergist"],
+      "pediatrics": ["pediatrician", "child specialist"],
+      "geriatrics": ["geriatrician"],
+      "oncology": ["oncologist", "medical oncologist", "surgical oncologist", "radiation oncologist", "cancer specialist"]
+    }
+
+    const recommended = doctors.filter(doc => {
+      const docSpecialization = normalize(doc.specialization || "")
+      if (!docSpecialization) return false
+
+      return matchedSymptomCategory.relatedSpecializations.some(categorySpec => {
+        const categorySpecLower = normalize(categorySpec)
+        
+        if (docSpecialization.includes(categorySpecLower) || categorySpecLower.includes(docSpecialization)) {
+          return true
+        }
+        
+        const variations = specializationMappings[categorySpecLower] || []
+        for (const variation of variations) {
+          const variationNormalized = normalize(variation)
+          if (docSpecialization.includes(variationNormalized) || variationNormalized.includes(docSpecialization)) {
+            return true
+          }
+          const docWords = docSpecialization.split(/\s+/)
+          const varWords = variationNormalized.split(/\s+/)
+          if (varWords.some(word => docWords.includes(word) && word.length > 3)) {
+            return true
+          }
+        }
+        
+        return false
+      })
+    })
+
+    const other = doctors.filter(doc => !recommended.some(rec => rec.id === doc.id))
+
+    return { recommendedDoctors: recommended, otherDoctors: other }
+  }, [matchedSymptomCategory, doctors])
 
 
   const handleUpdateBooking = async () => {
@@ -169,9 +314,8 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
         appointmentTime: formAppointmentTime,
         chiefComplaint: formChiefComplaint.trim() || "General consultation",
         medicalHistory: formMedicalHistory.trim(),
-        paymentAmount: Number(formPaymentAmount) || 0,
         paymentMethod: formPaymentMethod,
-        // Payment status will be calculated on backend based on doctor fee
+        // Payment amount will be handled separately in billing section
         markConfirmed: true,
       }
 
@@ -344,7 +488,73 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
               </div>
 
               <div className="p-6 space-y-4">
-                {/* Doctor Selection */}
+                {/* Chief Complaint - Moved to top */}
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Chief Complaint</label>
+                  <textarea
+                    value={formChiefComplaint}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setFormChiefComplaint(value)
+                      
+                      // Show suggestions when user types 1-2 letters
+                      if (value.trim().length >= 1 && value.trim().length <= 2) {
+                        const searchTerm = value.trim().toLowerCase()
+                        const filtered = commonComplaints.filter(complaint =>
+                          complaint.toLowerCase().startsWith(searchTerm)
+                        )
+                        setChiefComplaintSuggestions(filtered.slice(0, 5))
+                        setShowSuggestions(filtered.length > 0)
+                      } else {
+                        setShowSuggestions(false)
+                        setChiefComplaintSuggestions([])
+                      }
+                    }}
+                    onFocus={(e) => {
+                      const value = e.target.value
+                      if (value.trim().length >= 1 && value.trim().length <= 2) {
+                        const searchTerm = value.trim().toLowerCase()
+                        const filtered = commonComplaints.filter(complaint =>
+                          complaint.toLowerCase().startsWith(searchTerm)
+                        )
+                        setChiefComplaintSuggestions(filtered.slice(0, 5))
+                        setShowSuggestions(filtered.length > 0)
+                      }
+                    }}
+                    onBlur={() => {
+                      // Delay hiding suggestions to allow clicking on them
+                      setTimeout(() => setShowSuggestions(false), 200)
+                    }}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Start typing to see suggestions..."
+                  />
+                  {showSuggestions && chiefComplaintSuggestions.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {chiefComplaintSuggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => {
+                            setFormChiefComplaint(suggestion)
+                            setShowSuggestions(false)
+                            setChiefComplaintSuggestions([])
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 transition-colors"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {matchedSymptomCategory && (
+                    <p className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+                      💡 Detected: {matchedSymptomCategory.label} - Showing recommended doctors below
+                    </p>
+                  )}
+                </div>
+
+                {/* Doctor Selection - Now shows recommended doctors based on chief complaint */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Doctor <span className="text-red-500">*</span>
@@ -352,16 +562,37 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                   <select
                     value={formDoctorId}
                     onChange={(e) => setFormDoctorId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     disabled={doctorsLoading}
                   >
                     <option value="">Select a doctor</option>
-                    {doctors.map((doctor) => (
-                      <option key={doctor.id} value={doctor.id}>
-                        {doctor.firstName} {doctor.lastName} - {doctor.specialization}
-                      </option>
-                    ))}
+                    {recommendedDoctors.length > 0 && (
+                      <optgroup label={`⭐ Recommended for Complaint (${recommendedDoctors.length})`}>
+                        {recommendedDoctors.map((doctor) => (
+                          <option key={doctor.id} value={doctor.id}>
+                            {doctor.firstName} {doctor.lastName} - {doctor.specialization}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherDoctors.length > 0 && (
+                      <optgroup label={recommendedDoctors.length > 0 ? `Other Doctors (${otherDoctors.length})` : `All Doctors (${otherDoctors.length})`}>
+                        {otherDoctors.map((doctor) => (
+                          <option key={doctor.id} value={doctor.id}>
+                            {doctor.firstName} {doctor.lastName} - {doctor.specialization}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {doctors.length === 0 && (
+                      <option value="" disabled>No doctors available</option>
+                    )}
                   </select>
+                  {recommendedDoctors.length > 0 && (
+                    <p className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+                      ⭐ {recommendedDoctors.length} doctor(s) recommended based on chief complaint
+                    </p>
+                  )}
                 </div>
 
                 {/* Patient Details */}
@@ -373,8 +604,8 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                     <input
                       type="text"
                       value={formPatientName}
-                      onChange={(e) => setFormPatientName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -382,8 +613,8 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                     <input
                       type="tel"
                       value={formPatientPhone}
-                      onChange={(e) => setFormPatientPhone(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -391,8 +622,8 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                     <input
                       type="email"
                       value={formPatientEmail}
-                      onChange={(e) => setFormPatientEmail(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -407,7 +638,7 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                       type="date"
                       value={formAppointmentDate}
                       onChange={(e) => setFormAppointmentDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
                   <div>
@@ -418,28 +649,22 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                       type="time"
                       value={formAppointmentTime}
                       onChange={(e) => setFormAppointmentTime(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
                 </div>
 
                 {/* Medical Details */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Chief Complaint</label>
-                  <textarea
-                    value={formChiefComplaint}
-                    onChange={(e) => setFormChiefComplaint(e.target.value)}
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Medical History</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Medical History <span className="text-gray-400 font-normal">(Optional)</span>
+                  </label>
                   <textarea
                     value={formMedicalHistory}
                     onChange={(e) => setFormMedicalHistory(e.target.value)}
                     rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Previous medical conditions, allergies, medications, etc."
                   />
                 </div>
 
@@ -454,32 +679,19 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                   </div>
                 )}
 
-                {/* Payment Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formPaymentAmount}
-                        onChange={(e) => setFormPaymentAmount(e.target.value || "0")}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                      <select
-                        value={formPaymentMethod}
-                        onChange={(e) => setFormPaymentMethod(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      >
-                        <option value="cash">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="upi">UPI</option>
-                        <option value="wallet">Wallet</option>
-                      </select>
-                    </div>
+                {/* Payment Method */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                  <select
+                    value={formPaymentMethod}
+                    onChange={(e) => setFormPaymentMethod(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="upi">UPI</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Payment amount will be handled in the billing section</p>
                 </div>
               </div>
 

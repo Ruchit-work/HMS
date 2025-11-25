@@ -150,8 +150,6 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         return "UPI"
       case "cash":
         return "Cash"
-      case "wallet":
-        return "Wallet"
       default:
         return "Card"
     }
@@ -196,14 +194,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   }, [symptomCategory, customSymptom])
 
   const paymentMethods = useMemo<BookingPaymentMethod[]>(() => {
-    return patientMode === "new" ? ["card", "upi", "cash"] : ["card", "upi", "cash", "wallet"]
+    return ["card", "upi", "cash"]
   }, [patientMode])
-
-  useEffect(() => {
-    if (patientMode === "new" && paymentMethod === "wallet") {
-      setPaymentMethod(null)
-    }
-  }, [patientMode, paymentMethod])
 
   const isSelectedDateBlocked = useMemo(() => {
     if (!selectedDoctorId || !appointmentDate) return false

@@ -175,10 +175,10 @@ See you soon! 🏥`
       vitalTemperatureC?: number; vitalBloodPressure?: string; vitalHeartRate?: number; vitalRespiratoryRate?: number; vitalSpO2?: number;
       additionalConcern?: string;
     }
-    paymentMethod: "card" | "upi" | "cash" | "wallet"
+    paymentMethod: "card" | "upi" | "cash"
     paymentType: "full" | "partial"
     paymentData: { cardNumber: string; cardName: string; expiryDate: string; cvv: string; upiId: string }
-  }) => {
+  }): Promise<void> => {
     const { selectedDoctor, appointmentData, paymentMethod, paymentType, paymentData } = formData
     
     if (!selectedDoctor) {
@@ -199,16 +199,6 @@ See you soon! 🏥`
     } else if (!rescheduleMode && paymentMethod === "upi") {
       if (!paymentData.upiId) {
         setNotification({ type: "error", message: "Please enter UPI ID" })
-        return
-      }
-    } else if (!rescheduleMode && paymentMethod === "wallet") {
-      const balance = Number((userData as any)?.walletBalance || 0)
-      const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
-      const CONSULTATION_FEE = selectedDoctorData?.consultationFee || 500
-      const PARTIAL_PAYMENT_AMOUNT = Math.ceil(CONSULTATION_FEE * 0.1)
-      const AMOUNT_TO_PAY = (formData.paymentType === 'partial') ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
-      if (balance < AMOUNT_TO_PAY) {
-        setNotification({ type: 'error', message: 'Insufficient wallet balance' })
         return
       }
     }
@@ -295,16 +285,6 @@ See you soon! 🏥`
       const latestPatientDoc = await getDoc(doc(db, "patients", user.uid))
       const latestUserData = latestPatientDoc.exists() ? (latestPatientDoc.data() as UserData) : userData
       
-      // If paying by wallet, deduct from wallet AFTER slot check
-      let walletDeducted = false
-      if (!rescheduleMode && formData.paymentMethod === 'wallet') {
-        await updateDoc(doc(db, 'patients', user.uid), {
-          walletBalance: increment(-AMOUNT_TO_PAY)
-        })
-        // reflect locally
-        setUserData(prev => prev ? ({ ...prev, walletBalance: Number((prev as any).walletBalance || 0) - AMOUNT_TO_PAY } as any) : prev)
-        walletDeducted = true
-      }
       
       const patientSixDigitId = latestUserData?.patientId || user.uid
       const appointmentPayload = {
@@ -376,14 +356,6 @@ See you soon! 🏥`
       })
 
       if (!response.ok) {
-        if (walletDeducted) {
-          await updateDoc(doc(db, "patients", user.uid), {
-            walletBalance: increment(AMOUNT_TO_PAY),
-          })
-          setUserData(prev =>
-            prev ? ({ ...prev, walletBalance: Number((prev as any).walletBalance || 0) + AMOUNT_TO_PAY } as any) : prev
-          )
-        }
         const data = await response.json().catch(() => ({}))
         setNotification({
           type: "error",

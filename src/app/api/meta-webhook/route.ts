@@ -85,6 +85,12 @@ export async function POST(req: Request) {
         await handleTimeButtonClick(from, buttonId)
         return NextResponse.json({ success: true })
       }
+      
+      // Handle re-checkup pick date button
+      if (buttonId === "recheckup_pick_date") {
+        await handleRecheckupPickDate(from)
+        return NextResponse.json({ success: true })
+      }
     }
 
     // Handle list selections (date/time pickers)
@@ -450,6 +456,14 @@ async function processBookingConfirmation(
   const remainingAmount = consultationFee
   const paymentStatus: "pending" | "paid" = "pending"
 
+  // Determine chief complaint based on whether it's a re-checkup
+  let chiefComplaint = "General consultation"
+  if (session.isRecheckup) {
+    chiefComplaint = session.recheckupNote 
+      ? `Re-checkup: ${session.recheckupNote}`
+      : "Re-checkup appointment"
+  }
+
   try {
     const appointmentId = await createAppointment(
       db,
@@ -457,7 +471,7 @@ async function processBookingConfirmation(
       null, // No doctor assigned yet
       {
         symptomCategory: "",
-        chiefComplaint: "General consultation",
+        chiefComplaint,
         doctorId: "", // Empty - will be assigned by receptionist
         appointmentDate: session.appointmentDate,
         appointmentTime: session.appointmentTime,
@@ -468,6 +482,9 @@ async function processBookingConfirmation(
         consultationFee,
         paymentAmount,
         remainingAmount,
+        isRecheckup: session.isRecheckup || false,
+        recheckupNote: session.recheckupNote || "",
+        originalAppointmentId: session.originalAppointmentId || "",
       },
       normalizedPhone,
       true // Mark as WhatsApp pending
@@ -550,11 +567,15 @@ interface BookingSession {
   appointmentDate?: string
   appointmentTime?: string
   symptoms?: string
-  paymentMethod?: "card" | "upi" | "cash" | "wallet"
+  paymentMethod?: "card" | "upi" | "cash"
   paymentType?: "full" | "partial"
   consultationFee?: number
   paymentAmount?: number
   remainingAmount?: number
+  isRecheckup?: boolean // Flag for re-checkup bookings
+  recheckupNote?: string // Note from doctor for re-checkup
+  originalAppointmentId?: string // Original appointment ID for re-checkup
+  originalAppointmentDate?: string // Original appointment date for re-checkup
   registrationData?: {
     firstName?: string
     lastName?: string
@@ -831,7 +852,7 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         appointmentDate: appointmentDate,
         appointmentTime: normalizedTime,
         symptoms: symptoms,
-        paymentMethod: paymentMethod as "card" | "upi" | "cash" | "wallet",
+        paymentMethod: paymentMethod as "card" | "upi" | "cash",
         paymentType: paymentType as "full" | "partial",
         consultationFee: consultationFee,
         paymentAmount: collectedAmount,
@@ -1586,6 +1607,29 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     return
   }
 
+}
+
+// Handler for re-checkup pick date button
+async function handleRecheckupPickDate(phone: string) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const sessionDoc = await sessionRef.get()
+
+  if (!sessionDoc.exists) {
+    // Create a new session for re-checkup
+    await sessionRef.set({
+      state: "selecting_date",
+      isRecheckup: true,
+      language: "english",
+      needsRegistration: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  // Show date picker (for re-checkup, no doctor ID needed)
+  await sendDatePicker(phone, undefined, "english")
 }
 
 // Handler for date button clicks (Today, Tomorrow, See All)
@@ -2433,6 +2477,9 @@ async function createAppointment(
     consultationFee: number
     paymentAmount: number
     remainingAmount: number
+    isRecheckup?: boolean
+    recheckupNote?: string
+    originalAppointmentId?: string
   },
   phone: string,
   whatsappPending: boolean = false
@@ -2487,6 +2534,9 @@ async function createAppointment(
       updatedAt: new Date().toISOString(),
       createdBy: whatsappPending ? "whatsapp" : "whatsapp_flow",
       whatsappPending: whatsappPending,
+      isRecheckup: payload.isRecheckup || false,
+      recheckupNote: payload.recheckupNote || "",
+      originalAppointmentId: payload.originalAppointmentId || "",
     }
 
     transaction.set(appointmentRef, appointmentData)
@@ -2546,31 +2596,34 @@ async function sendBookingConfirmation(
   const amountCollected = session.paymentAmount !== undefined ? session.paymentAmount : 0
   const remainingAmount = session.remainingAmount !== undefined ? session.remainingAmount : consultationFee
 
+  // Check if this is a re-checkup appointment
+  const isRecheckup = session.isRecheckup || appointmentData.isRecheckup || false
+  const recheckupNote = session.recheckupNote || appointmentData.recheckupNote || ""
+  
   // Send confirmation message
   const isPending = !doctorData
+  const recheckupHeader = isRecheckup ? "🔄 *Re-checkup Appointment Request Received!*\n\n" : "🎉 *Appointment Request Received!*\n\n"
+  const recheckupHeaderConfirmed = isRecheckup ? "🔄 *Re-checkup Appointment Confirmed!*\n\n" : "🎉 *Appointment Confirmed!*\n\n"
+  
   const confirmationMsg = isPending
-    ? `🎉 *Appointment Request Received!*
+    ? `${recheckupHeader}Hi ${patientName},
 
-Hi ${patientName},
-
-Your appointment request has been received:
+Your ${isRecheckup ? "re-checkup " : ""}appointment request has been received:
 • 📅 Date: ${dateDisplay}
 • 🕒 Time: ${timeDisplay}
 • 📋 Appointment ID: ${appointmentId}
-• 👨‍⚕️ Doctor: Will be assigned by reception
+• 👨‍⚕️ Doctor: Will be assigned by reception${recheckupNote ? `\n• 📝 Note: ${recheckupNote}` : ""}
 
 ✅ Our receptionist will confirm your appointment and assign a doctor shortly. You'll receive a confirmation message once processed.
 
 If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
-    : `🎉 *Appointment Confirmed!*
+    : `${recheckupHeaderConfirmed}Hi ${patientName},
 
-Hi ${patientName},
-
-Your appointment has been booked successfully:
+Your ${isRecheckup ? "re-checkup " : ""}appointment has been booked successfully:
 • 👨‍⚕️ Doctor: ${doctorName}
 • 📅 Date: ${dateDisplay}
 • 🕒 Time: ${timeDisplay}
-• 📋 Appointment ID: ${appointmentId}
+• 📋 Appointment ID: ${appointmentId}${recheckupNote ? `\n• 📝 Note: ${recheckupNote}` : ""}
 • 💳 Payment: ${session.paymentMethod?.toUpperCase() || "CASH"} - ₹${amountCollected}${remainingAmount > 0 ? ` (₹${remainingAmount} due at hospital)` : " (paid)"}
 
 ✅ Your appointment is now visible in our system. Admin and receptionist can see it.

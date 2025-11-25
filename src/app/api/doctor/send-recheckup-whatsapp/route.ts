@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { appointmentId, patientId, patientPhone, doctorName, appointmentDate } = body
+    const { appointmentId, patientId, patientPhone, doctorName, appointmentDate, recheckupNote } = body
 
     if (!appointmentId || !patientId) {
       return NextResponse.json({ error: "Missing appointmentId or patientId" }, { status: 400 })
@@ -72,75 +72,65 @@ export async function POST(request: Request) {
           day: "numeric",
         })
       : "recent checkup"
+
+    // Normalize phone number
+    const normalizedPhone = phone.replace(/[^\d+]/g, "")
     
-    // Get recheckup date/time if provided (for future enhancement)
-    const { recheckupDate, recheckupTime } = body
-    let recheckupInfo = ""
-    if (recheckupDate) {
-      const recheckupDateDisplay = new Date(recheckupDate + "T00:00:00").toLocaleDateString("en-IN", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-      if (recheckupTime) {
-        const [hours, minutes] = recheckupTime.split(":").map(Number)
-        const recheckupTimeDisplay = new Date(2000, 0, 1, hours, minutes).toLocaleTimeString("en-IN", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        })
-        recheckupInfo = `\n\n📅 *Recommended Re-checkup Date & Time:*\n• Date: ${recheckupDateDisplay}\n• Time: ${recheckupTimeDisplay}`
-      } else {
-        recheckupInfo = `\n\n📅 *Recommended Re-checkup Date:*\n• Date: ${recheckupDateDisplay}`
-      }
-    }
-
-    // Get base URL for booking link
-    const requestUrl = new URL(request.url)
-    const baseUrl = 
-      process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.NEXT_PUBLIC_BASE_URL 
-        ? process.env.NEXT_PUBLIC_BASE_URL
-        : `${requestUrl.protocol}//${requestUrl.host}`
-
-    // Create booking URL with patient info for auto-fill
-    const bookingParams = new URLSearchParams({
-      phone: phone.replace(/[^\d+]/g, ""), // Clean phone number
-      patientId: patientId,
-      recheckup: "1", // Flag to indicate this is a re-checkup
+    // Create re-checkup booking session in Firestore
+    const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+    await sessionRef.set({
+      state: "selecting_date",
+      isRecheckup: true,
+      recheckupNote: recheckupNote || "",
+      originalAppointmentId: appointmentId,
+      originalAppointmentDate: appointmentDate,
+      language: "english", // Default to English for re-checkup
+      needsRegistration: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     })
-    const bookingUrl = `${baseUrl}/patient-dashboard/book-appointment?${bookingParams.toString()}`
 
-    // Send recheckup message via Meta WhatsApp
-    const message = `🏥 *Re-checkup Required*\n\n` +
+    // Build message with re-checkup note if provided
+    let messageText = `🏥 *Re-checkup Required*\n\n` +
       `Hi ${patientName},\n\n` +
-      `Dr. ${doctorName} has reviewed your checkup from ${dateDisplay} and recommends a follow-up appointment.${recheckupInfo}\n\n` +
-      `📅 *Schedule Your Re-checkup:*\n\n` +
-      `Reply "Book" or "Book Appointment" to schedule directly via WhatsApp, or visit our website to book online.\n\n` +
-      `We'll help you find the best available time slot.`
+      `Dr. ${doctorName} has reviewed your checkup from ${dateDisplay} and recommends a follow-up appointment.\n\n`
+    
+    if (recheckupNote && recheckupNote.trim()) {
+      messageText += `📝 *Doctor's Note:*\n${recheckupNote}\n\n`
+    }
+    
+    messageText += `📅 *Schedule Your Re-checkup:*\n\n` +
+      `Please select your preferred date and time for the re-checkup appointment.`
 
-    const result = await sendWhatsAppNotification({
-      to: phone,
-      message: message,
-      buttons: [
+    // Send message with "Pick Date" button
+    const { sendMultiButtonMessage } = await import("@/server/metaWhatsApp")
+    const buttonResult = await sendMultiButtonMessage(
+      phone,
+      messageText,
+      [
         {
-          type: "url",
-          title: "🌐 Book Online",
-          url: bookingUrl,
+          id: "recheckup_pick_date",
+          title: "📅 Pick Date",
         },
       ],
-    })
-    
-    const messageForStorage = message
+      "Harmony Medical Services"
+    )
 
-    if (!result.success) {
-      console.error("[send-recheckup-whatsapp] Failed to send WhatsApp:", result.error)
-      return NextResponse.json(
-        { error: result.error || "Failed to send WhatsApp message" },
-        { status: 500 }
-      )
+    if (!buttonResult.success) {
+      // Fallback to text message with instructions
+      const fallbackMessage = messageText + `\n\nReply "Book" or tap the button below to select a date.`
+      const result = await sendWhatsAppNotification({
+        to: phone,
+        message: fallbackMessage,
+      })
+      
+      if (!result.success) {
+        console.error("[send-recheckup-whatsapp] Failed to send WhatsApp:", result.error)
+        return NextResponse.json(
+          { error: result.error || "Failed to send WhatsApp message" },
+          { status: 500 }
+        )
+      }
     }
 
     // Store re-checkup request in Firestore for tracking
@@ -151,7 +141,8 @@ export async function POST(request: Request) {
         patientPhone: phone,
         doctorName,
         originalAppointmentDate: appointmentDate,
-        message: messageForStorage,
+        recheckupNote: recheckupNote || "",
+        message: messageText,
         sentAt: new Date().toISOString(),
         status: "pending",
       })
@@ -163,7 +154,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       success: true, 
       message: "Re-checkup WhatsApp message sent successfully",
-      sid: result.sid 
+      sid: buttonResult.success ? buttonResult.messageId : undefined
     })
 
   } catch (error: any) {

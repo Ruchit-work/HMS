@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { db, auth } from "@/firebase/config"
 import { doc, getDoc } from "firebase/firestore"
 import { signOut } from "firebase/auth"
@@ -29,6 +29,7 @@ export default function ReceptionistDashboard() {
   const [patientMode, setPatientMode] = useState<'existing'|'new'>('existing')
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
+  const [whatsappPendingCount, setWhatsappPendingCount] = useState(0)
 
   const router = useRouter()
   const { user, loading: authLoading } = useAuth("receptionist")
@@ -53,6 +54,34 @@ export default function ReceptionistDashboard() {
     }
     load()
   }, [user])
+
+  const refreshWhatsappPendingCount = useCallback(async () => {
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) return
+      const token = await currentUser.getIdToken()
+      const res = await fetch("/api/receptionist/whatsapp-bookings", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+      if (!res.ok) {
+        throw new Error("Failed to load WhatsApp bookings")
+      }
+      const data = await res.json().catch(() => ({}))
+      const appointments = Array.isArray(data?.appointments) ? data.appointments : []
+      setWhatsappPendingCount(appointments.length)
+    } catch (error) {
+      console.error("[ReceptionistDashboard] Failed to refresh WhatsApp badge:", error)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshWhatsappPendingCount()
+    const interval = setInterval(refreshWhatsappPendingCount, 30000)
+    return () => clearInterval(interval)
+  }, [refreshWhatsappPendingCount])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -133,9 +162,14 @@ export default function ReceptionistDashboard() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2-2 4 4m0 0l4-4m-4 4V3m-5 5H5a2 2 0 00-2 2v9a2 2 0 002 2h6" /></svg>
               Billing History
             </button>
-            <button onClick={() => { setActiveTab("whatsapp-bookings"); setSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === "whatsapp-bookings" ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" : "text-gray-600 hover:bg-gray-100"}`}>
+            <button onClick={() => { setActiveTab("whatsapp-bookings"); setSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative ${activeTab === "whatsapp-bookings" ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" : "text-gray-600 hover:bg-gray-100"}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-              WhatsApp Bookings
+              <span className="flex-1 text-left">WhatsApp Bookings</span>
+              {whatsappPendingCount > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center text-xs font-semibold text-white bg-red-500 rounded-full min-w-[1.5rem] px-2 py-0.5">
+                  {whatsappPendingCount}
+                </span>
+              )}
             </button>
             <button onClick={() => { if (!bookSubOpen){ setActiveTab("book-appointment") }; setBookSubOpen(!bookSubOpen) }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === "book-appointment" ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" : "text-gray-600 hover:bg-gray-100"}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -269,6 +303,7 @@ export default function ReceptionistDashboard() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <WhatsAppBookingsPanel
                 onNotification={(payload) => setNotification(payload)}
+                onPendingCountChange={setWhatsappPendingCount}
               />
             </div>
           )}

@@ -1,13 +1,31 @@
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 
 export async function POST(req) {
-  // Authenticate request - requires doctor role
-  const auth = await authenticateRequest(req, "doctor")
-  if (!auth.success) {
-    return createAuthErrorResponse(auth)
-  }
-
   try {
+    // Authenticate request - requires doctor role
+    const auth = await authenticateRequest(req, "doctor")
+    if (!auth.success) {
+      console.error("[diagnosis API] Authentication failed:", {
+        error: auth.error,
+        statusCode: auth.statusCode,
+        user: auth.user?.uid || "unknown",
+        requiredRole: "doctor",
+        timestamp: new Date().toISOString()
+      })
+      // Return more detailed error response with the actual error message
+      return Response.json(
+        { 
+          error: auth.error || "Authentication failed",
+          details: {
+            statusCode: auth.statusCode,
+            reason: auth.error || "Unknown authentication error"
+          }
+        },
+        { status: auth.statusCode || 403 }
+      )
+    }
+
+    try {
     const body = await req.json();
     const { symptoms, patientInfo, medicalHistory } = body || {};
 
@@ -70,11 +88,25 @@ export async function POST(req) {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e?.message || "Unexpected server error" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    } catch (e) {
+      console.error("[diagnosis API] Unexpected error:", e)
+      return new Response(JSON.stringify({ error: e?.message || "Unexpected server error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  } catch (outerError) {
+    console.error("[diagnosis API] Outer error (authentication setup):", outerError)
+    return Response.json(
+      { 
+        error: "Authentication setup failed. Please check server configuration.",
+        details: {
+          message: outerError?.message || "Unknown error",
+          type: outerError?.name || "Error"
+        }
+      },
+      { status: 500 }
+    )
   }
 }
 

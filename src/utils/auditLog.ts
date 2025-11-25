@@ -12,7 +12,6 @@ export type AuditEventType =
   | "user_deletion"
   | "user_update"
   | "payment"
-  | "wallet_topup"
   | "refund"
   | "appointment_booking"
   | "appointment_cancellation"
@@ -76,6 +75,27 @@ function getUserAgent(request: Request | undefined): string | undefined {
 }
 
 /**
+ * Remove undefined values from an object (Firestore doesn't accept undefined)
+ */
+function removeUndefinedValues<T extends Record<string, any>>(obj: T): Partial<T> {
+  const cleaned: any = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      // Recursively clean nested objects
+      if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
+        const cleanedNested = removeUndefinedValues(value)
+        if (Object.keys(cleanedNested).length > 0) {
+          cleaned[key] = cleanedNested
+        }
+      } else {
+        cleaned[key] = value
+      }
+    }
+  }
+  return cleaned
+}
+
+/**
  * Create audit log entry
  */
 export async function logAuditEvent(
@@ -99,12 +119,15 @@ export async function logAuditEvent(
       userAgent: request ? getUserAgent(request) : undefined,
     }
 
+    // Remove undefined values before writing to Firestore
+    const cleanedEntry = removeUndefinedValues(auditEntry)
+
     // Add to audit_logs collection
-    await firestore.collection("audit_logs").add(auditEntry)
+    await firestore.collection("audit_logs").add(cleanedEntry)
 
     // Log to console in development
     if (process.env.NODE_ENV === "development") {
-      console.log("[Audit Log]", JSON.stringify(auditEntry, null, 2))
+      console.log("[Audit Log]", JSON.stringify(cleanedEntry, null, 2))
     }
   } catch (error: any) {
     // Don't throw - audit logging failures shouldn't break the application
@@ -221,7 +244,7 @@ export async function logUserEvent(
  * Log payment events
  */
 export async function logPaymentEvent(
-  eventType: "payment_processed" | "payment_failed" | "refund_processed" | "refund_failed" | "wallet_topup" | "wallet_topup_failed",
+  eventType: "payment_processed" | "payment_failed" | "refund_processed" | "refund_failed",
   request: Request | undefined,
   userId?: string,
   userEmail?: string,
@@ -234,7 +257,7 @@ export async function logPaymentEvent(
   metadata?: Record<string, any>
 ): Promise<void> {
   const severity: AuditSeverity = eventType.includes("failed") ? "high" : "medium"
-  const eventTypeEnum: AuditEventType = eventType.includes("refund") ? "refund" : eventType.includes("wallet") ? "wallet_topup" : "payment"
+  const eventTypeEnum: AuditEventType = eventType.includes("refund") ? "refund" : "payment"
 
   await logAuditEvent(
     {

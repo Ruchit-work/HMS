@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   // Declare variables outside try block for catch block access
   let billingId: string | undefined
-  let method: "card" | "upi" | "cash" | "wallet" | "demo" = "card"
+  let method: "card" | "upi" | "cash" | "demo" = "card"
   const isAdmissionBilling = false
   let totalAmount = 0
 
@@ -60,7 +60,6 @@ export async function POST(req: Request) {
     const paymentReference = `BILL-${Date.now()}`
     const transactionId = `TXN-${Date.now()}`
 
-    let walletBalanceAfter: number | null = null
 
     if (!billingId) {
       return Response.json({ error: "Missing billingId" }, { status: 400 })
@@ -117,39 +116,6 @@ export async function POST(req: Request) {
       const patientUid = billingData.patientUid ? String(billingData.patientUid) : null
       const patientId = billingData.patientId ? String(billingData.patientId) : null
 
-      if (method === "wallet") {
-        if (!patientUid) {
-          throw new Error("Patient account not linked for wallet payment")
-        }
-        const patientRef = firestore.collection("patients").doc(patientUid)
-        const patientSnap = await tx.get(patientRef)
-        if (!patientSnap.exists) {
-          throw new Error("Patient not found for wallet payment")
-        }
-        const patientData = patientSnap.data() || {}
-        const currentBalance = Number(patientData.walletBalance || 0)
-        if (currentBalance < totalAmount) {
-          throw new Error("Insufficient wallet balance")
-        }
-        walletBalanceAfter = currentBalance - totalAmount
-
-        tx.update(patientRef, {
-          walletBalance: walletBalanceAfter
-        })
-
-        const walletTxnRef = firestore.collection("wallet_transactions").doc()
-        tx.set(walletTxnRef, {
-          id: walletTxnRef.id,
-          patientUid,
-          patientId,
-          type: "debit",
-          amount: totalAmount,
-          method: "hospital_bill",
-          billingId,
-          createdAt: nowIso,
-          balanceAfter: walletBalanceAfter
-        })
-      }
 
       const paymentMetadata =
         actorType === "receptionist"
@@ -181,6 +147,7 @@ export async function POST(req: Request) {
           paymentMethod: method,
           paidAt: nowIso,
           transactionId: transactionId,
+          paymentAmount: totalAmount, // Update paymentAmount to reflect the actual amount paid
           remainingAmount: 0,
           status: "confirmed",
           updatedAt: nowIso,
@@ -209,7 +176,6 @@ export async function POST(req: Request) {
       paidAt: nowIso,
       paymentReference,
       transactionId,
-      walletBalance: walletBalanceAfter
     })
   } catch (error: any) {
     console.error("billing pay error", error)

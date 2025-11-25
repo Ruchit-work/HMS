@@ -694,14 +694,8 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                   paymentData={billingPaymentData}
                   setPaymentData={setBillingPaymentData}
                   amountToPay={selectedBillingRecord.totalAmount}
-                  walletBalance={undefined}
-                  methods={["cash", "card", "upi", "wallet"]}
+                  methods={["cash", "card", "upi"]}
                 />
-                {billingPaymentMethod === "wallet" && (
-                  <p className="text-xs text-amber-600 mt-2">
-                    Ensure the patient has sufficient wallet balance before confirming.
-                  </p>
-                )}
               </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">

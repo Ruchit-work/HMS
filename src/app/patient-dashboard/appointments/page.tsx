@@ -242,16 +242,6 @@ export default function PatientAppointments() {
           }
         })
       )
-      if (data?.walletBalance !== undefined && data.walletBalance !== null) {
-        setUserData(prev =>
-          prev
-            ? ({
-                ...prev,
-                walletBalance: data.walletBalance
-              } as UserData)
-            : prev
-        )
-      }
       setNotification({
         type: "success",
         message: "Payment successful. Thank you!"
@@ -494,14 +484,8 @@ export default function PatientAppointments() {
                   paymentData={billingPaymentData}
                   setPaymentData={setBillingPaymentData}
                   amountToPay={selectedBilling.billing.totalAmount}
-                  walletBalance={Number((userData as any)?.walletBalance || 0)}
-                  methods={["card", "upi", "wallet"]}
+                  methods={["card", "upi"]}
                 />
-                {billingPaymentMethod === "wallet" && (
-                  <p className="text-xs text-slate-500">
-                    Wallet balance: ₹{Number((userData as any)?.walletBalance || 0).toFixed(2)}
-                  </p>
-                )}
               </div>
               <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
                 <button
@@ -515,9 +499,7 @@ export default function PatientAppointments() {
                   onClick={handleConfirmBillingPayment}
                   disabled={
                     payingBill ||
-                    (billingPaymentMethod === "wallet" &&
-                      Number((userData as any)?.walletBalance || 0) <
-                        Number(selectedBilling.billing.totalAmount || 0))
+                    Number(selectedBilling.billing.totalAmount || 0) <= 0
                   }
                   className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-60"
                 >

@@ -59,6 +59,11 @@ export async function POST(req: Request) {
     const apt = aptSnap.data() as any
 
     const amount = Number(refund.paymentAmount ?? apt.paymentAmount ?? apt.totalConsultationFee ?? 0)
+    const patientId = String(refund.patientId || apt.patientId || "")
+
+    if (!patientId) {
+      return NextResponse.json({ error: "Patient ID missing on refund request" }, { status: 400 })
+    }
 
     // Update appointment to reflect refund
     await aptRef.update({
@@ -78,24 +83,8 @@ export async function POST(req: Request) {
       approvedBy: null, // can be set by auth context in future
     })
 
-    // Credit patient's wallet (dummy refund box)
-    const patientId = String(refund.patientId || apt.patientId || '')
-    if (patientId) {
-      const patientRef = firestore.collection('patients').doc(patientId)
-      await patientRef.set({
-        walletBalance: admin.firestore.FieldValue.increment(amount)
-      }, { merge: true })
-
-      // Record wallet transaction
-      await firestore.collection('wallet_transactions').add({
-        patientId,
-        appointmentId,
-        refundRequestId,
-        type: 'refund',
-        amount,
-        createdAt: new Date().toISOString()
-      })
-    }
+    // Note: Wallet refund feature has been removed
+    // Refunds are now processed through other payment methods
 
     // Log admin approval and refund processing
     await logAdminEvent(

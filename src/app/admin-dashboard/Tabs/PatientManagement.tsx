@@ -746,14 +746,13 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                             )}
                           </div>
                         </th>
-                        <th className="hidden px-3 py-3 text-left xl:table-cell">Appointments</th>
                         <th className="px-3 py-3 text-left">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white text-sm text-slate-700">
                       {loading ? (
                         <tr>
-                          <td colSpan={7} className="px-3 py-12 text-center">
+                          <td colSpan={6} className="px-3 py-12 text-center">
                             <div className="flex flex-col items-center">
                               <svg
                                 className="mb-2 h-8 w-8 animate-spin text-blue-600"
@@ -782,7 +781,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                         </tr>
                       ) : error ? (
                         <tr>
-                          <td colSpan={7} className="px-3 py-12 text-center">
+                          <td colSpan={6} className="px-3 py-12 text-center">
                             <svg
                               className="mb-2 h-12 w-12 text-red-400"
                               fill="none"
@@ -804,7 +803,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                         </tr>
                       ) : paginatedPatients.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-3 py-12 text-center">
+                          <td colSpan={6} className="px-3 py-12 text-center">
                             <svg
                               className="mb-2 h-12 w-12 text-slate-300"
                               fill="none"
@@ -886,60 +885,6 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                                     ? "Active"
                                     : "Inactive"}
                                 </span>
-                              </td>
-                              <td className="hidden px-3 py-4 xl:table-cell">
-                                {patient.appointmentDetails ? (
-                                  <div className="flex flex-col gap-1">
-                                    <div className="text-sm font-medium text-slate-900">
-                                      Total: {patient.appointmentDetails.total}
-                                      {patient.appointmentDetails.upcoming > 0 && (
-                                        <span className="ml-1 text-blue-600">
-                                          ({patient.appointmentDetails.upcoming} upcoming)
-                                        </span>
-                                      )}
-                                    </div>
-                                    {patient.appointmentDetails.nextAppointment && (
-                                      <div className="text-xs text-slate-600">
-                                        <div>
-                                          📅 {formatDate(patient.appointmentDetails.nextAppointment.date)} {patient.appointmentDetails.nextAppointment.time && `at ${patient.appointmentDetails.nextAppointment.time}`}
-                                        </div>
-                                        <div className="text-slate-500">
-                                          👨‍⚕️ {patient.appointmentDetails.nextAppointment.doctorName}
-                                        </div>
-                                        {patient.appointmentDetails.nextAppointment.chiefComplaint && (
-                                          <div className="mt-1 text-slate-600 truncate" title={patient.appointmentDetails.nextAppointment.chiefComplaint}>
-                                            💬 {patient.appointmentDetails.nextAppointment.chiefComplaint.length > 30 
-                                              ? `${patient.appointmentDetails.nextAppointment.chiefComplaint.substring(0, 30)}...` 
-                                              : patient.appointmentDetails.nextAppointment.chiefComplaint}
-                                          </div>
-                                        )}
-                                        <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold mt-1 ${
-                                          patient.appointmentDetails.nextAppointment.status === "confirmed"
-                                            ? "bg-blue-100 text-blue-700"
-                                            : patient.appointmentDetails.nextAppointment.status === "pending" || patient.appointmentDetails.nextAppointment.status === "whatsapp_pending"
-                                            ? "bg-yellow-100 text-yellow-700"
-                                            : "bg-gray-100 text-gray-700"
-                                        }`}>
-                                          {patient.appointmentDetails.nextAppointment.status === "whatsapp_pending" ? "Pending" : patient.appointmentDetails.nextAppointment.status}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {!patient.appointmentDetails.nextAppointment && patient.appointmentDetails.total > 0 && (
-                                      <div className="text-xs text-slate-400">
-                                        No upcoming appointments
-                                      </div>
-                                    )}
-                                    {patient.appointmentDetails.total === 0 && (
-                                      <div className="text-xs text-slate-400">
-                                        No appointments yet
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-slate-400">
-                                    Loading...
-                                  </div>
-                                )}
                               </td>
                               <td className="px-3 py-4">
                                 <div className="flex items-center gap-1.5">
