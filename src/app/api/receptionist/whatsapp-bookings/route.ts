@@ -90,9 +90,9 @@ export async function GET(request: Request) {
         paymentStatus: data.paymentStatus || "pending",
         paymentMethod: data.paymentMethod || "cash",
         paymentType: (data.paymentType as "full" | "partial") || "full",
-        totalConsultationFee: data.totalConsultationFee || data.consultationFee || 0,
+        totalConsultationFee: data.totalConsultationFee || data.consultationFee || 0, // Doctor fee
         paymentAmount: data.paymentAmount || 0,
-        remainingAmount: data.remainingAmount || data.totalConsultationFee || data.consultationFee || 0,
+        remainingAmount: data.remainingAmount || data.totalConsultationFee || data.consultationFee || 0, // Based on doctor fee
         transactionId: data.transactionId || data.id,
         paidAt: data.paidAt || "",
         status,

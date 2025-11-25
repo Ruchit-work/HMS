@@ -38,7 +38,6 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
   const [formAppointmentTime, setFormAppointmentTime] = useState("")
   const [formChiefComplaint, setFormChiefComplaint] = useState("")
   const [formMedicalHistory, setFormMedicalHistory] = useState("")
-  const [formConsultationFee, setFormConsultationFee] = useState("")
   const [formPaymentAmount, setFormPaymentAmount] = useState("")
   const [formPaymentMethod, setFormPaymentMethod] = useState<"card" | "upi" | "cash" | "wallet">("cash")
 
@@ -118,7 +117,6 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
     setFormAppointmentTime(booking.appointmentTime || "")
     setFormChiefComplaint(booking.chiefComplaint || "")
     setFormMedicalHistory(booking.medicalHistory || "")
-    setFormConsultationFee(String(booking.totalConsultationFee || booking.consultationFee || 0))
     setFormPaymentAmount(String(booking.paymentAmount || 0))
     setFormPaymentMethod((booking.paymentMethod as "card" | "upi" | "cash" | "wallet") || "cash")
     setEditModalOpen(true)
@@ -134,11 +132,6 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
     return doctors.find((d) => d.id === formDoctorId) || null
   }, [doctors, formDoctorId])
 
-  useEffect(() => {
-    if (selectedDoctor?.consultationFee) {
-      setFormConsultationFee(String(selectedDoctor.consultationFee))
-    }
-  }, [selectedDoctor])
 
   const handleUpdateBooking = async () => {
     if (!selectedBooking) return
@@ -176,10 +169,9 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
         appointmentTime: formAppointmentTime,
         chiefComplaint: formChiefComplaint.trim() || "General consultation",
         medicalHistory: formMedicalHistory.trim(),
-        consultationFee: Number(formConsultationFee) || 0,
         paymentAmount: Number(formPaymentAmount) || 0,
         paymentMethod: formPaymentMethod,
-        paymentStatus: Number(formPaymentAmount) >= Number(formConsultationFee) ? "paid" : "pending",
+        // Payment status will be calculated on backend based on doctor fee
         markConfirmed: true,
       }
 
@@ -282,7 +274,7 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                     Phone
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fee
+                    Doctor Fee
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -313,7 +305,11 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                       {booking.patientPhone || "—"}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ₹{booking.totalConsultationFee || booking.consultationFee || 0}
+                      {booking.doctorId && booking.totalConsultationFee ? (
+                        <span>₹{booking.totalConsultationFee}</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
@@ -448,40 +444,42 @@ export default function WhatsAppBookingsPanel({ onNotification }: WhatsAppBookin
                 </div>
 
                 {/* Payment Details */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Consultation Fee <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      value={formConsultationFee}
-                      onChange={(e) => setFormConsultationFee(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
+                {selectedDoctor && selectedDoctor.consultationFee && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-blue-900">Doctor Fee:</span>
+                      <span className="text-lg font-semibold text-blue-900">₹{selectedDoctor.consultationFee}</span>
+                    </div>
+                    <p className="text-xs text-blue-600 mt-1">Fee will be automatically set from doctor's profile</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
-                    <input
-                      type="number"
-                      value={formPaymentAmount}
-                      onChange={(e) => setFormPaymentAmount(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                    <select
-                      value={formPaymentMethod}
-                      onChange={(e) => setFormPaymentMethod(e.target.value as any)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="card">Card</option>
-                      <option value="upi">UPI</option>
-                      <option value="wallet">Wallet</option>
-                    </select>
-                  </div>
+                )}
+
+                {/* Payment Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formPaymentAmount}
+                        onChange={(e) => setFormPaymentAmount(e.target.value || "0")}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                      <select
+                        value={formPaymentMethod}
+                        onChange={(e) => setFormPaymentMethod(e.target.value as any)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="upi">UPI</option>
+                        <option value="wallet">Wallet</option>
+                      </select>
+                    </div>
                 </div>
               </div>
 

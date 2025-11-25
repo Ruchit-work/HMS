@@ -64,6 +64,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true })
       }
       
+      if (buttonId === "register_yes") {
+        await handleRegistrationPrompt(from)
+        return NextResponse.json({ success: true })
+      }
+      
       if (buttonId === "booking_confirm" || buttonId === "booking_cancel") {
         await handleConfirmationButtonClick(from, buttonId === "booking_confirm" ? "confirm" : "cancel")
         return NextResponse.json({ success: true })
@@ -136,24 +141,52 @@ export async function POST(req: Request) {
 
 
 async function handleGreeting(phone: string) {
-  // Send greeting with two buttons
-  const buttonResponse = await sendMultiButtonMessage(
-    phone,
-    "Hello! 👋\n\nHow can I help you today?",
-    [
-      { id: "book_appointment", title: "📅 Book Appointment" },
-      { id: "help_center", title: "🆘 Help Center" },
-    ],
-    "Harmony Medical Services"
-  )
-
-  if (!buttonResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send greeting buttons:", buttonResponse.error)
-    // Fallback to text message
-    await sendTextMessage(
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  
+  // Check if patient exists
+  const patient = await findPatientByPhone(db, normalizedPhone)
+  
+  if (!patient) {
+    // Unknown number - ask for registration
+    const buttonResponse = await sendMultiButtonMessage(
       phone,
-      "Hello! 👋\n\nHow can I help you today?\n\n• Type 'Book' to book an appointment\n• Type 'Help' for assistance\n\nOr contact our reception at +91-XXXXXXXXXX"
+      "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?",
+      [
+        { id: "register_yes", title: "✅ Yes, Register" },
+        { id: "help_center", title: "🆘 Help Center" },
+      ],
+      "Harmony Medical Services"
     )
+
+    if (!buttonResponse.success) {
+      console.error("[Meta WhatsApp] Failed to send registration prompt:", buttonResponse.error)
+      // Fallback to text message
+      await sendTextMessage(
+        phone,
+        "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?\n\nReply 'Yes' to register or 'Help' for assistance."
+      )
+    }
+  } else {
+    // Registered patient - show booking options
+    const buttonResponse = await sendMultiButtonMessage(
+      phone,
+      "Hello! 👋\n\nHow can I help you today?",
+      [
+        { id: "book_appointment", title: "📅 Book Appointment" },
+        { id: "help_center", title: "🆘 Help Center" },
+      ],
+      "Harmony Medical Services"
+    )
+
+    if (!buttonResponse.success) {
+      console.error("[Meta WhatsApp] Failed to send greeting buttons:", buttonResponse.error)
+      // Fallback to text message
+      await sendTextMessage(
+        phone,
+        "Hello! 👋\n\nHow can I help you today?\n\n• Type 'Book' to book an appointment\n• Type 'Help' for assistance\n\nOr contact our reception at +91-XXXXXXXXXX"
+      )
+    }
   }
 }
 
@@ -507,6 +540,7 @@ type BookingState =
   | "selecting_date"
   | "selecting_time"
   | "confirming"
+  | "registering_full_name"
 
 interface BookingSession {
   state: BookingState
@@ -914,6 +948,8 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
   switch (session.state) {
     case "selecting_language":
       return await handleLanguageSelection(db, phone, normalizedPhone, sessionRef, text, session)
+    case "registering_full_name":
+      return await handleRegistrationFullName(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_date":
       return await handleDateSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_time":
@@ -967,6 +1003,165 @@ async function handleLanguageSelection(
 
   await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
   return true
+}
+
+async function handleRegistrationPrompt(phone: string) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  
+  // Create session for registration
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  await sessionRef.set({
+    state: "selecting_language",
+    needsRegistration: true,
+    registrationData: {},
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  })
+  
+  // Send language picker
+  await sendLanguagePicker(phone)
+}
+
+async function handleRegistrationFullName(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const language = session.language || "english"
+  const fullName = text.trim()
+  
+  if (!fullName || fullName.length < 2) {
+    const errorMsg = language === "gujarati"
+      ? "❌ કૃપા કરીને માન્ય નામ દાખલ કરો (ઓછામાં ઓછું 2 અક્ષરો)."
+      : "❌ Please enter a valid name (at least 2 characters)."
+    await sendTextMessage(phone, errorMsg)
+    await sendTextMessage(phone, getTranslation("registrationFullName", language))
+    return true
+  }
+  
+  // Split name into first and last name
+  const nameParts = fullName.split(/\s+/).filter(Boolean)
+  const firstName = nameParts[0] || fullName
+  const lastName = nameParts.slice(1).join(" ") || ""
+  
+  // Create minimal patient record (name + phone only)
+  try {
+    await createPatientFromWhatsApp(db, normalizedPhone, firstName, lastName)
+    
+    // Update session
+    await sessionRef.update({
+      state: "selecting_language",
+      needsRegistration: false,
+      registrationData: {
+        firstName,
+        lastName,
+      },
+      updatedAt: new Date().toISOString(),
+    })
+    
+    const successMsg = language === "gujarati"
+      ? `✅ *રજિસ્ટ્રેશન સફળ!*\n\nતમારું પ્રોફાઇલ બનાવવામાં આવ્યું છે.\n\nહવે તમે અપોઇન્ટમેન્ટ બુક કરી શકો છો. શું તમે અપોઇન્ટમેન્ટ બુક કરવા માંગો છો?`
+      : `✅ *Registration Successful!*\n\nYour profile has been created.\n\nNow you can book appointments. Would you like to book an appointment?`
+    
+    await sendTextMessage(phone, successMsg)
+    
+    // Ask if they want to book
+    const buttonResponse = await sendMultiButtonMessage(
+      phone,
+      language === "gujarati"
+        ? "શું તમે અપોઇન્ટમેન્ટ બુક કરવા માંગો છો?"
+        : "Would you like to book an appointment?",
+      [
+        { id: "book_appointment", title: "📅 Book Appointment" },
+        { id: "help_center", title: "🆘 Help Center" },
+      ],
+      "Harmony Medical Services"
+    )
+    
+    if (!buttonResponse.success) {
+      await sendTextMessage(
+        phone,
+        language === "gujarati"
+          ? "અપોઇન્ટમેન્ટ બુક કરવા માટે 'Book' ટાઇપ કરો."
+          : "Type 'Book' to book an appointment."
+      )
+    }
+    
+    return true
+  } catch (error: any) {
+    console.error("[Meta WhatsApp] Error creating patient:", error)
+    const errorMsg = language === "gujarati"
+      ? "❌ રજિસ્ટ્રેશન દરમિયાન ભૂલ આવી. કૃપા કરીને ફરીથી પ્રયાસ કરો અથવા રિસેપ્શનને કૉલ કરો."
+      : "❌ Error during registration. Please try again or contact reception."
+    await sendTextMessage(phone, errorMsg)
+    return true
+  }
+}
+
+async function createPatientFromWhatsApp(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  firstName: string,
+  lastName: string
+): Promise<string> {
+  // Check if patient already exists
+  const existing = await findPatientByPhone(db, phone)
+  if (existing) {
+    return existing.id
+  }
+  
+  // Generate patient ID
+  const START_NUMBER = 12906
+  const patientId = await db.runTransaction(async (transaction) => {
+    const counterRef = db.collection("meta").doc("patientIdCounter")
+    const counterSnap = await transaction.get(counterRef)
+    
+    let lastNumber = START_NUMBER - 1
+    if (counterSnap.exists) {
+      const data = counterSnap.data()
+      const stored = typeof data?.lastNumber === "number" ? data.lastNumber : undefined
+      if (stored && stored >= START_NUMBER - 1) {
+        lastNumber = stored
+      }
+    }
+    
+    const nextNumber = lastNumber + 1
+    transaction.set(
+      counterRef,
+      {
+        lastNumber: nextNumber,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    )
+    
+    return nextNumber.toString().padStart(6, "0")
+  })
+  
+  // Create patient document (no Firebase Auth user - receptionist will add email/password later)
+  const patientRef = db.collection("patients").doc()
+  const patientUid = patientRef.id
+  
+  await patientRef.set({
+    patientId,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    phone,
+    phoneNumber: phone.replace(/^\+91/, ""), // Remove country code for phoneNumber field
+    status: "active",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: "whatsapp",
+    whatsappRegistered: true, // Flag to indicate registered via WhatsApp
+  })
+  
+  console.log("[Meta WhatsApp] Created patient via WhatsApp:", patientUid, phone)
+  
+  return patientUid
 }
 
 async function handleDateSelection(
@@ -2246,15 +2441,19 @@ async function createAppointment(
   let appointmentId = ""
 
   await db.runTransaction(async (transaction) => {
-    // Only create slot if doctor is assigned
-    if (doctor && payload.doctorId) {
-      const slotDocId = `${payload.doctorId}_${payload.appointmentDate}_${appointmentTime}`.replace(
-        /[:\s]/g,
-        "-"
-      )
-      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-      const slotSnap = await transaction.get(slotRef)
-      if (slotSnap.exists) {
+    // Reserve slot even if no doctor assigned (to prevent double booking)
+    // Use placeholder slot ID if no doctor
+    const checkSlotDocId = payload.doctorId
+      ? `${payload.doctorId}_${payload.appointmentDate}_${appointmentTime}`.replace(/[:\s]/g, "-")
+      : `PENDING_${payload.appointmentDate}_${appointmentTime}`.replace(/[:\s]/g, "-")
+    
+    const checkSlotRef = db.collection("appointmentSlots").doc(checkSlotDocId)
+    const checkSlotSnap = await transaction.get(checkSlotRef)
+    
+    if (checkSlotSnap.exists) {
+      // Check if it's the same appointment (for updates)
+      const existingSlotData = checkSlotSnap.data()
+      if (existingSlotData && existingSlotData.appointmentId && existingSlotData.appointmentId !== appointmentId) {
         throw new Error("SLOT_ALREADY_BOOKED")
       }
     }
@@ -2292,21 +2491,20 @@ async function createAppointment(
 
     transaction.set(appointmentRef, appointmentData)
 
-    // Only create slot if doctor is assigned
-    if (doctor && payload.doctorId) {
-      const slotDocId = `${payload.doctorId}_${payload.appointmentDate}_${appointmentTime}`.replace(
-        /[:\s]/g,
-        "-"
-      )
-      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-      transaction.set(slotRef, {
-        appointmentId,
-        doctorId: payload.doctorId,
-        appointmentDate: payload.appointmentDate,
-        appointmentTime,
-        createdAt: new Date().toISOString(),
-      })
-    }
+    // Reserve slot (even if no doctor assigned - prevents double booking)
+    const finalSlotDocId = payload.doctorId
+      ? `${payload.doctorId}_${payload.appointmentDate}_${appointmentTime}`.replace(/[:\s]/g, "-")
+      : `PENDING_${payload.appointmentDate}_${appointmentTime}`.replace(/[:\s]/g, "-")
+    
+    const finalSlotRef = db.collection("appointmentSlots").doc(finalSlotDocId)
+    transaction.set(finalSlotRef, {
+      appointmentId,
+      doctorId: payload.doctorId || null,
+      appointmentDate: payload.appointmentDate,
+      appointmentTime,
+      createdAt: new Date().toISOString(),
+      pending: !payload.doctorId, // Flag to indicate slot is pending doctor assignment
+    })
   })
 
   return appointmentId

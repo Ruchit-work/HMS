@@ -73,12 +73,12 @@ export async function PUT(
       updateData.doctorName = `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
       updateData.doctorSpecialization = doctorData.specialization || ""
 
-      // Update consultation fee if doctor has one
+      // Set doctor fee (only fee we charge - no separate consultation fee)
       if (doctorData.consultationFee) {
         updateData.consultationFee = doctorData.consultationFee
         updateData.totalConsultationFee = doctorData.consultationFee
         
-        // Recalculate remaining amount
+        // Recalculate remaining amount based on doctor fee
         const paymentAmount = body.paymentAmount !== undefined ? body.paymentAmount : (appointmentData.paymentAmount || 0)
         updateData.remainingAmount = Math.max(doctorData.consultationFee - paymentAmount, 0)
       }
@@ -128,14 +128,12 @@ export async function PUT(
     if (body.appointmentTime !== undefined) updateData.appointmentTime = body.appointmentTime
     if (body.chiefComplaint !== undefined) updateData.chiefComplaint = body.chiefComplaint
     if (body.medicalHistory !== undefined) updateData.medicalHistory = body.medicalHistory
-    if (body.consultationFee !== undefined) {
-      updateData.consultationFee = body.consultationFee
-      updateData.totalConsultationFee = body.consultationFee
-    }
+    // No manual consultation fee - only use doctor's fee
     if (body.paymentAmount !== undefined) {
       updateData.paymentAmount = body.paymentAmount
-      const consultationFee = updateData.consultationFee || appointmentData.consultationFee || 500
-      updateData.remainingAmount = Math.max(consultationFee - body.paymentAmount, 0)
+      // Use doctor fee from updateData or appointmentData (doctor fee is the only fee)
+      const doctorFee = updateData.totalConsultationFee || appointmentData.totalConsultationFee || appointmentData.consultationFee || 0
+      updateData.remainingAmount = Math.max(doctorFee - body.paymentAmount, 0)
     }
     if (body.paymentMethod !== undefined) updateData.paymentMethod = body.paymentMethod
     if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus
@@ -160,8 +158,9 @@ export async function PUT(
     if (shouldSendNotification && updateData.doctorId) {
       try {
         const patientPhone = updatedData.patientPhone || appointmentData.patientPhone
+        const patientName = updatedData.patientName || appointmentData.patientName || "Patient"
+        
         if (patientPhone) {
-          const patientName = updatedData.patientName || appointmentData.patientName || "Patient"
           const doctorName = updateData.doctorName || updatedData.doctorName
           const doctorSpecialization = updateData.doctorSpecialization || updatedData.doctorSpecialization || ""
           
@@ -182,11 +181,12 @@ export async function PUT(
             hour12: true,
           })
           
-          const consultationFee = updatedData.totalConsultationFee || updatedData.consultationFee || appointmentData.consultationFee || 0
+          // Use doctor fee (only fee we charge)
+          const doctorFee = updatedData.totalConsultationFee || updatedData.consultationFee || appointmentData.totalConsultationFee || appointmentData.consultationFee || 0
           const paymentAmount = updatedData.paymentAmount || appointmentData.paymentAmount || 0
           const paymentMethod = updatedData.paymentMethod || appointmentData.paymentMethod || "cash"
           const paymentStatus = updatedData.paymentStatus || appointmentData.paymentStatus || "pending"
-          const remainingAmount = updatedData.remainingAmount || (consultationFee - paymentAmount)
+          const remainingAmount = updatedData.remainingAmount || Math.max(doctorFee - paymentAmount, 0)
           
           const message = `🎉 *Appointment Confirmed!*
 
@@ -202,8 +202,9 @@ Your appointment has been confirmed and booked successfully by our receptionist.
 ${updatedData.chiefComplaint ? `• 📝 Reason: ${updatedData.chiefComplaint}` : ""}
 
 💳 *Payment Information:*
+• Doctor Fee: ₹${doctorFee}
 • Method: ${paymentMethod.toUpperCase()}
-• Amount: ₹${paymentAmount}${remainingAmount > 0 ? ` (₹${remainingAmount} due)` : " (paid)"}
+• Amount Paid: ₹${paymentAmount}${remainingAmount > 0 ? ` (₹${remainingAmount} due)` : " (paid)"}
 • Status: ${paymentStatus === "paid" ? "✅ Paid" : "⏳ Pending"}
 
 ✅ Your appointment is confirmed and visible in our system.

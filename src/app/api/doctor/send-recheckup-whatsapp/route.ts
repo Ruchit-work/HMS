@@ -72,6 +72,29 @@ export async function POST(request: Request) {
           day: "numeric",
         })
       : "recent checkup"
+    
+    // Get recheckup date/time if provided (for future enhancement)
+    const { recheckupDate, recheckupTime } = body
+    let recheckupInfo = ""
+    if (recheckupDate) {
+      const recheckupDateDisplay = new Date(recheckupDate + "T00:00:00").toLocaleDateString("en-IN", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+      if (recheckupTime) {
+        const [hours, minutes] = recheckupTime.split(":").map(Number)
+        const recheckupTimeDisplay = new Date(2000, 0, 1, hours, minutes).toLocaleTimeString("en-IN", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+        recheckupInfo = `\n\n📅 *Recommended Re-checkup Date & Time:*\n• Date: ${recheckupDateDisplay}\n• Time: ${recheckupTimeDisplay}`
+      } else {
+        recheckupInfo = `\n\n📅 *Recommended Re-checkup Date:*\n• Date: ${recheckupDateDisplay}`
+      }
+    }
 
     // Get base URL for booking link
     const requestUrl = new URL(request.url)
@@ -90,72 +113,27 @@ export async function POST(request: Request) {
     })
     const bookingUrl = `${baseUrl}/patient-dashboard/book-appointment?${bookingParams.toString()}`
 
-    // For proper interactive buttons, we need a Twilio Content Template
-    // For now, we'll use an existing template or create a clear message with instructions
-    
-    // Use Content Template with interactive buttons
-    // Content SID: HX794833b5f237f5cceb0444832495b4c1
-    const whatsAppContentSid = process.env.WHATSAPP_RECHECKUP_CONTENT_SID || process.env.WHATSAPP_CONTENT_SID || null
-    
-    let result
-    let messageForStorage: string
-    
-    if (whatsAppContentSid) {
-      // Use Content Template with interactive buttons
-      // Template variables: {{1}} = Patient Name, {{2}} = Doctor Name, {{3}} = Checkup Date, {{4}} = Booking URL
-      // Note: If template has "Dr. {{2}}" then send just doctor name, if template has "{{2}}" then send "Dr. Name"
-      // Based on the guide, template should have "Dr. {{2}}" so we send just the name
-      const doctorNameForTemplate = doctorName.startsWith("Dr. ") ? doctorName.substring(4) : doctorName
-      
-      const contentVariables: Record<string, string> = {
-        "1": patientName,                    // {{1}} - Patient Name
-        "2": doctorNameForTemplate,          // {{2}} - Doctor Name (without "Dr." since template adds it)
-        "3": dateDisplay,                    // {{3}} - Checkup Date  
-        "4": bookingUrl,                     // {{4}} - Booking URL for buttons
-      }
-      
-      // Fallback message (used if template fails)
-      const fallbackMessage = `🏥 *Re-checkup Required*\n\n` +
-        `Hi ${patientName},\n\n` +
-        `Dr. ${doctorName} has reviewed your checkup from ${dateDisplay} and recommends a follow-up appointment.\n\n` +
-        `Reply "Schedule Appointment" to book via WhatsApp, or visit:\n${bookingUrl}`
-      
-      console.log(`[send-recheckup-whatsapp] Using Content Template: ${whatsAppContentSid}`)
-      
-      result = await sendWhatsAppNotification({
-        to: phone,
-        message: fallbackMessage, // Fallback message if template fails
-        contentSid: whatsAppContentSid,
-        contentVariables: contentVariables,
-      })
-      
-      // Use fallback message for storing in Firestore
-      messageForStorage = fallbackMessage
-    } else {
-      // Fallback: Send message with clear instructions
-      // Note: For proper interactive buttons, create a Twilio Content Template with call-to-action buttons
-      // Set WHATSAPP_RECHECKUP_CONTENT_SID environment variable once template is approved
-      const message = `🏥 *Re-checkup Required*\n\n` +
-        `Hi ${patientName},\n\n` +
-        `Dr. ${doctorName} has reviewed your checkup from ${dateDisplay} and recommends a follow-up appointment.\n\n` +
-        `📅 *Schedule Your Re-checkup:*\n\n` +
-        `Reply "Schedule Appointment" to book directly via WhatsApp, or visit:\n${bookingUrl}`
+    // Send recheckup message via Meta WhatsApp
+    const message = `🏥 *Re-checkup Required*\n\n` +
+      `Hi ${patientName},\n\n` +
+      `Dr. ${doctorName} has reviewed your checkup from ${dateDisplay} and recommends a follow-up appointment.${recheckupInfo}\n\n` +
+      `📅 *Schedule Your Re-checkup:*\n\n` +
+      `Reply "Book" or "Book Appointment" to schedule directly via WhatsApp, or visit our website to book online.\n\n` +
+      `We'll help you find the best available time slot.`
 
-      result = await sendWhatsAppNotification({
-        to: phone,
-        message: message,
-        buttons: [
-          {
-            type: "url",
-            title: "🌐 Book Online",
-            url: bookingUrl,
-          },
-        ],
-      })
-      
-      // Use this message for storing in Firestore
-      messageForStorage = message
-    }
+    const result = await sendWhatsAppNotification({
+      to: phone,
+      message: message,
+      buttons: [
+        {
+          type: "url",
+          title: "🌐 Book Online",
+          url: bookingUrl,
+        },
+      ],
+    })
+    
+    const messageForStorage = message
 
     if (!result.success) {
       console.error("[send-recheckup-whatsapp] Failed to send WhatsApp:", result.error)

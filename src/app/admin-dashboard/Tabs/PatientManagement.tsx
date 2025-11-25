@@ -33,6 +33,18 @@ interface Patient {
     createdBy: string
     createdAt: string
     updatedAt: string
+    appointmentDetails?: {
+        total: number
+        upcoming: number
+        nextAppointment?: {
+            date: string
+            time: string
+            doctorName: string
+            status: string
+            chiefComplaint?: string
+            medicalHistory?: string
+        }
+    }
 }
 
 export default function PatientManagement({ canDelete = true, canAdd = true, disableAdminGuard = true }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean } = {}) {
@@ -133,7 +145,74 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                 id: doc.id,
                 ...doc.data()
             })) as Patient[]
-            setPatients(patientsList)
+            
+            // Fetch appointments for each patient
+            const appointmentsRef = collection(db, 'appointments')
+            const appointmentsSnapshot = await getDocs(appointmentsRef)
+            const allAppointments = appointmentsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }))
+            
+            // Group appointments by patient ID
+            const appointmentsByPatient = new Map<string, any[]>()
+            allAppointments.forEach((apt: any) => {
+                const patientId = apt.patientId || apt.patientUid || ''
+                if (patientId) {
+                    if (!appointmentsByPatient.has(patientId)) {
+                        appointmentsByPatient.set(patientId, [])
+                    }
+                    appointmentsByPatient.get(patientId)!.push(apt)
+                }
+            })
+            
+            // Add appointment details to each patient
+            const patientsWithAppointments = patientsList.map(patient => {
+                const patientAppointments = [
+                    ...(appointmentsByPatient.get(patient.id) || []),
+                    ...(patient.patientId ? (appointmentsByPatient.get(patient.patientId) || []) : [])
+                ]
+                
+                // Remove duplicates
+                const uniqueAppointments = Array.from(
+                    new Map(patientAppointments.map(apt => [apt.id, apt])).values()
+                )
+                
+                // Filter upcoming appointments (confirmed/pending and date >= today)
+                const today = new Date().toISOString().split('T')[0]
+                const upcoming = uniqueAppointments.filter((apt: any) => {
+                    const isUpcoming = apt.appointmentDate >= today
+                    const isActiveStatus = ['confirmed', 'pending', 'whatsapp_pending'].includes(apt.status)
+                    return isUpcoming && isActiveStatus
+                })
+                
+                // Find next appointment
+                const nextAppointment = upcoming.length > 0
+                    ? upcoming.sort((a: any, b: any) => {
+                        const dateA = new Date(`${a.appointmentDate}T${a.appointmentTime || '00:00'}`).getTime()
+                        const dateB = new Date(`${b.appointmentDate}T${b.appointmentTime || '00:00'}`).getTime()
+                        return dateA - dateB
+                    })[0]
+                    : null
+                
+                return {
+                    ...patient,
+                    appointmentDetails: {
+                        total: uniqueAppointments.length,
+                        upcoming: upcoming.length,
+                        nextAppointment: nextAppointment ? {
+                            date: nextAppointment.appointmentDate,
+                            time: nextAppointment.appointmentTime || '',
+                            doctorName: nextAppointment.doctorName || 'To be assigned',
+                            status: nextAppointment.status,
+                            chiefComplaint: nextAppointment.chiefComplaint || '',
+                            medicalHistory: nextAppointment.medicalHistory || ''
+                        } : undefined
+                    }
+                }
+            })
+            
+            setPatients(patientsWithAppointments)
         } catch (error) {
             setError((error as Error).message)
         } finally {
@@ -667,13 +746,14 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                             )}
                           </div>
                         </th>
+                        <th className="hidden px-3 py-3 text-left xl:table-cell">Appointments</th>
                         <th className="px-3 py-3 text-left">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white text-sm text-slate-700">
                       {loading ? (
                         <tr>
-                          <td colSpan={6} className="px-3 py-12 text-center">
+                          <td colSpan={7} className="px-3 py-12 text-center">
                             <div className="flex flex-col items-center">
                               <svg
                                 className="mb-2 h-8 w-8 animate-spin text-blue-600"
@@ -702,7 +782,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                         </tr>
                       ) : error ? (
                         <tr>
-                          <td colSpan={6} className="px-3 py-12 text-center">
+                          <td colSpan={7} className="px-3 py-12 text-center">
                             <svg
                               className="mb-2 h-12 w-12 text-red-400"
                               fill="none"
@@ -724,7 +804,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                         </tr>
                       ) : paginatedPatients.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-3 py-12 text-center">
+                          <td colSpan={7} className="px-3 py-12 text-center">
                             <svg
                               className="mb-2 h-12 w-12 text-slate-300"
                               fill="none"
@@ -806,6 +886,60 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                                     ? "Active"
                                     : "Inactive"}
                                 </span>
+                              </td>
+                              <td className="hidden px-3 py-4 xl:table-cell">
+                                {patient.appointmentDetails ? (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="text-sm font-medium text-slate-900">
+                                      Total: {patient.appointmentDetails.total}
+                                      {patient.appointmentDetails.upcoming > 0 && (
+                                        <span className="ml-1 text-blue-600">
+                                          ({patient.appointmentDetails.upcoming} upcoming)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {patient.appointmentDetails.nextAppointment && (
+                                      <div className="text-xs text-slate-600">
+                                        <div>
+                                          📅 {formatDate(patient.appointmentDetails.nextAppointment.date)} {patient.appointmentDetails.nextAppointment.time && `at ${patient.appointmentDetails.nextAppointment.time}`}
+                                        </div>
+                                        <div className="text-slate-500">
+                                          👨‍⚕️ {patient.appointmentDetails.nextAppointment.doctorName}
+                                        </div>
+                                        {patient.appointmentDetails.nextAppointment.chiefComplaint && (
+                                          <div className="mt-1 text-slate-600 truncate" title={patient.appointmentDetails.nextAppointment.chiefComplaint}>
+                                            💬 {patient.appointmentDetails.nextAppointment.chiefComplaint.length > 30 
+                                              ? `${patient.appointmentDetails.nextAppointment.chiefComplaint.substring(0, 30)}...` 
+                                              : patient.appointmentDetails.nextAppointment.chiefComplaint}
+                                          </div>
+                                        )}
+                                        <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold mt-1 ${
+                                          patient.appointmentDetails.nextAppointment.status === "confirmed"
+                                            ? "bg-blue-100 text-blue-700"
+                                            : patient.appointmentDetails.nextAppointment.status === "pending" || patient.appointmentDetails.nextAppointment.status === "whatsapp_pending"
+                                            ? "bg-yellow-100 text-yellow-700"
+                                            : "bg-gray-100 text-gray-700"
+                                        }`}>
+                                          {patient.appointmentDetails.nextAppointment.status === "whatsapp_pending" ? "Pending" : patient.appointmentDetails.nextAppointment.status}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {!patient.appointmentDetails.nextAppointment && patient.appointmentDetails.total > 0 && (
+                                      <div className="text-xs text-slate-400">
+                                        No upcoming appointments
+                                      </div>
+                                    )}
+                                    {patient.appointmentDetails.total === 0 && (
+                                      <div className="text-xs text-slate-400">
+                                        No appointments yet
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-slate-400">
+                                    Loading...
+                                  </div>
+                                )}
                               </td>
                               <td className="px-3 py-4">
                                 <div className="flex items-center gap-1.5">
@@ -1094,6 +1228,118 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Appointment Information */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 lg:col-span-2">
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-purple-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                  </div>
+                  <h4 className="text-lg font-semibold text-gray-900">
+                    Appointment Information
+                  </h4>
+                </div>
+                {selectedPatient?.appointmentDetails ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                        <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">
+                          Total Appointments
+                        </div>
+                        <div className="text-2xl font-bold text-blue-900">
+                          {selectedPatient.appointmentDetails.total}
+                        </div>
+                      </div>
+                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <div className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-1">
+                          Upcoming Appointments
+                        </div>
+                        <div className="text-2xl font-bold text-green-900">
+                          {selectedPatient.appointmentDetails.upcoming}
+                        </div>
+                      </div>
+                    </div>
+                    {selectedPatient.appointmentDetails.nextAppointment ? (
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                          Next Appointment
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">📅 Date:</span>
+                            <span className="text-sm text-gray-700">
+                              {formatDate(selectedPatient.appointmentDetails.nextAppointment.date)}
+                              {selectedPatient.appointmentDetails.nextAppointment.time && (
+                                <span className="ml-2">
+                                  at {selectedPatient.appointmentDetails.nextAppointment.time}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">👨‍⚕️ Doctor:</span>
+                            <span className="text-sm text-gray-700">
+                              {selectedPatient.appointmentDetails.nextAppointment.doctorName}
+                            </span>
+                          </div>
+                          {selectedPatient.appointmentDetails.nextAppointment.chiefComplaint && (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm font-medium text-gray-900">💬 Chief Complaint / Symptoms:</span>
+                              <span className="text-sm text-gray-700 bg-white px-3 py-2 rounded-md border border-gray-200">
+                                {selectedPatient.appointmentDetails.nextAppointment.chiefComplaint}
+                              </span>
+                            </div>
+                          )}
+                          {selectedPatient.appointmentDetails.nextAppointment.medicalHistory && (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm font-medium text-gray-900">📋 Medical History:</span>
+                              <span className="text-sm text-gray-700 bg-white px-3 py-2 rounded-md border border-gray-200">
+                                {selectedPatient.appointmentDetails.nextAppointment.medicalHistory}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">Status:</span>
+                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${
+                              selectedPatient.appointmentDetails.nextAppointment.status === "confirmed"
+                                ? "bg-blue-100 text-blue-700"
+                                : selectedPatient.appointmentDetails.nextAppointment.status === "pending" || selectedPatient.appointmentDetails.nextAppointment.status === "whatsapp_pending"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-gray-100 text-gray-700"
+                            }`}>
+                              {selectedPatient.appointmentDetails.nextAppointment.status === "whatsapp_pending" ? "Pending" : selectedPatient.appointmentDetails.nextAppointment.status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 text-center">
+                        <p className="text-sm text-gray-500">
+                          {selectedPatient.appointmentDetails.total > 0
+                            ? "No upcoming appointments"
+                            : "No appointments booked yet"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-gray-500">Loading appointment information...</p>
+                  </div>
+                )}
               </div>
             </div>
           </ViewModal>

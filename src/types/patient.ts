@@ -110,6 +110,7 @@ export interface Appointment {
   paymentStatus: string
   paymentMethod: string
   paymentType: "full" | "partial"
+  consultationFee?: number // Legacy field - kept for backward compatibility with existing Firestore data
   totalConsultationFee: number
   paymentAmount: number
   remainingAmount: number
