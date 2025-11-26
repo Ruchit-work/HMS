@@ -1620,20 +1620,22 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     }
 
     // Check if date is blocked (system-wide like Sunday OR doctor-specific)
+    let doctorData = {}
     if (session.doctorId) {
       const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
       if (doctorDoc.exists) {
-        const doctorData = doctorDoc.data()!
-        const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
-        if (availabilityCheck.isBlocked) {
-          const errorMsg = language === "gujarati"
-            ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${availabilityCheck.reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
-            : `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
-          await sendTextMessage(phone, errorMsg)
-          await sendDatePicker(phone, session.doctorId, language)
-          return
-        }
+        doctorData = doctorDoc.data()!
       }
+    }
+    
+    const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
+    if (availabilityCheck.isBlocked) {
+      const errorMsg = language === "gujarati"
+        ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${availabilityCheck.reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
+        : `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
+      await sendTextMessage(phone, errorMsg)
+      await sendDatePicker(phone, session.doctorId, language)
+      return
     }
 
     // Check if user already has an appointment on this date
@@ -1669,7 +1671,71 @@ async function handleListSelection(phone: string, selectedId: string, selectedTi
     return
   }
 
-  // Check if it's a time selection (ID starts with "time_")
+  // Check if it's an hourly slot selection (ID starts with "hourly_")
+  if (selectedId.startsWith("hourly_")) {
+    const hourStr = selectedId.replace("hourly_", "")
+    const hour = parseInt(hourStr)
+    
+    if (isNaN(hour)) {
+      console.error("[Meta WhatsApp] Invalid hourly slot ID:", selectedId)
+      return
+    }
+    
+    // Find the next available 15-minute slot within this hour
+    const db = admin.firestore()
+    const nextAvailableSlot = await getNextAvailable15MinSlot(
+      db,
+      hour,
+      session.appointmentDate!,
+      undefined // No doctor assigned yet
+    )
+    
+    if (!nextAvailableSlot) {
+      const errorMsg = language === "gujarati"
+        ? "❌ આ સમય સ્લોટમાં કોઈ ઉપલબ્ધ સમય નથી. કૃપા કરીને બીજો સમય પસંદ કરો."
+        : "❌ No available time in this slot. Please select another time."
+      await sendTextMessage(phone, errorMsg)
+      await sendTimePicker(phone, undefined, session.appointmentDate!, language)
+      return
+    }
+    
+    const normalizedTime = normalizeTime(nextAvailableSlot)
+    
+    // Validate that the selected time is not in the past (for today's appointments)
+    const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
+    if (isToday) {
+      const now = new Date()
+      const currentTime = now.getTime()
+      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+      const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+      const slotTime = slotDateTime.getTime()
+      
+      // Reject if slot is in the past or less than 15 minutes away
+      if (slotTime <= minimumTime) {
+        const errorMsg = language === "gujarati"
+          ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
+          : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
+        await sendTextMessage(phone, errorMsg)
+        await sendTimePicker(phone, undefined, session.appointmentDate!, language)
+        return
+      }
+    }
+
+    await sessionRef.update({
+      appointmentTime: normalizedTime,
+      updatedAt: new Date().toISOString(),
+    })
+
+    const updatedSession: BookingSession = {
+      ...session,
+      appointmentTime: normalizedTime,
+    }
+
+    await sendConfirmationButtons(phone, sessionRef, updatedSession)
+    return
+  }
+
+  // Check if it's a time selection (ID starts with "time_") - legacy support
   if (selectedId.startsWith("time_")) {
     const selectedTime = selectedId.replace("time_", "")
     const normalizedTime = normalizeTime(selectedTime)
@@ -1786,20 +1852,22 @@ async function handleDateButtonClick(phone: string, buttonId: string) {
   }
 
   // Check if date is blocked
+  let doctorData = {}
   if (session.doctorId) {
     const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
     if (doctorDoc.exists) {
-      const doctorData = doctorDoc.data()!
-      const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
-      if (availabilityCheck.isBlocked) {
-        const errorMsg = language === "gujarati"
-          ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${availabilityCheck.reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
-          : `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
-        await sendTextMessage(phone, errorMsg)
-        await sendDatePicker(phone, session.doctorId, language)
-        return
-      }
+      doctorData = doctorDoc.data()!
     }
+  }
+  
+  const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
+  if (availabilityCheck.isBlocked) {
+    const errorMsg = language === "gujarati"
+      ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${availabilityCheck.reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
+      : `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
+    await sendTextMessage(phone, errorMsg)
+    await sendDatePicker(phone, session.doctorId, language)
+    return
   }
 
   // Check if user already has an appointment on this date
@@ -1961,234 +2029,55 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
 
 async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english", showButtons: boolean = true) {
   const db = admin.firestore()
-  const timeSlots = generateTimeSlots()
   
-  // Check which slots are available (filter out already booked slots only if doctor is assigned)
-  const availableSlots: Array<{ id: string; title: string; description?: string }> = []
+  // Use new hourly slot system
+  const hourlySlots = generateHourlyTimeSlots()
+  const availableHourlySlots: Array<{ id: string; title: string; description?: string }> = []
   
-  const isToday = appointmentDate === new Date().toISOString().split("T")[0]
-  const now = new Date()
-  const currentTime = now.getTime()
-  // Add 15 minute buffer - don't allow booking slots less than 15 minutes from now
-  const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes in milliseconds
-
-  for (const slot of timeSlots) {
-    const normalizedTime = normalizeTime(slot)
+  // Check availability for each hourly slot
+  for (const hourlySlot of hourlySlots) {
+    const nextAvailableSlot = await getNextAvailable15MinSlot(
+      db,
+      hourlySlot.hour,
+      appointmentDate,
+      doctorId
+    )
     
-    // Skip past slots for today (with 15 minute buffer)
-    if (isToday) {
-      const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
-      const slotTime = slotDateTime.getTime()
-      
-      // Reject if slot is in the past or less than 15 minutes away
-      if (slotTime <= minimumTime) {
-        console.log("[Meta WhatsApp] Skipping past/near slot:", normalizedTime, "Current time:", now.toISOString())
-        continue
-      }
+    if (nextAvailableSlot) {
+      // This hourly slot has at least one available 15-minute slot
+      availableHourlySlots.push({
+        id: hourlySlot.id,
+        title: hourlySlot.title,
+        description: language === "gujarati" ? "ઉપલબ્ધ" : "Available"
+      })
     }
-    
-    // Only check slot availability if doctor is assigned
-    if (doctorId) {
-      const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
-      const slotDoc = await slotRef.get()
-      
-      if (slotDoc.exists) {
-        continue // Slot already booked for this doctor
-      }
-    }
-    
-    // Slot is available (either no doctor assigned yet, or not booked)
-    availableSlots.push({
-      id: `time_${slot}`,
-      title: slot, // Time in 24-hour format like "09:00", "09:30", etc.
-      description: "Available", // Add description to match doctor picker format
-    })
   }
   
-  if (availableSlots.length === 0) {
+  if (availableHourlySlots.length === 0) {
     const noSlotsMsg = language === "gujarati"
       ? "❌ આ તારીખ માટે કોઈ સમય સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજી તારીખ પસંદ કરો."
       : "❌ No time slots available for this date. Please select another date."
     await sendTextMessage(phone, noSlotsMsg)
-      await sendDatePicker(phone, undefined, language)
+    await sendDatePicker(phone, undefined, language)
     return
   }
 
-  // Show Morning/Afternoon buttons first (default behavior)
-  if (showButtons && availableSlots.length > 0) {
-    // Group slots into time periods
-    const morningSlots = availableSlots.filter(s => {
-      const hour = parseInt(s.title.split(":")[0])
-      return hour >= 9 && hour <= 13 // 9 AM to 1 PM
-    })
-    
-    const afternoonSlots = availableSlots.filter(s => {
-      const hour = parseInt(s.title.split(":")[0])
-      return hour >= 14 && hour <= 17 // 2 PM to 5 PM
-    })
+  // Send hourly slot selection as list message
+  const timeMsg = language === "gujarati"
+    ? "🕰️ *સમય પસંદ કરો*\n\nતમારો પસંદીદા સમય સ્લોટ પસંદ કરો:"
+    : "🕰️ *Choose Time*\n\nSelect your preferred time slot:"
 
-    const quickButtons: Array<{ id: string; title: string }> = []
-    
-    // Add Morning button if slots available
-    if (morningSlots.length > 0) {
-      quickButtons.push({
-        id: "time_quick_morning",
-        title: language === "gujarati" ? "🌅 સવાર 9-1" : "🌅 Morning 9-1",
-      })
-    }
-    
-    // Add Afternoon button if slots available
-    if (afternoonSlots.length > 0 && quickButtons.length < 3) {
-      quickButtons.push({
-        id: "time_quick_afternoon",
-        title: language === "gujarati" ? "☀️ બપોર 2-5" : "☀️ Afternoon 2-5",
-      })
-    }
-    
-    if (quickButtons.length > 0) {
-      const timeMsg = language === "gujarati"
-        ? "🕐 *સમય પસંદ કરો*\n\nઝડપી પસંદગી માટે નીચેના બટનમાંથી પસંદ કરો:\n• સવાર (Morning) - પહેલું ઉપલબ્ધ સ્લોટ આપમેળે પસંદ થશે\n• બપોર (Afternoon) - પહેલું ઉપલબ્ધ સ્લોટ આપમેળે પસંદ થશે"
-        : "🕐 *Select Appointment Time*\n\nChoose from quick options below:\n• Morning - First available slot will be auto-selected\n• Afternoon - First available slot will be auto-selected"
+  const buttonText = language === "gujarati" ? "🕰️ સમય પસંદ કરો" : "🕰️ Choose Time"
+  const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 17) + "..." : buttonText
 
-      console.log("[Meta WhatsApp] Sending time period buttons:", {
-        phone,
-        buttonCount: quickButtons.length,
-        buttons: quickButtons.map(b => b.id),
-        date: appointmentDate,
-      })
-
-      const buttonResponse = await sendMultiButtonMessage(
-        phone,
-        timeMsg,
-        quickButtons,
-        "Harmony Medical Services"
-      )
-
-      if (buttonResponse.success) {
-        console.log("[Meta WhatsApp] ✅ Time period buttons sent successfully")
-        return // Buttons sent successfully
-      } else {
-        console.error("[Meta WhatsApp] ❌ Failed to send time buttons:", {
-          error: buttonResponse.error,
-          errorCode: buttonResponse.errorCode,
-          phone,
-        })
-        // Retry once before falling back to list
-        console.log("[Meta WhatsApp] Retrying time buttons...")
-        const retryResponse = await sendMultiButtonMessage(
-          phone,
-          language === "gujarati" ? "સમય પસંદ કરો:" : "Select Time:",
-          quickButtons,
-          "HMS"
-        )
-        
-        if (retryResponse.success) {
-          console.log("[Meta WhatsApp] ✅ Time buttons sent successfully on retry")
-          return
-        } else {
-          console.error("[Meta WhatsApp] ❌ Retry also failed, falling back to list:", retryResponse.error)
-          // Fallback to list if buttons fail
-        }
-      }
-    }
-  }
-
-  // Format time slots for interactive list message (radio button style)
-  // Sort slots chronologically for better UX
-  const sortedSlots = [...availableSlots].sort((a, b) => {
-    const [hA, mA] = a.title.split(":").map(Number)
-    const [hB, mB] = b.title.split(":").map(Number)
-    return hA * 60 + mA - (hB * 60 + mB)
-  })
-
-  // WhatsApp list messages have a maximum of 10 rows TOTAL across all sections
-  // Distribute slots between morning (9 AM - 1 PM) and afternoon (2 PM - 5 PM) parts
-  // Separate slots into morning and afternoon
-  const morningSlots = sortedSlots.filter(slot => {
-    const hour = parseInt(slot.title.split(":")[0])
-    return hour >= 9 && hour <= 13 // 9 AM to 1 PM
-  })
-  
-  const afternoonSlots = sortedSlots.filter(slot => {
-    const hour = parseInt(slot.title.split(":")[0])
-    return hour >= 14 && hour <= 17 // 2 PM to 5 PM
-  })
-  
-  // Distribute 10 slots between both parts (5 from morning, 5 from afternoon)
-  // If one part has fewer slots, show more from the other part
-  const maxSlots = 10
-  let slotsToShow: typeof sortedSlots = []
-  
-  if (morningSlots.length > 0 && afternoonSlots.length > 0) {
-    // Both parts have slots - distribute evenly
-    const morningCount = Math.min(morningSlots.length, Math.ceil(maxSlots / 2))
-    const afternoonCount = Math.min(afternoonSlots.length, maxSlots - morningCount)
-    
-    slotsToShow = [
-      ...morningSlots.slice(0, morningCount),
-      ...afternoonSlots.slice(0, afternoonCount)
-    ]
-  } else if (morningSlots.length > 0) {
-    // Only morning slots available
-    slotsToShow = morningSlots.slice(0, maxSlots)
-  } else if (afternoonSlots.length > 0) {
-    // Only afternoon slots available
-    slotsToShow = afternoonSlots.slice(0, maxSlots)
-  } else {
-    // Fallback: just take first 10
-    slotsToShow = sortedSlots.slice(0, maxSlots)
-  }
-
-  // Format slots for list message - match doctor picker format exactly
-  // Ensure title is max 24 chars, description max 72 chars
-  const formattedSlots = slotsToShow.map(slot => {
-    const timeStr = slot.title // "09:00" format
-    // Format time for title display (09:00 -> 9:00 AM)
-    const [hours, minutes] = timeStr.split(":").map(Number)
-    const hour12 = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
-    const ampm = hours >= 12 ? "PM" : "AM"
-    const displayTime = `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`
-    
-    // Title: just the time (max 24 chars) - this will show as "9:00 AM" format
-    let title = displayTime
-    if (title.length > 24) {
-      title = title.substring(0, 21) + "..."
-    }
-    
-    // Description: "Available" to match doctor format (has specialization as description)
-    let description = language === "gujarati" ? "ઉપલબ્ધ" : "Available"
-    if (description.length > 72) {
-      description = description.substring(0, 69) + "..."
-    }
-    
-    return {
-      id: slot.id, // Keep "time_09:00" format for backend
-      title: title, // Display format like "9:00 AM"
-      description: description, // Simple description to match doctor format
-    }
-  })
-
-  // WhatsApp list message limit: 10 rows TOTAL (not per section)
-  // Create single section with max 10 rows
   const sections = [{
-    title: language === "gujarati" ? "સમય પસંદ કરો" : "Available Times",
-    rows: formattedSlots,
+    title: language === "gujarati" ? "ઉપલબ્ધ સમય" : "Available Times",
+    rows: availableHourlySlots.slice(0, 10) // WhatsApp limit
   }]
 
-  const timeMsg = language === "gujarati"
-    ? "🕐 *સમય પસંદ કરો*\n\nતમારો પસંદીદા સમય પસંદ કરો:"
-    : "🕐 *Select Time*\n\nChoose your preferred time slot:"
-
-  // Button text max 20 chars - keep it short and simple
-  const buttonText = language === "gujarati" ? "સમય પસંદ કરો" : "Select Time"
-  const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 20) : buttonText
-
-  console.log("[Meta WhatsApp] Sending time slot list message:", {
+  console.log("[Meta WhatsApp] Sending hourly time slots:", {
     phone,
-    slotCount: formattedSlots.length,
-    sectionCount: sections.length,
-    buttonText: truncatedButtonText,
+    slotCount: availableHourlySlots.length,
   })
 
   const listResponse = await sendListMessage(
@@ -2200,50 +2089,25 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   )
 
   if (!listResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send time slot list message:", {
+    console.error("[Meta WhatsApp] Failed to send hourly time slots:", {
       error: listResponse.error,
       errorCode: listResponse.errorCode,
-      phone: phone,
-      slotCount: formattedSlots.length,
     })
     
-    // Retry with simplified format - still limit to 10 rows total
-    console.log("[Meta WhatsApp] Retrying time slot list with simplified format...")
-    const simplifiedSlots = formattedSlots.map(slot => ({
-      id: slot.id,
-      title: slot.title.length > 24 ? slot.title.substring(0, 21) + "..." : slot.title,
-      description: "Available", // Keep description to avoid WhatsApp rejection
-    }))
-
-    // Single section with max 10 rows (WhatsApp limit)
-    const simplifiedSections = [{
-      title: "Times",
-      rows: simplifiedSlots,
-    }]
-
-    const retryResponse = await sendListMessage(
-      phone,
-      language === "gujarati" ? "સમય પસંદ કરો:" : "Select Time:",
-      "Select",
-      simplifiedSections,
-      "HMS"
-    )
-
-    if (!retryResponse.success) {
-      console.error("[Meta WhatsApp] Both attempts failed to send time slot list:", {
-        originalError: listResponse.error,
-        retryError: retryResponse.error,
-      })
-      // Send error message instead of text fallback
-      const errorMsg = language === "gujarati"
-        ? "❌ ક્ષમા કરો, અમે સમય સ્લોટ પસંદ કરવા માટે સૂચિ બતાવી શક્યા નથી. કૃપા કરીને પાછળથી પ્રયાસ કરો અથવા રિસેપ્શનનો સંપર્ક કરો."
-        : "❌ Sorry, we couldn't display the time slot selection. Please try again later or contact reception."
-      await sendTextMessage(phone, errorMsg)
-    } else {
-      console.log("[Meta WhatsApp] ✅ Time slot list sent successfully on retry")
-    }
-  } else {
-    console.log("[Meta WhatsApp] ✅ Time slot list sent successfully")
+    // Fallback to text message
+    let fallbackMsg = language === "gujarati"
+      ? "🕰️ *ઉપલબ્ધ સમય સ્લોટ્સ*\n\n"
+      : "🕰️ *Available Time Slots*\n\n"
+    
+    availableHourlySlots.forEach((slot, index) => {
+      fallbackMsg += `${index + 1}. ${slot.title}\n`
+    })
+    
+    fallbackMsg += language === "gujarati"
+      ? "\nકૃપા કરીને નંબર લખી જવાબ આપો (ઉદાહરણ: 1)."
+      : "\nPlease reply with the number of your preferred slot (e.g., 1)."
+    
+    await sendTextMessage(phone, fallbackMsg)
   }
 }
 
@@ -2257,13 +2121,11 @@ function generateDateOptions(doctorData?: any): Array<{ id: string; title: strin
     date.setDate(today.getDate() + i)
     const dateStr = date.toISOString().split("T")[0]
     
-    // Check if date is blocked (system-wide like Sunday OR doctor-specific)
-    if (doctorData) {
-      const availabilityCheck = checkDateAvailability(dateStr, doctorData)
-      if (availabilityCheck.isBlocked) {
-        // Skip blocked dates - don't include them in the list
-        continue
-      }
+    // Always check if date is blocked (system-wide like Sunday OR doctor-specific)
+    const availabilityCheck = checkDateAvailability(dateStr, doctorData || {})
+    if (availabilityCheck.isBlocked) {
+      // Skip blocked dates - don't include them in the list
+      continue
     }
     
     const dayName = date.toLocaleDateString("en-IN", { weekday: "short" })
@@ -2521,6 +2383,84 @@ async function handleConfirmation(
     await sessionRef.delete()
     return true
   }
+}
+
+// Generate hourly time slots for the new system
+function generateHourlyTimeSlots(): Array<{ id: string; title: string; description?: string; hour: number }> {
+  const hourlySlots = [
+    { hour: 9, title: "09:00 – 10:00", id: "hourly_09" },
+    { hour: 10, title: "10:00 – 11:00", id: "hourly_10" },
+    { hour: 11, title: "11:00 – 12:00", id: "hourly_11" },
+    { hour: 12, title: "12:00 – 13:00", id: "hourly_12" },
+    { hour: 14, title: "14:00 – 15:00", id: "hourly_14" },
+    { hour: 15, title: "15:00 – 16:00", id: "hourly_15" },
+    { hour: 16, title: "16:00 – 17:00", id: "hourly_16" },
+  ]
+  
+  return hourlySlots.map(slot => ({
+    id: slot.id,
+    title: slot.title,
+    description: "Available",
+    hour: slot.hour
+  }))
+}
+
+// Generate 15-minute sub-slots within an hour
+function generate15MinuteSubSlots(hour: number): string[] {
+  const slots: string[] = []
+  const hourStr = hour.toString().padStart(2, "0")
+  
+  // Generate 4 sub-slots: 00, 15, 30, 45
+  for (let minute = 0; minute < 60; minute += 15) {
+    slots.push(`${hourStr}:${minute.toString().padStart(2, "0")}`)
+  }
+  
+  return slots
+}
+
+// Get next available 15-minute slot within an hour
+async function getNextAvailable15MinSlot(
+  db: FirebaseFirestore.Firestore,
+  hour: number,
+  appointmentDate: string,
+  doctorId?: string
+): Promise<string | null> {
+  const subSlots = generate15MinuteSubSlots(hour)
+  
+  // Check each 15-minute slot for availability
+  for (const slot of subSlots) {
+    const normalizedTime = normalizeTime(slot)
+    
+    // Skip past slots for today
+    const isToday = appointmentDate === new Date().toISOString().split("T")[0]
+    if (isToday) {
+      const now = new Date()
+      const currentTime = now.getTime()
+      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+      const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
+      const slotTime = slotDateTime.getTime()
+      
+      if (slotTime <= minimumTime) {
+        continue // Skip past/near slots
+      }
+    }
+    
+    // Check if slot is available (only if doctor is assigned)
+    if (doctorId) {
+      const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+      const slotRef = db.collection("appointmentSlots").doc(slotDocId)
+      const slotDoc = await slotRef.get()
+      
+      if (slotDoc.exists) {
+        continue // Slot already booked
+      }
+    }
+    
+    // Found available slot
+    return slot
+  }
+  
+  return null // No available slots in this hour
 }
 
 function generateTimeSlots(): string[] {

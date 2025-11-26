@@ -139,12 +139,20 @@ export async function PUT(
     if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus
 
     // Update status - if doctor is assigned, always mark as confirmed so it appears in appointment lists
+    // This ensures appointments show up for doctors regardless of billing status
     let shouldSendNotification = false
     if (updateData.doctorId && body.markConfirmed !== false) {
       // Always mark as confirmed when receptionist assigns doctor and saves
+      // This makes the appointment visible in doctor's dashboard regardless of payment status
       updateData.status = "confirmed"
       updateData.whatsappPending = false
       shouldSendNotification = true // Send WhatsApp notification to patient
+    } else if (updateData.doctorId) {
+      // Even if markConfirmed is false, still mark as confirmed when doctor is assigned
+      // Real-world scenario: patients often pay after checkup or through different methods
+      updateData.status = "confirmed"
+      updateData.whatsappPending = false
+      // Don't send notification if markConfirmed is explicitly false
     }
 
     // Update appointment
@@ -158,7 +166,8 @@ export async function PUT(
     if (shouldSendNotification && updateData.doctorId) {
       try {
         const patientPhone = updatedData.patientPhone || appointmentData.patientPhone
-        const patientName = updatedData.patientName || appointmentData.patientName || "Patient"
+        // Use the updated name from the request body first, then fallback to database values
+        const patientName = updateData.patientName || updatedData.patientName || appointmentData.patientName || "Patient"
         
         if (patientPhone) {
           const doctorName = updateData.doctorName || updatedData.doctorName

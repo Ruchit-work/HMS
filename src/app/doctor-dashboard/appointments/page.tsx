@@ -2379,13 +2379,32 @@ export default function DoctorAppointments() {
                           {/* Complete Checkup Button - Show at bottom if AI not shown yet */}
                           {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (
                             <div className="mt-4">
-                                <button
-                                  onClick={() => toggleCompletionForm(appointment.id)}
-                                  disabled={updating[appointment.id] || false}
-                                  className="w-full px-4 py-2.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm"
-                                >
-                                  <span>✓</span> Complete Checkup
-                                </button>
+                              {(() => {
+                                const isToday = new Date(appointment.appointmentDate).toDateString() === new Date().toDateString()
+                                const isFutureAppointment = !isToday && new Date(appointment.appointmentDate) > new Date()
+                                
+                                return (
+                                  <>
+                                    <button
+                                      onClick={() => toggleCompletionForm(appointment.id)}
+                                      disabled={updating[appointment.id] || isFutureAppointment}
+                                      className={`w-full px-4 py-2.5 rounded-md transition-all font-semibold text-sm flex items-center justify-center gap-2 shadow-sm ${
+                                        isFutureAppointment 
+                                          ? 'bg-gray-400 text-white cursor-not-allowed opacity-60' 
+                                          : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                                      }`}
+                                      title={isFutureAppointment ? "Can only complete today's appointments" : ""}
+                                    >
+                                      <span>✓</span> Complete Checkup
+                                    </button>
+                                    {isFutureAppointment && (
+                                      <p className="text-xs text-gray-500 mt-1 text-center">
+                                        ⏰ Can only complete today's appointments
+                                      </p>
+                                    )}
+                                  </>
+                                )
+                              })()}
                             </div>
                           )}
 
