@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
-import { collection, getDocs,where,query,doc, deleteDoc } from 'firebase/firestore'
+import { collection, getDocs,where,query,doc, deleteDoc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -15,7 +15,6 @@ import { calculateAge, formatDate, formatDateTime } from '@/utils/date'
 import SuccessToast from '@/components/ui/SuccessToast'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import Pagination from '@/components/ui/Pagination'
-import RefreshButton from '@/components/ui/RefreshButton'
 // import toast from 'react-hot-toast'
 
 interface Patient {
@@ -135,84 +134,95 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
             setLoading(false)
         }
     }
-    const fetchPatients = useCallback(async () => {
+    const setupPatientsListener = useCallback(() => {
         try{
             setLoading(true)
             const patientsRef = collection(db,'patients')
             const q = query(patientsRef, where('status','in',['active','inactive']))
-            const snapshot = await getDocs(q)
-            const patientsList = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Patient[]
             
-            // Fetch appointments for each patient
-            const appointmentsRef = collection(db, 'appointments')
-            const appointmentsSnapshot = await getDocs(appointmentsRef)
-            const allAppointments = appointmentsSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))
-            
-            // Group appointments by patient ID
-            const appointmentsByPatient = new Map<string, any[]>()
-            allAppointments.forEach((apt: any) => {
-                const patientId = apt.patientId || apt.patientUid || ''
-                if (patientId) {
-                    if (!appointmentsByPatient.has(patientId)) {
-                        appointmentsByPatient.set(patientId, [])
+            const unsubscribe = onSnapshot(q, async (snapshot) => {
+                const patientsList = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data()
+                })) as Patient[]
+                
+                console.log(`[Patient Management] Real-time update: ${patientsList.length} patients loaded`)
+                
+                // Fetch appointments for each patient (keep this as one-time fetch for now)
+                const appointmentsRef = collection(db, 'appointments')
+                const appointmentsSnapshot = await getDocs(appointmentsRef)
+                const allAppointments = appointmentsSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+                
+                // Group appointments by patient ID
+                const appointmentsByPatient = new Map<string, any[]>()
+                allAppointments.forEach((apt: any) => {
+                    const patientId = apt.patientId || apt.patientUid || ''
+                    if (patientId) {
+                        if (!appointmentsByPatient.has(patientId)) {
+                            appointmentsByPatient.set(patientId, [])
+                        }
+                        appointmentsByPatient.get(patientId)!.push(apt)
                     }
-                    appointmentsByPatient.get(patientId)!.push(apt)
-                }
-            })
-            
-            // Add appointment details to each patient
-            const patientsWithAppointments = patientsList.map(patient => {
-                const patientAppointments = [
-                    ...(appointmentsByPatient.get(patient.id) || []),
-                    ...(patient.patientId ? (appointmentsByPatient.get(patient.patientId) || []) : [])
-                ]
-                
-                // Remove duplicates
-                const uniqueAppointments = Array.from(
-                    new Map(patientAppointments.map(apt => [apt.id, apt])).values()
-                )
-                
-                // Filter upcoming appointments (confirmed/pending and date >= today)
-                const today = new Date().toISOString().split('T')[0]
-                const upcoming = uniqueAppointments.filter((apt: any) => {
-                    const isUpcoming = apt.appointmentDate >= today
-                    const isActiveStatus = ['confirmed', 'pending', 'whatsapp_pending'].includes(apt.status)
-                    return isUpcoming && isActiveStatus
                 })
                 
-                // Find next appointment
-                const nextAppointment = upcoming.length > 0
-                    ? upcoming.sort((a: any, b: any) => {
-                        const dateA = new Date(`${a.appointmentDate}T${a.appointmentTime || '00:00'}`).getTime()
-                        const dateB = new Date(`${b.appointmentDate}T${b.appointmentTime || '00:00'}`).getTime()
-                        return dateA - dateB
-                    })[0]
-                    : null
-                
-                return {
-                    ...patient,
-                    appointmentDetails: {
-                        total: uniqueAppointments.length,
-                        upcoming: upcoming.length,
-                        nextAppointment: nextAppointment ? {
-                            date: nextAppointment.appointmentDate,
-                            time: nextAppointment.appointmentTime || '',
-                            doctorName: nextAppointment.doctorName || 'To be assigned',
-                            status: nextAppointment.status,
-                            chiefComplaint: nextAppointment.chiefComplaint || '',
-                            medicalHistory: nextAppointment.medicalHistory || ''
-                        } : undefined
+                // Add appointment details to each patient
+                const patientsWithAppointments = patientsList.map(patient => {
+                    const patientAppointments = [
+                        ...(appointmentsByPatient.get(patient.id) || []),
+                        ...(patient.patientId ? (appointmentsByPatient.get(patient.patientId) || []) : [])
+                    ]
+                    
+                    // Remove duplicates
+                    const uniqueAppointments = Array.from(
+                        new Map(patientAppointments.map(apt => [apt.id, apt])).values()
+                    )
+                    
+                    // Filter upcoming appointments (confirmed/pending and date >= today)
+                    const today = new Date().toISOString().split('T')[0]
+                    const upcoming = uniqueAppointments.filter((apt: any) => {
+                        const isUpcoming = apt.appointmentDate >= today
+                        const isActiveStatus = ['confirmed', 'pending', 'whatsapp_pending'].includes(apt.status)
+                        return isUpcoming && isActiveStatus
+                    })
+                    
+                    // Find next appointment
+                    const nextAppointment = upcoming.length > 0
+                        ? upcoming.sort((a: any, b: any) => {
+                            const dateA = new Date(`${a.appointmentDate}T${a.appointmentTime || '00:00'}`).getTime()
+                            const dateB = new Date(`${b.appointmentDate}T${b.appointmentTime || '00:00'}`).getTime()
+                            return dateA - dateB
+                        })[0]
+                        : null
+                    
+                    return {
+                        ...patient,
+                        appointmentDetails: {
+                            total: uniqueAppointments.length,
+                            upcoming: upcoming.length,
+                            nextAppointment: nextAppointment ? {
+                                date: nextAppointment.appointmentDate,
+                                time: nextAppointment.appointmentTime || '',
+                                doctorName: nextAppointment.doctorName || 'To be assigned',
+                                status: nextAppointment.status,
+                                chiefComplaint: nextAppointment.chiefComplaint || '',
+                                medicalHistory: nextAppointment.medicalHistory || ''
+                            } : undefined
+                        }
                     }
-                }
+                })
+                
+                setPatients(patientsWithAppointments)
+                setLoading(false)
+            }, (error) => {
+                console.error("Error in patients listener:", error)
+                setError(error.message)
+                setLoading(false)
             })
             
-            setPatients(patientsWithAppointments)
+            return unsubscribe
         } catch (error) {
             setError((error as Error).message)
         } finally {
@@ -222,8 +232,16 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
 
     useEffect(() => {   
         if (!user || authLoading) return
-        fetchPatients()
-    }, [fetchPatients, user, authLoading])
+        
+        const unsubscribe = setupPatientsListener()
+        
+        // Cleanup function
+        return () => {
+            if (unsubscribe) {
+                unsubscribe()
+            }
+        }
+    }, [setupPatientsListener, user, authLoading])
 
     const metrics = useMemo(() => {
         const total = patients.length
@@ -368,7 +386,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                 throw new Error(data?.error || 'Failed to create patient')
             }
 
-            await fetchPatients()
+            // Real-time listener will automatically update patients
             setShowAddModal(false)
             setShowOtpModal(false)
             setPendingPatientValues(null)
@@ -537,12 +555,10 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                       Registrations handled by reception team
                     </div>
                   )}
-                  <RefreshButton
-                    onClick={fetchPatients}
-                    loading={loading}
-                    variant="outline"
-                    label="Refresh"
-                  />
+                  <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-2 text-xs font-semibold text-green-700 shadow-inner">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span>Live Updates Active</span>
+                  </div>
                 </div>
               </div>
 

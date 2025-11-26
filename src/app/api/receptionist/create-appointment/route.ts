@@ -15,7 +15,7 @@ const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => 
   const appointmentId = appointmentData.appointmentId || appointmentData.id || "N/A"
   const paymentMethod = appointmentData.paymentMethod || appointmentData.paymentOption || "Cash"
   const paymentAmount = appointmentData.paymentAmount || appointmentData.totalConsultationFee || 0
-  const paymentStatus = appointmentData.paymentStatus || "pending"
+  const paymentStatus = appointmentData.paymentStatus || "paid" // Default to paid for receptionist bookings
   
   const dateDisplay = new Date(appointmentData.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
     weekday: "long",
@@ -143,6 +143,11 @@ export async function POST(request: Request) {
     // Normalize appointment time to 24-hour format (HH:MM) for consistent storage
     const normalizedAppointmentTime = normalizeTime(String(appointmentData.appointmentTime))
     
+    // Get doctor's consultation fee for payment calculations
+    const doctorDoc = await admin.firestore().collection("doctors").doc(String(appointmentData.doctorId)).get()
+    const doctorData = doctorDoc.exists ? doctorDoc.data() : {}
+    const consultationFee = doctorData?.consultationFee || appointmentData.paymentAmount || 0
+    
     const docData: any = {
       patientId: String(appointmentData.patientId),
       patientName: String(appointmentData.patientName),
@@ -154,7 +159,17 @@ export async function POST(request: Request) {
       appointmentDate: String(appointmentData.appointmentDate),
       appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
       status: safeValue(appointmentData.status, "confirmed"),
-      paymentAmount: typeof appointmentData.paymentAmount === 'number' ? appointmentData.paymentAmount : 0,
+      
+      // Payment fields - properly set for completed payment
+      paymentAmount: typeof appointmentData.paymentAmount === 'number' ? appointmentData.paymentAmount : consultationFee,
+      totalConsultationFee: consultationFee,
+      paymentMethod: safeValue(appointmentData.paymentMethod, "cash"),
+      paymentType: safeValue(appointmentData.paymentType, "full"),
+      paymentStatus: "paid", // Mark as paid since receptionist completed payment
+      remainingAmount: 0, // No remaining amount since payment is complete
+      paidAt: nowIso, // Set payment timestamp
+      transactionId: `RCPT${Date.now()}`, // Generate transaction ID
+      
       createdAt: safeValue(appointmentData.createdAt, nowIso),
       updatedAt: nowIso,
       createdBy: safeValue(appointmentData.createdBy, "receptionist")

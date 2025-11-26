@@ -1,10 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { collection, getDocs, query, where } from "firebase/firestore"
+import { collection, getDocs, query, where, onSnapshot } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { Appointment } from "@/types/patient"
-import RefreshButton from "@/components/ui/RefreshButton"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
 
@@ -81,44 +80,47 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
     [onNotification]
   )
 
-  const fetchBookings = useCallback(async () => {
+  const setupRealtimeListener = useCallback(() => {
     try {
       setLoading(true)
       setError(null)
 
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to access WhatsApp bookings")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch("/api/receptionist/whatsapp-bookings", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      // Set up real-time listener for WhatsApp pending appointments
+      const appointmentsRef = collection(db, 'appointments')
+      const whatsappQuery = query(
+        appointmentsRef,
+        where('whatsappPending', '==', true)
+      )
+      
+      const unsubscribe = onSnapshot(whatsappQuery, (snapshot) => {
+        console.log(`[WhatsApp Bookings] Real-time update: ${snapshot.docs.length} pending bookings`)
+        
+        const bookingsList = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Appointment[]
+        
+        setBookings(bookingsList)
+        onPendingCountChange?.(bookingsList.length)
+        setLoading(false)
+      }, (error) => {
+        console.error('Error in WhatsApp bookings listener:', error)
+        setError(error.message)
+        setBookings([])
+        onPendingCountChange?.(0)
+        setLoading(false)
       })
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        const errorMessage = errorData?.error || errorData?.details || `HTTP ${res.status}: Failed to load WhatsApp bookings`
-        console.error("[WhatsAppBookingsPanel] API error:", res.status, errorData)
-        throw new Error(errorMessage)
-      }
-
-      const data = await res.json()
-      const appointments = Array.isArray(data?.appointments) ? data.appointments : []
-      setBookings(appointments)
-      onPendingCountChange?.(appointments.length)
+      
+      return unsubscribe
     } catch (error: any) {
-      console.error("[WhatsAppBookingsPanel] Failed to load WhatsApp bookings:", error)
-      setError(error?.message || "Failed to load WhatsApp bookings. Please check the console for details.")
+      console.error("Error setting up WhatsApp bookings listener:", error)
+      setError(error?.message || "Failed to set up real-time updates")
+      setBookings([])
       onPendingCountChange?.(0)
-    } finally {
       setLoading(false)
+      return () => {}
     }
-  }, [])
+  }, [onPendingCountChange])
 
   const fetchDoctors = useCallback(async () => {
     try {
@@ -138,9 +140,21 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
   }, [])
 
   useEffect(() => {
-    fetchBookings()
+    let unsubscribeBookings: (() => void) | null = null
+
+    // Set up real-time listener for bookings
+    unsubscribeBookings = setupRealtimeListener()
+    
+    // Fetch doctors (one-time)
     fetchDoctors()
-  }, [fetchBookings, fetchDoctors])
+
+    // Cleanup function
+    return () => {
+      if (unsubscribeBookings) {
+        unsubscribeBookings()
+      }
+    }
+  }, [setupRealtimeListener, fetchDoctors])
 
   const handleOpenEditModal = (booking: Appointment) => {
     setSelectedBooking(booking)
@@ -349,7 +363,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
 
       notify({ type: "success", message: "Booking updated successfully!" })
       handleCloseEditModal()
-      fetchBookings()
+      // Real-time listener will automatically update the list
     } catch (error: any) {
       console.error("Failed to update booking", error)
       notify({ type: "error", message: error?.message || "Failed to update booking" })
@@ -400,7 +414,10 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
       {/* Actions */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-gray-900">WhatsApp Bookings</h2>
-        <RefreshButton onClick={fetchBookings} loading={loading} />
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs font-semibold text-green-700">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span>Live Updates</span>
+        </div>
       </div>
 
       {error && (

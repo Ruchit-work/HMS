@@ -104,37 +104,45 @@ export async function PUT(
 
         // Update slot in transaction - ensure no duplicates and proper cleanup
         await firestore.runTransaction(async (transaction) => {
-          // Step 1: Clean up any existing slots for this appointment to prevent duplicates
+          // STEP 1: DO ALL READS FIRST (Firestore requirement)
           
-          // Remove PENDING slot if it exists for this appointment
+          // Read old PENDING slot
           const oldPendingSlotId = `PENDING_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
           const oldPendingSlotRef = firestore.collection("appointmentSlots").doc(oldPendingSlotId)
           const oldPendingSlotSnap = await transaction.get(oldPendingSlotRef)
           
+          // Read old doctor slot (if doctor is being changed)
+          let oldDoctorSlotRef = null
+          let oldDoctorSlotSnap = null
+          if (appointmentData.doctorId && appointmentData.doctorId !== body.doctorId) {
+            const oldDoctorSlotId = `${appointmentData.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+            oldDoctorSlotRef = firestore.collection("appointmentSlots").doc(oldDoctorSlotId)
+            oldDoctorSlotSnap = await transaction.get(oldDoctorSlotRef)
+          }
+          
+          // Read new slot to check availability
+          const newSlotSnap = await transaction.get(newSlotRef)
+          
+          // STEP 2: VALIDATE READS
+          if (newSlotSnap.exists && newSlotSnap.data()?.appointmentId !== appointmentId) {
+            throw new Error("SLOT_ALREADY_BOOKED")
+          }
+          
+          // STEP 3: DO ALL WRITES AFTER READS
+          
+          // Delete old PENDING slot if it belongs to this appointment
           if (oldPendingSlotSnap.exists && oldPendingSlotSnap.data()?.appointmentId === appointmentId) {
             console.log(`[Receptionist Update] Removing old PENDING slot: ${oldPendingSlotId}`)
             transaction.delete(oldPendingSlotRef)
           }
           
-          // Remove any existing doctor-specific slot for this appointment (in case doctor was changed)
-          if (appointmentData.doctorId && appointmentData.doctorId !== body.doctorId) {
-            const oldDoctorSlotId = `${appointmentData.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-            const oldDoctorSlotRef = firestore.collection("appointmentSlots").doc(oldDoctorSlotId)
-            const oldDoctorSlotSnap = await transaction.get(oldDoctorSlotRef)
-            
-            if (oldDoctorSlotSnap.exists && oldDoctorSlotSnap.data()?.appointmentId === appointmentId) {
-              console.log(`[Receptionist Update] Removing old doctor slot: ${oldDoctorSlotId}`)
-              transaction.delete(oldDoctorSlotRef)
-            }
+          // Delete old doctor slot if it belongs to this appointment
+          if (oldDoctorSlotRef && oldDoctorSlotSnap && oldDoctorSlotSnap.exists && oldDoctorSlotSnap.data()?.appointmentId === appointmentId) {
+            console.log(`[Receptionist Update] Removing old doctor slot: ${oldDoctorSlotRef.id}`)
+            transaction.delete(oldDoctorSlotRef)
           }
           
-          // Step 2: Check if the new slot is available (unless it's already owned by this appointment)
-          const newSlotSnap = await transaction.get(newSlotRef)
-          if (newSlotSnap.exists && newSlotSnap.data()?.appointmentId !== appointmentId) {
-            throw new Error("SLOT_ALREADY_BOOKED")
-          }
-          
-          // Step 3: Create the new doctor-specific slot
+          // Create the new doctor-specific slot
           console.log(`[Receptionist Update] Creating new doctor slot: ${newSlotDocId}`)
           transaction.set(newSlotRef, {
             appointmentId,
@@ -186,6 +194,49 @@ export async function PUT(
     // Update appointment (this modifies the existing appointment, does not create a new one)
     console.log(`[Receptionist Update] Updating appointment ${appointmentId} with doctor ${body.doctorId}`)
     await appointmentRef.update(updateData)
+
+    // Also update the patient record if patient details were changed
+    if (body.patientName !== undefined || body.patientPhone !== undefined || body.patientEmail !== undefined) {
+      try {
+        const patientId = appointmentData.patientUid || appointmentData.patientId
+        if (patientId) {
+          const patientRef = firestore.collection("patients").doc(patientId)
+          const patientDoc = await patientRef.get()
+          
+          if (patientDoc.exists) {
+            const patientUpdateData: any = {}
+            
+            // Update patient name if changed
+            if (body.patientName !== undefined && body.patientName.trim() !== "") {
+              // Split name into firstName and lastName
+              const nameParts = body.patientName.trim().split(" ")
+              patientUpdateData.firstName = nameParts[0] || ""
+              patientUpdateData.lastName = nameParts.slice(1).join(" ") || ""
+            }
+            
+            // Update patient phone if changed
+            if (body.patientPhone !== undefined && body.patientPhone.trim() !== "") {
+              patientUpdateData.phone = body.patientPhone.trim()
+              patientUpdateData.phoneNumber = body.patientPhone.trim() // Also update phoneNumber field for compatibility
+            }
+            
+            // Update patient email if changed
+            if (body.patientEmail !== undefined && body.patientEmail.trim() !== "") {
+              patientUpdateData.email = body.patientEmail.trim()
+            }
+            
+            if (Object.keys(patientUpdateData).length > 0) {
+              patientUpdateData.updatedAt = new Date().toISOString()
+              await patientRef.update(patientUpdateData)
+              console.log(`[Receptionist Update] Updated patient record for ${patientId}:`, patientUpdateData)
+            }
+          }
+        }
+      } catch (patientUpdateError) {
+        console.error("[Receptionist Update] Error updating patient record:", patientUpdateError)
+        // Don't fail the appointment update if patient update fails
+      }
+    }
 
     // Fetch updated appointment
     const updatedDoc = await appointmentRef.get()

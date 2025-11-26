@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where } from "firebase/firestore"
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
+import NotificationBadge from "@/components/ui/NotificationBadge"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
@@ -81,14 +82,16 @@ export default function AdminDashboard() {
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "reports">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing">("overview")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
   const [loadingRefunds, setLoadingRefunds] = useState(false)
+  const [newAppointmentsCount, setNewAppointmentsCount] = useState(0)
+  const [newPatientsCount, setNewPatientsCount] = useState(0)
+  const [pendingBillingCount, setPendingBillingCount] = useState(0)
   const [trendView, setTrendView] = useState<"weekly" | "monthly" | "yearly">("weekly")
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
@@ -309,7 +312,7 @@ export default function AdminDashboard() {
 
       setRecentAppointments(recent)
 
-      // Load pending doctor schedule requests
+      // Load pending doctor schedule requests (initial load)
       setLoadingRequests(true)
       const reqQuery = query(
         collection(db, 'doctor_schedule_requests'),
@@ -331,16 +334,128 @@ export default function AdminDashboard() {
       setPendingRequests(reqs)
       setLoadingRequests(false)
 
-      // Load pending refund requests
-      setLoadingRefunds(true)
-      const refundQ = query(
-        collection(db, 'refund_requests'),
-        where('status', '==', 'pending'),
-        limit(50)
-      )
-      const refundSnap = await getDocs(refundQ)
-      const refunds = refundSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[]
-      // enrich with patient and doctor names
+
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error)
+      setNotification({ 
+        type: "error", 
+        message: "Failed to load dashboard data" 
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (user) {
+      fetchDashboardData()
+      setupRealtimeBadgeListeners()
+    }
+  }, [user])
+
+  // Setup real-time listeners for badge counts
+  const setupRealtimeBadgeListeners = () => {
+    // Listen for new appointments (today's appointments)
+    const today = new Date()
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    const todayEnd = new Date(todayStart)
+    todayEnd.setDate(todayEnd.getDate() + 1)
+
+    const appointmentsQuery = query(
+      collection(db, "appointments"),
+      where("appointmentDate", ">=", todayStart.toISOString().split('T')[0]),
+      where("appointmentDate", "<", todayEnd.toISOString().split('T')[0])
+    )
+
+    const unsubscribeAppointments = onSnapshot(appointmentsQuery, (snapshot) => {
+      const todayAppointments = snapshot.docs.filter(doc => {
+        const data = doc.data()
+        return data.status === "confirmed" || data.status === "whatsapp_pending"
+      })
+      setNewAppointmentsCount(todayAppointments.length)
+    })
+
+    // Listen for new patients (created in last 7 days)
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    const patientsQuery = query(
+      collection(db, "patients"),
+      where("createdAt", ">=", sevenDaysAgo)
+    )
+
+    const unsubscribePatients = onSnapshot(patientsQuery, (snapshot) => {
+      setNewPatientsCount(snapshot.size)
+    })
+
+    // Listen for pending billing (unpaid appointments)
+    const billingQuery = query(
+      collection(db, "appointments"),
+      where("status", "==", "completed"),
+      where("paymentStatus", "in", ["pending", "unpaid"])
+    )
+
+    const unsubscribeBilling = onSnapshot(billingQuery, (snapshot) => {
+      setPendingBillingCount(snapshot.size)
+    })
+
+    // Return cleanup function
+    return () => {
+      unsubscribeAppointments()
+      unsubscribePatients()
+      unsubscribeBilling()
+    }
+  }
+
+  // Real-time listener for doctor schedule requests
+  useEffect(() => {
+    if (!user) return
+
+    const reqQuery = query(
+      collection(db, 'doctor_schedule_requests'),
+      where('status', '==', 'pending'),
+      limit(20)
+    )
+    
+    const unsubscribeRequests = onSnapshot(reqQuery, async (snapshot) => {
+      const reqsRaw = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[]
+      
+      // Enrich with doctor name for easier verification
+      const reqs = await Promise.all(reqsRaw.map(async (r) => {
+        try {
+          const dref = await getDoc(doc(db, 'doctors', String(r.doctorId)))
+          const ddata = dref.exists() ? dref.data() as any : null
+          return { ...r, doctorName: ddata ? `${ddata.firstName || ''} ${ddata.lastName || ''}`.trim() : r.doctorId }
+        } catch {
+          return { ...r, doctorName: r.doctorId }
+        }
+      }))
+      
+      setPendingRequests(reqs)
+    }, (error) => {
+      console.error("Error listening to doctor schedule requests:", error)
+    })
+
+    // Cleanup function
+    return () => {
+      unsubscribeRequests()
+    }
+  }, [user])
+
+  // Real-time listener for refund requests
+  useEffect(() => {
+    if (!user) return
+
+    const refundQuery = query(
+      collection(db, 'refund_requests'),
+      where('status', '==', 'pending'),
+      limit(50)
+    )
+    
+    const unsubscribeRefunds = onSnapshot(refundQuery, async (snapshot) => {
+      const refunds = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[]
+      
+      // Enrich with patient and doctor names
       const refundsEnriched = await Promise.all(refunds.map(async (r) => {
         let patientName = r.patientId
         let doctorName = r.doctorId
@@ -360,23 +475,18 @@ export default function AdminDashboard() {
         } catch {}
         return { ...r, patientName, doctorName }
       }))
+      
       setPendingRefunds(refundsEnriched)
-      setLoadingRefunds(false)
+    }, (error) => {
+      console.error("Error listening to refund requests:", error)
+    })
 
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error)
-      setNotification({ 
-        type: "error", 
-        message: "Failed to load dashboard data" 
-      })
-    } finally {
-      setLoading(false)
+    // Cleanup function
+    return () => {
+      unsubscribeRefunds()
     }
-  }
-
-  useEffect(() => {
-    fetchDashboardData()
   }, [user])
+
 
   const handleRefresh = async (e?: React.MouseEvent) => {
     e?.preventDefault()
@@ -463,14 +573,17 @@ export default function AdminDashboard() {
     try {
       setLogoutLoading(true)
       await signOut(auth)
-      router.replace("/auth/login?role=admin")
+      // Clear any cached data
+      localStorage.clear()
+      sessionStorage.clear()
+      // Force redirect after sign out
+      window.location.href = "/auth/login?role=admin"
     } catch (error) {
       console.error("Logout error:", error)
       setNotification({ 
         type: "error", 
         message: "Failed to logout. Please try again." 
       })
-    } finally {
       setLogoutLoading(false)
       setLogoutConfirmOpen(false)
     }
@@ -486,278 +599,295 @@ export default function AdminDashboard() {
 
   return (
     <AdminProtected>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Mobile Menu Button - Only show when sidebar is closed */}
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-[60] lg:hidden bg-white p-2.5 rounded-lg shadow-md border border-gray-200 hover:shadow-lg hover:bg-gray-50 transition-all duration-200"
+          className="fixed top-4 left-4 z-[60] lg:hidden bg-white/95 backdrop-blur-xl p-2.5 rounded-lg shadow-lg border border-slate-200/50 hover:shadow-xl hover:bg-white transition-all duration-200"
         >
-          <div className="flex flex-col items-center justify-center w-5 h-5">
-            <span className="block w-4 h-0.5 bg-gray-600"></span>
-            <span className="block w-4 h-0.5 bg-gray-600 mt-1"></span>
-            <span className="block w-4 h-0.5 bg-gray-600 mt-1"></span>
-          </div>
+          <svg className="w-6 h-6 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
         </button>
       )}
 
-      {/* Mobile Backdrop */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {sidebarOpen && (<div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />)}
 
-      {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:translate-x-0`}>
-        <div className="flex items-center justify-center h-16 px-4 bg-gradient-to-r from-purple-600 to-indigo-600">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-purple-600 font-bold text-lg">H</span>
+      {/* Professional Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-slate-200/50 transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
+        {/* Header */}
+        <div className="relative h-20 px-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-between overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/90 to-purple-600/90"></div>
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full"></div>
+          <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/5 rounded-full"></div>
+          
+          <div className="relative flex items-center gap-4">
+            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
             </div>
-            <h1 className="text-white text-xl font-bold">HMS Admin</h1>
+            <div>
+              <h1 className="text-white text-lg font-bold">HMS Admin</h1>
+              <p className="text-white/80 text-xs font-medium">Administrative Portal</p>
+            </div>
           </div>
-          {/* Mobile Close Button */}
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden ml-auto text-white hover:text-purple-200 transition-colors p-1"
+          
+          <button 
+            onClick={() => setSidebarOpen(false)} 
+            className="lg:hidden relative p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        
-        <nav className="mt-8 px-4">
-          <div className="space-y-2">
-            <button
-              onClick={() => {
-                setActiveTab("overview")
-                setSidebarOpen(false)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === "overview" 
-                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
-              </svg>
-              Dashboard Overview
-            </button>
+
+        {/* Navigation Menu */}
+        <nav className="flex-1 flex flex-col mt-4 px-3">
+          <div className="flex-1 space-y-1">
+            {/* Dashboard Overview */}
+            <div className="relative">
+              <button 
+                onClick={() => { setActiveTab("overview"); setSidebarOpen(false) }} 
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                  activeTab === "overview" 
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <div className={`p-1.5 rounded-md ${activeTab === "overview" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                  </svg>
+                </div>
+                <span className="font-medium text-sm">Dashboard Overview</span>
+              </button>
+              <NotificationBadge 
+                count={pendingRequests.length + pendingRefunds.length}
+                position="top-right"
+              />
+            </div>
             
-            <button
-              onClick={() => {
-                setActiveTab("patients")
-                setSidebarOpen(false)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === "patients" 
-                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              Patients
-            </button>
+            {/* Patients */}
+            <div className="relative">
+              <button 
+                onClick={() => { setActiveTab("patients"); setSidebarOpen(false) }} 
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                  activeTab === "patients" 
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <div className={`p-1.5 rounded-md ${activeTab === "patients" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <span className="font-medium text-sm">Patients</span>
+              </button>
+              <NotificationBadge 
+                count={newPatientsCount} 
+                position="top-right" 
+                size="sm" 
+                color="blue" 
+                animate 
+              />
+            </div>
             
-            <button
-              onClick={() => {
-                setActiveTab("doctors")
-                setSidebarOpen(false)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            {/* Doctors */}
+            <button 
+              onClick={() => { setActiveTab("doctors"); setSidebarOpen(false) }} 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                 activeTab === "doctors" 
-                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
-                  : "text-gray-600 hover:bg-gray-100"
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Doctors
+              <div className={`p-1.5 rounded-md ${activeTab === "doctors" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <span className="font-medium text-sm">Doctors</span>
             </button>
 
-            <button
-              onClick={() => {
-                setActiveTab("campaigns")
-                setSidebarOpen(false)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            {/* Campaigns */}
+            <button 
+              onClick={() => { setActiveTab("campaigns"); setSidebarOpen(false) }} 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                 activeTab === "campaigns" 
-                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
-                  : "text-gray-600 hover:bg-gray-100"
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
-              </svg>
-              Campaigns
+              <div className={`p-1.5 rounded-md ${activeTab === "campaigns" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
+                </svg>
+              </div>
+              <span className="font-medium text-sm">Campaigns</span>
             </button>
             
-            <button
-              onClick={() => {
-                setActiveTab("appointments")
-                setSidebarOpen(false)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === "appointments" 
-                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Appointments
-            </button>
+            {/* Appointments */}
+            <div className="relative">
+              <button 
+                onClick={() => { setActiveTab("appointments"); setSidebarOpen(false) }} 
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                  activeTab === "appointments" 
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <div className={`p-1.5 rounded-md ${activeTab === "appointments" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <span className="font-medium text-sm">Appointments</span>
+              </button>
+              <NotificationBadge 
+                count={newAppointmentsCount} 
+                position="top-right" 
+                size="sm" 
+                color="orange" 
+                animate 
+              />
+            </div>
             
-            <button
-              onClick={() => {
-                setActiveTab("billing")
-                setSidebarOpen(false)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === "billing" 
-                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Billing & Payments
-            </button>
+            {/* Billing */}
+            <div className="relative">
+              <button 
+                onClick={() => { setActiveTab("billing"); setSidebarOpen(false) }} 
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                  activeTab === "billing" 
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <div className={`p-1.5 rounded-md ${activeTab === "billing" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <span className="font-medium text-sm">Billing & Payments</span>
+              </button>
+              <NotificationBadge 
+                count={pendingBillingCount} 
+                position="top-right" 
+                size="sm" 
+                color="red" 
+                animate 
+              />
+            </div>
             
-            <button
-              onClick={() => {
-                setActiveTab("reports")
-                setSidebarOpen(false)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                activeTab === "reports" 
-                  ? "bg-purple-100 text-purple-700 border-r-2 border-purple-600" 
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Reports & Analytics
-            </button>
+          </div>
+
+          {/* Logout Section - Fixed at Bottom */}
+          <div className="px-3 pb-3 mt-2">
+            <div className="border-t border-slate-200 pt-2">
+              {/* User Info */}
+              <div className="flex items-center gap-2 px-1 py-1 mb-2">
+                <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-md flex items-center justify-center shadow-sm">
+                  <span className="text-white font-bold text-xs">
+                    {userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-900 truncate">{userData.firstName || "Admin"}</p>
+                  <p className="text-xs text-slate-500">Administrator</p>
+                </div>
+              </div>
+              
+              {/* Logout Button */}
+              <button 
+                onClick={() => setLogoutConfirmOpen(true)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-200 text-red-600 hover:bg-red-50 border border-red-200/50 hover:border-red-300"
+              >
+                <div className="p-1 bg-red-100 rounded-md">
+                  <svg className="w-3 h-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </div>
+                <span className="font-medium text-xs">Logout</span>
+              </button>
+            </div>
           </div>
         </nav>
+
       </div>
 
       {/* Main Content */}
-      <div className="lg:ml-64">
-        {/* Top Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 py-4">
+      <div className="lg:ml-72">
+        {/* Professional Header */}
+        <header className="bg-white/80 backdrop-blur-xl shadow-xl border-b border-slate-200/50">
+          <div className={`py-6 px-6 sm:px-8 lg:px-6 ${!sidebarOpen ? 'pl-16 sm:pl-20 lg:pl-6' : ''}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex-1 text-center sm:text-left">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 capitalize">
+                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent capitalize">
                   {activeTab === "overview" ? "Dashboard Overview" : 
                    activeTab === "patients" ? "Patient Management" :
                    activeTab === "doctors" ? "Doctor Management" :
                    activeTab === "campaigns" ? "Campaigns" :
                    activeTab === "appointments" ? "Appointment Management" :
-                   activeTab === "billing" ? "Billing & Payments" :
-                   "Reports & Analytics"}
+                   "Billing & Payments"}
                 </h1>
-                <p className="text-sm sm:text-base text-gray-600 mt-1">
+                <p className="text-sm sm:text-base text-slate-600 mt-1">
                   {activeTab === "overview" ? "Hospital management system overview" :
                    activeTab === "patients" ? "Manage patient records and information" :
                    activeTab === "doctors" ? "Manage doctor profiles and schedules" :
                    activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
                    activeTab === "appointments" ? "Monitor and manage all appointments" :
-                   activeTab === "billing" ? "View billing records, payments, and revenue tracking" :
-                   "View detailed reports and analytics"}
+                   "View billing records, payments, and revenue tracking"}
                 </p>
               </div>
               
-              <div className="flex items-center gap-2 sm:gap-4">
-                <button
-                  type="button"
-                  onClick={handleRefresh}
-                  className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span className="hidden sm:inline">Refresh</span>
-                </button>
-                
-                <div className="relative">
-                  <button
-                    onClick={() => setShowUserDropdown(!showUserDropdown)}
-                    className="flex items-center gap-2 sm:gap-3 hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors"
-                  >
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <span className="text-purple-600 font-semibold text-sm">
-                        {userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="hidden sm:block text-left">
-                      <p className="text-sm font-medium text-gray-900">
-                        {userData.firstName || "Admin"}
-                      </p>
-                      <p className="text-xs text-gray-500">Administrator</p>
-                    </div>
-                    <svg 
-                      className={`w-4 h-4 text-gray-500 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  
-                  {/* User Dropdown Menu */}
-                  {showUserDropdown && (
-                    <>
-                      <div 
-                        className="fixed inset-0 z-10" 
-                        onClick={() => setShowUserDropdown(false)}
-                      />
-                      <div className="absolute  mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                        <div className="px-4 py-2 border-b border-gray-200">
-                          <p className="text-sm font-medium text-gray-900">
-                            {userData.firstName || "Admin"}
-                          </p>
-                          <p className="text-xs text-gray-500">{userData.email}</p>
-                        </div>
-                        <button
-                          onClick={() => setLogoutConfirmOpen(true)}
-                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-100/70 active:bg-red-100 rounded-md transition-colors"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                          </svg>
-                          <span>Logout</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </header>
 
         {/* Content Area */}
-        <main className="p-4 sm:p-6">
+        <main className="p-6">
           {activeTab === "overview" && (
             <div className="space-y-6">
+              {/* Pending Requests Notification */}
+              {(pendingRequests.length > 0 || pendingRefunds.length > 0) && (
+                <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-orange-900 mb-1">Pending Requests Require Attention</h4>
+                      <div className="text-sm text-orange-800 space-y-1">
+                        {pendingRequests.length > 0 && (
+                          <p>• <span className="font-medium">{pendingRequests.length}</span> doctor leave request{pendingRequests.length !== 1 ? 's' : ''} awaiting approval</p>
+                        )}
+                        {pendingRefunds.length > 0 && (
+                          <p>• <span className="font-medium">{pendingRefunds.length}</span> refund request{pendingRefunds.length !== 1 ? 's' : ''} awaiting approval</p>
+                        )}
+                      </div>
+                      <p className="text-xs text-orange-700 mt-2">Scroll down to review and approve/reject these requests.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <NotificationBadge 
+                          count={pendingRequests.length + pendingRefunds.length}
+                          size="md"
+                          position="top-right"
+                          className="relative top-0 right-0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Stats Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
@@ -1142,17 +1272,6 @@ export default function AdminDashboard() {
                         <span className="font-medium text-green-800 text-sm sm:text-base">Manage Doctors</span>
                       </div>
                     </button>
-                    <button className="w-full text-left p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors" onClick={() => {
-                      setActiveTab("reports")
-                      setSidebarOpen(false)
-                    }}>
-                      <div className="flex items-center gap-3">
-                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                        <span className="font-medium text-purple-800 text-sm sm:text-base">Generate Reports</span>
-                      </div>
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1305,7 +1424,7 @@ export default function AdminDashboard() {
                     >
                       <span>{showRecentAppointments ? 'Hide' : 'Show'}</span>
                       <svg 
-                        className={`w-4 h-4 transition-transform duration-200 ${showRecentAppointments ? 'rotate-180' : ''}`} 
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${showRecentAppointments ? 'rotate-180' : ''}`} 
                         fill="none" 
                         stroke="currentColor" 
                         viewBox="0 0 24 24"
@@ -1375,45 +1494,35 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "patients" && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Patient Management</h2> */}
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
               <PatientManagement />
             </div>
           )}
 
           {activeTab === "doctors" && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Doctor Management</h2> */}
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
               <DoctorManagement />
             </div>
           )}
 
           {activeTab === "campaigns" && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Campaigns</h2> */}
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
               <CampaignManagement />
             </div>
           )}
 
           {activeTab === "appointments" && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              {/* <h2 className="text-xl font-semibold text-gray-900 mb-4">Appointment Management</h2> */}
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
               <AppoinmentManagement />
             </div>
           )}
 
           {activeTab === "billing" && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
               <BillingManagement />
             </div>
           )}
 
-          {activeTab === "reports" && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Reports & Analytics</h2>
-              <p className="text-gray-600">Reports and analytics features will be implemented here.</p>
-            </div>
-          )}
         </main>
       </div>
       {/* Notification Toast */}

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import Notification from "@/components/ui/Notification"
 import { generatePrescriptionPDF } from "@/utils/prescriptionPDF"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
+import NotificationBadge from "@/components/ui/NotificationBadge"
 import { calculateAge } from "@/utils/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
@@ -192,28 +193,58 @@ export default function DoctorAppointments() {
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
 
-  const fetchData = async () => {
-    if (!user) return
+  const setupRealtimeListeners = async () => {
+    if (!user) return () => {}
 
-      const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
-      if (doctorDoc.exists()) {
-        const data = doctorDoc.data() as UserData
-        setUserData(data)
-      }
-
-      // Get appointments for the doctor
-      const appointmentsRef = collection(db, "appointments")
-      const q = query(appointmentsRef, where("doctorId", "==", user.uid))
-      const appointmentsSnapshot = await getDocs(q)
-      const appointmentsList = appointmentsSnapshot.docs.map((doc) => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as AppointmentType))
-      setAppointments(appointmentsList)
+    // Get doctor data (one-time fetch)
+    const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
+    if (doctorDoc.exists()) {
+      const data = doctorDoc.data() as UserData
+      setUserData(data)
     }
 
+    // Set up real-time appointments listener
+    const appointmentsRef = collection(db, "appointments")
+    const q = query(appointmentsRef, where("doctorId", "==", user.uid))
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const appointmentsList = snapshot.docs
+        .map((doc) => ({ 
+          id: doc.id, 
+          ...doc.data() 
+        } as AppointmentType))
+        // Filter out WhatsApp pending appointments - they should only appear in WhatsApp Bookings Panel
+        .filter((appointment) => {
+          const appt = appointment as any
+          return appt.status !== "whatsapp_pending" && !appt.whatsappPending
+        })
+      
+      setAppointments(appointmentsList)
+      console.log(`[Doctor Appointments] Real-time update: ${appointmentsList.length} appointments loaded`)
+    }, (error) => {
+      console.error("Error in appointments listener:", error)
+    })
+
+    return unsubscribe
+  }
+
   useEffect(() => {
-    fetchData()
+    if (!user) return
+
+    let unsubscribe: (() => void) | null = null
+
+    const initializeRealtimeData = async () => {
+      unsubscribe = await setupRealtimeListeners()
+    }
+
+    initializeRealtimeData()
+
+    // Cleanup function to unsubscribe from listeners
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
   }, [user])
 
   // Auto-expand appointment if redirected from dashboard
@@ -239,8 +270,8 @@ export default function DoctorAppointments() {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await fetchData()
-      setNotification({ type: "success", message: "Appointments refreshed successfully!" })
+      // Real-time listeners will automatically update, so just show success message
+      setNotification({ type: "success", message: "Appointments are automatically updated in real-time!" })
     } catch (error) {
       console.error("Error refreshing appointments:", error)
       setNotification({ type: "error", message: "Failed to refresh appointments" })
@@ -1404,11 +1435,12 @@ export default function DoctorAppointments() {
                 >
                   <div className="relative">
                     <span className="text-base">Today</span>
-                    {todayAppointments.length > 0 && (
-                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
-                        {todayAppointments.length > 99 ? '99+' : todayAppointments.length}
-                      </span>
-                    )}
+                    <NotificationBadge 
+                      count={todayAppointments.length}
+                      position="top-right"
+                      color="orange"
+                      size="sm"
+                    />
                   </div>
                   {activeTab === "today" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
@@ -1425,11 +1457,12 @@ export default function DoctorAppointments() {
                 >
                   <div className="relative">
                     <span className="text-base">Tomorrow</span>
-                    {tomorrowAppointments.length > 0 && (
-                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
-                        {tomorrowAppointments.length > 99 ? '99+' : tomorrowAppointments.length}
-                      </span>
-                    )}
+                    <NotificationBadge 
+                      count={tomorrowAppointments.length}
+                      position="top-right"
+                      color="orange"
+                      size="sm"
+                    />
                   </div>
                   {activeTab === "tomorrow" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
@@ -1446,11 +1479,12 @@ export default function DoctorAppointments() {
                 >
                   <div className="relative">
                     <span className="text-base">This Week</span>
-                    {thisWeekAppointments.length > 0 && (
-                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
-                        {thisWeekAppointments.length > 99 ? '99+' : thisWeekAppointments.length}
-                      </span>
-                    )}
+                    <NotificationBadge 
+                      count={thisWeekAppointments.length}
+                      position="top-right"
+                      color="orange"
+                      size="sm"
+                    />
                   </div>
                   {activeTab === "thisWeek" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
@@ -1467,11 +1501,12 @@ export default function DoctorAppointments() {
                 >
                   <div className="relative">
                     <span className="text-base">Next Week</span>
-                    {nextWeekAppointments.length > 0 && (
-                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
-                        {nextWeekAppointments.length > 99 ? '99+' : nextWeekAppointments.length}
-                      </span>
-                    )}
+                    <NotificationBadge 
+                      count={nextWeekAppointments.length}
+                      position="top-right"
+                      color="orange"
+                      size="sm"
+                    />
                   </div>
                   {activeTab === "nextWeek" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
@@ -1488,11 +1523,13 @@ export default function DoctorAppointments() {
                 >
                   <div className="relative">
                     <span className="text-base">History</span>
-                    {historyAppointments.length > 0 && (
-                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-green-500 to-teal-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white">
-                        {historyAppointments.length > 99 ? '99+' : historyAppointments.length}
-                      </span>
-                    )}
+                    <NotificationBadge 
+                      count={historyAppointments.length}
+                      position="top-right"
+                      color="green"
+                      size="sm"
+                      animate={false}
+                    />
                   </div>
                   {activeTab === "history" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>

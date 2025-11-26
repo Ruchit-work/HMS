@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
-import { auth } from "@/firebase/config"
+import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
+import { collection, query, where, onSnapshot } from "firebase/firestore"
 import { useRouter, usePathname } from "next/navigation"
 import { getUserData } from "@/utils/userHelpers"
 import ConfirmDialog from "./ConfirmDialog"
+import NotificationBadge from "./NotificationBadge"
 
 export default function GlobalHeader() {
   const [user, setUser] = useState<any>(null)
@@ -16,6 +18,7 @@ export default function GlobalHeader() {
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
+  const [appointmentCount, setAppointmentCount] = useState(0)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -40,12 +43,42 @@ export default function GlobalHeader() {
       } else {
         setUser(null)
         setUserData(null)
+        setAppointmentCount(0)
       }
       setLoading(false)
     })
 
     return () => unsubscribe()
   }, [])
+
+  // Set up real-time appointment listener for doctors
+  useEffect(() => {
+    if (!user?.uid || !userData?.role || userData.role !== 'doctor') {
+      setAppointmentCount(0)
+      return
+    }
+
+    const appointmentsRef = collection(db, "appointments")
+    const q = query(
+      appointmentsRef, 
+      where("doctorId", "==", user.uid),
+      where("status", "==", "confirmed")
+    )
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const confirmedAppointments = snapshot.docs.filter(doc => {
+        const data = doc.data()
+        // Filter out WhatsApp pending appointments
+        return data.status === "confirmed" && !data.whatsappPending
+      })
+      setAppointmentCount(confirmedAppointments.length)
+    }, (error) => {
+      console.error("Error fetching appointments:", error)
+      setAppointmentCount(0)
+    })
+
+    return () => unsubscribe()
+  }, [user?.uid, userData?.role])
 
   // Close mobile menu when clicking outside
   useEffect(() => {
@@ -138,7 +171,13 @@ export default function GlobalHeader() {
   const isDoctor = userData.role === "doctor"
   const isPatient = userData.role === "patient"
 
-  const patientLinks = [
+  type NavLink = {
+    href: string
+    label: string
+    showBadge?: boolean
+  }
+
+  const patientLinks: NavLink[] = [
     { href: "/patient-dashboard", label: "Home" },
     { href: "/patient-dashboard/book-appointment", label: "Book Appointment" },
     { href: "/patient-dashboard/doctors", label: "Doctors" },
@@ -148,9 +187,9 @@ export default function GlobalHeader() {
     { href: "/patient-dashboard/about", label: "About & Support" }
   ]
 
-  const doctorLinks = [
+  const doctorLinks: NavLink[] = [
     { href: "/doctor-dashboard", label: "Home" },
-    { href: "/doctor-dashboard/appointments", label: "Appointments" },
+    { href: "/doctor-dashboard/appointments", label: "Appointments", showBadge: true },
     { href: "/doctor-dashboard/about", label: "About" }
   ]
 
@@ -177,17 +216,26 @@ export default function GlobalHeader() {
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-4 xl:gap-6">
             {navLinks.map((link) => (
-              <Link 
-                key={link.href}
-                href={link.href} 
-                className={`text-sm font-medium transition-colors whitespace-nowrap ${
-                  pathname === link.href 
-                    ? 'text-slate-800 border-b-2 border-slate-800' 
-                    : 'text-slate-600 hover:text-slate-800'
-                }`}
-              >
-                {link.label}
-              </Link>
+              <div key={link.href} className="relative">
+                <Link 
+                  href={link.href} 
+                  className={`text-sm font-medium transition-colors whitespace-nowrap ${
+                    pathname === link.href 
+                      ? 'text-slate-800 border-b-2 border-slate-800' 
+                      : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+                {link.showBadge && isDoctor && appointmentCount > 0 && (
+                  <NotificationBadge 
+                    count={appointmentCount} 
+                    size="sm" 
+                    position="top-right"
+                    className="translate-x-2 -translate-y-1"
+                  />
+                )}
+              </div>
             ))}
           </nav>
 
@@ -293,19 +341,28 @@ export default function GlobalHeader() {
         >
           <nav className="max-w-7xl mx-auto px-3 sm:px-4 py-4 space-y-1">
             {navLinks.map((link, index) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={handleNavClick}
-                className={`block px-4 py-3 rounded-lg font-medium transition-all duration-300 hover:scale-[1.02] hover:shadow-sm animate-slide-in-right ${
-                  pathname === link.href
-                    ? 'bg-slate-100 text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                {link.label}
-              </Link>
+              <div key={link.href} className="relative">
+                <Link
+                  href={link.href}
+                  onClick={handleNavClick}
+                  className={`block px-4 py-3 rounded-lg font-medium transition-all duration-300 hover:scale-[1.02] hover:shadow-sm animate-slide-in-right ${
+                    pathname === link.href
+                      ? 'bg-slate-100 text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  {link.label}
+                </Link>
+                {link.showBadge && isDoctor && appointmentCount > 0 && (
+                  <NotificationBadge 
+                    count={appointmentCount} 
+                    size="sm" 
+                    position="top-right"
+                    className="translate-x-2 -translate-y-1"
+                  />
+                )}
+              </div>
             ))}
           </nav>
         </div>

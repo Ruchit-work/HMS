@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { collection, getDocs,doc, deleteDoc } from 'firebase/firestore'
+import { collection, getDocs, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -13,7 +13,6 @@ import SuccessToast from '@/components/ui/SuccessToast'
 import { formatDate, formatDateTime } from '@/utils/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import Pagination from '@/components/ui/Pagination'
-import RefreshButton from '@/components/ui/RefreshButton'
 
 export default function AppoinmentManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
     const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -172,28 +171,50 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             setLoading(false)
         }
     }
-    const fetchAppointments = async () => {
+    const setupRealtimeListener = () => {
         try {
             setLoading(true)
             setError(null)
             const appointmentsRef = collection(db, 'appointments')
-            // Fetch ALL appointments (not just confirmed ones)
-            const snapshot = await getDocs(appointmentsRef)
-            const appointmentsList = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Appointment[]
-            setAppointments(appointmentsList)
-            setFilteredAppointments(appointmentsList)
-            setLastUpdated(new Date())
+            
+            // Set up real-time listener
+            const unsubscribe = onSnapshot(appointmentsRef, (snapshot) => {
+                console.log(`[Admin Appointments] Real-time update: ${snapshot.docs.length} total appointments`)
+                
+                const appointmentsList = snapshot.docs
+                    .map((doc) => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }))
+                    // Filter out WhatsApp pending appointments - they should only appear in WhatsApp Bookings Panel
+                    .filter((appointment: any) => {
+                        return appointment.status !== "whatsapp_pending" && !appointment.whatsappPending
+                    }) as Appointment[]
+                
+                setAppointments(appointmentsList)
+                setFilteredAppointments(appointmentsList)
+                setLastUpdated(new Date())
+                setLoading(false)
+            }, (error) => {
+                console.error('Error in appointments listener:', error)
+                setError(error.message)
+                setLoading(false)
+            })
+            
+            return unsubscribe
         } catch (error) {
+            console.error('Error setting up appointments listener:', error)
             setError((error as Error).message)
-        } finally {
             setLoading(false)
+            return () => {}
         }
     }
     useEffect(() => {
-        fetchAppointments()
+        let unsubscribeAppointments: (() => void) | null = null
+
+        // Set up real-time listener for appointments
+        unsubscribeAppointments = setupRealtimeListener()
+        
         // Fetch limited doctors list for dropdown (active doctors)
         ;(async () => {
             try {
@@ -205,6 +226,13 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                 setDoctors([])
             }
         })()
+
+        // Cleanup function
+        return () => {
+            if (unsubscribeAppointments) {
+                unsubscribeAppointments()
+            }
+        }
     }, [])
 
     const handleSort = (field: string) => {
@@ -358,21 +386,16 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             </p>
                         </div>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            {lastUpdatedDisplay && (
-                                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600 shadow-inner">
-                                    <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2m6-2a8 8 0 11-16 0 8 8 0 0116 0z" />
-                                    </svg>
-                                    <span>Last refreshed</span>
-                                    <span className="text-slate-500">{lastUpdatedDisplay}</span>
-                                </div>
-                            )}
-                            <RefreshButton
-                                onClick={fetchAppointments}
-                                loading={loading}
-                                variant="primary"
-                                label="Refresh data"
-                            />
+                            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-2 text-xs font-semibold text-green-700 shadow-inner">
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                <span>Live Updates Active</span>
+                                {lastUpdatedDisplay && (
+                                    <>
+                                        <span className="text-green-600">•</span>
+                                        <span className="text-green-600">Last update: {lastUpdatedDisplay}</span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 

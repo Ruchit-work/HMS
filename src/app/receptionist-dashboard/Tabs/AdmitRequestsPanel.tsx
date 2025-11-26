@@ -1,11 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { collection, getDocs } from "firebase/firestore"
+import { collection, getDocs, onSnapshot } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import { Admission, AdmissionRequest, Room } from "@/types/patient"
-import RefreshButton from "@/components/ui/RefreshButton"
 
 const roomTypeLabelMap: Record<Room["roomType"], string> = ROOM_TYPES.reduce((acc, type) => {
   acc[type.id] = type.name
@@ -302,6 +301,14 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
     fetchRooms()
     fetchAdmitRequests()
     fetchAdmissions()
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchAdmitRequests()
+      fetchAdmissions()
+    }, 30000)
+    
+    return () => clearInterval(interval)
   }, [fetchRooms, fetchAdmitRequests, fetchAdmissions])
 
   const handleOpenAssignModal = (request: AdmissionRequest) => {
@@ -511,12 +518,10 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <RefreshButton
-                onClick={fetchAdmitRequests}
-                loading={admitRequestsLoading}
-                variant="purple"
-                label="Refresh"
-              />
+              <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg text-xs font-semibold text-purple-700">
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                <span>Auto-Refresh</span>
+              </div>
             </div>
           </div>
 
@@ -688,12 +693,10 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
             <h3 className="text-xl font-semibold text-slate-900">Currently Admitted Patients</h3>
             <p className="text-sm text-slate-500">Monitor active inpatients and wrap up their discharge paperwork.</p>
           </div>
-          <RefreshButton
-            onClick={fetchAdmissions}
-            loading={admissionsLoading}
-            variant="sky"
-            label="Refresh"
-          />
+          <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 border border-sky-200 rounded-lg text-xs font-semibold text-sky-700">
+            <div className="w-2 h-2 bg-sky-500 rounded-full animate-pulse"></div>
+            <span>Auto-Refresh</span>
+          </div>
         </div>
 
         <div className="px-6 py-5">

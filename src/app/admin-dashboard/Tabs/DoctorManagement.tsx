@@ -1,6 +1,6 @@
 'use client'
 import { db, auth } from '@/firebase/config'
-import { getDocs, where, query, collection, doc, deleteDoc, updateDoc } from 'firebase/firestore'
+import { getDocs, where, query, collection, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -10,7 +10,6 @@ import DeleteModal from '@/components/ui/DeleteModal'
 import DoctorProfileForm, { DoctorProfileFormValues } from '@/components/forms/DoctorProfileForm'
 import SuccessToast from '@/components/ui/SuccessToast'
 import { formatDate, formatDateTime } from '@/utils/date'
-import RefreshButton from '@/components/ui/RefreshButton'
 
 interface Doctor {
     id: string
@@ -280,32 +279,50 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             setLoading(false)
         }
     }
-    const fetchDoctors = useCallback(async () => {
+    const setupRealtimeListeners = useCallback(() => {
         try {
             setLoading(true)
             const doctorsRef = collection(db, 'doctors')
             
-            // Fetch active doctors
+            // Set up real-time listener for active doctors
             const activeQ = query(doctorsRef, where('status', '==', 'active'))
-            const activeSnapshot = await getDocs(activeQ)
-            const activeList = activeSnapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Doctor[]
-            setDoctors(activeList)
+            const unsubscribeActive = onSnapshot(activeQ, (snapshot) => {
+                console.log(`[Admin Doctors] Real-time update: ${snapshot.docs.length} active doctors`)
+                const activeList = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data()
+                })) as Doctor[]
+                setDoctors(activeList)
+            }, (error) => {
+                console.error('Error in active doctors listener:', error)
+                setError(error.message)
+            })
             
-            // Fetch pending doctors
+            // Set up real-time listener for pending doctors
             const pendingQ = query(doctorsRef, where('status', '==', 'pending'))
-            const pendingSnapshot = await getDocs(pendingQ)
-            const pendingList = pendingSnapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Doctor[]
-            setPendingDoctors(pendingList)
+            const unsubscribePending = onSnapshot(pendingQ, (snapshot) => {
+                console.log(`[Admin Doctors] Real-time update: ${snapshot.docs.length} pending doctors`)
+                const pendingList = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data()
+                })) as Doctor[]
+                setPendingDoctors(pendingList)
+                setLoading(false)
+            }, (error) => {
+                console.error('Error in pending doctors listener:', error)
+                setError(error.message)
+                setLoading(false)
+            })
+            
+            return () => {
+                unsubscribeActive()
+                unsubscribePending()
+            }
         } catch (error) {
-            setError((error as Error).message)  
-        } finally {
+            console.error("Error setting up doctors listeners:", error)
+            setError((error as Error).message)
             setLoading(false)
+            return () => {}
         }
     }, [])
     
@@ -329,8 +346,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             // Update local state
             setPendingDoctors(prev => prev.filter(d => d.id !== doctorId))
             
-            // Refresh active doctors list
-            await fetchDoctors()
+            // Real-time listeners will automatically update the lists
             
             setSuccessMessage('Doctor approved successfully!')
             setTimeout(() => {
@@ -404,8 +420,16 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     }
     useEffect(() => {
         if (!user || authLoading) return
-        fetchDoctors()
-    }, [fetchDoctors, user, authLoading])
+        
+        let unsubscribe: (() => void) | null = null
+        unsubscribe = setupRealtimeListeners()
+        
+        return () => {
+            if (unsubscribe) {
+                unsubscribe()
+            }
+        }
+    }, [setupRealtimeListeners, user, authLoading])
 
     // Ensure receptionists can't access pending tab
     useEffect(() => {
@@ -472,12 +496,10 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                         Registration handled centrally
                         </div>
                                 )}
-                            <RefreshButton
-                                onClick={fetchDoctors}
-                                loading={loading}
-                                variant="outline"
-                                label="Refresh"
-                            />   
+                            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs font-semibold text-green-700">
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                <span>Live Updates</span>
+                            </div>   
                         </div>
                     </div>
 

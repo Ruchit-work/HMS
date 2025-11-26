@@ -1,13 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { auth } from "@/firebase/config"
+import { auth, db } from "@/firebase/config"
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore"
 import PaymentMethodSection, {
   PaymentData as BillingPaymentData,
   PaymentMethodOption as BillingPaymentMethod,
 } from "@/components/payments/PaymentMethodSection"
 import { BillingRecord } from "@/types/patient"
-import RefreshButton from "@/components/ui/RefreshButton"
 
 const BILLING_PAGE_SIZE = 6
 
@@ -108,6 +108,13 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
 
   useEffect(() => {
     fetchBillingRecords()
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchBillingRecords()
+    }, 30000)
+    
+    return () => clearInterval(interval)
   }, [fetchBillingRecords])
 
   const billingSearchValue = billingSearchTerm.trim().toLowerCase()
@@ -419,12 +426,10 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                 </button>
               )}
             </div>
-            <RefreshButton
-              onClick={fetchBillingRecords}
-              loading={billingLoading}
-              variant="gray"
-              label="Refresh"
-            />
+            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <span>Auto-Refresh</span>
+            </div>
           </div>
         </div>
 

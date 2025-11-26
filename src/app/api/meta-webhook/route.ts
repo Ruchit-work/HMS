@@ -2431,16 +2431,25 @@ async function getNextAvailable15MinSlot(
   for (const slot of subSlots) {
     const normalizedTime = normalizeTime(slot)
     
-    // Skip past slots for today
-    const isToday = appointmentDate === new Date().toISOString().split("T")[0]
+    // Skip past slots for today with proper time validation
+    const today = new Date()
+    const todayDateString = today.toISOString().split("T")[0]
+    const isToday = appointmentDate === todayDateString
+    
     if (isToday) {
-      const now = new Date()
-      const currentTime = now.getTime()
-      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+      // Create proper datetime for the slot using local timezone
       const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
-      const slotTime = slotDateTime.getTime()
+      const now = new Date()
+      const minimumTime = new Date(now.getTime() + (15 * 60 * 1000)) // 15 minutes buffer
       
-      if (slotTime <= minimumTime) {
+      console.log(`[WhatsApp Slot Check] Checking slot ${slot} at ${appointmentDate}:`)
+      console.log(`  Current time: ${now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`)
+      console.log(`  Slot time: ${slotDateTime.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`)
+      console.log(`  Minimum required time: ${minimumTime.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`)
+      console.log(`  Is past/too soon: ${slotDateTime <= minimumTime}`)
+      
+      if (slotDateTime <= minimumTime) {
+        console.log(`  ❌ Skipping past/near slot: ${slot}`)
         continue // Skip past/near slots
       }
     }
@@ -2452,14 +2461,17 @@ async function getNextAvailable15MinSlot(
       const slotDoc = await slotRef.get()
       
       if (slotDoc.exists) {
+        console.log(`  ❌ Slot already booked: ${slot}`)
         continue // Slot already booked
       }
     }
     
     // Found available slot
+    console.log(`  ✅ Available slot found: ${slot}`)
     return slot
   }
   
+  console.log(`  ❌ No available slots in hour ${hour}`)
   return null // No available slots in this hour
 }
 
