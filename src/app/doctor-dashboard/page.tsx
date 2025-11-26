@@ -572,9 +572,17 @@ export default function DoctorDashboard() {
               </button>
               <Link 
                 href="/doctor-dashboard/appointments"
-                className="text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors text-center sm:text-left"
+                className="text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors text-center sm:text-left relative inline-flex items-center gap-2"
               >
-                View All →
+                <div className="relative">
+                  <span>View All</span>
+                  {appointments.filter(apt => apt.status === "confirmed").length > 0 && (
+                    <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
+                      {appointments.filter(apt => apt.status === "confirmed").length > 99 ? '99+' : appointments.filter(apt => apt.status === "confirmed").length}
+                    </span>
+                  )}
+                </div>
+                <span>→</span>
               </Link>
             </div>
           </div>

@@ -1396,18 +1396,20 @@ export default function DoctorAppointments() {
               <div className="flex gap-4 sm:gap-6 lg:gap-8 overflow-x-auto pb-px w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("today")}
-                  className={`relative flex items-center gap-3 py-4 px-1 font-semibold transition-all whitespace-nowrap ${
+                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
                 activeTab === "today"
                       ? "text-slate-800"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <span className="text-base">Today</span>
-                  {todayAppointments.length > 0 && (
-                    <div className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 text-xs font-bold text-white bg-red-500 rounded-full">
-                      {todayAppointments.length}
-                    </div>
-                  )}
+                  <div className="relative">
+                    <span className="text-base">Today</span>
+                    {todayAppointments.length > 0 && (
+                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
+                        {todayAppointments.length > 99 ? '99+' : todayAppointments.length}
+                      </span>
+                    )}
+                  </div>
                   {activeTab === "today" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
                   )}
@@ -1415,18 +1417,20 @@ export default function DoctorAppointments() {
                 
             <button
               onClick={() => setActiveTab("tomorrow")}
-                  className={`relative flex items-center gap-3 py-4 px-1 font-semibold transition-all whitespace-nowrap ${
+                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
                 activeTab === "tomorrow"
                       ? "text-slate-800"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <span className="text-base">Tomorrow</span>
-                  {tomorrowAppointments.length > 0 && (
-                    <div className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 text-xs font-bold text-white bg-red-500 rounded-full">
-                      {tomorrowAppointments.length}
-                    </div>
-                  )}
+                  <div className="relative">
+                    <span className="text-base">Tomorrow</span>
+                    {tomorrowAppointments.length > 0 && (
+                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
+                        {tomorrowAppointments.length > 99 ? '99+' : tomorrowAppointments.length}
+                      </span>
+                    )}
+                  </div>
                   {activeTab === "tomorrow" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
                   )}
@@ -1434,18 +1438,20 @@ export default function DoctorAppointments() {
                 
             <button
               onClick={() => setActiveTab("thisWeek")}
-                  className={`relative flex items-center gap-3 py-4 px-1 font-semibold transition-all whitespace-nowrap ${
+                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
                 activeTab === "thisWeek"
                       ? "text-slate-800"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <span className="text-base">This Week</span>
-                  {thisWeekAppointments.length > 0 && (
-                    <div className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 text-xs font-bold text-white bg-red-500 rounded-full">
-                      {thisWeekAppointments.length}
-                    </div>
-                  )}
+                  <div className="relative">
+                    <span className="text-base">This Week</span>
+                    {thisWeekAppointments.length > 0 && (
+                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
+                        {thisWeekAppointments.length > 99 ? '99+' : thisWeekAppointments.length}
+                      </span>
+                    )}
+                  </div>
                   {activeTab === "thisWeek" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
                   )}
@@ -1453,18 +1459,20 @@ export default function DoctorAppointments() {
                 
             <button
               onClick={() => setActiveTab("nextWeek")}
-                  className={`relative flex items-center gap-3 py-4 px-1 font-semibold transition-all whitespace-nowrap ${
+                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
                 activeTab === "nextWeek"
                       ? "text-slate-800"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <span className="text-base">Next Week</span>
-                  {nextWeekAppointments.length > 0 && (
-                    <div className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 text-xs font-bold text-white bg-red-500 rounded-full">
-                      {nextWeekAppointments.length}
-                    </div>
-                  )}
+                  <div className="relative">
+                    <span className="text-base">Next Week</span>
+                    {nextWeekAppointments.length > 0 && (
+                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-red-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white animate-pulse">
+                        {nextWeekAppointments.length > 99 ? '99+' : nextWeekAppointments.length}
+                      </span>
+                    )}
+                  </div>
                   {activeTab === "nextWeek" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
                   )}
@@ -1472,18 +1480,20 @@ export default function DoctorAppointments() {
                 
             <button
               onClick={() => setActiveTab("history")}
-                  className={`relative flex items-center gap-3 py-4 px-1 font-semibold transition-all whitespace-nowrap ${
+                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
                 activeTab === "history"
                       ? "text-slate-800"
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <span className="text-base">History</span>
-                  {historyAppointments.length > 0 && (
-                    <div className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 text-xs font-bold text-white bg-red-500 rounded-full">
-                      {historyAppointments.length}
-                    </div>
-                  )}
+                  <div className="relative">
+                    <span className="text-base">History</span>
+                    {historyAppointments.length > 0 && (
+                      <span className="absolute -top-2 -right-2 inline-flex items-center justify-center text-[10px] font-bold text-white bg-gradient-to-r from-green-500 to-teal-500 rounded-full min-w-[18px] h-[18px] px-1 shadow-lg border-2 border-white">
+                        {historyAppointments.length > 99 ? '99+' : historyAppointments.length}
+                      </span>
+                    )}
+                  </div>
                   {activeTab === "history" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
                   )}

@@ -90,32 +90,60 @@ export async function PUT(
       if (appointmentDate && appointmentTime) {
         const { normalizeTime } = await import("@/utils/timeSlots")
         const normalizedTime = normalizeTime(appointmentTime)
-        const slotDocId = `${body.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-        const slotRef = firestore.collection("appointmentSlots").doc(slotDocId)
+        const newSlotDocId = `${body.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+        const newSlotRef = firestore.collection("appointmentSlots").doc(newSlotDocId)
         
-        // Check if slot is available (unless it's for this same appointment)
-        const slotDoc = await slotRef.get()
-        if (slotDoc.exists && slotDoc.data()?.appointmentId !== appointmentId) {
+        // Check if the new slot is available (unless it's for this same appointment)
+        const newSlotDoc = await newSlotRef.get()
+        if (newSlotDoc.exists && newSlotDoc.data()?.appointmentId !== appointmentId) {
           return Response.json(
             { error: "Time slot is already booked for this doctor and date" },
             { status: 400 }
           )
         }
 
-        // Update slot in transaction
+        // Update slot in transaction - ensure no duplicates and proper cleanup
         await firestore.runTransaction(async (transaction) => {
-          const slotSnap = await transaction.get(slotRef)
-          if (!slotSnap.exists || slotSnap.data()?.appointmentId === appointmentId) {
-            transaction.set(slotRef, {
-              appointmentId,
-              doctorId: body.doctorId,
-              appointmentDate,
-              appointmentTime: normalizedTime,
-              createdAt: new Date().toISOString(),
-            }, { merge: true })
-          } else {
+          // Step 1: Clean up any existing slots for this appointment to prevent duplicates
+          
+          // Remove PENDING slot if it exists for this appointment
+          const oldPendingSlotId = `PENDING_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+          const oldPendingSlotRef = firestore.collection("appointmentSlots").doc(oldPendingSlotId)
+          const oldPendingSlotSnap = await transaction.get(oldPendingSlotRef)
+          
+          if (oldPendingSlotSnap.exists && oldPendingSlotSnap.data()?.appointmentId === appointmentId) {
+            console.log(`[Receptionist Update] Removing old PENDING slot: ${oldPendingSlotId}`)
+            transaction.delete(oldPendingSlotRef)
+          }
+          
+          // Remove any existing doctor-specific slot for this appointment (in case doctor was changed)
+          if (appointmentData.doctorId && appointmentData.doctorId !== body.doctorId) {
+            const oldDoctorSlotId = `${appointmentData.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+            const oldDoctorSlotRef = firestore.collection("appointmentSlots").doc(oldDoctorSlotId)
+            const oldDoctorSlotSnap = await transaction.get(oldDoctorSlotRef)
+            
+            if (oldDoctorSlotSnap.exists && oldDoctorSlotSnap.data()?.appointmentId === appointmentId) {
+              console.log(`[Receptionist Update] Removing old doctor slot: ${oldDoctorSlotId}`)
+              transaction.delete(oldDoctorSlotRef)
+            }
+          }
+          
+          // Step 2: Check if the new slot is available (unless it's already owned by this appointment)
+          const newSlotSnap = await transaction.get(newSlotRef)
+          if (newSlotSnap.exists && newSlotSnap.data()?.appointmentId !== appointmentId) {
             throw new Error("SLOT_ALREADY_BOOKED")
           }
+          
+          // Step 3: Create the new doctor-specific slot
+          console.log(`[Receptionist Update] Creating new doctor slot: ${newSlotDocId}`)
+          transaction.set(newSlotRef, {
+            appointmentId,
+            doctorId: body.doctorId,
+            appointmentDate,
+            appointmentTime: normalizedTime,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
         })
       }
     }
@@ -155,7 +183,8 @@ export async function PUT(
       // Don't send notification if markConfirmed is explicitly false
     }
 
-    // Update appointment
+    // Update appointment (this modifies the existing appointment, does not create a new one)
+    console.log(`[Receptionist Update] Updating appointment ${appointmentId} with doctor ${body.doctorId}`)
     await appointmentRef.update(updateData)
 
     // Fetch updated appointment
