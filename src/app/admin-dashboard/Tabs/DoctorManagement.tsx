@@ -289,10 +289,10 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             const unsubscribeActive = onSnapshot(activeQ, (snapshot) => {
                 console.log(`[Admin Doctors] Real-time update: ${snapshot.docs.length} active doctors`)
                 const activeList = snapshot.docs.map((doc) => ({
-                    id: doc.id,
-                    ...doc.data()
-                })) as Doctor[]
-                setDoctors(activeList)
+                id: doc.id,
+                ...doc.data()
+            })) as Doctor[]
+            setDoctors(activeList)
             }, (error) => {
                 console.error('Error in active doctors listener:', error)
                 setError(error.message)
@@ -303,10 +303,10 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             const unsubscribePending = onSnapshot(pendingQ, (snapshot) => {
                 console.log(`[Admin Doctors] Real-time update: ${snapshot.docs.length} pending doctors`)
                 const pendingList = snapshot.docs.map((doc) => ({
-                    id: doc.id,
-                    ...doc.data()
-                })) as Doctor[]
-                setPendingDoctors(pendingList)
+                id: doc.id,
+                ...doc.data()
+            })) as Doctor[]
+            setPendingDoctors(pendingList)
                 setLoading(false)
             }, (error) => {
                 console.error('Error in pending doctors listener:', error)
@@ -320,7 +320,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             }
         } catch (error) {
             console.error("Error setting up doctors listeners:", error)
-            setError((error as Error).message)
+            setError((error as Error).message)  
             setLoading(false)
             return () => {}
         }

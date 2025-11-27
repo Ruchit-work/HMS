@@ -1,7 +1,8 @@
 /**
- * Twilio OTP Utility Functions
+ * Meta WhatsApp OTP Utility Functions
  * 
- * Helper functions to interact with Twilio OTP API endpoints
+ * Helper functions to interact with Meta WhatsApp OTP API endpoints
+ * (Migrated from Twilio to Meta WhatsApp Business API)
  */
 
 export interface SendOTPResponse {
@@ -20,7 +21,7 @@ export interface VerifyOTPResponse {
 }
 
 /**
- * Send OTP to a phone number via SMS
+ * Send OTP to a phone number via WhatsApp
  * @param phoneNumber - Phone number to send OTP to (with or without country code)
  * @returns Promise with send OTP response
  */

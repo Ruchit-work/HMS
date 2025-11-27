@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { sendOTP, verifyOTP } from "@/utils/twilioOTP"
+import { sendOTP, verifyOTP } from "@/utils/metaOTP"
 
 interface OTPVerificationModalProps {
   isOpen: boolean

@@ -292,15 +292,14 @@ function LoginContent() {
         return
       }
 
-      // ⚠️ TEMPORARILY DISABLED: 2FA for testing (using trial Twilio account with single phone)
-      // TODO: Uncomment this section when ready for production 2FA
+      // ⚠️ TEMPORARILY DISABLED: 2FA for staff (doctor, admin, receptionist)
+      // TODO: Uncomment this section when ready to enable 2FA
       // if (STAFF_ROLES.includes(roleInfo.role)) {
       //   await beginMfaFlow(user, roleInfo)
       //   return
       // }
 
-      // ✅ ALLOWING DIRECT LOGIN FOR STAFF (admin, doctor, receptionist) - FOR TESTING ONLY
-      // Remove this block and uncomment the 2FA block above when ready for production
+      // ✅ ALLOWING DIRECT LOGIN FOR STAFF - 2FA DISABLED FOR NOW
       if (STAFF_ROLES.includes(roleInfo.role)) {
         setLoading(false)
         dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
@@ -444,7 +443,7 @@ function LoginContent() {
           {/* Success Alert */}
           {success && (
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 p-4 mb-6 rounded-xl shadow-lg animate-fade-in">
-              <div className="flex items-start gap-3">
+              <div className="flex items-center gap-3">
                 <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center animate-bounce-in">
                   <span className="text-white text-lg font-bold">✓</span>
                 </div>

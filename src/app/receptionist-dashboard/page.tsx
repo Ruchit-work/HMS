@@ -354,7 +354,7 @@ export default function ReceptionistDashboard() {
                   </svg>
                 </div>
                 <span className="font-medium text-sm">Billing History</span>
-              </button>
+            </button>
               <NotificationBadge 
                 count={pendingBillingCount} 
                 position="top-right" 

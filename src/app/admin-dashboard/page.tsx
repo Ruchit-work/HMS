@@ -100,8 +100,8 @@ export default function AdminDashboard() {
   const trendTotal = stats.appointmentTotals[trendView] || 0
   const maxTrendCount = trendData.reduce((max, point) => Math.max(max, point.count), 0)
   const safeTrendCount = Math.max(maxTrendCount, 1)
-  const chartPadding = { left: 60, right: 40, top: 20, bottom: 20 }
-  const chartSize = { width: 400, height: 200 }
+  const chartPadding = { left: 70, right: 50, top: 40, bottom: 50 }
+  const chartSize = { width: 600, height: 280 }
   const innerWidth = chartSize.width - chartPadding.left - chartPadding.right
   const innerHeight = chartSize.height - chartPadding.top - chartPadding.bottom
   const xStep = trendData.length > 1 ? innerWidth / (trendData.length - 1) : 0
@@ -982,7 +982,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="h-48 sm:h-64 relative">
+                  <div className="h-56 sm:h-72 relative overflow-hidden">
                     {trendData.length > 0 && (
                       <div className="absolute right-6 top-4 bg-white/80 backdrop-blur-sm border border-blue-100 text-blue-600 rounded-md px-3 py-1 text-xs font-semibold z-10">
                         Total: {trendTotal}
@@ -992,10 +992,11 @@ export default function AdminDashboard() {
                       <svg className="w-full h-full" viewBox={`0 0 ${chartSize.width} ${chartSize.height}`}>
                         {/* Grid lines */}
                         <defs>
-                          <pattern id="appointmentsGrid" width="40" height="20" patternUnits="userSpaceOnUse">
-                            <path d="M 40 0 L 0 0 0 20" fill="none" stroke="#f3f4f6" strokeWidth="1"/>
+                          <pattern id="appointmentsGrid" width="50" height="25" patternUnits="userSpaceOnUse">
+                            <path d="M 50 0 L 0 0 0 25" fill="none" stroke="#f1f5f9" strokeWidth="1"/>
                           </pattern>
                         </defs>
+                        <rect width="100%" height="100%" fill="#fafafa" />
                         <rect width="100%" height="100%" fill="url(#appointmentsGrid)" />
                         
                         {/* Y-axis labels */}
@@ -1003,9 +1004,20 @@ export default function AdminDashboard() {
                           const value = Math.round((safeTrendCount * index) / 4)
                           const y = chartSize.height - chartPadding.bottom - (innerHeight * index) / 4
                           return (
-                            <text key={index} x="10" y={y} className="text-xs fill-gray-500" textAnchor="start">
-                              {value}
-                            </text>
+                            <g key={index}>
+                              {/* Background for Y-axis labels */}
+                              <rect 
+                                x={chartPadding.left - 50} 
+                                y={y - 8} 
+                                width="40" 
+                                height="16" 
+                                fill="white" 
+                                fillOpacity="0.8"
+                              />
+                              <text x={chartPadding.left - 10} y={y + 4} className="text-xs font-medium fill-gray-600" textAnchor="end">
+                                {value}
+                              </text>
+                            </g>
                           )
                         })}
                         
@@ -1034,7 +1046,18 @@ export default function AdminDashboard() {
                                   <g key={`${point.fullLabel}-${index}`}>
                                     <circle cx={x} cy={y} r="4" fill="#3b82f6" />
                                     <circle cx={x} cy={y} r="8" fill="#3b82f6" fillOpacity="0.2" />
-                                    <text x={x} y={y - 15} className="text-xs fill-gray-700" textAnchor="middle">
+                                    {/* Background for number text */}
+                                    <rect 
+                                      x={x - 15} 
+                                      y={y - 25} 
+                                      width="30" 
+                                      height="16" 
+                                      rx="8" 
+                                      fill="white" 
+                                      stroke="#e2e8f0" 
+                                      strokeWidth="1"
+                                    />
+                                    <text x={x} y={y - 12} className="text-xs font-semibold fill-gray-700" textAnchor="middle">
                                       {point.count}
                                     </text>
                                     <title>{`${point.fullLabel}: ${point.count} appointments`}</title>
@@ -1048,10 +1071,38 @@ export default function AdminDashboard() {
                         {/* X-axis labels */}
                         {trendData.map((point, index) => {
                           const x = chartPadding.left + index * xStep
+                          
+                          // Smart label spacing based on number of data points
+                          let shouldShowLabel = true
+                          if (trendData.length > 12) {
+                            shouldShowLabel = index % 3 === 0 || index === trendData.length - 1 // Show every 3rd + last
+                          } else if (trendData.length > 7) {
+                            shouldShowLabel = index % 2 === 0 || index === trendData.length - 1 // Show every 2nd + last
+                          }
+                          
+                          if (!shouldShowLabel) return null
+                          
+                          // Calculate label width based on text length
+                          const labelWidth = Math.max(40, point.label.length * 8)
+                          
                           return (
-                            <text key={`${point.label}-${index}`} x={x} y={chartSize.height - 5} className="text-xs fill-gray-500" textAnchor="middle">
-                              {point.label}
-                            </text>
+                            <g key={`${point.label}-${index}`}>
+                              {/* Background for X-axis labels */}
+                              <rect 
+                                x={x - labelWidth/2} 
+                                y={chartSize.height - 28} 
+                                width={labelWidth} 
+                                height="18" 
+                                fill="white" 
+                                fillOpacity="0.9"
+                                rx="6"
+                                stroke="#e2e8f0"
+                                strokeWidth="1"
+                              />
+                              <text x={x} y={chartSize.height - 15} className="text-xs font-medium fill-gray-700" textAnchor="middle">
+                                {point.label}
+                              </text>
+                            </g>
                           )
                         })}
                       </svg>

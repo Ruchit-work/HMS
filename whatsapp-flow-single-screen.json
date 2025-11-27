@@ -1,0 +1,108 @@
+{
+    "version": "7.2",
+    "screens": [
+      {
+        "id": "APPOINTMENT_BOOKING_SCREEN",
+        "title": "Book Your Appointment",
+        "terminal": true,
+        "layout": {
+          "type": "SingleColumnLayout",
+          "children": [
+            {
+              "type": "Form",
+              "name": "appointment_form",
+              "children": [
+                {
+                  "type": "TextInput",
+                  "label": "Your full name",
+                  "name": "patient_name",
+                  "required": true,
+                  "input-type": "text"
+                },
+                {
+                  "type": "TextInput",
+                  "label": "Reason for visit",
+                  "name": "chief_complaint",
+                  "required": true,
+                  "input-type": "text"
+                },
+                {
+                  "type": "Dropdown",
+                  "label": "Preferred doctor",
+                  "name": "doctor_id",
+                  "required": true,
+                  "data-source": [
+                    { "id": "doctor_smith", "title": "Dr. Smith - General Medicine" },
+                    { "id": "doctor_rohan", "title": "Dr. Rohan - Cardiology" },
+                    { "id": "doctor_meera", "title": "Dr. Meera - Pediatrics" },
+                    { "id": "doctor_priya", "title": "Dr. Priya - Diabetes Care" },
+                    { "id": "doctor_any", "title": "Any Available Doctor" }
+                  ]
+                },
+                {
+                  "type": "DatePicker",
+                  "label": "Appointment date",
+                  "name": "appointment_date",
+                  "required": true
+                },
+                {
+                  "type": "Dropdown",
+                  "label": "Time slot",
+                  "name": "appointment_time",
+                  "required": true,
+                  "data-source": [
+                    { "id": "slot_0900", "title": "🌅 09:00 AM - 09:15 AM" },
+                    { "id": "slot_0920", "title": "🌅 09:15 AM - 09:30 AM" },
+                    { "id": "slot_0930", "title": "🌅 09:30 AM - 09:45 AM" },
+                     { "id": "slot_0940", "title": "🌅 09:45 AM - 10:00 AM" },
+                    { "id": "slot_1000", "title": "🌅 10:00 AM - 10:15 AM" },
+                    { "id": "slot_1020", "title": "🌅 10:15 AM - 10:30 AM" },
+                    { "id": "slot_1030", "title": "🌅 10:30 AM - 10:45 AM" },
+                    { "id": "slot_1040", "title": "🌅 10:45 AM - 11:00 AM" }, 
+                    { "id": "slot_1100", "title": "🌅 11:00 AM - 11:15 AM" },
+                    { "id": "slot_1110", "title": "🌅 11:15 AM - 11:30 AM" },
+                    { "id": "slot_1120", "title": "🌅 11:30 AM - 11:45 AM" },
+                    { "id": "slot_1130", "title": "🌅 11:45 AM - 12:00 PM" },
+                    { "id": "slot_1140", "title": "🌅 12:00 PM - 12:15 PM" },
+                    { "id": "slot_1150", "title": "🌅 12:15 PM - 12:30 PM" },
+                    { "id": "slot_1160", "title": "🌅 12:30 PM - 12:45 PM" },
+                    { "id": "slot_1170", "title": "🌅 12:45 PM - 01:00 PM" },
+                    { "id": "slot_1400", "title": "🌞 02:00 PM - 02:15 PM" },
+                    { "id": "slot_1410", "title": "🌞 02:15 PM - 02:30 PM" },
+                    { "id": "slot_1430", "title": "🌞 02:30 PM - 02:45 PM" },
+                     { "id": "slot_1440", "title": "🌞 02:45 PM - 03:00 PM" },
+                    { "id": "slot_1500", "title": "🌞 03:00 PM - 03:15 PM" },
+                     { "id": "slot_1510", "title": "🌞 03:15 PM - 03:30 PM" },
+                    { "id": "slot_1530", "title": "🌞 03:30 PM - 03:45 PM" },
+                     { "id": "slot_1540", "title": "🌞 03:45 PM - 04:00 PM" },
+                    { "id": "slot_1600", "title": "🌞 04:00 PM - 04:15 PM" },
+                     { "id": "slot_1610", "title": "🌞 04:15 PM - 04:30 PM" },
+                    { "id": "slot_1630", "title": "🌞 04:30 PM - 04:45 PM" },
+                     { "id": "slot_1640", "title": "🌞 04:45 PM - 05:00 PM" }
+                  ]
+                },
+                
+                {
+                  "type": "Footer",
+                  "label": "📋 Submit Appointment Request",
+                  "on-click-action": {
+                    "name": "complete",
+                     "payload": {
+                       "chief_complaint": "${form.chief_complaint}",
+                       "doctor_id": "${form.doctor_id}",
+                       "appointment_date": "${form.appointment_date}",
+                       "appointment_time": "${form.appointment_time}",
+                       "patient_name": "${form.patient_name}",
+                       "booking_source": "whatsapp_flow",
+                       "status": "pending_confirmation"
+                     }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+  
