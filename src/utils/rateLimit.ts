@@ -122,19 +122,7 @@ export async function rateLimit(
   const result = checkRateLimit(identifier, config)
   
   if (!result.success) {
-    // Log rate limit violation
-    try {
-      const { logSecurityEvent } = await import("@/utils/auditLog")
-      await logSecurityEvent("rate_limit_exceeded", request, userId, undefined, undefined, undefined, undefined, {
-        identifier,
-        limit: result.limit,
-        windowMs: config.windowMs,
-        resetTime: result.resetTime,
-      })
-    } catch (error) {
-      // Don't fail if audit logging fails
-      console.error("[Rate Limit] Failed to log audit event:", error)
-    }
+    // Rate limit logging disabled
 
     const resetSeconds = Math.ceil((result.resetTime - Date.now()) / 1000)
     return Response.json(

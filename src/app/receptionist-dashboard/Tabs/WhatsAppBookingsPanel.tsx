@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react"
 import { collection, getDocs, query, where, onSnapshot } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { Appointment } from "@/types/patient"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
 
 interface WhatsAppBookingsPanelProps {

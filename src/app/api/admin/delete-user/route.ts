@@ -1,7 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
-import { logUserEvent } from "@/utils/auditLog"
 
 export async function POST(request: Request) {
   // Apply rate limiting first
@@ -61,17 +60,6 @@ export async function POST(request: Request) {
     try {
       await admin.auth().deleteUser(uid)
 
-      // Log user deletion event
-      await logUserEvent(
-        "user_deleted",
-        request,
-        uid,
-        detectedUserType,
-        auth.user?.uid,
-        auth.user?.email || undefined,
-        auth.user?.role,
-        { userType: detectedUserType }
-      )
 
       return Response.json({ 
         success: true, 
@@ -80,17 +68,6 @@ export async function POST(request: Request) {
     } catch (error: any) {
       // If user doesn't exist in auth, that's okay (might have been deleted already)
       if (error.code === 'auth/user-not-found') {
-        // Still log the deletion attempt
-        await logUserEvent(
-          "user_deleted",
-          request,
-          uid,
-          detectedUserType,
-          auth.user?.uid,
-          auth.user?.email || undefined,
-          auth.user?.role,
-          { userType: detectedUserType, note: "User not found in auth (already deleted)" }
-        )
 
         return Response.json({ 
           success: true, 

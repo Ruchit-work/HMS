@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
-import { logAdminEvent, logPaymentEvent } from "@/utils/auditLog"
 
 export async function POST(req: Request) {
   // Apply rate limiting first
@@ -86,53 +85,11 @@ export async function POST(req: Request) {
     // Note: Wallet refund feature has been removed
     // Refunds are now processed through other payment methods
 
-    // Log admin approval and refund processing
-    await logAdminEvent(
-      "admin_approval",
-      req,
-      adminUser.uid,
-      adminUser.email || undefined,
-      "approve_refund",
-      "refund_request",
-      refundRequestId,
-      patientId,
-      true,
-      { amount, appointmentId }
-    )
-
-    await logPaymentEvent(
-      "refund_processed",
-      req,
-      adminUser.uid,
-      adminUser.email || undefined,
-      adminUser.role,
-      amount,
-      undefined,
-      undefined,
-      appointmentId,
-      undefined,
-      { refundRequestId, patientId }
-    )
 
     return NextResponse.json({ ok: true, amountRefunded: amount })
   } catch (e: any) {
     console.error('approve-refund error', e)
     
-    // Log failed refund processing
-    if (auth.success && auth.user) {
-      await logPaymentEvent(
-        "refund_failed",
-        req,
-        auth.user.uid,
-        auth.user.email || undefined,
-        auth.user.role,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        e?.message || 'Internal error'
-      )
-    }
 
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
   }

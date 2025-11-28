@@ -165,9 +165,6 @@ export async function authenticateRequest(
   // Extract token from Authorization header
   const token = extractAuthToken(request)
   if (!token) {
-    // Log authentication failure
-    const { logAuthEvent } = await import("@/utils/auditLog")
-    await logAuthEvent("token_invalid", request, undefined, undefined, undefined, "Authorization token missing")
     return {
       success: false,
       error: "Authorization token missing. Please include 'Authorization: Bearer <token>' header.",
@@ -178,9 +175,6 @@ export async function authenticateRequest(
   // Verify token
   const tokenData = await verifyAuthToken(token)
   if (!tokenData) {
-    // Log authentication failure
-    const { logAuthEvent } = await import("@/utils/auditLog")
-    await logAuthEvent("token_invalid", request, undefined, undefined, undefined, "Invalid or expired token")
     return {
       success: false,
       error: "Invalid or expired authentication token.",
@@ -191,9 +185,6 @@ export async function authenticateRequest(
   // Get user role
   const roleData = await getUserRole(tokenData.uid, requiredRole)
   if (!roleData) {
-    // Log authorization failure
-    const { logAuthzEvent } = await import("@/utils/auditLog")
-    await logAuthzEvent("access_denied", request, tokenData.uid, tokenData.email || undefined, undefined, undefined, undefined, "User not found")
     return {
       success: false,
       error: requiredRole
@@ -205,9 +196,6 @@ export async function authenticateRequest(
 
   // Check if required role matches
   if (requiredRole && roleData.role !== requiredRole) {
-    // Log authorization failure
-    const { logAuthzEvent } = await import("@/utils/auditLog")
-    await logAuthzEvent("permission_denied", request, tokenData.uid, tokenData.email || undefined, roleData.role, undefined, undefined, `Required role: ${requiredRole}`)
     return {
       success: false,
       error: `Access denied. This endpoint requires ${requiredRole} role.`,
@@ -217,9 +205,6 @@ export async function authenticateRequest(
 
   // Check if doctor account is approved (if status exists)
   if (roleData.role === "doctor" && roleData.data?.status === "pending") {
-    // Log authorization failure
-    const { logAuthzEvent } = await import("@/utils/auditLog")
-    await logAuthzEvent("permission_denied", request, tokenData.uid, tokenData.email || undefined, roleData.role, undefined, undefined, "Doctor account pending approval")
     return {
       success: false,
       error: "Your doctor account is pending approval. Please wait for admin approval.",
@@ -257,9 +242,6 @@ export async function authenticateRequest(
   //   }
   // }
 
-  // Log successful authentication
-  const { logAuthEvent } = await import("@/utils/auditLog")
-  await logAuthEvent("token_verified", request, tokenData.uid, tokenData.email || undefined, roleData.role)
 
   return {
     success: true,

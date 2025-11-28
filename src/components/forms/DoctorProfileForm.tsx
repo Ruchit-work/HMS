@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import PasswordRequirements, { isPasswordValid } from '@/components/forms/PasswordRequirements'
+import PasswordRequirements, { isPasswordValid } from '@/components/forms/PasswordComponents'
 import { qualifications, specializationCategories, qualificationSpecializationMap } from '@/constants/signup'
 
 export interface DoctorProfileFormValues {

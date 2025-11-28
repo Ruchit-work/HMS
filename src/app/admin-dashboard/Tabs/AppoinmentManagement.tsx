@@ -4,15 +4,17 @@ import { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import LoadingSpinner from '@/components/ui/StatusComponents'
 import AdminProtected from '@/components/AdminProtected'
-import ViewModal from '@/components/ui/ViewModal'
-import DeleteModal from '@/components/ui/DeleteModal'
+import { ViewModal, DeleteModal } from '@/components/ui/Modals'
 import { Appointment } from '@/types/patient'
-import SuccessToast from '@/components/ui/SuccessToast'
+import { SuccessToast } from '@/components/ui/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import Pagination from '@/components/ui/Pagination'
+import { useNewItems } from '@/hooks/useNewItems'
+import NewItemHighlight from '@/components/ui/NewItemHighlight'
+import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
 
 export default function AppoinmentManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
     const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -20,6 +22,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const { user, loading: authLoading } = useAuth()
+    const { isNew } = useNewItems('admin-appointments')
     const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([])
     const [sortField, setSortField] = useState<string>('')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
@@ -377,12 +380,9 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                     <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                         <div className="space-y-2">
                             <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                                <span className="inline-flex h-2 w-2 rounded-full bg-blue-500" />
-                                Appointment control
-                            </span>
+                                <span className="inline-flex h-2 w-2 rounded-full bg-blue-500" /> Appointment control  </span>
                             <h2 className="text-2xl font-bold text-slate-900">Appointment Workspace</h2>
-                            <p className="max-w-xl text-sm text-slate-600">
-                                Track visits, manage follow-ups, and audit cancellations across the hospital in one place.
+                            <p className="max-w-xl text-sm text-slate-600">Track visits, manage follow-ups, and audit cancellations across the hospital in one place.
                             </p>
                         </div>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -401,10 +401,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
 
                     <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                         {summaryCards.map((card) => (
-                            <div
-                                key={card.title}
-                                className="flex items-center gap-4 rounded-xl border border-white/70 bg-white/80 px-4 py-3 shadow-sm backdrop-blur"
-                            >
+                            <div key={card.title} className="flex items-center gap-4 rounded-xl border border-white/70 bg-white/80 px-4 py-3 shadow-sm backdrop-blur" >
                                 {card.icon}
                                 <div>
                                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.title}</p>
@@ -421,8 +418,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                             <div>
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Doctor</label>
-                                <select
-                                    value={selectedDoctorId}  onChange={(e) => setSelectedDoctorId(e.target.value)}
+                                <select value={selectedDoctorId}  onChange={(e) => setSelectedDoctorId(e.target.value)}
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="all">All</option>
@@ -435,8 +431,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             </div>
                             <div>
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Time range</label>
-                                <select
-                                    value={timeRange}   onChange={(e) => setTimeRange(e.target.value as any)}
+                                <select value={timeRange}   onChange={(e) => setTimeRange(e.target.value as any)}
                                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="all">All</option>
@@ -449,8 +444,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             <div className="md:col-span-2 xl:col-span-2">
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Search</label>
                                 <div className="relative">
-                                    <input
-                                        type="text" value={search}
+                                    <input  type="text" value={search}
                                         onChange={(e) => setSearch(e.target.value)} placeholder="Search by patient, doctor, email, specialization, or patient ID…"
                                         className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
@@ -482,14 +476,11 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             </div>
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <span>Need a fresh start?</span>
-                                <button
-                                    type="button"   onClick={resetFilters}
-                                    className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
-                                >
+                                <button type="button"   onClick={resetFilters}
+                                    className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800">
                                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    Reset filters
+                                    </svg>Reset filters   
                                 </button>
                             </div>
                         </div>
@@ -522,12 +513,8 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                 Date & time  {sortField === 'appointmentDate' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                                             </div>
                                         </th>
-                                        <th
-                                            className="px-3 py-3 text-left hover:bg-slate-50"
-                                            onClick={() => handleSort('status')}
-                                        >
-                                            <div className="inline-flex items-center gap-1">
-                                                Status
+                                        <th className="px-3 py-3 text-left hover:bg-slate-50"onClick={() => handleSort('status')} >
+                                            <div className="inline-flex items-center gap-1">  Status
                                                 {sortField === 'status' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                                             </div>
                                         </th>
@@ -571,8 +558,16 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                             </td>
                                         </tr>
                                     ) : (
-                                        paginatedAppointments.map((appointment) => (
-                                            <tr className="hover:bg-slate-50" key={appointment.id}>
+                                        paginatedAppointments.map((appointment) => {
+                                            const itemIsNew = isNew(appointment)
+                                            return (
+                                            <tr key={appointment.id}
+                                                className={`hover:bg-slate-50 relative ${
+                                                    itemIsNew 
+                                                        ? 'bg-yellow-50/50 border-l-4 border-yellow-400 animate-pulse-glow' 
+                                                        : ''
+                                                }`}
+                                            >
                                                 <td className="px-3 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-600">
@@ -619,22 +614,16 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                 </td>
                                                 <td className="px-3 py-4">
                                                     <div className="flex items-center gap-1.5">
-                                                        <button
-                                                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-                                                            onClick={() => handleView(appointment)}
-                                                            type="button"
-                                                        >
+                                                        <button className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                                            onClick={() => handleView(appointment)}  type="button">
                                                             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                                             </svg>
                                                             <span className="hidden sm:inline">View</span>
                                                         </button>
-                                                        <button
-                                                            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                                                            onClick={() => handleDelete(appointment)}
-                                                            type="button"
-                                                        >
+                                                        <button  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                                                            onClick={() => handleDelete(appointment)}  type="button" >
                                                             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                             </svg>
@@ -643,7 +632,8 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                     </div>
                                                 </td>
                                             </tr>
-                                        ))
+                                            )
+                                        })
                                     )}
                                 </tbody>
                             </table>
@@ -788,6 +778,37 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                         </div>
                     </div>
 
+                    {/* Prescription & Notes - Only for completed appointments */}
+                    {selectedAppointment && (
+                        <PrescriptionDisplay 
+                            appointment={selectedAppointment} 
+                            variant="modal"
+                            showPdfButton={true}
+                        />
+                    )}
+
+                    {/* WhatsApp Notes - If available */}
+                    {selectedAppointment?.whatsappPending && (selectedAppointment as any).whatsappNotes && (
+                        <div className="bg-white rounded-lg shadow-sm border border-orange-200 p-4 sm:p-6">
+                            <div className="flex items-center space-x-2 mb-4">
+                                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                </div>
+                                <h4 className="text-base sm:text-lg font-semibold text-gray-900">WhatsApp Notes</h4>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="flex flex-col space-y-1">
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Initial Message/Notes</label>
+                                    <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md whitespace-pre-line">
+                                        {(selectedAppointment as any).whatsappNotes || 'N/A'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* System Information */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 lg:col-span-2">
                         <div className="flex items-center space-x-2 mb-4">
@@ -817,13 +838,9 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             </ViewModal>
 
             {/* Delete Confirmation Modal */}
-            <DeleteModal
-                isOpen={deleteModal}
-                onClose={() => setDeleteModal(false)}
-                onConfirm={handleDeleteConfirm}
-                title="Delete Appointment"
-                subtitle="This action cannot be undone"
-                itemType="appointment"
+            <DeleteModal isOpen={deleteModal}
+                onClose={() => setDeleteModal(false)}  onConfirm={handleDeleteConfirm}
+                title="Delete Appointment"  subtitle="This action cannot be undone"  itemType="appointment"
                 itemDetails={{
                     name: deleteAppointment?.patientName || 'N/A',
                     email: deleteAppointment?.patientEmail,

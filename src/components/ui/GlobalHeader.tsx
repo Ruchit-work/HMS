@@ -7,8 +7,9 @@ import { onAuthStateChanged, signOut } from "firebase/auth"
 import { collection, query, where, onSnapshot } from "firebase/firestore"
 import { useRouter, usePathname } from "next/navigation"
 import { getUserData } from "@/utils/userHelpers"
-import ConfirmDialog from "./ConfirmDialog"
+import { ConfirmDialog } from "./Modals"
 import NotificationBadge from "./NotificationBadge"
+import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 
 export default function GlobalHeader() {
   const [user, setUser] = useState<any>(null)
@@ -23,6 +24,13 @@ export default function GlobalHeader() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const pathname = usePathname()
+
+  // Notification badge hook - automatically clear when appointments page is viewed
+  const appointmentsBadge = useNotificationBadge({ 
+    badgeKey: 'doctor-appointments', 
+    rawCount: appointmentCount, 
+    pathname 
+  })
 
   // Routes that don't need the header
   const noHeaderRoutes = ["/", "/auth/login", "/auth/signup", "/auth/forgot-password"]
@@ -227,9 +235,9 @@ export default function GlobalHeader() {
                 >
                   {link.label}
                 </Link>
-                {link.showBadge && isDoctor && appointmentCount > 0 && (
+                {link.showBadge && isDoctor && appointmentsBadge.displayCount > 0 && (
                   <NotificationBadge 
-                    count={appointmentCount} 
+                    count={appointmentsBadge.displayCount} 
                     size="sm" 
                     position="top-right"
                     className="translate-x-2 -translate-y-1"
@@ -354,9 +362,9 @@ export default function GlobalHeader() {
                 >
                   {link.label}
                 </Link>
-                {link.showBadge && isDoctor && appointmentCount > 0 && (
+                {link.showBadge && isDoctor && appointmentsBadge.displayCount > 0 && (
                   <NotificationBadge 
-                    count={appointmentCount} 
+                    count={appointmentsBadge.displayCount} 
                     size="sm" 
                     position="top-right"
                     className="translate-x-2 -translate-y-1"

@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 import AdminProtected from "@/components/AdminProtected"
 import { Campaign, CampaignAudience, CampaignStatus, createCampaign, slugify, updateCampaign } from "@/utils/campaigns"
 import { collection, getDocs, orderBy, query, Timestamp } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
-import SuccessToast from "@/components/ui/SuccessToast"
+import { SuccessToast } from "@/components/ui/StatusComponents"
 import { formatDateTime } from "@/utils/date"
 import { sanitizeForInnerHTML } from "@/utils/sanitizeHtml"
 
@@ -930,12 +930,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
               dangerouslySetInnerHTML={sanitizeForInnerHTML(selectedCampaign.content)}
             />
             {selectedCampaign.ctaText && selectedCampaign.ctaHref && (
-              <a
-                className="inline-flex items-center gap-2 text-sm font-semibold text-teal-600 hover:text-teal-700"
-                href={selectedCampaign.ctaHref}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a className="inline-flex items-center gap-2 text-sm font-semibold text-teal-600 hover:text-teal-700"
+                href={selectedCampaign.ctaHref} target="_blank" rel="noopener noreferrer"  >
                 {selectedCampaign.ctaText}
                 <span>↗</span>
               </a>
@@ -965,12 +961,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
             </div>
             {selectedCampaign.imageUrl && (
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <img
-                  src={selectedCampaign.imageUrl}
-                  alt={selectedCampaign.title}
-                  className="h-48 w-full object-cover"
-                  loading="lazy"
-                />
+                <img src={selectedCampaign.imageUrl}    alt={selectedCampaign.title}
+                  className="h-48 w-full object-cover"  loading="lazy" />
               </div>
             )}
           </div>

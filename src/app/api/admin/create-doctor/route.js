@@ -88,18 +88,7 @@ export async function POST(request) {
     // Save to Firestore using Admin SDK
     await admin.firestore().collection('doctors').doc(userRecord.uid).set(firestoreData)
     
-    // Log user creation event
-    const { logUserEvent } = await import("@/utils/auditLog")
-    await logUserEvent(
-      "user_created",
-      request,
-      userRecord.uid,
-      "doctor",
-      auth.user?.uid,
-      auth.user?.email || undefined,
-      auth.user?.role,
-      { email: doctorData.email, phoneNumber: normalizedPhone, specialization: firestoreData.specialization }
-    )
+    // Audit logging disabled
     
     return Response.json({ 
       success: true, 

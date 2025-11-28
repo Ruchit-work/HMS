@@ -6,16 +6,19 @@ import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/NotificationBadge"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 import { useRouter } from "next/navigation"
-import ConfirmDialog from "@/components/ui/ConfirmDialog"
+import { ConfirmDialog } from "@/components/ui/Modals"
+import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import Notification from "@/components/ui/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
 import PatientManagement from "./Tabs/PatientManagement"
+import PatientAnalytics from "./Tabs/PatientAnalytics"
 import DoctorManagement from "./Tabs/DoctorManagement"
 import AppoinmentManagement from "./Tabs/AppoinmentManagement"
 import CampaignManagement from "./Tabs/CampaignManagement"
 import BillingManagement from "./Tabs/BillingManagement"
+import FinancialAnalytics from "./Tabs/FinancialAnalytics"
 import AdminProtected from "@/components/AdminProtected"
 
 interface UserData {
@@ -83,6 +86,8 @@ export default function AdminDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing">("overview")
+  const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
+  const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
@@ -95,6 +100,28 @@ export default function AdminDashboard() {
   const [trendView, setTrendView] = useState<"weekly" | "monthly" | "yearly">("weekly")
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
+
+  // Notification badge hooks - automatically clear when panels are viewed
+  const overviewBadge = useNotificationBadge({ 
+    badgeKey: 'admin-overview', 
+    rawCount: pendingRequests.length + pendingRefunds.length, 
+    activeTab 
+  })
+  const patientsBadge = useNotificationBadge({ 
+    badgeKey: 'admin-patients', 
+    rawCount: newPatientsCount, 
+    activeTab 
+  })
+  const appointmentsBadge = useNotificationBadge({ 
+    badgeKey: 'admin-appointments', 
+    rawCount: newAppointmentsCount, 
+    activeTab 
+  })
+  const billingBadge = useNotificationBadge({ 
+    badgeKey: 'admin-billing', 
+    rawCount: pendingBillingCount, 
+    activeTab 
+  })
 
   const trendData = stats.appointmentTrends[trendView] || []
   const trendTotal = stats.appointmentTotals[trendView] || 0
@@ -666,7 +693,7 @@ export default function AdminDashboard() {
                 <span className="font-medium text-sm">Dashboard Overview</span>
               </button>
               <NotificationBadge 
-                count={pendingRequests.length + pendingRefunds.length}
+                count={overviewBadge.displayCount}
                 position="top-right"
               />
             </div>
@@ -689,7 +716,7 @@ export default function AdminDashboard() {
                 <span className="font-medium text-sm">Patients</span>
               </button>
               <NotificationBadge 
-                count={newPatientsCount} 
+                count={patientsBadge.displayCount} 
                 position="top-right" 
                 size="sm" 
                 color="blue" 
@@ -750,7 +777,7 @@ export default function AdminDashboard() {
                 <span className="font-medium text-sm">Appointments</span>
               </button>
               <NotificationBadge 
-                count={newAppointmentsCount} 
+                count={appointmentsBadge.displayCount} 
                 position="top-right" 
                 size="sm" 
                 color="orange" 
@@ -773,10 +800,10 @@ export default function AdminDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <span className="font-medium text-sm">Billing & Payments</span>
+                <span className="font-medium text-sm">Revenue & Analytics</span>
               </button>
               <NotificationBadge 
-                count={pendingBillingCount} 
+                count={billingBadge.displayCount} 
                 position="top-right" 
                 size="sm" 
                 color="red" 
@@ -833,7 +860,7 @@ export default function AdminDashboard() {
                    activeTab === "doctors" ? "Doctor Management" :
                    activeTab === "campaigns" ? "Campaigns" :
                    activeTab === "appointments" ? "Appointment Management" :
-                   "Billing & Payments"}
+                   "Revenue & Analytics"}
                 </h1>
                 <p className="text-sm sm:text-base text-slate-600 mt-1">
                   {activeTab === "overview" ? "Hospital management system overview" :
@@ -841,7 +868,7 @@ export default function AdminDashboard() {
                    activeTab === "doctors" ? "Manage doctor profiles and schedules" :
                    activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
                    activeTab === "appointments" ? "Monitor and manage all appointments" :
-                   "View billing records, payments, and revenue tracking"}
+                   "Comprehensive revenue analytics, billing records, and financial insights"}
                 </p>
               </div>
               
@@ -877,7 +904,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-2">
                       <div className="relative">
                         <NotificationBadge 
-                          count={pendingRequests.length + pendingRefunds.length}
+                          count={overviewBadge.displayCount}
                           size="md"
                           position="top-right"
                           className="relative top-0 right-0"
@@ -1545,8 +1572,38 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "patients" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
-              <PatientManagement />
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+              {/* Patient Sub-Tabs */}
+              <div className="border-b border-slate-200 px-6 pt-6">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setPatientSubTab("all")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      patientSubTab === "all"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    All Patients
+                  </button>
+                  <button
+                    onClick={() => setPatientSubTab("analytics")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      patientSubTab === "analytics"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Analytics & Insights
+                  </button>
+                </div>
+              </div>
+
+              {/* Patient Content */}
+              <div className="p-6">
+                {patientSubTab === "all" && <PatientManagement />}
+                {patientSubTab === "analytics" && <PatientAnalytics />}
+              </div>
             </div>
           )}
 
@@ -1569,8 +1626,38 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "billing" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
-              <BillingManagement />
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+              {/* Billing Sub-Tabs */}
+              <div className="border-b border-slate-200 px-6 pt-6">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setBillingSubTab("all")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      billingSubTab === "all"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    All Records
+                  </button>
+                  <button
+                    onClick={() => setBillingSubTab("analytics")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      billingSubTab === "analytics"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Financial Analytics
+                  </button>
+                </div>
+              </div>
+
+              {/* Billing Content */}
+              <div className="p-6">
+                {billingSubTab === "all" && <BillingManagement />}
+                {billingSubTab === "analytics" && <FinancialAnalytics />}
+              </div>
             </div>
           )}
 

@@ -3,7 +3,7 @@ import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMes
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime, isDoctorAvailableOnDate, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked as isDateBlockedFromRaw, normalizeBlockedDates } from "@/utils/blockedDates"
-import { generateAppointmentConfirmationPDFBase64 } from "@/utils/appointmentConfirmationPDF"
+import { generateAppointmentConfirmationPDFBase64 } from "@/utils/pdfGenerators"
 import { Appointment } from "@/types/patient"
 
 export async function GET(req: Request) {

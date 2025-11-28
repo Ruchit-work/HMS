@@ -2,7 +2,6 @@ import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
-import { logAdminEvent } from "@/utils/auditLog"
 
 export async function POST(req: NextRequest) {
   // Apply rate limiting first
@@ -124,19 +123,6 @@ export async function POST(req: NextRequest) {
 
     await batch.commit()
 
-    // Log admin approval
-    await logAdminEvent(
-      "admin_approval",
-      req,
-      adminUser.uid,
-      adminUser.email || undefined,
-      "approve_schedule_request",
-      "doctor_schedule_request",
-      requestId,
-      doctorId,
-      true,
-      { conflicts: conflicts.length, awaitingCount, cancelledCount, requestType: request.requestType }
-    )
 
     return Response.json({ success: true, conflicts: conflicts.length, awaitingCount, cancelledCount })
   } catch (e: any) {

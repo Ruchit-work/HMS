@@ -258,30 +258,22 @@ export default function BillingManagement() {
           <div className="absolute inset-y-0 right-0 hidden w-48 translate-x-16 rotate-12 rounded-full bg-white/10 blur-3xl sm:block" />
           <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-200/80">
-                Billing & Payments
-              </p>
-              <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
-                Monitor all billing records and payments.
-              </h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-200/80"> Billing & Payments </p>
+              <h2 className="text-3xl font-bold leading-tight sm:text-4xl"> Monitor all billing records and payments.</h2>
               <p className="text-sm text-purple-100/90 sm:text-base">
                 View comprehensive billing history, track revenue, and monitor outstanding dues across all appointments and admissions.
               </p>
               <div className="flex flex-wrap gap-2 text-xs text-purple-100/90">
                 <span className="rounded-full border border-purple-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
-                  Complete overview
-                </span>
+                  Complete overview  </span>
                 <span className="rounded-full border border-purple-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
-                  Revenue tracking
-                </span>
+                  Revenue tracking </span>
               </div>
             </div>
             <div className="grid w-full max-w-md grid-cols-1 gap-4 sm:grid-cols-2">
               {summaryCards.map((card) => (
-                <div
-                  key={card.label}
-                  className="relative overflow-hidden rounded-2xl border border-white/20 bg-white/15 p-4 shadow-md backdrop-blur"
-                >
+                <div key={card.label}
+                  className="relative overflow-hidden rounded-2xl border border-white/20 bg-white/15 p-4 shadow-md backdrop-blur"  >
                   <div className="absolute right-3 top-3 text-lg">{card.icon}</div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-100/90">{card.label}</p>
                   <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
@@ -302,36 +294,24 @@ export default function BillingManagement() {
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <div className="relative sm:w-48">
-              <input
-                type="date"
-                value={billingDateFilter}
-                onChange={(e) => setBillingDateFilter(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+              <input  type="date" value={billingDateFilter}
+                onChange={(e) => setBillingDateFilter(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
               />
               {billingDateFilter && (
-                <button
-                  type="button"
-                  onClick={() => setBillingDateFilter("")}
-                  className="absolute inset-y-0 right-2 flex items-center rounded-full bg-white px-2 text-slate-400 shadow-sm hover:text-slate-600"
-                >
+                <button type="button" onClick={() => setBillingDateFilter("")}
+                  className="absolute inset-y-0 right-2 flex items-center rounded-full bg-white px-2 text-slate-400 shadow-sm hover:text-slate-600">
                   ✕
                 </button>
               )}
             </div>
             <div className="relative sm:w-72">
-              <input
-                type="text"
-                value={billingSearchTerm}
-                onChange={(e) => setBillingSearchTerm(e.target.value)}
+              <input type="text"   value={billingSearchTerm}onChange={(e) => setBillingSearchTerm(e.target.value)}
                 placeholder="Search by patient name, ID, doctor name, or bill ID"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
               />
               {billingSearchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setBillingSearchTerm("")}
-                  className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 text-sm"
-                >
+                <button type="button"   onClick={() => setBillingSearchTerm("")}
+                  className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 text-sm">
                   ✕
                 </button>
               )}
@@ -350,9 +330,7 @@ export default function BillingManagement() {
               {typeTabs.map((tab) => {
                 const isActive = billingTypeFilter === tab.value
                 return (
-                  <button
-                    key={tab.value}
-                    onClick={() => setBillingTypeFilter(tab.value)}
+                  <button  key={tab.value}  onClick={() => setBillingTypeFilter(tab.value)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       isActive
                         ? "border-purple-500 bg-purple-50 text-purple-700 shadow-sm"
@@ -378,8 +356,7 @@ export default function BillingManagement() {
               {statusTabs.map((tab) => {
                 const isActive = billingStatusFilter === tab.value
                 return (
-                  <button
-                    key={tab.value}
+                  <button key={tab.value}
                     onClick={() => setBillingStatusFilter(tab.value)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       isActive
@@ -388,8 +365,7 @@ export default function BillingManagement() {
                     }`}
                   >
                     {tab.label}
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] ${
+                    <span   className={`rounded-full px-2 py-0.5 text-[11px] ${
                         isActive ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500"
                       }`}
                     >
@@ -533,8 +509,7 @@ export default function BillingManagement() {
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {record.otherServices.map((service, idx) => (
-                                <span
-                                  key={idx}
+                                <span  key={idx}
                                   className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600"
                                 >
                                   {service.description || "Service"} · {formatCurrency(Number(service.amount) || 0)}
@@ -587,21 +562,15 @@ export default function BillingManagement() {
                   >
                     Previous
                   </button>
-                  <span className="text-slate-600">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  <span className="text-slate-600">  Page {currentPage} of {totalPages}</span>
+                  <button type="button"onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
                     className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
                       currentPage === totalPages
                         ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                         : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
                     }`}
-                  >
-                    Next
-                  </button>
+                  >  Next </button>
                 </div>
               </div>
             </div>

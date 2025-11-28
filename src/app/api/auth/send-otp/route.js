@@ -98,11 +98,6 @@ export async function POST(request) {
     const result = await sendTextMessage(cleanedPhone, otpMessage);
 
     if (!result.success) {
-      // Log audit event for failure
-      const { logAuthEvent } = await import("@/utils/auditLog");
-      await logAuthEvent("otp_failed", request, undefined, undefined, undefined, result.error || "Failed to send OTP", {
-        errorCode: result.errorCode,
-      });
 
       return Response.json(
         { error: result.error || "Failed to send OTP. Please try again." },
@@ -110,13 +105,6 @@ export async function POST(request) {
       );
     }
 
-    // Log audit event
-    const { logAuthEvent } = await import("@/utils/auditLog");
-    await logAuthEvent("otp_sent", request, undefined, undefined, undefined, undefined, {
-      phoneNumber: cleanedPhone,
-      messageId: result.messageId,
-      method: "whatsapp", // Note: now using WhatsApp instead of SMS
-    });
 
     // Return success (don't return OTP in response for security)
     return Response.json({
@@ -128,11 +116,6 @@ export async function POST(request) {
   } catch (error) {
     console.error("Error sending OTP:", error);
 
-    // Log audit event for failure
-    const { logAuthEvent } = await import("@/utils/auditLog");
-    await logAuthEvent("otp_failed", request, undefined, undefined, undefined, error?.message || "Failed to send OTP", {
-      errorCode: error?.code,
-    });
 
     // Handle Meta WhatsApp-specific errors
     if (error.code === 100 || error.message?.includes("Invalid phone number")) {

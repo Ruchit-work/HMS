@@ -1,7 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
-import { logPaymentEvent } from "@/utils/auditLog"
 
 export async function POST(req: Request) {
   // Apply rate limiting first
@@ -155,20 +154,6 @@ export async function POST(req: Request) {
       }
     })
 
-    // Log successful payment
-    await logPaymentEvent(
-      "payment_processed",
-      req,
-      auth.user?.uid,
-      auth.user?.email || undefined,
-      auth.user?.role,
-      totalAmount,
-      method,
-      transactionId,
-      billingId,
-      undefined,
-      { billingType: isAdmissionBilling ? "admission" : "appointment", actorType }
-    )
 
     return Response.json({
       success: true,
@@ -180,21 +165,6 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("billing pay error", error)
     
-    // Log failed payment
-    if (auth.success && auth.user && billingId) {
-      await logPaymentEvent(
-        "payment_failed",
-        req,
-        auth.user.uid,
-        auth.user.email || undefined,
-        auth.user.role,
-        undefined,
-        method,
-        undefined,
-        billingId,
-        error?.message || "Failed to pay bill"
-      )
-    }
 
     return Response.json(
       { error: error?.message || "Failed to pay bill" },

@@ -7,9 +7,11 @@ import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/NotificationBadge"
 import { useAuth } from "@/hooks/useAuth"
 import { useRouter } from "next/navigation"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
+import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import PatientManagement from "@/app/admin-dashboard/Tabs/PatientManagement"
+import PatientAnalytics from "@/app/admin-dashboard/Tabs/PatientAnalytics"
 import DoctorManagement from "@/app/admin-dashboard/Tabs/DoctorManagement"
 import AppoinmentManagement from "@/app/admin-dashboard/Tabs/AppoinmentManagement"
 import AdmitRequestsPanel from "@/app/receptionist-dashboard/Tabs/AdmitRequestsPanel"
@@ -17,12 +19,13 @@ import BillingHistoryPanel from "@/app/receptionist-dashboard/Tabs/BillingHistor
 import BookAppointmentPanel from "@/app/receptionist-dashboard/Tabs/BookAppointmentPanel"
 import WhatsAppBookingsPanel from "@/app/receptionist-dashboard/Tabs/WhatsAppBookingsPanel"
 import DashboardOverview from "@/app/receptionist-dashboard/Tabs/DashboardOverview"
-import ConfirmDialog from "@/components/ui/ConfirmDialog"
+import { ConfirmDialog } from "@/components/ui/Modals"
 
 export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"dashboard" | "patients" | "doctors" | "appointments" | "book-appointment" | "admit-requests" | "billing" | "whatsapp-bookings">("dashboard")
+  const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userName, setUserName] = useState<string>("")
   // Booking state
@@ -38,6 +41,28 @@ export default function ReceptionistDashboard() {
 
   const router = useRouter()
   const { user, loading: authLoading } = useAuth("receptionist")
+
+  // Notification badge hooks - automatically clear when panels are viewed
+  const appointmentsBadge = useNotificationBadge({ 
+    badgeKey: 'receptionist-appointments', 
+    rawCount: newAppointmentsCount, 
+    activeTab 
+  })
+  const admitRequestsBadge = useNotificationBadge({ 
+    badgeKey: 'receptionist-admit-requests', 
+    rawCount: admitRequestsCount, 
+    activeTab 
+  })
+  const billingBadge = useNotificationBadge({ 
+    badgeKey: 'receptionist-billing', 
+    rawCount: pendingBillingCount, 
+    activeTab 
+  })
+  const whatsappBadge = useNotificationBadge({ 
+    badgeKey: 'receptionist-whatsapp-bookings', 
+    rawCount: whatsappPendingCount, 
+    activeTab 
+  })
 
   useEffect(() => {
       if (!user) return
@@ -304,7 +329,7 @@ export default function ReceptionistDashboard() {
                 <span className="font-medium text-sm">Appointments</span>
               </button>
               <NotificationBadge 
-                count={newAppointmentsCount} 
+                count={appointmentsBadge.displayCount} 
                 position="top-right" 
                 size="sm" 
                 color="orange" 
@@ -330,7 +355,7 @@ export default function ReceptionistDashboard() {
                 <span className="font-medium text-sm">Admit Requests</span>
               </button>
               <NotificationBadge 
-                count={admitRequestsCount} 
+                count={admitRequestsBadge.displayCount} 
                 position="top-right" 
                 size="sm" 
                 color="purple" 
@@ -356,7 +381,7 @@ export default function ReceptionistDashboard() {
                 <span className="font-medium text-sm">Billing History</span>
             </button>
               <NotificationBadge 
-                count={pendingBillingCount} 
+                count={billingBadge.displayCount} 
                 position="top-right" 
                 size="sm" 
                 color="red" 
@@ -377,7 +402,7 @@ export default function ReceptionistDashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
                 <NotificationBadge 
-                  count={whatsappPendingCount}
+                  count={whatsappBadge.displayCount}
                   position="top-right"
                   color="orange"
                   size="sm"
@@ -501,8 +526,38 @@ export default function ReceptionistDashboard() {
             <DashboardOverview onTabChange={(tab) => setActiveTab(tab)} />
           )}
           {activeTab === "patients" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
-              <PatientManagement canDelete={true} disableAdminGuard={true} />
+            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50">
+              {/* Patient Sub-Tabs */}
+              <div className="border-b border-slate-200 px-8 pt-8">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setPatientSubTab("all")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      patientSubTab === "all"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    All Patients
+                  </button>
+                  <button
+                    onClick={() => setPatientSubTab("analytics")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      patientSubTab === "analytics"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Analytics & Insights
+                  </button>
+                </div>
+              </div>
+
+              {/* Patient Content */}
+              <div className="p-8">
+                {patientSubTab === "all" && <PatientManagement canDelete={true} disableAdminGuard={true} />}
+                {patientSubTab === "analytics" && <PatientAnalytics />}
+              </div>
             </div>
           )}
           {activeTab === "doctors" && (

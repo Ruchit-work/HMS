@@ -6,7 +6,7 @@
 
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 
 export interface SymptomCategory {
   id: string
@@ -145,11 +145,9 @@ export const SYMPTOM_CATEGORIES: SymptomCategory[] = [
 
 export default function SymptomSelector({ selectedCategory, onSelect }: SymptomSelectorProps) {
   const [search, setSearch] = useState("")
-  const [remoteCategories, setRemoteCategories] = useState<SymptomCategory[] | null>(null)
-  const [remoteSynonyms, setRemoteSynonyms] = useState<Record<string, string> | null>(null)
 
-  // Default synonym map (English/Hinglish/Hindi) → category id
-  const DEFAULT_SYNONYMS: Record<string, string> = useMemo(() => ({
+  // Synonym map (English/Hinglish/Hindi) → category id
+  const SYNONYMS: Record<string, string> = useMemo(() => ({
     fever: "monsoon_diseases",
     bukhar: "monsoon_diseases",
     khansi: "respiratory_asthma", // cough
@@ -179,26 +177,10 @@ export default function SymptomSelector({ selectedCategory, onSelect }: SymptomS
     chemotherapy: "cancer_oncology"
   }), [])
 
-  // Try loading JSON-driven config; fallback to built-in
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch("/symptoms.json", { cache: "no-store" })
-        if (!res.ok) return
-        const json = await res.json()
-        if (cancelled) return
-        if (Array.isArray(json?.categories)) setRemoteCategories(json.categories)
-        if (json?.synonyms && typeof json.synonyms === 'object') setRemoteSynonyms(json.synonyms)
-      } catch (_) { /* ignore */ }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
-    const categories = remoteCategories ?? SYMPTOM_CATEGORIES
-    const synonyms = remoteSynonyms ?? DEFAULT_SYNONYMS
+    const categories = SYMPTOM_CATEGORIES
+    const synonyms = SYNONYMS
     if (!term) return categories
 
     const synonymHit = synonyms[term]
@@ -207,7 +189,7 @@ export default function SymptomSelector({ selectedCategory, onSelect }: SymptomS
     )
     // If only synonym matched, ensure that item appears first
     return base.sort((a, b) => (a.id === synonymHit ? -1 : b.id === synonymHit ? 1 : 0))
-  }, [search, remoteCategories, remoteSynonyms, DEFAULT_SYNONYMS])
+  }, [search, SYNONYMS])
 
   return (
     <div>

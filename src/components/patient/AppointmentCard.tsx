@@ -1,101 +1,9 @@
 "use client"
 
+import { useState } from "react"
 import { Appointment } from "@/types/patient"
-import { generatePrescriptionPDF } from "@/utils/prescriptionPDF"
-import { generateAppointmentConfirmationPDF } from "@/utils/appointmentConfirmationPDF"
-
-// Helper function to parse and render prescription text
-const parsePrescription = (text: string) => {
-  if (!text) return null
-  
-  const lines = text.split('\n').filter(line => line.trim())
-  const medicines: Array<{emoji: string, name: string, dosage: string, frequency: string, duration: string}> = []
-  let advice = ""
-  
-  let currentMedicine: {emoji: string, name: string, dosage: string, frequency: string, duration: string} | null = null
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
-    
-    // Skip prescription header
-    if (line.includes('🧾') && line.includes('Prescription')) continue
-    
-    // Check for medicine line (contains emoji and medicine name) - matches *1️⃣ Medicine Name Dosage*
-    const medicineMatch = line.match(/\*([1-9]️⃣|🔟)\s+(.+?)\*/)
-    if (medicineMatch) {
-      // Save previous medicine
-      if (currentMedicine) {
-        medicines.push(currentMedicine)
-      }
-      
-      const emoji = medicineMatch[1]
-      let nameWithDosage = medicineMatch[2].trim()
-      
-      // Extract dosage from anywhere (e.g., "20mg", "400mg")
-      const dosageMatch = nameWithDosage.match(/(\d+(?:\.\d+)?\s*(?:mg|g|ml|capsule|tablet|tab|cap))/i)
-      let dosage = ""
-      if (dosageMatch) {
-        dosage = dosageMatch[1]
-        nameWithDosage = nameWithDosage.replace(dosageMatch[0], '').trim()
-      }
-      
-      // Extract duration if present in the line (e.g., "for 14 days", "for 7 days")
-      let duration = ""
-      const durationMatch = nameWithDosage.match(/(?:for|duration)\s+(\d+\s*(?:days?|weeks?|months?))/i)
-      if (durationMatch) {
-        duration = durationMatch[1]
-        nameWithDosage = nameWithDosage.replace(durationMatch[0], '').trim()
-      }
-      
-      // Extract frequency if present (e.g., "daily", "twice", "three times")
-      let frequency = ""
-      const frequencyMatch = nameWithDosage.match(/(daily|once|twice|three times|four times|\d+\s*times)/i)
-      if (frequencyMatch) {
-        frequency = frequencyMatch[1]
-        nameWithDosage = nameWithDosage.replace(frequencyMatch[0], '').trim()
-      }
-      
-      // Clean up name (remove brackets, dashes, extra spaces)
-      const name = nameWithDosage.replace(/\[.*?\]/g, '').replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim()
-      
-      currentMedicine = {
-        emoji,
-        name: name || "Medicine",
-        dosage,
-        frequency,
-        duration
-      }
-    } else if (currentMedicine) {
-      // Check for frequency (starts with • and doesn't contain "duration")
-      if (line.startsWith('•') && !line.toLowerCase().includes('duration')) {
-        const freq = line.replace('•', '').trim()
-        if (freq && !currentMedicine.frequency) {
-          currentMedicine.frequency = freq
-        }
-      }
-      
-      // Check for duration (starts with • and contains "duration")
-      if (line.startsWith('•') && line.toLowerCase().includes('duration')) {
-        const duration = line.replace('•', '').replace(/duration:/i, '').trim()
-        if (duration) {
-          currentMedicine.duration = duration
-        }
-      }
-    }
-    
-    // Check for advice
-    if (line.includes('📌') && line.includes('Advice')) {
-      advice = line.replace(/📌\s*\*?Advice:\*?\s*/i, '').trim()
-    }
-  }
-  
-  // Add last medicine
-  if (currentMedicine) {
-    medicines.push(currentMedicine)
-  }
-  
-  return { medicines, advice }
-}
+import { generateAppointmentConfirmationPDF } from "@/utils/pdfGenerators"
+import PrescriptionDisplay from "@/components/prescription/PrescriptionDisplay"
 
 interface AppointmentCardProps {
   appointment: Appointment
@@ -239,93 +147,13 @@ export default function AppointmentCard({
             </div>
 
             {/* Prescription & Notes (Only for completed appointments) */}
-            {appointment.status === "completed" && (appointment.medicine || appointment.doctorNotes) && (
-              <div className="md:col-span-2 bg-green-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>💊</span>
-                    <span>Prescription & Doctor's Notes</span>
-                  </h4>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      generatePrescriptionPDF(appointment)
-                    }}
-                    className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Download PDF
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  {appointment.medicine && (() => {
-                    const parsed = parsePrescription(appointment.medicine)
-                    if (parsed && parsed.medicines.length > 0) {
-                      return (
-                        <div className="bg-white rounded-lg p-4 border border-gray-200">
-                          <h5 className="text-gray-700 font-semibold mb-3 flex items-center gap-2">
-                            <span>💊</span>
-                            <span>Prescribed Medicines</span>
-                          </h5>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {parsed.medicines.map((med, index) => (
-                              <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                                <div className="flex items-start gap-2 mb-1.5">
-                                  <span className="text-lg">{med.emoji}</span>
-                                  <div className="flex-1">
-                                    <h6 className="font-semibold text-gray-900 text-sm">
-                                      {med.name}
-                                      {med.dosage && <span className="text-gray-600 font-normal">({med.dosage})</span>}
-                                    </h6>
-                                  </div>
-                                </div>
-                                <div className="ml-7 space-y-0.5 text-sm text-gray-700">
-                                  {med.frequency && (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-400">•</span>
-                                      <span>{med.frequency}</span>
-                                    </div>
-                                  )}
-                                  {med.duration && (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-400">•</span>
-                                      <span><span className="font-medium">Duration:</span> {med.duration}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    } else {
-                      // Fallback to plain text if parsing fails
-                      return (
-                    <div>
-                      <span className="text-gray-600 font-medium">💊 Prescribed Medicine:</span>
-                          <p className="text-gray-900 mt-1 bg-white p-3 rounded border whitespace-pre-line text-sm">
-                        {appointment.medicine}
-                      </p>
-                    </div>
-                      )
-                    }
-                  })()}
-                  {appointment.doctorNotes && (
-                    <div>
-                      <h5 className="text-gray-700 font-semibold mb-2 flex items-center gap-2">
-                        <span>📝</span>
-                        <span>Doctor's Notes</span>
-                      </h5>
-                      <p className="text-gray-900 bg-white p-3 rounded border whitespace-pre-line text-sm">
-                        {appointment.doctorNotes}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            <PrescriptionDisplay 
+              appointment={appointment} 
+              variant="default"
+              onPdfClick={(e) => {
+                if (e) e.stopPropagation()
+              }}
+            />
 
             {/* Action Buttons (Only for confirmed appointments) */}
             {appointment.status === "confirmed" && (
@@ -587,6 +415,49 @@ export default function AppointmentCard({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ============================================================================
+// AppointmentsList - List wrapper component that renders multiple AppointmentCard components
+// ============================================================================
+
+interface AppointmentsListProps {
+  appointments: Appointment[]
+  onCancelAppointment: (appointment: Appointment) => void
+  onPayBill?: (appointment: Appointment) => void
+}
+
+export function AppointmentsList({
+  appointments,
+  onCancelAppointment,
+  onPayBill
+}: AppointmentsListProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  if (appointments.length === 0) {
+    return (
+      <div className="text-center py-12 bg-slate-50 rounded-xl">
+        <span className="text-5xl block mb-3 text-slate-300">📅</span>
+        <p className="text-slate-600 font-medium">No appointments found</p>
+        <p className="text-sm text-slate-400 mt-1">Your appointments will appear here</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {appointments.map((appointment) => (
+        <AppointmentCard
+          key={appointment.id}
+          appointment={appointment}
+          isExpanded={expandedId === appointment.id}
+          onToggle={() => setExpandedId(expandedId === appointment.id ? null : appointment.id)}
+          onCancel={() => onCancelAppointment(appointment)}
+          onPayBill={onPayBill ? () => onPayBill(appointment) : undefined}
+        />
+      ))}
     </div>
   )
 }

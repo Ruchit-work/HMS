@@ -1,7 +1,7 @@
 "use client"
 
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 import PageHeader from "@/components/ui/PageHeader"
 
 interface Facility {

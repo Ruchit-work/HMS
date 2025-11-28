@@ -7,7 +7,7 @@ import { signInWithEmailAndPassword, type User } from "firebase/auth"
 import { getDoc, doc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 
 type DashboardRole = "patient" | "doctor" | "admin" | "receptionist"
 const STAFF_ROLES: DashboardRole[] = ["admin", "doctor", "receptionist"]

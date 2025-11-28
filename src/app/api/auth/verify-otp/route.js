@@ -103,13 +103,6 @@ export async function POST(request) {
         attempts: admin.firestore.FieldValue.increment(1),
       });
 
-      // Log audit event for failed verification
-      const { logAuthEvent } = await import("@/utils/auditLog");
-      await logAuthEvent("otp_failed", request, undefined, undefined, undefined, "Invalid OTP", {
-        phoneNumber: cleanedPhone,
-        attempts: attempts + 1,
-        remainingAttempts: 5 - (attempts + 1),
-      });
 
       const remainingAttempts = 5 - (attempts + 1);
       return Response.json(
@@ -127,11 +120,6 @@ export async function POST(request) {
       verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Log audit event for successful verification
-    const { logAuthEvent } = await import("@/utils/auditLog");
-    await logAuthEvent("otp_verified", request, undefined, undefined, undefined, undefined, {
-      phoneNumber: otpData.phoneNumber || cleanedPhone,
-    });
 
     // Return success
     return Response.json({

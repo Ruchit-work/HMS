@@ -4,15 +4,15 @@ import { useEffect, useState } from "react"
 import { db, auth } from "@/firebase/config"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { signOut } from "firebase/auth"
-import ChangePasswordSection from "@/components/forms/ChangePasswordSection"
+import { ChangePasswordSection } from "@/components/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import PageHeader from "@/components/ui/PageHeader"
 import { UserData, NotificationData } from "@/types/patient"
 import { calculateAge } from "@/utils/date"
-import ConfirmDialog from "@/components/ui/ConfirmDialog"
+import { ConfirmDialog } from "@/components/ui/Modals"
 
 export default function PatientProfilePage() {
   const { user, loading: authLoading } = useAuth("patient")

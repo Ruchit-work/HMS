@@ -7,8 +7,8 @@ import PaymentMethodSection, {
   PaymentData as BookingPaymentData,
   PaymentMethodOption as BookingPaymentMethod,
 } from "@/components/payments/PaymentMethodSection"
-import PasswordRequirements, { isPasswordValid } from "@/components/forms/PasswordRequirements"
-import AppointmentSuccessModal from "@/components/patient/AppointmentSuccessModal"
+import PasswordRequirements, { isPasswordValid } from "@/components/forms/PasswordComponents"
+import { AppointmentSuccessModal } from "@/components/patient/AppointmentModals"
 import OTPVerificationModal from "@/components/forms/OTPVerificationModal"
 import { bloodGroups } from "@/constants/signup"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
