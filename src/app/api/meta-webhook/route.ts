@@ -2542,13 +2542,24 @@ async function createAppointment(
 ) {
   const appointmentTime = normalizeTime(payload.appointmentTime)
   
-  // Get hospital ID from doctor, or use first active hospital as fallback (BEFORE transaction)
+  // Prefer patient's registered hospital, then doctor's hospital, then first active hospital (BEFORE transaction)
   let hospitalId: string | null = null
-  if (payload.doctorId) {
+  // 1) Try patient record hospitals
+  const patientData = patient.data || {}
+  if (patientData.hospitalId) {
+    hospitalId = String(patientData.hospitalId)
+  } else if (Array.isArray(patientData.hospitals) && patientData.hospitals.length > 0) {
+    hospitalId = String(patientData.hospitals[0])
+  } else if (patientData.activeHospital) {
+    hospitalId = String(patientData.activeHospital)
+  }
+
+  // 2) Fallback to doctor's hospital if patient hospital is not set
+  if (!hospitalId && payload.doctorId) {
     hospitalId = await getDoctorHospitalId(payload.doctorId)
   }
   
-  // If no hospital found from doctor, use first active hospital as fallback
+  // 3) Final fallback: use first active hospital if still not found
   if (!hospitalId) {
     const activeHospitals = await getAllActiveHospitals()
     if (activeHospitals.length > 0) {
@@ -2645,16 +2656,6 @@ async function sendBookingConfirmation(
   session: BookingSession,
   appointmentId: string
 ) {
-  const db = admin.firestore()
-  
-  // Fetch the created appointment to get all details
-  const appointmentDoc = await db.collection("appointments").doc(appointmentId).get()
-  if (!appointmentDoc.exists) {
-    await sendTextMessage(phone, "❌ Error: Appointment not found. Please contact reception.")
-    return
-  }
-
-  const appointmentData = appointmentDoc.data()! as any
   const doctorName = doctorData ? `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim() : "To be assigned"
   const patientName = `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim()
   const dateDisplay = new Date(session.appointmentDate! + "T00:00:00").toLocaleDateString("en-IN", {
@@ -2675,8 +2676,8 @@ async function sendBookingConfirmation(
   const remainingAmount = session.remainingAmount !== undefined ? session.remainingAmount : consultationFee
 
   // Check if this is a re-checkup appointment
-  const isRecheckup = session.isRecheckup || appointmentData.isRecheckup || false
-  const recheckupNote = session.recheckupNote || appointmentData.recheckupNote || ""
+  const isRecheckup = session.isRecheckup || false
+  const recheckupNote = session.recheckupNote || ""
   
   // Send confirmation message
   const isPending = !doctorData
@@ -2713,6 +2714,11 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
   // Generate and send PDF only if doctor is assigned (not pending)
   if (!isPending && doctorData) {
     try {
+      const nowIso = new Date().toISOString()
+      const paidAt = remainingAmount === 0 ? nowIso : ""
+      const appointmentStatus: Appointment["status"] = "confirmed"
+      const paymentStatus = remainingAmount === 0 ? "paid" : "pending"
+
       const appointment: Appointment = {
         id: appointmentId,
         transactionId: appointmentId,
@@ -2726,20 +2732,18 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
         doctorSpecialization: doctorData.specialization || "",
         appointmentDate: session.appointmentDate!,
         appointmentTime: session.appointmentTime!,
-        status: (appointmentData.status === "confirmed" || appointmentData.status === "completed" || appointmentData.status === "cancelled") 
-          ? appointmentData.status 
-          : "confirmed",
+        status: appointmentStatus,
         chiefComplaint: session.symptoms || "General consultation",
         medicalHistory: "",
         paymentMethod: session.paymentMethod || "cash",
-        paymentStatus: appointmentData.paymentStatus || "pending",
+        paymentStatus,
         paymentType: session.paymentType || "full",
         totalConsultationFee: consultationFee,
         paymentAmount: amountCollected,
         remainingAmount,
-        paidAt: appointmentData.paidAt || "",
-        createdAt: appointmentData.createdAt || new Date().toISOString(),
-        updatedAt: appointmentData.updatedAt || new Date().toISOString(),
+        paidAt,
+        createdAt: nowIso,
+        updatedAt: nowIso,
       }
 
     // Generate PDF as base64
@@ -2749,6 +2753,7 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
     const base64Data = pdfBase64.split(",")[1]
 
     // Store PDF in Firestore temporarily (for API endpoint to serve it)
+    const db = admin.firestore()
     await db.collection("appointmentPDFs").doc(appointmentId).set({
       pdfBase64: base64Data,
       createdAt: new Date().toISOString(),
