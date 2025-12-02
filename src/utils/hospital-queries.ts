@@ -4,16 +4,18 @@
  * Maintains backward compatibility where possible
  */
 
-import { 
-  collection, 
-  query, 
-  where, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  Query, 
+import {
+  collection,
+  query,
+  where,
+  doc,
+  getDoc,
+  getDocs,
+  Query,
   CollectionReference,
-  DocumentReference 
+  DocumentReference,
+  QueryConstraint,
+  DocumentData,
 } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { COLLECTION_MAP, CollectionName } from '@/lib/hospital/helpers'
@@ -49,9 +51,9 @@ export function getHospitalDocument(
 export function getHospitalQuery(
   hospitalId: string,
   collectionName: CollectionName,
-  ...queryConstraints: Parameters<typeof query>
-): Query {
-  const collRef = getHospitalCollection(hospitalId, collectionName)
+  ...queryConstraints: QueryConstraint[]
+): Query<DocumentData> {
+  const collRef = getHospitalCollection(hospitalId, collectionName) as CollectionReference<DocumentData>
   return query(collRef, ...queryConstraints)
 }
 

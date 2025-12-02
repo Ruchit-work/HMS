@@ -42,7 +42,7 @@ interface VerifiedTokenData {
   authTime: string | null
 }
 
-async function verifyAuthToken(token: string): Promise<VerifiedTokenData | null> {
+export async function verifyAuthToken(token: string): Promise<VerifiedTokenData | null> {
   try {
     const initResult = initFirebaseAdmin("api-auth")
     if (!initResult.ok) {

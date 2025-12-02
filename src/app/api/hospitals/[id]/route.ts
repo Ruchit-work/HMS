@@ -31,8 +31,12 @@ const db = admin.firestore()
  * PUT /api/hospitals/[id]
  * Update a hospital
  */
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id: hospitalId } = await context.params
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
       return NextResponse.json(
@@ -68,7 +72,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    const hospitalId = params.id
     const body = await request.json()
     const { name, code, address, phone, email, status } = body
 
@@ -134,8 +137,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
  * DELETE /api/hospitals/[id]
  * Delete a hospital (sets status to inactive)
  */
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id: hospitalId } = await context.params
     const authHeader = request.headers.get('authorization')
     if (!authHeader) {
       return NextResponse.json(
@@ -170,8 +177,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
         { status: 403 }
       )
     }
-
-    const hospitalId = params.id
 
     // Verify hospital exists
     const hospitalRef = db.collection('hospitals').doc(hospitalId)

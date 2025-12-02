@@ -35,15 +35,6 @@ export default function HospitalManagement() {
     email: ''
   })
 
-  // Only super admins can access this
-  if (!isSuperAdmin) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-red-600 font-medium">Access Denied: Super Admin privileges required</p>
-      </div>
-    )
-  }
-
   useEffect(() => {
     if (user && isSuperAdmin) {
       loadHospitals()
@@ -77,10 +68,12 @@ export default function HospitalManagement() {
     setSaving(true)
 
     try {
-      const token = await user?.getIdToken()
-      if (!token) {
-        throw new Error('Authentication token not found')
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error('You must be logged in to manage hospitals')
       }
+
+      const token = await currentUser.getIdToken()
 
       const url = editingHospital
         ? `/api/hospitals/${editingHospital.id}`
@@ -136,10 +129,12 @@ export default function HospitalManagement() {
     setSuccess(null)
 
     try {
-      const token = await user?.getIdToken()
-      if (!token) {
-        throw new Error('Authentication token not found')
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error('You must be logged in to manage hospitals')
       }
+
+      const token = await currentUser.getIdToken()
 
       const response = await fetch(`/api/hospitals/${hospitalId}`, {
         method: 'DELETE',
@@ -171,6 +166,15 @@ export default function HospitalManagement() {
 
   if (authLoading || loading) {
     return <LoadingSpinner message="Loading hospitals..." />
+  }
+
+  // Only super admins can access this
+  if (!isSuperAdmin) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 font-medium">Access Denied: Super Admin privileges required</p>
+      </div>
+    )
   }
 
   return (

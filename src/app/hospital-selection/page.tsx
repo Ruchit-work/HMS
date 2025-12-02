@@ -5,14 +5,14 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { auth } from '@/firebase/config'
 import LoadingSpinner from '@/components/ui/StatusComponents'
 import { Hospital } from '@/types/hospital'
 
-export default function HospitalSelectionPage() {
+function HospitalSelectionContent() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -224,6 +224,20 @@ export default function HospitalSelectionPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function HospitalSelectionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <LoadingSpinner message="Loading hospitals..." />
+        </div>
+      }
+    >
+      <HospitalSelectionContent />
+    </Suspense>
   )
 }
 

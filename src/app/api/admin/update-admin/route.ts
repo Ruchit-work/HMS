@@ -117,9 +117,13 @@ export async function PUT(request: NextRequest) {
         }
 
         // Update email in Firebase Auth
+        if (!existingAdminData) {
+          throw new Error('Existing admin data is missing for display name update')
+        }
+
         await admin.auth().updateUser(adminId, {
           email: adminData.email.trim().toLowerCase(),
-          displayName: `${adminData.firstName || existingAdminData.firstName} ${adminData.lastName || existingAdminData.lastName}`
+          displayName: `${adminData.firstName || existingAdminData.firstName || ''} ${adminData.lastName || existingAdminData.lastName || ''}`.trim()
         })
         updateData.email = adminData.email.trim().toLowerCase()
       }

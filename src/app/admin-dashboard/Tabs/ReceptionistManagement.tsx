@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import LoadingSpinner from '@/components/ui/StatusComponents'
@@ -44,22 +44,7 @@ export default function ReceptionistManagement() {
     password: ''
   })
 
-  // Block super admins
-  if (isSuperAdmin) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-red-600 font-medium">Super admins cannot manage receptionists. Please use a regular admin account.</p>
-      </div>
-    )
-  }
-
-  useEffect(() => {
-    if (user && activeHospitalId && !isSuperAdmin) {
-      loadData()
-    }
-  }, [user, activeHospitalId, isSuperAdmin])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!activeHospitalId) return
     
     setLoading(true)
@@ -77,7 +62,7 @@ export default function ReceptionistManagement() {
       const hospitalDoc = await getDoc(doc(db, 'hospitals', activeHospitalId))
       const hospitalName = hospitalDoc.exists() ? hospitalDoc.data().name : 'Unknown'
       
-      let receptionistsList: Receptionist[] = receptionistsSnapshot.docs.map(doc => ({
+      const receptionistsList: Receptionist[] = receptionistsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         hospitalName
@@ -97,7 +82,13 @@ export default function ReceptionistManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeHospitalId])
+
+  useEffect(() => {
+    if (user && activeHospitalId && !isSuperAdmin) {
+      loadData()
+    }
+  }, [user, activeHospitalId, isSuperAdmin, loadData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -171,6 +162,15 @@ export default function ReceptionistManagement() {
 
   if (authLoading || loading || hospitalLoading) {
     return <LoadingSpinner message="Loading receptionists..." />
+  }
+
+  // Block super admins
+  if (isSuperAdmin) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 font-medium">Super admins cannot manage receptionists. Please use a regular admin account.</p>
+      </div>
+    )
   }
 
   if (!activeHospitalId) {

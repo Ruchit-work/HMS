@@ -54,15 +54,6 @@ export default function AdminAssignment() {
     hospitalId: ''
   })
 
-  // Only super admins can access this
-  if (!isSuperAdmin) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-red-600 font-medium">Access Denied: Super Admin privileges required</p>
-      </div>
-    )
-  }
-
   useEffect(() => {
     if (user && isSuperAdmin) {
       loadData()
@@ -342,6 +333,15 @@ export default function AdminAssignment() {
 
   if (authLoading || loading) {
     return <LoadingSpinner message="Loading admins..." />
+  }
+
+  // Only super admins can access this
+  if (!isSuperAdmin) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-600 font-medium">Access Denied: Super Admin privileges required</p>
+      </div>
+    )
   }
 
   return (
