@@ -401,8 +401,8 @@ export default function BillingManagement() {
             <p className="text-xs text-slate-400">Try adjusting the search or status filter.</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <div className="space-y-3">
               {paginatedBillingRecords.map((record) => {
                 const generatedAt = record.generatedAt ? new Date(record.generatedAt) : null
                 const paidAt = record.paidAt ? new Date(record.paidAt) : null
@@ -420,97 +420,98 @@ export default function BillingManagement() {
                 return (
                   <article
                     key={record.id}
-                    className="group rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
+                    className="group rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
                   >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="flex-1 space-y-4">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
                             record.type === "admission" 
                               ? "bg-blue-100 text-blue-700" 
                               : "bg-green-100 text-green-700"
                           }`}>
                             {record.type === "admission" ? "🏥 Admission" : "📅 Appointment"}
                           </span>
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                             {record.type === "admission" ? "Bill" : "Payment"} #{record.id.slice(0, 8).toUpperCase()}
                           </span>
                           {record.admissionId && (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono text-slate-500">
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-500">
                               Admission {record.admissionId.slice(0, 8)}
                             </span>
                           )}
                           {record.appointmentId && (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono text-slate-500">
+                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-500">
                               Appointment {record.appointmentId.slice(0, 8)}
                             </span>
                           )}
                         </div>
 
-                        <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">
                               {record.type === "admission" ? "Generated" : "Paid"}
                             </p>
                             <p className="font-semibold text-slate-800">{generatedAt ? generatedAt.toLocaleString() : "—"}</p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Patient</p>
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Patient</p>
                             <p className="font-semibold text-slate-800">
                               {record.patientName || "Unknown"}{" "}
-                              <span className="ml-1 text-xs font-mono text-slate-500">
+                              <span className="ml-1 text-[11px] font-mono text-slate-500">
                                 (ID {record.patientId || "N/A"})
                               </span>
                             </p>
                           </div>
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Doctor</p>
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Doctor</p>
                             <p className="font-semibold text-slate-800">{record.doctorName || "—"}</p>
                           </div>
                           {record.type === "admission" ? (
                             <>
                               <div>
-                                <p className="text-xs uppercase tracking-wide text-slate-400">Room Charges</p>
+                                <p className="text-[11px] uppercase tracking-wide text-slate-400">Room Charges</p>
                                 <p className="font-semibold text-slate-800">{formatCurrency(record.roomCharges || 0)}</p>
                               </div>
                               <div>
-                                <p className="text-xs uppercase tracking-wide text-slate-400">Doctor Fee</p>
+                                <p className="text-[11px] uppercase tracking-wide text-slate-400">Doctor Fee</p>
                                 <p className="font-semibold text-slate-800">{formatCurrency(record.doctorFee || 0)}</p>
                               </div>
                             </>
                           ) : (
                             <div>
-                              <p className="text-xs uppercase tracking-wide text-slate-400">Consultation Fee</p>
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Consultation Fee</p>
                               <p className="font-semibold text-slate-800">{formatCurrency(record.consultationFee || 0)}</p>
                             </div>
                           )}
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-slate-400">Total Amount</p>
-                            <p className="text-lg font-bold text-slate-900">{formatCurrency(record.totalAmount)}</p>
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Total Amount</p>
+                            <p className="text-base font-bold text-slate-900">{formatCurrency(record.totalAmount)}</p>
                           </div>
                           {record.type === "appointment" && record.remainingAmount !== undefined && record.remainingAmount > 0 && (
                             <div>
-                              <p className="text-xs uppercase tracking-wide text-slate-400">Remaining Amount</p>
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Remaining Amount</p>
                               <p className="font-semibold text-amber-600">{formatCurrency(record.remainingAmount)}</p>
                             </div>
                           )}
                           {record.type === "appointment" && record.paymentType && (
                             <div>
-                              <p className="text-xs uppercase tracking-wide text-slate-400">Payment Type</p>
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Payment Type</p>
                               <p className="font-semibold text-slate-800 capitalize">{record.paymentType}</p>
                             </div>
                           )}
                         </div>
 
                         {record.otherServices && record.otherServices.length > 0 && (
-                          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                               Additional services
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {record.otherServices.map((service, idx) => (
-                                <span  key={idx}
-                                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-600"
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600"
                                 >
                                   {service.description || "Service"} · {formatCurrency(Number(service.amount) || 0)}
                                 </span>
@@ -520,9 +521,9 @@ export default function BillingManagement() {
                         )}
                       </div>
 
-                      <div className="flex w-full flex-col gap-3 sm:max-w-[200px]">
+                      <div className="flex w-full flex-col gap-2 sm:max-w-[200px] text-xs">
                         <div className="flex flex-col gap-2">
-                          <span className={`inline-flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${statusStyle}`}>
+                          <span className={`inline-flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-[11px] font-semibold ${statusStyle}`}>
                             <span>{statusLabel}</span>
                             {record.paymentMethod && record.status === "paid" && (
                               <span className="capitalize text-[11px] opacity-80">via {record.paymentMethod}</span>
@@ -545,7 +546,7 @@ export default function BillingManagement() {
                   </article>
                 )
               })}
-              <div className="flex flex-col gap-2 border-t border-slate-200 pt-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   Showing {pageStart.toLocaleString("en-IN")}–{pageEnd.toLocaleString("en-IN")} of {filteredBillingRecords.length.toLocaleString("en-IN")} bills
                 </p>

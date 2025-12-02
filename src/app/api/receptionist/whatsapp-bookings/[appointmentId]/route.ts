@@ -2,6 +2,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { NextRequest } from "next/server"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 
 interface Params {
   appointmentId: string
@@ -33,8 +34,23 @@ export async function PUT(
     const body = await request.json()
 
     const firestore = admin.firestore()
-    const appointmentRef = firestore.collection("appointments").doc(appointmentId)
-    const appointmentDoc = await appointmentRef.get()
+
+    // Prefer hospital-scoped appointment based on provided hospitalId
+    let appointmentRef: FirebaseFirestore.DocumentReference | null = null
+    let appointmentDoc = null as FirebaseFirestore.DocumentSnapshot | null
+
+    if (body.hospitalId) {
+      appointmentRef = firestore
+        .collection(getHospitalCollectionPath(body.hospitalId, "appointments"))
+        .doc(appointmentId)
+      appointmentDoc = await appointmentRef.get()
+    }
+
+    // Fallback to legacy global collection if not found or no hospitalId
+    if (!appointmentDoc || !appointmentDoc.exists) {
+      appointmentRef = firestore.collection("appointments").doc(appointmentId)
+      appointmentDoc = await appointmentRef.get()
+    }
 
     if (!appointmentDoc.exists) {
       return Response.json(
@@ -183,6 +199,11 @@ export async function PUT(
       updateData.status = "confirmed"
       updateData.whatsappPending = false
       // Don't send notification if markConfirmed is explicitly false
+    }
+
+    // At this point we know appointmentDoc exists, so appointmentRef must be non-null
+    if (!appointmentRef) {
+      throw new Error("Internal error: appointmentRef not initialized")
     }
 
     await appointmentRef.update(updateData)

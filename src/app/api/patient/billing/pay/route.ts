@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
+import { getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 
 export async function POST(req: Request) {
   // Apply rate limiting first
@@ -71,21 +72,42 @@ export async function POST(req: Request) {
       
       let isAdmissionBilling = false
       let billingData: any = null
+      let appointmentRef: FirebaseFirestore.DocumentReference | null = null
       
       if (billingSnap.exists) {
         isAdmissionBilling = true
         billingData = billingSnap.data() || {}
       } else {
         // If not found in billing_records, check appointments (appointment billing)
-        const appointmentRef = firestore.collection("appointments").doc(billingId!)
-        const appointmentSnap = await tx.get(appointmentRef)
+        // Prefer hospital-scoped appointments when hospitalId is provided
+        const hospitalId: string | undefined = body?.hospitalId
         
-        if (!appointmentSnap.exists) {
-          throw new Error("Billing record not found")
+        if (hospitalId) {
+          const hospAppointmentRef = firestore
+            .collection(getHospitalCollectionPath(hospitalId, "appointments"))
+            .doc(billingId!)
+          const hospAppointmentSnap = await tx.get(hospAppointmentRef)
+          
+          if (hospAppointmentSnap.exists) {
+            isAdmissionBilling = false
+            billingData = hospAppointmentSnap.data() || {}
+            appointmentRef = hospAppointmentRef
+          }
         }
         
-        isAdmissionBilling = false
-        billingData = appointmentSnap.data() || {}
+        // Fallback to legacy global appointments collection
+        if (!appointmentRef) {
+          const globalAppointmentRef = firestore.collection("appointments").doc(billingId!)
+          const globalAppointmentSnap = await tx.get(globalAppointmentRef)
+          
+          if (!globalAppointmentSnap.exists) {
+            throw new Error("Billing record not found")
+          }
+          
+          isAdmissionBilling = false
+          billingData = globalAppointmentSnap.data() || {}
+          appointmentRef = globalAppointmentRef
+        }
       }
 
       // Check if already paid
@@ -139,8 +161,10 @@ export async function POST(req: Request) {
           ...paymentMetadata
         })
       } else {
-        // Appointment billing - update appointments
-        const appointmentRef = firestore.collection("appointments").doc(billingId!)
+        // Appointment billing - update appointments (hospital-scoped or legacy)
+        if (!appointmentRef) {
+          throw new Error("Billing record not found")
+        }
         tx.update(appointmentRef, {
           paymentStatus: "paid",
           paymentMethod: method,

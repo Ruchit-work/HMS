@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { collection, getDocs, query, where, onSnapshot } from "firebase/firestore"
-import { db, auth } from "@/firebase/config"
+import { getDocs, query, where, onSnapshot } from "firebase/firestore"
+import { auth } from "@/firebase/config"
 import { Appointment } from "@/types/patient"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
@@ -84,34 +84,41 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
   )
 
   const setupRealtimeListener = useCallback(() => {
+    if (!activeHospitalId) {
+      setBookings([])
+      onPendingCountChange?.(0)
+      return () => {}
+    }
+
     try {
       setLoading(true)
       setError(null)
 
-      // Set up real-time listener for WhatsApp pending appointments
-      const appointmentsRef = collection(db, 'appointments')
-      const whatsappQuery = query(
-        appointmentsRef,
-        where('whatsappPending', '==', true)
+      // Set up real-time listener for WhatsApp pending appointments in the active hospital
+      const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
+      const whatsappQuery = query(appointmentsRef, where("whatsappPending", "==", true))
+
+      const unsubscribe = onSnapshot(
+        whatsappQuery,
+        (snapshot) => {
+          const bookingsList = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as Appointment[]
+
+          setBookings(bookingsList)
+          onPendingCountChange?.(bookingsList.length)
+          setLoading(false)
+        },
+        (error) => {
+          console.error("Error in WhatsApp bookings listener:", error)
+          setError(error.message)
+          setBookings([])
+          onPendingCountChange?.(0)
+          setLoading(false)
+        }
       )
-      
-      const unsubscribe = onSnapshot(whatsappQuery, (snapshot) => {
-        const bookingsList = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Appointment[]
-        
-        setBookings(bookingsList)
-        onPendingCountChange?.(bookingsList.length)
-        setLoading(false)
-      }, (error) => {
-        console.error('Error in WhatsApp bookings listener:', error)
-        setError(error.message)
-        setBookings([])
-        onPendingCountChange?.(0)
-        setLoading(false)
-      })
-      
+
       return unsubscribe
     } catch (error: any) {
       console.error("Error setting up WhatsApp bookings listener:", error)
@@ -121,7 +128,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
       setLoading(false)
       return () => {}
     }
-  }, [onPendingCountChange])
+  }, [activeHospitalId, onPendingCountChange])
 
   const fetchDoctors = useCallback(async () => {
     if (!activeHospitalId) return
@@ -346,6 +353,8 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
         chiefComplaint: formChiefComplaint.trim() || "General consultation",
         medicalHistory: formMedicalHistory.trim(),
         paymentMethod: formPaymentMethod,
+        // Ensure API knows which hospital subcollection the appointment lives in
+        hospitalId: (selectedBooking as any).hospitalId,
         // Payment amount will be handled separately in billing section
         markConfirmed: true,
       }
@@ -361,7 +370,9 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to update booking")
+        // Log full error payload for debugging
+        console.error("WhatsApp booking update failed:", data)
+        throw new Error(data?.error || data?.details || "Failed to update booking")
       }
 
       notify({ type: "success", message: "Booking updated successfully!" })

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { collection, getDocs, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { getDocs, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
@@ -15,7 +15,6 @@ import { formatDate, formatDateTime } from '@/utils/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import Pagination from '@/components/ui/Pagination'
 import { useNewItems } from '@/hooks/useNewItems'
-import NewItemHighlight from '@/components/ui/NewItemHighlight'
 import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
 
 export default function AppoinmentManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
@@ -24,7 +23,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const { user, loading: authLoading } = useAuth()
-    const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+    const { activeHospitalId } = useMultiHospital()
     const { isNew } = useNewItems('admin-appointments')
     const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([])
     const [sortField, setSortField] = useState<string>('')
@@ -244,7 +243,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
 
         return appointmentDate <= today
     }
-    const setupRealtimeListener = () => {
+    const setupRealtimeListener = useCallback(() => {
         if (!activeHospitalId) return () => {}
         
         try {
@@ -257,11 +256,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                     .map((doc) => ({
                         id: doc.id,
                         ...doc.data()
-                    }))
-                    // Filter out WhatsApp pending appointments - they should only appear in WhatsApp Bookings Panel
-                    .filter((appointment: any) => {
-                        return appointment.status !== "whatsapp_pending" && !appointment.whatsappPending
-                    }) as Appointment[]
+                    })) as Appointment[]
                 
                 setAppointments(appointmentsList)
                 setFilteredAppointments(appointmentsList)
@@ -280,7 +275,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             setLoading(false)
             return () => {}
         }
-    }
+    }, [activeHospitalId])
     useEffect(() => {
         let unsubscribeAppointments: (() => void) | null = null
 
@@ -306,7 +301,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                 unsubscribeAppointments()
             }
         }
-    }, [activeHospitalId, user, authLoading])
+    }, [activeHospitalId, user, authLoading, setupRealtimeListener])
 
     const handleSort = (field: string) => {
         if (sortField === field) {

@@ -27,6 +27,7 @@ interface UnifiedBillingRecord {
   settlementMode?: string | null
   paymentType?: "full" | "partial"
   remainingAmount?: number
+  hospitalId?: string | null
 }
 
 export async function GET(request: Request) {
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
 
     const firestore = admin.firestore()
     const records: UnifiedBillingRecord[] = []
+    const billedAppointmentIds = new Set<string>()
 
     // Fetch billing records from admissions
     const billingSnapshot = await firestore
@@ -121,12 +123,18 @@ export async function GET(request: Request) {
         handledBy: data?.handledBy || null,
         settlementMode: data?.settlementMode || null,
       })
+
+      // Track any explicit appointment billing tied to an appointmentId
+      if (data.appointmentId) {
+        billedAppointmentIds.add(String(data.appointmentId))
+      }
     }
 
     // Fetch appointments with payments
     // Use a simpler query that doesn't require composite index
     // Fetch recent appointments and filter/sort in memory
     let appointmentsDocs: any[] = []
+    const seenAppointmentIds = new Set<string>()
     try {
       // Fetch appointments ordered by createdAt (most recent first)
       // This doesn't require a composite index
@@ -158,6 +166,11 @@ export async function GET(request: Request) {
           return bDate.localeCompare(aDate)
         })
         .slice(0, 100)
+
+      // Track IDs we've already included so we don't duplicate when we add hospital-scoped appointments
+      for (const doc of appointmentsDocs) {
+        seenAppointmentIds.add(doc.id)
+      }
     } catch (error: any) {
       // Final fallback: fetch without orderBy
       try {
@@ -185,9 +198,33 @@ export async function GET(request: Request) {
             return bDate.localeCompare(aDate)
           })
           .slice(0, 100)
+        for (const doc of appointmentsDocs) {
+          seenAppointmentIds.add(doc.id)
+        }
       } catch (fallbackError: any) {
         console.error("Failed to fetch appointments:", fallbackError?.message)
       }
+    }
+
+    // Also include hospital-scoped appointments (hospitals/{id}/appointments)
+    try {
+      const hospitalsSnap = await firestore.collection("hospitals").where("status", "==", "active").limit(20).get()
+      for (const hospDoc of hospitalsSnap.docs) {
+        const hospId = hospDoc.id
+        const hospAppointmentsSnap = await firestore
+          .collection(`hospitals/${hospId}/appointments`)
+          .orderBy("createdAt", "desc")
+          .limit(200)
+          .get()
+
+        for (const doc of hospAppointmentsSnap.docs) {
+          if (seenAppointmentIds.has(doc.id)) continue
+          appointmentsDocs.push(doc)
+          seenAppointmentIds.add(doc.id)
+        }
+      }
+    } catch (groupError: any) {
+      console.error("Failed to fetch hospital-scoped appointments:", groupError?.message)
     }
 
     for (const docSnap of appointmentsDocs) {
@@ -195,6 +232,11 @@ export async function GET(request: Request) {
       const paymentAmount = Number(data.paymentAmount || 0)
       const totalConsultationFee = Number(data.totalConsultationFee || 0)
       if (paymentAmount <= 0 && totalConsultationFee <= 0) {
+        continue
+      }
+
+      // Skip if there's already an explicit billing record for this appointment
+      if (billedAppointmentIds.has(docSnap.id)) {
         continue
       }
 
@@ -269,6 +311,7 @@ export async function GET(request: Request) {
               ? billedAmount - paymentAmount
               : billedAmount || totalConsultationFee
             : Number(data.remainingAmount || 0),
+        hospitalId: data.hospitalId || null,
       })
     }
 

@@ -253,5 +253,6 @@ export interface BillingRecord {
   settlementMode?: string | null
   paymentType?: "full" | "partial" // For appointment billing
   remainingAmount?: number // For appointment billing (partial payments)
+  hospitalId?: string | null // For hospital-scoped appointment billing
 }
 
