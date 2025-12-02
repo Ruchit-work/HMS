@@ -49,8 +49,6 @@ export async function POST(request: Request) {
     // Delete the campaign
     await campaignRef.delete()
 
-    console.log(`[Campaign Delete] ✅ Campaign ${id} deleted successfully`)
-
     return NextResponse.json({
       success: true,
       message: "Campaign deleted successfully",

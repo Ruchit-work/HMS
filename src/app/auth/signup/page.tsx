@@ -8,6 +8,7 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  getDoc,
 } from "firebase/firestore";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePublicRoute } from "@/hooks/useAuth";
@@ -50,6 +51,11 @@ function SignUpContent() {
   const [pendingPatientValues, setPendingPatientValues] =
     useState<PatientProfileFormValues | null>(null);
 
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
+  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [loadingHospitals, setLoadingHospitals] = useState(false);
+  const [showHospitalSelection, setShowHospitalSelection] = useState(false);
+
   const { loading: checking } = usePublicRoute();
 
   useEffect(() => {
@@ -61,6 +67,33 @@ function SignUpContent() {
   useEffect(() => {
     setError("");
   }, [role]);
+
+  // Load hospitals when patient role is selected
+  useEffect(() => {
+    if (role === "patient") {
+      loadHospitals();
+    }
+  }, [role]);
+
+  const loadHospitals = async () => {
+    try {
+      setLoadingHospitals(true);
+      const response = await fetch("/api/hospitals");
+      const data = await response.json();
+      if (data.success) {
+        setHospitals(data.hospitals || []);
+        // If only one hospital, auto-select it
+        if (data.hospitals?.length === 1) {
+          setSelectedHospitalId(data.hospitals[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load hospitals:", err);
+      setError("Failed to load hospitals. Please refresh the page.");
+    } finally {
+      setLoadingHospitals(false);
+    }
+  };
 
   const dispatchCountdownNotification = (
     message: string,
@@ -196,6 +229,13 @@ function SignUpContent() {
 
   const handlePatientSubmit = (values: PatientProfileFormValues) => {
     setError("");
+    
+    // Check if hospital is selected
+    if (!selectedHospitalId) {
+      setError("Please select a hospital to continue.");
+      return;
+    }
+    
     if (!values.phone.trim()) {
       setError(
         "Please enter your phone number to proceed with OTP verification."
@@ -219,7 +259,9 @@ function SignUpContent() {
       const user = userCredential.user;
 
       const patientId = await getNextPatientId();
+      const selectedHospital = selectedHospitalId || null;
 
+      // Create patient document
       await setDoc(doc(db, "patients", user.uid), {
         email: values.email,
         status: values.status ?? "active",
@@ -233,9 +275,39 @@ function SignUpContent() {
         bloodGroup: values.bloodGroup,
         address: values.address,
         patientId,
+        hospitalId: selectedHospital, // Store hospital association
         createdAt: new Date().toISOString(),
         createdBy: "self",
       });
+
+      // Create/update user document in users collection for multi-hospital support
+      const userDocRef = doc(db, "users", user.uid);
+      const existingUserDoc = await getDoc(userDocRef);
+      
+      if (existingUserDoc.exists()) {
+        // User exists - add hospital to hospitals array if not already present
+        const userData = existingUserDoc.data();
+        const hospitals = userData?.hospitals || [];
+        if (selectedHospital && !hospitals.includes(selectedHospital)) {
+          hospitals.push(selectedHospital);
+        }
+        await setDoc(userDocRef, {
+          hospitals,
+          activeHospital: selectedHospital,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      } else {
+        // Create new user document
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: values.email,
+          role: "patient",
+          hospitals: selectedHospital ? [selectedHospital] : [],
+          activeHospital: selectedHospital,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       // Send WhatsApp notification after successful account creation
       const combinedPhone = `${values.countryCode || ""}${
@@ -290,9 +362,7 @@ Thank you for choosing Harmony Medical Services! 🏥`;
 
             const data = await response.json().catch(() => ({}))
 
-            if (data?.success) {
-              console.log("[Signup WhatsApp] ✅ Account creation message sent successfully to:", phoneToSend)
-            } else {
+            if (!data?.success) {
               console.error("[Signup WhatsApp] ❌ Failed to send account creation message:", {
                 phone: phoneToSend,
                 error: data?.error || "Unknown error",
@@ -537,18 +607,72 @@ Thank you for choosing Harmony Medical Services! 🏥`;
                   }
                 />
               ) : (
-                <PatientProfileForm
-                  mode="public"
-                  loading={loading}
-                  externalError={error}
-                  onErrorClear={() => setError("")}
-                  onSubmit={handlePatientSubmit}
-                  submitLabel={
-                    loading
-                      ? "Creating Patient Account..."
-                      : "Create Patient Account"
-                  }
-                />
+                <>
+                  {/* Hospital Selection for Patients */}
+                  {role === "patient" && (!selectedHospitalId || hospitals.length > 1) && (
+                    <div className="mb-6">
+                      <label className="block text-sm font-semibold text-slate-700 mb-3">
+                        Select Hospital *
+                      </label>
+                      {loadingHospitals ? (
+                        <div className="text-center py-4">
+                          <LoadingSpinner message="Loading hospitals..." />
+                        </div>
+                      ) : hospitals.length === 0 ? (
+                        <div className="text-center py-4 text-red-600">
+                          No hospitals available. Please contact support.
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {hospitals.map((hospital) => (
+                            <label
+                              key={hospital.id}
+                              className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                                selectedHospitalId === hospital.id
+                                  ? "border-blue-500 bg-blue-50"
+                                  : "border-slate-200 hover:border-slate-300"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="hospital"
+                                value={hospital.id}
+                                checked={selectedHospitalId === hospital.id}
+                                onChange={(e) => setSelectedHospitalId(e.target.value)}
+                                className="mt-1 w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                              />
+                              <div className="flex-1">
+                                <div className="font-medium text-slate-900">
+                                  {hospital.name}
+                                </div>
+                                {hospital.address && (
+                                  <div className="text-sm text-slate-600 mt-1">
+                                    {hospital.address}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {role === "patient" && selectedHospitalId && (
+                    <PatientProfileForm
+                      mode="public"
+                      loading={loading}
+                      externalError={error}
+                      onErrorClear={() => setError("")}
+                      onSubmit={handlePatientSubmit}
+                      submitLabel={
+                        loading
+                          ? "Creating Patient Account..."
+                          : "Create Patient Account"
+                      }
+                    />
+                  )}
+                </>
               )}
 
               <div className="mt-6 text-center">

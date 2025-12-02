@@ -21,6 +21,7 @@ export interface Campaign {
   updatedBy?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
+  hospitalId?: string | null // null/undefined = auto-generated (show to all), string = manual (show only to that hospital)
 }
 
 export function slugify(input: string): string {
@@ -53,7 +54,11 @@ export async function deleteCampaign(id: string) {
   await deleteDoc(doc(db, 'campaigns', id))
 }
 
-export async function fetchPublishedCampaignsForAudience(audience: CampaignAudience, now: Date = new Date()) {
+export async function fetchPublishedCampaignsForAudience(
+  audience: CampaignAudience, 
+  patientHospitalId?: string | null,
+  now: Date = new Date()
+) {
   const base = [
     where('status', '==', 'published'),
     orderBy('priority', 'desc'),
@@ -69,9 +74,21 @@ export async function fetchPublishedCampaignsForAudience(audience: CampaignAudie
 
   const nowMs = now.getTime()
   return list.filter(c => {
+    // Filter by date (start/end)
     const startOk = !c.startAt || (c.startAt instanceof Timestamp ? c.startAt.toMillis() <= nowMs : true)
     const endOk = !c.endAt || (c.endAt instanceof Timestamp ? c.endAt.toMillis() >= nowMs : true)
-    return startOk && endOk
+    if (!startOk || !endOk) return false
+
+    // Filter by hospital:
+    // All campaigns (both auto-generated and manual) are now hospital-specific
+    // Show campaign only if patient's hospital matches the campaign's hospital
+    if (!c.hospitalId) {
+      // Legacy campaign without hospitalId - skip (shouldn't happen for new campaigns)
+      return false
+    } else {
+      // Campaign with hospitalId - show only if patient's hospital matches
+      return c.hospitalId === patientHospitalId
+    }
   })
 }
 

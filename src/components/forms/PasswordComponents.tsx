@@ -121,7 +121,32 @@ export function ChangePasswordSection({
       setConfirmNewPassword("")
       notify?.("success", "Password updated successfully")
     } catch (error: unknown) {
-      notify?.("error", (error as Error).message || "Failed to update password")
+      const firebaseError = error as { code?: string; message?: string }
+      let errorMessage = "Failed to update password"
+
+      // Map Firebase error codes to user-friendly messages
+      switch (firebaseError.code) {
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+          errorMessage = "Current password is incorrect. Please check and try again."
+          break
+        case "auth/weak-password":
+          errorMessage = "New password is too weak. Please use a stronger password (at least 8 characters with uppercase, lowercase, number, and special character)."
+          break
+        case "auth/requires-recent-login":
+          errorMessage = "For security reasons, please sign out and sign in again before changing your password."
+          break
+        case "auth/network-request-failed":
+          errorMessage = "Network error. Please check your internet connection and try again."
+          break
+        case "auth/too-many-requests":
+          errorMessage = "Too many attempts. Please try again later."
+          break
+        default:
+          errorMessage = firebaseError.message || "Failed to update password. Please try again."
+      }
+
+      notify?.("error", errorMessage)
     } finally {
       setChanging(false)
     }

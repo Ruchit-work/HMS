@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, addDoc, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import { CancelAppointmentModal } from "@/components/patient/AppointmentModals"
@@ -29,11 +31,14 @@ export default function PatientDashboard() {
 
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
 
     const fetchData = async () => {
+      // For patients, we still check the legacy patients collection for user data
+      // but data will be stored in hospital-scoped subcollections
       const patientDocRef = doc(db, "patients", user.uid)
       const patientDoc = await getDoc(patientDocRef)
       let patientRecord: UserData | null = null
@@ -42,7 +47,8 @@ export default function PatientDashboard() {
         setUserData(patientRecord)
       }
 
-      const doctorsQuery = query(collection(db, "doctors"), where("status", "==", "active"))
+      // Get doctors from active hospital
+      const doctorsQuery = query(getHospitalCollection(activeHospitalId, "doctors"), where("status", "==", "active"))
       const doctorsSnapshot = await getDocs(doctorsQuery)
       const doctorsList = doctorsSnapshot.docs.map((doc) => ({
         id: doc.id,
@@ -50,7 +56,8 @@ export default function PatientDashboard() {
       } as Doctor))
       setDoctors(doctorsList)
 
-      const appointmentsCollection = collection(db, "appointments")
+      // Get appointments from active hospital
+      const appointmentsCollection = getHospitalCollection(activeHospitalId, "appointments")
       const appointmentQueries: Promise<any>[] = [
         getDocs(query(appointmentsCollection, where("patientUid", "==", user.uid)))
       ]
@@ -77,15 +84,28 @@ export default function PatientDashboard() {
       })
       setAppointments(Array.from(appointmentMap.values()))
 
-      const published = await fetchPublishedCampaignsForAudience("patients")
+      const published = await fetchPublishedCampaignsForAudience("patients", activeHospitalId)
       setCampaigns(published)
     }
 
     fetchData()
-  }, [user])
+  }, [user, activeHospitalId])
 
-  if (loading) {
+  if (loading || hospitalLoading) {
     return <LoadingSpinner message="Loading Patient Portal..." />
+  }
+
+  if (!activeHospitalId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-600 mb-4">No hospital selected. Please select a hospital to continue.</p>
+          <Link href="/hospital-selection" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-block">
+            Select Hospital
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   if (!user || !userData) {

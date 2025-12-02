@@ -1,5 +1,6 @@
 import { db } from "@/firebase/config"
 import { doc, updateDoc, getDoc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 const SLOT_COLLECTION = "appointmentSlots"
 const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {
   if (!doctorId || !date || !time) return null
@@ -76,10 +77,16 @@ export const cancelAppointment = async (appointment: Appointment) => {
 export const completeAppointment = async (
   appointmentId: string,
   medicine: string,
-  notes: string
+  notes: string,
+  hospitalId: string
 ) => {
-  // Load appointment to validate rules
-  const aptRef = doc(db, "appointments", appointmentId)
+  if (!hospitalId) {
+    throw new Error("Hospital ID is required")
+  }
+
+  // Load appointment to validate rules - use hospital-scoped collection
+  const appointmentsRef = getHospitalCollection(hospitalId, "appointments")
+  const aptRef = doc(appointmentsRef, appointmentId)
   const aptSnap = await getDoc(aptRef)
   if (!aptSnap.exists()) {
     throw new Error("Appointment not found")
@@ -99,7 +106,7 @@ export const completeAppointment = async (
   }
   const todayStr = new Date().toISOString().slice(0,10)
   const qConfirmedToday = query(
-    collection(db, "appointments"),
+    appointmentsRef,
     where("doctorId", "==", doctorId),
     where("appointmentDate", "==", todayStr),
     where("status", "==", "confirmed")

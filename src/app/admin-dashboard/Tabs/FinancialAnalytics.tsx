@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
+import { useMultiHospital } from '@/contexts/MultiHospitalContext'
+import { getHospitalCollection } from '@/utils/hospital-queries'
 import LoadingSpinner from '@/components/ui/StatusComponents'
 import { formatDate } from '@/utils/date'
 
@@ -113,16 +115,19 @@ interface FinancialAnalytics {
 
 export default function FinancialAnalytics() {
   const { user, loading: authLoading } = useAuth()
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<FinancialAnalytics | null>(null)
   const [timeRange, setTimeRange] = useState<'7days' | '30days' | '3months' | '6months' | '1year' | 'all'>('1year')
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
     fetchFinancialAnalytics()
-  }, [user, timeRange])
+  }, [user, activeHospitalId, timeRange])
 
   const fetchFinancialAnalytics = async () => {
+    if (!activeHospitalId) return
+    
     try {
       setLoading(true)
 
@@ -148,8 +153,8 @@ export default function FinancialAnalytics() {
         billingRecords = Array.isArray(billingData?.records) ? billingData.records : []
       }
 
-      // Fetch appointments (they also have payment data)
-      const appointmentsSnapshot = await getDocs(collection(db, 'appointments'))
+      // Fetch appointments (they also have payment data) - use hospital-scoped collection
+      const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'appointments'))
       const appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()

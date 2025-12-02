@@ -130,20 +130,14 @@ export async function PUT(
           
           // STEP 3: DO ALL WRITES AFTER READS
           
-          // Delete old PENDING slot if it belongs to this appointment
           if (oldPendingSlotSnap.exists && oldPendingSlotSnap.data()?.appointmentId === appointmentId) {
-            console.log(`[Receptionist Update] Removing old PENDING slot: ${oldPendingSlotId}`)
             transaction.delete(oldPendingSlotRef)
           }
           
-          // Delete old doctor slot if it belongs to this appointment
           if (oldDoctorSlotRef && oldDoctorSlotSnap && oldDoctorSlotSnap.exists && oldDoctorSlotSnap.data()?.appointmentId === appointmentId) {
-            console.log(`[Receptionist Update] Removing old doctor slot: ${oldDoctorSlotRef.id}`)
             transaction.delete(oldDoctorSlotRef)
           }
           
-          // Create the new doctor-specific slot
-          console.log(`[Receptionist Update] Creating new doctor slot: ${newSlotDocId}`)
           transaction.set(newSlotRef, {
             appointmentId,
             doctorId: body.doctorId,
@@ -191,8 +185,6 @@ export async function PUT(
       // Don't send notification if markConfirmed is explicitly false
     }
 
-    // Update appointment (this modifies the existing appointment, does not create a new one)
-    console.log(`[Receptionist Update] Updating appointment ${appointmentId} with doctor ${body.doctorId}`)
     await appointmentRef.update(updateData)
 
     // Also update the patient record if patient details were changed
@@ -228,7 +220,6 @@ export async function PUT(
             if (Object.keys(patientUpdateData).length > 0) {
               patientUpdateData.updatedAt = new Date().toISOString()
               await patientRef.update(patientUpdateData)
-              console.log(`[Receptionist Update] Updated patient record for ${patientId}:`, patientUpdateData)
             }
           }
         }
@@ -307,9 +298,7 @@ See you soon! 🏥`
             message,
           })
 
-          if (result.success) {
-            console.log("[WhatsApp Bookings API] ✅ Confirmation message sent successfully to:", patientPhone)
-          } else {
+          if (!result.success) {
             console.error("[WhatsApp Bookings API] ❌ Failed to send confirmation message:", {
               phone: patientPhone,
               error: result.error,

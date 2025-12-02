@@ -4,6 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, increment } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import BookAppointmentForm from "@/components/patient/BookAppointmentForm"
@@ -33,6 +35,7 @@ function BookAppointmentContent() {
   const [successAppointmentData, setSuccessAppointmentData] = useState<any>(null)
 
   const { user, loading } = useAuth("patient")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const searchParams = useSearchParams()
   const router = useRouter()
  
@@ -133,7 +136,7 @@ See you soon! 🏥`
   )
  
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
 
     const fetchData = async () => {
       const patientDoc = await getDoc(doc(db, "patients", user.uid))
@@ -142,7 +145,7 @@ See you soon! 🏥`
         setUserData(data)
       }
 
-      const doctorsQuery = query(collection(db, "doctors"), where("status", "==", "active"))
+      const doctorsQuery = query(getHospitalCollection(activeHospitalId, "doctors"), where("status", "==", "active"))
       const unsub = onSnapshot(doctorsQuery, (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Doctor))
         setDoctors(list)

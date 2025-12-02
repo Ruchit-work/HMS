@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs, updateDoc, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import Link from "next/link"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns"
 import CampaignCarousel from "@/components/patient/CampaignCarousel"
@@ -50,11 +52,14 @@ export default function DoctorDashboard() {
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
 
   // Function to set up real-time appointments listener
   const setupAppointmentsListener = (doctorId: string) => {
+    if (!activeHospitalId) return () => {}
+    
     try {
-      const appointmentsRef = collection(db, "appointments")
+      const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
       const q = query(appointmentsRef, where("doctorId", "==", doctorId))
       
       // Set up real-time listener
@@ -70,7 +75,6 @@ export default function DoctorDashboard() {
           })
         
         setAppointments(appointmentsList)
-        console.log(`[Doctor Dashboard] Real-time update: ${appointmentsList.length} appointments loaded`)
       }, (error) => {
         console.error("Error in appointments listener:", error)
       })
@@ -198,13 +202,13 @@ export default function DoctorDashboard() {
   }
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
     const loadCampaigns = async () => {
-      const published = await fetchPublishedCampaignsForAudience('doctors')
+      const published = await fetchPublishedCampaignsForAudience('doctors', activeHospitalId)
       setCampaigns(published)
     }
     loadCampaigns()
-  }, [user])
+  }, [user, activeHospitalId])
 
   if (loading) {
     return <LoadingSpinner message="Loading Doctor Dashboard..." />
@@ -232,6 +236,14 @@ export default function DoctorDashboard() {
     e.preventDefault()
     
     if (!selectedAppointmentId) return
+
+    if (!activeHospitalId) {
+      setNotification({ 
+        type: "error", 
+        message: "Hospital context is not available. Please refresh the page." 
+      })
+      return
+    }
     
     if (!completionData.medicine.trim() || !completionData.notes.trim()) {
       setNotification({ 
@@ -246,7 +258,8 @@ export default function DoctorDashboard() {
       const result = await completeAppointment(
         selectedAppointmentId,
         completionData.medicine,
-        completionData.notes
+        completionData.notes,
+        activeHospitalId
       )
 
       // Update local state

@@ -6,6 +6,8 @@ import { doc, getDoc, collection, query, where, onSnapshot } from "firebase/fire
 import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/NotificationBadge"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import { useRouter } from "next/navigation"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
@@ -41,6 +43,7 @@ export default function ReceptionistDashboard() {
 
   const router = useRouter()
   const { user, loading: authLoading } = useAuth("receptionist")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
 
   // Notification badge hooks - automatically clear when panels are viewed
   const appointmentsBadge = useNotificationBadge({ 
@@ -107,15 +110,10 @@ export default function ReceptionistDashboard() {
     }
   }, [])
 
-  useEffect(() => {
-    refreshWhatsappPendingCount()
-    setupRealtimeBadgeListeners()
-    const interval = setInterval(refreshWhatsappPendingCount, 30000)
-    return () => clearInterval(interval)
-  }, [refreshWhatsappPendingCount])
-
   // Setup real-time listeners for badge counts
-  const setupRealtimeBadgeListeners = () => {
+  const setupRealtimeBadgeListeners = useCallback(() => {
+    if (!activeHospitalId) return () => {}
+    
     // Listen for new appointments (today's appointments)
     const today = new Date()
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -123,7 +121,7 @@ export default function ReceptionistDashboard() {
     todayEnd.setDate(todayEnd.getDate() + 1)
 
     const appointmentsQuery = query(
-      collection(db, "appointments"),
+      getHospitalCollection(activeHospitalId, "appointments"),
       where("appointmentDate", ">=", todayStart.toISOString().split('T')[0]),
       where("appointmentDate", "<", todayEnd.toISOString().split('T')[0])
     )
@@ -141,8 +139,8 @@ export default function ReceptionistDashboard() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
     const patientsQuery = query(
-      collection(db, "patients"),
-      where("createdAt", ">=", sevenDaysAgo)
+      getHospitalCollection(activeHospitalId, "patients"),
+      where("createdAt", ">=", sevenDaysAgo.toISOString())
     )
 
     const unsubscribePatients = onSnapshot(patientsQuery, (snapshot) => {
@@ -151,7 +149,7 @@ export default function ReceptionistDashboard() {
 
     // Listen for pending billing (unpaid appointments)
     const billingQuery = query(
-      collection(db, "appointments"),
+      getHospitalCollection(activeHospitalId, "appointments"),
       where("status", "==", "completed"),
       where("paymentStatus", "in", ["pending", "unpaid"])
     )
@@ -160,9 +158,9 @@ export default function ReceptionistDashboard() {
       setPendingBillingCount(snapshot.size)
     })
 
-    // Listen for admit requests
+    // Listen for admit requests (hospital-scoped)
     const admitRequestsQuery = query(
-      collection(db, "admission_requests"),
+      getHospitalCollection(activeHospitalId, "admission_requests"),
       where("status", "==", "pending")
     )
 
@@ -177,8 +175,21 @@ export default function ReceptionistDashboard() {
       unsubscribeBilling()
       unsubscribeAdmitRequests()
     }
-  }
+  }, [activeHospitalId])
 
+  // Setup real-time badge listeners when activeHospitalId is available
+  useEffect(() => {
+    if (!activeHospitalId || hospitalLoading) return
+    
+    const unsubscribe = setupRealtimeBadgeListeners()
+    refreshWhatsappPendingCount()
+    const interval = setInterval(refreshWhatsappPendingCount, 30000)
+    
+    return () => {
+      if (unsubscribe) unsubscribe()
+      clearInterval(interval)
+    }
+  }, [activeHospitalId, hospitalLoading, setupRealtimeBadgeListeners, refreshWhatsappPendingCount])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -204,7 +215,7 @@ export default function ReceptionistDashboard() {
     }
   }
 
-  if (authLoading || loading) {
+  if (authLoading || loading || hospitalLoading) {
     return <LoadingSpinner message="Loading receptionist dashboard..." />
   }
 
@@ -555,7 +566,7 @@ export default function ReceptionistDashboard() {
 
               {/* Patient Content */}
               <div className="p-8">
-                {patientSubTab === "all" && <PatientManagement canDelete={true} disableAdminGuard={true} />}
+                {patientSubTab === "all" && <PatientManagement canDelete={true} canAdd={true} disableAdminGuard={true} />}
                 {patientSubTab === "analytics" && <PatientAnalytics />}
               </div>
             </div>

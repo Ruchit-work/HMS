@@ -9,10 +9,47 @@ export async function POST(request: Request) {
     return rateLimitResult // Rate limited
   }
 
-  // Authenticate request - requires admin role
-  const auth = await authenticateRequest(request, "admin")
+  // Authenticate request - requires admin or super_admin role
+  const auth = await authenticateRequest(request)
   if (!auth.success) {
     return createAuthErrorResponse(auth)
+  }
+
+  // Verify user is admin or super_admin
+  if (!auth.user) {
+    return Response.json({ error: "User not authenticated" }, { status: 401 })
+  }
+
+  // Verify user is admin or super_admin
+  const initResult = initFirebaseAdmin("delete-user API")
+  if (!initResult.ok) {
+    return Response.json({ error: "Server not configured for admin" }, { status: 500 })
+  }
+
+  // Check if user is admin or super_admin
+  const db = admin.firestore()
+  const userDoc = await db.collection('users').doc(auth.user.uid).get()
+  let isAuthorized = false
+
+  if (userDoc.exists) {
+    const userData = userDoc.data()
+    isAuthorized = userData?.role === 'admin' || userData?.role === 'super_admin'
+  }
+
+  // Fallback: Check admins collection
+  if (!isAuthorized) {
+    const adminDoc = await db.collection('admins').doc(auth.user.uid).get()
+    if (adminDoc.exists) {
+      // If it exists in admins collection, they're authorized (either admin or super_admin)
+      isAuthorized = true
+    }
+  }
+
+  if (!isAuthorized) {
+    return Response.json(
+      { error: "Access denied. Admin or Super Admin privileges required." },
+      { status: 403 }
+    )
   }
 
   // Re-apply rate limit with user ID for better tracking
@@ -22,11 +59,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const initResult = initFirebaseAdmin("delete-user API")
-    if (!initResult.ok) {
-      return Response.json({ error: "Server not configured for admin" }, { status: 500 })
-    }
-
     const body = await request.json().catch(() => ({}))
     const { uid, userType } = body
 
@@ -35,20 +67,25 @@ export async function POST(request: Request) {
     }
 
     // Determine user role by checking Firestore collections
-    const firestore = admin.firestore()
     let detectedUserType = userType || "user"
     try {
-      const patientDoc = await firestore.collection("patients").doc(uid).get()
-      if (patientDoc.exists) {
-        detectedUserType = "patient"
+      // Check admins collection first
+      const adminDoc = await db.collection("admins").doc(uid).get()
+      if (adminDoc.exists) {
+        detectedUserType = "admin"
       } else {
-        const doctorDoc = await firestore.collection("doctors").doc(uid).get()
-        if (doctorDoc.exists) {
-          detectedUserType = "doctor"
+        const patientDoc = await db.collection("patients").doc(uid).get()
+        if (patientDoc.exists) {
+          detectedUserType = "patient"
         } else {
-          const receptionistDoc = await firestore.collection("receptionists").doc(uid).get()
-          if (receptionistDoc.exists) {
-            detectedUserType = "receptionist"
+          const doctorDoc = await db.collection("doctors").doc(uid).get()
+          if (doctorDoc.exists) {
+            detectedUserType = "doctor"
+          } else {
+            const receptionistDoc = await db.collection("receptionists").doc(uid).get()
+            if (receptionistDoc.exists) {
+              detectedUserType = "receptionist"
+            }
           }
         }
       }

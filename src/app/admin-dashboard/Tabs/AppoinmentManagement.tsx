@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
-import { db } from '@/firebase/config'
+import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
+import { useMultiHospital } from '@/contexts/MultiHospitalContext'
+import { getHospitalCollection } from '@/utils/hospital-queries'
 import LoadingSpinner from '@/components/ui/StatusComponents'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/Modals'
@@ -22,6 +24,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const { user, loading: authLoading } = useAuth()
+    const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
     const { isNew } = useNewItems('admin-appointments')
     const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([])
     const [sortField, setSortField] = useState<string>('')
@@ -35,7 +38,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     const [doctors, setDoctors] = useState<Array<{ id: string; firstName?: string; lastName?: string }>>([])
     const [selectedDoctorId, setSelectedDoctorId] = useState<string>('all')
     const [timeRange, setTimeRange] = useState<'all' | 'today' | 'last10' | 'month' | 'year'>('all')
-    const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'completed' | 'cancelled'>('all')
+    const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'completed' | 'cancelled' | 'not_attended'>('all')
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
     const resetFilters = () => {
@@ -48,12 +51,13 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     }
 
     const statusCounts = useMemo(() => {
-        const counts = { confirmed: 0, completed: 0, cancelled: 0 }
+        const counts = { confirmed: 0, completed: 0, cancelled: 0, not_attended: 0 }
         appointments.forEach((apt) => {
             const status = (apt as any).status
             if (status === 'confirmed') counts.confirmed += 1
             if (status === 'completed') counts.completed += 1
             if (status === 'cancelled' || status === 'doctor_cancelled') counts.cancelled += 1
+            if (status === 'not_attended') counts.not_attended += 1
         })
         return counts
     }, [appointments])
@@ -62,8 +66,9 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
         { key: 'all' as const, label: 'All', count: appointments.length },
         { key: 'confirmed' as const, label: 'Confirmed', count: statusCounts.confirmed },
         { key: 'completed' as const, label: 'Completed', count: statusCounts.completed },
+        { key: 'not_attended' as const, label: 'Not Attended', count: statusCounts.not_attended },
         { key: 'cancelled' as const, label: 'Cancelled', count: statusCounts.cancelled },
-    ]), [appointments.length, statusCounts.cancelled, statusCounts.completed, statusCounts.confirmed])
+    ]), [appointments.length, statusCounts.cancelled, statusCounts.completed, statusCounts.confirmed, statusCounts.not_attended])
 
     const metrics = useMemo(() => {
         const parseDate = (value?: string) => {
@@ -174,16 +179,80 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             setLoading(false)
         }
     }
-    const setupRealtimeListener = () => {
+
+    const handleMarkNotAttended = async (appointment: Appointment) => {
+        if (!appointment) return
+        
+        // Check if appointment can be marked as not attended
+        const currentStatus = appointment.status || ''
+        if (currentStatus === 'completed' || currentStatus === 'cancelled') {
+            setError(`Cannot mark ${currentStatus} appointment as not attended`)
+            return
+        }
+
         try {
             setLoading(true)
             setError(null)
-            const appointmentsRef = collection(db, 'appointments')
+
+            // Get Firebase Auth token
+            const currentUser = auth.currentUser
+            if (!currentUser) {
+                throw new Error('You must be logged in to mark appointments')
+            }
+
+            const token = await currentUser.getIdToken()
+
+            const response = await fetch(`/api/appointments/${appointment.id}/mark-not-attended`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to mark appointment as not attended')
+            }
+
+            setSuccessMessage('Appointment marked as not attended successfully!')
+            setTimeout(() => {
+                setSuccessMessage(null)
+            }, 3000)
+
+            // The real-time listener will automatically update the appointment status
+        } catch (error: any) {
+            setError(error?.message || 'Failed to mark appointment as not attended')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Helper function to check if appointment can be marked as not attended
+    const canMarkNotAttended = (appointment: Appointment): boolean => {
+        const status = appointment.status || ''
+        if (status === 'completed' || status === 'cancelled' || status === 'not_attended') {
+            return false
+        }
+
+        // Check if appointment date is today or in the past
+        const appointmentDate = new Date(appointment.appointmentDate + 'T00:00:00')
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        appointmentDate.setHours(0, 0, 0, 0)
+
+        return appointmentDate <= today
+    }
+    const setupRealtimeListener = () => {
+        if (!activeHospitalId) return () => {}
+        
+        try {
+            setLoading(true)
+            setError(null)
+            const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
             
-            // Set up real-time listener
             const unsubscribe = onSnapshot(appointmentsRef, (snapshot) => {
-                console.log(`[Admin Appointments] Real-time update: ${snapshot.docs.length} total appointments`)
-                
                 const appointmentsList = snapshot.docs
                     .map((doc) => ({
                         id: doc.id,
@@ -218,10 +287,11 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
         // Set up real-time listener for appointments
         unsubscribeAppointments = setupRealtimeListener()
         
-        // Fetch limited doctors list for dropdown (active doctors)
+        // Fetch limited doctors list for dropdown (active doctors) - use hospital-scoped collection
         ;(async () => {
+            if (!activeHospitalId) return
             try {
-                const snap = await getDocs(collection(db, 'doctors'))
+                const snap = await getDocs(getHospitalCollection(activeHospitalId, 'doctors'))
                 const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as any[]
                 const mapped = list.map(d => ({ id: d.id, firstName: d.firstName, lastName: d.lastName }))
                 setDoctors(mapped)
@@ -236,7 +306,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                 unsubscribeAppointments()
             }
         }
-    }, [])
+    }, [activeHospitalId, user, authLoading])
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -590,7 +660,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                 <td className="px-3 py-4">
                                                     {(() => {
                                                         const s = (appointment as any).status || 'N/A'
-                                                        const label = s === 'resrescheduled' ? 'rescheduled' : s
+                                                        const label = s === 'resrescheduled' ? 'rescheduled' : s === 'not_attended' ? 'not attended' : s
                                                         const cls =
                                                             s === 'completed'
                                                                 ? 'bg-emerald-100 text-emerald-700'
@@ -598,6 +668,8 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                                 ? 'bg-blue-100 text-blue-700'
                                                                 : s === 'cancelled' || s === 'doctor_cancelled'
                                                                 ? 'bg-red-100 text-red-700'
+                                                                : s === 'not_attended'
+                                                                ? 'bg-orange-100 text-orange-700'
                                                                 : s === 'resrescheduled'
                                                                 ? 'bg-purple-100 text-purple-700'
                                                                 : 'bg-slate-100 text-slate-700'
@@ -622,6 +694,15 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                             </svg>
                                                             <span className="hidden sm:inline">View</span>
                                                         </button>
+                                                        {canMarkNotAttended(appointment) && (
+                                                            <button className="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700 transition hover:bg-orange-100"
+                                                                onClick={() => handleMarkNotAttended(appointment)} type="button">
+                                                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                </svg>
+                                                                <span className="hidden sm:inline">Not Attended</span>
+                                                            </button>
+                                                        )}
                                                         <button  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
                                                             onClick={() => handleDelete(appointment)}  type="button" >
                                                             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

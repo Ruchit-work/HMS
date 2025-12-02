@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import { generatePrescriptionPDF } from "@/utils/pdfGenerators"
@@ -192,9 +194,10 @@ export default function DoctorAppointments() {
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
 
   const setupRealtimeListeners = async () => {
-    if (!user) return () => {}
+    if (!user || !activeHospitalId) return () => {}
 
     // Get doctor data (one-time fetch)
     const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
@@ -203,8 +206,8 @@ export default function DoctorAppointments() {
       setUserData(data)
     }
 
-    // Set up real-time appointments listener
-    const appointmentsRef = collection(db, "appointments")
+    // Set up real-time appointments listener - use hospital-scoped collection
+    const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
     const q = query(appointmentsRef, where("doctorId", "==", user.uid))
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -220,7 +223,6 @@ export default function DoctorAppointments() {
         })
       
       setAppointments(appointmentsList)
-      console.log(`[Doctor Appointments] Real-time update: ${appointmentsList.length} appointments loaded`)
     }, (error) => {
       console.error("Error in appointments listener:", error)
     })
@@ -433,7 +435,7 @@ export default function DoctorAppointments() {
     (query: string, limitOptions = 5) => {
       if (!medicineSuggestions.length) return []
       const cleaned = query.trim().toLowerCase()
-      if (cleaned.length < 2) return []
+      if (cleaned.length < 1) return []
 
       const startsWithMatches = medicineSuggestions.filter((suggestion) =>
         suggestion.name.toLowerCase().startsWith(cleaned)
@@ -522,7 +524,7 @@ export default function DoctorAppointments() {
   const updateInlineSuggestion = useCallback(
     (appointmentId: string, index: number, value: string) => {
       const cleanedValue = value.trim()
-      if (cleanedValue.length < 2) {
+      if (cleanedValue.length < 1) {
         setInlineSuggestion((prev) =>
           prev?.appointmentId === appointmentId && prev.index === index ? null : prev
         )
@@ -694,9 +696,6 @@ export default function DoctorAppointments() {
       }
       const token = await currentUser.getIdToken()
 
-      // Debug: Log token info (without exposing full token)
-      console.log("[AI Diagnosis] Attempting API call with token (length:", token?.length || 0, ")")
-      
       const { data } = await axios.post(
         "/api/diagnosis",
         {
@@ -722,9 +721,6 @@ export default function DoctorAppointments() {
     } catch (error: unknown) {
       console.error("AI Diagnosis error:", error)
       const errorResponse = (error as { response?: { data?: unknown; status?: number } }).response
-      console.error("Error response full:", errorResponse)
-      console.error("Error response data:", errorResponse?.data)
-      console.error("Error status:", errorResponse?.status)
       
       // Extract error message from response
       let errorMessage = "Failed to get AI diagnosis"
@@ -741,10 +737,6 @@ export default function DoctorAppointments() {
       } else if (error instanceof Error) {
         errorMessage = error.message
       }
-      
-      // Log detailed error info for debugging
-      console.error("Extracted error message:", errorMessage)
-      console.error("Error details:", errorDetails)
       
       // Provide more helpful error messages
       if (errorResponse?.status === 403) {
@@ -999,13 +991,22 @@ export default function DoctorAppointments() {
     formData: CompletionFormEntry,
     options?: { showToast?: boolean }
   ) => {
+    if (!activeHospitalId) {
+      setNotification({ 
+        type: "error", 
+        message: "Hospital context is not available. Please refresh the page." 
+      })
+      return
+    }
+
     const appointmentSnapshot = appointments.find((apt) => apt.id === appointmentId)
     const medicineText = formatMedicinesAsText(formData.medicines, formData.notes)
 
     const result = await completeAppointment(
       appointmentId,
       medicineText,
-      formData.notes
+      formData.notes,
+      activeHospitalId
     )
 
     setAppointments((prevAppointments) =>
@@ -2859,7 +2860,6 @@ export default function DoctorAppointments() {
                                     rows={3}
                                     placeholder="Enter observations, diagnosis, recommendations..."
                                     className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
-                                    required
                                   />
                                 </div>
 

@@ -3,6 +3,8 @@ import { db, auth } from '@/firebase/config'
 import { getDocs, where, query, collection, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { useMultiHospital } from '@/contexts/MultiHospitalContext'
+import { getHospitalCollection } from '@/utils/hospital-queries'
 import LoadingSpinner from '@/components/ui/StatusComponents'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/Modals'
@@ -40,6 +42,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     const [showAddModal, setShowAddModal] = useState(false)
 
     const { user, loading: authLoading } = useAuth()
+    const { activeHospitalId, loading: hospitalLoading, isSuperAdmin } = useMultiHospital()
 
     const filteredActiveDoctors = useMemo(() => {
         if (!search.trim()) return doctors
@@ -61,7 +64,14 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         )
     }, [pendingDoctors, search])
 
-    const displayedDoctors = activeTab === 'active' ? filteredActiveDoctors : filteredPendingDoctors
+    const displayedDoctors = useMemo(() => {
+        const doctors = activeTab === 'active' ? filteredActiveDoctors : filteredPendingDoctors
+        // Remove duplicates based on doctor ID
+        const uniqueDoctors = doctors.filter((doctor, index, self) =>
+            index === self.findIndex((d) => d.id === doctor.id)
+        )
+        return uniqueDoctors
+    }, [activeTab, filteredActiveDoctors, filteredPendingDoctors])
 
     const metrics = useMemo(() => {
         const activeCount = doctors.length
@@ -82,7 +92,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         return { total, activeCount, pendingCount, newThisMonth, specialists }
     }, [doctors, pendingDoctors])
 
-    const allowAdd = canAdd && user?.role === 'admin'
+    const allowAdd = canAdd && !isSuperAdmin && user?.role === 'admin'
 
     const openAddDoctorModal = () => {
         setError(null)
@@ -279,14 +289,15 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         }
     }
     const setupRealtimeListeners = useCallback(() => {
+        if (!activeHospitalId) return () => {}
+        
         try {
             setLoading(true)
-            const doctorsRef = collection(db, 'doctors')
+            const doctorsRef = getHospitalCollection(activeHospitalId, 'doctors')
             
             // Set up real-time listener for active doctors
             const activeQ = query(doctorsRef, where('status', '==', 'active'))
             const unsubscribeActive = onSnapshot(activeQ, (snapshot) => {
-                console.log(`[Admin Doctors] Real-time update: ${snapshot.docs.length} active doctors`)
                 const activeList = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data()
@@ -297,10 +308,8 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 setError(error.message)
             })
             
-            // Set up real-time listener for pending doctors
             const pendingQ = query(doctorsRef, where('status', '==', 'pending'))
             const unsubscribePending = onSnapshot(pendingQ, (snapshot) => {
-                console.log(`[Admin Doctors] Real-time update: ${snapshot.docs.length} pending doctors`)
                 const pendingList = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data()
@@ -323,7 +332,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             setLoading(false)
             return () => {}
         }
-    }, [])
+    }, [activeHospitalId])
     
     const handleApproveDoctor = async (doctorId: string) => {
         // Only admins can approve doctors
@@ -677,8 +686,8 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                     </td>
                                 </tr>
                             ) : (
-                                            displayedDoctors.map((doctor) => (
-                                                <tr className="hover:bg-slate-50" key={doctor.id}>
+                                            displayedDoctors.map((doctor, index) => (
+                                                <tr className="hover:bg-slate-50" key={`${activeTab}-${doctor.id}-${index}`}>
                                                     <td className="px-3 py-4">
                                                         <div className="flex items-center gap-3">
                                                             <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-600">

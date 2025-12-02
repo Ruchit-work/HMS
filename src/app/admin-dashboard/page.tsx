@@ -6,6 +6,8 @@ import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/NotificationBadge"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalQuery, getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import { useRouter } from "next/navigation"
 import { ConfirmDialog } from "@/components/ui/Modals"
@@ -19,6 +21,9 @@ import AppoinmentManagement from "./Tabs/AppoinmentManagement"
 import CampaignManagement from "./Tabs/CampaignManagement"
 import BillingManagement from "./Tabs/BillingManagement"
 import FinancialAnalytics from "./Tabs/FinancialAnalytics"
+import HospitalManagement from "./Tabs/HospitalManagement"
+import AdminAssignment from "./Tabs/AdminAssignment"
+import ReceptionistManagement from "./Tabs/ReceptionistManagement"
 import AdminProtected from "@/components/AdminProtected"
 
 interface UserData {
@@ -85,7 +90,7 @@ export default function AdminDashboard() {
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "hospitals" | "admins" | "receptionists">("overview")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
@@ -135,10 +140,11 @@ export default function AdminDashboard() {
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
+  const { activeHospitalId, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital, activeHospital } = useMultiHospital()
   const router = useRouter()
 
   const fetchDashboardData = async () => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
 
     try {
       setLoading(true)
@@ -150,16 +156,16 @@ export default function AdminDashboard() {
         setUserData(data)
       }
 
-      // Get all patients count
-      const patientsSnapshot = await getDocs(collection(db, "patients"))
+      // Get all patients count - use hospital-scoped collection
+      const patientsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "patients"))
       const totalPatients = patientsSnapshot.size
 
-      // Get all doctors count
-      const doctorsSnapshot = await getDocs(collection(db, "doctors"))
+      // Get all doctors count - use hospital-scoped collection
+      const doctorsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "doctors"))
       const totalDoctors = doctorsSnapshot.size
 
-      // Get all appointments
-      const appointmentsSnapshot = await getDocs(collection(db, "appointments"))
+      // Get all appointments - use hospital-scoped collection
+      const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "appointments"))
       const allAppointments = appointmentsSnapshot.docs.map(doc => ({ 
         id: doc.id, 
         ...doc.data() 
@@ -194,9 +200,9 @@ export default function AdminDashboard() {
         .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= sevenDaysAgo)
         .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
 
-      // Get recent appointments (last 10)
+      // Get recent appointments (last 10) - use hospital-scoped collection
       const recentAppointmentsQuery = query(
-        collection(db, "appointments"),
+        getHospitalCollection(activeHospitalId, "appointments"),
         orderBy("createdAt", "desc"),
         limit(10)
       )
@@ -374,14 +380,19 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    if (user) {
+    if (user && activeHospitalId && !hospitalLoading) {
       fetchDashboardData()
-      setupRealtimeBadgeListeners()
+      const cleanup = setupRealtimeBadgeListeners()
+      return () => {
+        if (cleanup) cleanup()
+      }
     }
-  }, [user])
+  }, [user, activeHospitalId, hospitalLoading])
 
   // Setup real-time listeners for badge counts
   const setupRealtimeBadgeListeners = () => {
+    if (!activeHospitalId) return () => {}
+
     // Listen for new appointments (today's appointments)
     const today = new Date()
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -389,7 +400,7 @@ export default function AdminDashboard() {
     todayEnd.setDate(todayEnd.getDate() + 1)
 
     const appointmentsQuery = query(
-      collection(db, "appointments"),
+      getHospitalCollection(activeHospitalId, "appointments"),
       where("appointmentDate", ">=", todayStart.toISOString().split('T')[0]),
       where("appointmentDate", "<", todayEnd.toISOString().split('T')[0])
     )
@@ -407,7 +418,7 @@ export default function AdminDashboard() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
     const patientsQuery = query(
-      collection(db, "patients"),
+      getHospitalCollection(activeHospitalId, "patients"),
       where("createdAt", ">=", sevenDaysAgo)
     )
 
@@ -417,7 +428,7 @@ export default function AdminDashboard() {
 
     // Listen for pending billing (unpaid appointments)
     const billingQuery = query(
-      collection(db, "appointments"),
+      getHospitalCollection(activeHospitalId, "appointments"),
       where("status", "==", "completed"),
       where("paymentStatus", "in", ["pending", "unpaid"])
     )
@@ -514,6 +525,12 @@ export default function AdminDashboard() {
     }
   }, [user])
 
+  // Redirect super admins away from campaigns tab
+  useEffect(() => {
+    if (isSuperAdmin && activeTab === "campaigns") {
+      setActiveTab("overview")
+    }
+  }, [isSuperAdmin, activeTab])
 
   const handleRefresh = async (e?: React.MouseEvent) => {
     e?.preventDefault()
@@ -616,7 +633,7 @@ export default function AdminDashboard() {
     }
   }
 
-  if (authLoading || loading) {
+  if (authLoading || hospitalLoading || loading) {
     return <LoadingSpinner message="Loading admin dashboard..." />
   }
 
@@ -741,24 +758,26 @@ export default function AdminDashboard() {
               <span className="font-medium text-sm">Doctors</span>
             </button>
 
-            {/* Campaigns */}
-            <button 
-              onClick={() => { setActiveTab("campaigns"); setSidebarOpen(false) }} 
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                activeTab === "campaigns" 
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <div className={`p-1.5 rounded-md ${activeTab === "campaigns" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
-                </svg>
-              </div>
-              <span className="font-medium text-sm">Campaigns</span>
-            </button>
-            
+            {/* Campaigns - Only for Regular Admins */}
+            {!isSuperAdmin && (
+              <button 
+                onClick={() => { setActiveTab("campaigns"); setSidebarOpen(false) }} 
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                  activeTab === "campaigns" 
+                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <div className={`p-1.5 rounded-md ${activeTab === "campaigns" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
+                  </svg>
+                </div>
+                <span className="font-medium text-sm">Campaigns</span>
+              </button>
+            )}
+
             {/* Appointments */}
             <div className="relative">
               <button 
@@ -810,6 +829,77 @@ export default function AdminDashboard() {
                 animate 
               />
             </div>
+
+            {/* Super Admin Only Tabs */}
+            {isSuperAdmin && (
+              <>
+                <div className="border-t border-slate-300/30 my-2"></div>
+                <div className="px-3 py-1">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Super Admin</p>
+                </div>
+                
+                {/* Hospitals */}
+                <button 
+                  onClick={() => { setActiveTab("hospitals"); setSidebarOpen(false) }} 
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                    activeTab === "hospitals" 
+                      ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${activeTab === "hospitals" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <span className="font-medium text-sm">Hospitals</span>
+                </button>
+
+                {/* Admin Assignment */}
+                <button 
+                  onClick={() => { setActiveTab("admins"); setSidebarOpen(false) }} 
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                    activeTab === "admins" 
+                      ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${activeTab === "admins" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                  <span className="font-medium text-sm">Admin Assignment</span>
+                </button>
+              </>
+            )}
+
+            {/* Regular Admin Only Tabs */}
+            {!isSuperAdmin && (
+              <>
+                <div className="border-t border-slate-300/30 my-2"></div>
+                <div className="px-3 py-1">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
+                </div>
+                
+                {/* Receptionist Management */}
+                <button 
+                  onClick={() => { setActiveTab("receptionists"); setSidebarOpen(false) }} 
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                    activeTab === "receptionists" 
+                      ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${activeTab === "receptionists" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <span className="font-medium text-sm">Receptionists</span>
+                </button>
+              </>
+            )}
             
           </div>
 
@@ -860,7 +950,11 @@ export default function AdminDashboard() {
                    activeTab === "doctors" ? "Doctor Management" :
                    activeTab === "campaigns" ? "Campaigns" :
                    activeTab === "appointments" ? "Appointment Management" :
-                   "Revenue & Analytics"}
+                   activeTab === "billing" ? "Revenue & Analytics" :
+                   activeTab === "hospitals" ? "Hospital Management" :
+                   activeTab === "admins" ? "Admin Assignment" :
+                   activeTab === "receptionists" ? "Receptionist Management" :
+                   "Dashboard"}
                 </h1>
                 <p className="text-sm sm:text-base text-slate-600 mt-1">
                   {activeTab === "overview" ? "Hospital management system overview" :
@@ -868,10 +962,41 @@ export default function AdminDashboard() {
                    activeTab === "doctors" ? "Manage doctor profiles and schedules" :
                    activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
                    activeTab === "appointments" ? "Monitor and manage all appointments" :
-                   "Comprehensive revenue analytics, billing records, and financial insights"}
+                   activeTab === "billing" ? "Comprehensive revenue analytics, billing records, and financial insights" :
+                   activeTab === "hospitals" ? "Create and manage hospitals in the system" :
+                   activeTab === "admins" ? "Create and assign admins to hospitals" :
+                   activeTab === "receptionists" ? "Create and manage receptionists for your hospital" :
+                   "Administrative dashboard"}
                 </p>
               </div>
               
+              {/* Hospital Selector for Super Admins */}
+              {isSuperAdmin && hasMultipleHospitals && (
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-slate-700">Hospital:</label>
+                  <select
+                    value={activeHospitalId || ""}
+                    onChange={async (e) => {
+                      const hospitalId = e.target.value
+                      if (hospitalId) {
+                        try {
+                          await setActiveHospital(hospitalId)
+                          setNotification({ type: "success", message: "Hospital switched successfully" })
+                        } catch (err: any) {
+                          setNotification({ type: "error", message: err.message || "Failed to switch hospital" })
+                        }
+                      }
+                    }}
+                    className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                  >
+                    {userHospitals.map((hospital) => (
+                      <option key={hospital.id} value={hospital.id}>
+                        {hospital.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </header>
@@ -1492,17 +1617,27 @@ export default function AdminDashboard() {
               </div>
 
               {/* Recent Appointments */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-white">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Recent Appointments</h3>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg sm:text-xl font-bold text-gray-900">Recent Appointments</h3>
+                        <p className="text-xs sm:text-sm text-gray-600 mt-0.5">{recentAppointments.length} appointment{recentAppointments.length !== 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
                     <button
                       onClick={() => setShowRecentAppointments(!showRecentAppointments)}
-                      className="flex items-center gap-2 px-3 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
                     >
                       <span>{showRecentAppointments ? 'Hide' : 'Show'}</span>
                       <svg 
-                        className={`w-3.5 h-3.5 transition-transform duration-200 ${showRecentAppointments ? 'rotate-180' : ''}`} 
+                        className={`w-4 h-4 transition-transform duration-200 ${showRecentAppointments ? 'rotate-180' : ''}`} 
                         fill="none" 
                         stroke="currentColor" 
                         viewBox="0 0 24 24"
@@ -1514,57 +1649,106 @@ export default function AdminDashboard() {
                 </div>
                 
                 {showRecentAppointments && (
-                  <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
-                    <table className="w-full min-w-[600px]">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Doctor</th>
-                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
-                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {recentAppointments.map((appointment) => (
-                          <tr key={appointment.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">{appointment.patientName}</div>
-                                <div className="text-sm text-gray-500">{appointment.patientEmail}</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">{appointment.doctorName}</div>
-                                <div className="text-sm text-gray-500">{appointment.doctorSpecialization}</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {new Date(appointment.appointmentDate).toLocaleDateString()}
-                                </div>
-                                <div className="text-sm text-gray-500">{appointment.appointmentTime}</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                appointment.status === "completed" ? "bg-green-100 text-green-800" :
-                                appointment.status === "confirmed" ? "bg-blue-100 text-blue-800" :
-                                (appointment as any).status === 'resrescheduled' ? "bg-purple-100 text-purple-800" :
-                                "bg-red-100 text-red-800"
-                              }`}>
-                                {(appointment as any).status === 'resrescheduled' ? 'rescheduled' : appointment.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              ₹{appointment.paymentAmount || 0}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="p-4 sm:p-6">
+                    {recentAppointments.length === 0 ? (
+                      <div className="text-center py-12">
+                        <svg className="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-gray-500 font-medium">No recent appointments</p>
+                        <p className="text-sm text-gray-400 mt-1">Appointments will appear here once they are created</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[700px]">
+                          <thead>
+                            <tr className="border-b-2 border-gray-200">
+                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Patient</th>
+                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider hidden sm:table-cell">Doctor</th>
+                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date & Time</th>
+                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider hidden md:table-cell">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {recentAppointments.map((appointment) => (
+                              <tr key={appointment.id} className="hover:bg-gray-50 transition-colors duration-150">
+                                <td className="px-4 py-5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex-shrink-0">
+                                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                        <span className="text-blue-600 font-semibold text-sm">
+                                          {appointment.patientName?.charAt(0)?.toUpperCase() || 'P'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm font-semibold text-gray-900">{appointment.patientName}</div>
+                                      <div className="text-xs text-gray-500 mt-0.5">{appointment.patientEmail}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5 hidden sm:table-cell">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-900">{appointment.doctorName}</div>
+                                    <div className="text-xs text-gray-500 mt-0.5">{appointment.doctorSpecialization}</div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {new Date(appointment.appointmentDate).toLocaleDateString('en-US', { 
+                                        weekday: 'short',
+                                        year: 'numeric', 
+                                        month: 'short', 
+                                        day: 'numeric' 
+                                      })}
+                                    </div>
+                                    <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      {appointment.appointmentTime}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-5">
+                                  <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full ${
+                                    appointment.status === "completed" ? "bg-green-100 text-green-800" :
+                                    appointment.status === "confirmed" ? "bg-blue-100 text-blue-800" :
+                                    appointment.status === "not_attended" ? "bg-orange-100 text-orange-800" :
+                                    (appointment as any).status === 'resrescheduled' ? "bg-purple-100 text-purple-800" :
+                                    "bg-red-100 text-red-800"
+                                  }`}>
+                                    {(appointment as any).status === 'resrescheduled' ? 'rescheduled' : 
+                                     appointment.status === 'not_attended' ? 'not attended' :
+                                     appointment.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-5 hidden md:table-cell">
+                                  <div className="text-sm font-semibold text-gray-900">
+                                    ₹{appointment.paymentAmount?.toLocaleString() || 0}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {recentAppointments.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-center">
+                        <button
+                          onClick={() => setActiveTab("appointments")}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
+                        >
+                          <span>View all appointments</span>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1613,7 +1797,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeTab === "campaigns" && (
+          {activeTab === "campaigns" && !isSuperAdmin && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
               <CampaignManagement />
             </div>
@@ -1658,6 +1842,24 @@ export default function AdminDashboard() {
                 {billingSubTab === "all" && <BillingManagement />}
                 {billingSubTab === "analytics" && <FinancialAnalytics />}
               </div>
+            </div>
+          )}
+
+          {activeTab === "hospitals" && (
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+              <HospitalManagement />
+            </div>
+          )}
+
+          {activeTab === "admins" && (
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+              <AdminAssignment />
+            </div>
+          )}
+
+          {activeTab === "receptionists" && (
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+              <ReceptionistManagement />
             </div>
           )}
 

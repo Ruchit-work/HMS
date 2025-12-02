@@ -2,6 +2,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 
 const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
   const friendlyName = firstName?.trim() || "there"
@@ -43,11 +44,42 @@ export async function POST(request: Request) {
   if (!auth.success) {
     return createAuthErrorResponse(auth)
   }
-  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
+  
+  // Only receptionists can create patients (admins cannot)
+  if (!auth.user || auth.user.role !== "receptionist") {
     return Response.json(
-      { error: "Access denied. This endpoint requires receptionist or admin role." },
+      { error: "Access denied. Only receptionists can create patients." },
       { status: 403 }
     )
+  }
+
+  // Check if user is super admin and block them
+  try {
+    const userDoc = await admin.firestore().collection('users').doc(auth.user.uid).get()
+    if (userDoc.exists) {
+      const userData = userDoc.data()
+      if (userData?.role === 'super_admin') {
+        return Response.json(
+          { error: "Super admins cannot create patients. Please use a regular admin or receptionist account." },
+          { status: 403 }
+        )
+      }
+    } else {
+      // Fallback: Check admins collection
+      const adminDoc = await admin.firestore().collection('admins').doc(auth.user.uid).get()
+      if (adminDoc.exists) {
+        const adminData = adminDoc.data()
+        if (adminData?.isSuperAdmin === true) {
+          return Response.json(
+            { error: "Super admins cannot create patients. Please use a regular admin or receptionist account." },
+            { status: 403 }
+          )
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[create-patient] Error checking super admin status:', err)
+    // Continue if check fails
   }
 
   // Re-apply rate limit with user ID for better tracking
@@ -94,6 +126,12 @@ export async function POST(request: Request) {
       authUid = created.uid
     }
 
+    // Get receptionist's hospital ID
+    const receptionistHospitalId = await getUserActiveHospitalId(auth.user!.uid)
+    if (!receptionistHospitalId) {
+      return Response.json({ error: "Receptionist's hospital not found" }, { status: 400 })
+    }
+
     const db = admin.firestore()
     const START_NUMBER = 12906
     const patientId = await db.runTransaction(async (transaction) => {
@@ -136,11 +174,44 @@ export async function POST(request: Request) {
       createdAt: patientData.createdAt || nowIso,
       updatedAt: nowIso,
       createdBy: patientData.createdBy || "receptionist",
-      patientId
+      patientId,
+      hospitalId: receptionistHospitalId, // Store hospital association
     }
 
-    // Store patient doc with ID = authUid (so patient dashboard can load by user.uid)
+    // Store patient doc in hospital-scoped subcollection
+    await db.collection(getHospitalCollectionPath(receptionistHospitalId, "patients")).doc(authUid).set(docData, { merge: true })
+    
+    // Also store in legacy collection for backward compatibility (patient dashboard uses user.uid)
     await db.collection("patients").doc(authUid).set(docData, { merge: true })
+
+    // Create/update user document in users collection for multi-hospital support
+    const userDocRef = db.collection("users").doc(authUid)
+    const existingUserDoc = await userDocRef.get()
+    
+    if (existingUserDoc.exists) {
+      // User exists - add hospital to hospitals array if not already present
+      const userData = existingUserDoc.data()
+      const hospitals = userData?.hospitals || []
+      if (!hospitals.includes(receptionistHospitalId)) {
+        hospitals.push(receptionistHospitalId)
+      }
+      await userDocRef.update({
+        hospitals,
+        activeHospital: receptionistHospitalId, // Set as active if not set
+        updatedAt: nowIso,
+      })
+    } else {
+      // Create new user document
+      await userDocRef.set({
+        uid: authUid,
+        email: String(email).trim().toLowerCase(),
+        role: "patient",
+        hospitals: [receptionistHospitalId],
+        activeHospital: receptionistHospitalId,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      })
+    }
 
     // Try multiple phone number fields and formats
     const phoneCandidates = [
@@ -158,9 +229,7 @@ export async function POST(request: Request) {
           fallbackRecipients: phoneCandidates.slice(1),
           message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
         })
-        if (result.success) {
-          console.log("[create-patient] ✅ WhatsApp message sent successfully to:", phoneCandidates[0])
-        } else {
+        if (!result.success) {
           console.error("[create-patient] ❌ WhatsApp notification failed:", {
             phone: phoneCandidates[0],
             error: result.error,
@@ -174,7 +243,6 @@ export async function POST(request: Request) {
                 message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
               })
               if (fallbackResult.success) {
-                console.log("[create-patient] ✅ WhatsApp message sent successfully to fallback number:", phoneCandidates[i])
                 break
               }
             }

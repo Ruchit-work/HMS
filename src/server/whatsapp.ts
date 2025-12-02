@@ -94,7 +94,6 @@ export async function sendWhatsAppNotification(options: {
     const result = await metaSendTextMessage(recipientPhone, messageBody)
 
     if (result.success) {
-      console.log(`[Meta WhatsApp] ✅ Message sent successfully to ${recipientPhone}, Message ID: ${result.messageId}`)
       return {
         success: true,
         sid: result.messageId, // Use messageId as sid for compatibility

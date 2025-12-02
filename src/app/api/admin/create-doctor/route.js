@@ -1,5 +1,6 @@
 import admin from 'firebase-admin'
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -32,6 +33,37 @@ export async function POST(request) {
   const auth = await authenticateRequest(request, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
+  }
+
+  // Block super admins from creating doctors
+  // Check if user is super admin by checking users collection
+  try {
+    const db = admin.firestore()
+    const userDoc = await db.collection('users').doc(auth.user.uid).get()
+    if (userDoc.exists) {
+      const userData = userDoc.data()
+      if (userData?.role === 'super_admin') {
+        return Response.json(
+          { error: "Super admins cannot create doctors. Please use a regular admin account." },
+          { status: 403 }
+        )
+      }
+    } else {
+      // Fallback: Check admins collection
+      const adminDoc = await db.collection('admins').doc(auth.user.uid).get()
+      if (adminDoc.exists) {
+        const adminData = adminDoc.data()
+        if (adminData?.isSuperAdmin === true) {
+          return Response.json(
+            { error: "Super admins cannot create doctors. Please use a regular admin account." },
+            { status: 403 }
+          )
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[create-doctor] Error checking super admin status:', err)
+    // Continue if check fails
   }
 
   // Re-apply rate limit with user ID for better tracking
@@ -74,19 +106,43 @@ export async function POST(request) {
       disabled: false
     })
     
+    // Get admin's hospital ID - doctor belongs to admin's hospital
+    const adminHospitalId = await getUserActiveHospitalId(auth.user.uid)
+    if (!adminHospitalId) {
+      return Response.json({ error: 'Admin hospital not found. Please ensure you are assigned to a hospital.' }, { status: 400 })
+    }
+    
     // Prepare doctor data for Firestore
     const firestoreData = {
       ...doctorData,
       phoneNumber: normalizedPhone,
       mfaPhone: normalizedPhone,
       uid: userRecord.uid,
+      hospitalId: adminHospitalId, // Store hospital association
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       createdBy: "admin"
     }
     
-    // Save to Firestore using Admin SDK
-    await admin.firestore().collection('doctors').doc(userRecord.uid).set(firestoreData)
+    const db = admin.firestore()
+    
+    // Save to hospital-scoped subcollection
+    await db.collection(getHospitalCollectionPath(adminHospitalId, 'doctors')).doc(userRecord.uid).set(firestoreData)
+    
+    // Also save to legacy collection for backward compatibility
+    await db.collection('doctors').doc(userRecord.uid).set(firestoreData)
+    
+    // Create/update user document in users collection for multi-hospital support
+    const userDocRef = db.collection('users').doc(userRecord.uid)
+    await userDocRef.set({
+      uid: userRecord.uid,
+      email: doctorData.email,
+      role: 'doctor',
+      hospitals: [adminHospitalId],
+      activeHospital: adminHospitalId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }, { merge: true })
     
     // Audit logging disabled
     

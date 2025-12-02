@@ -43,8 +43,6 @@ export async function generateAdvertisement(
     throw new Error("GROQ_API_KEY is not set in environment variables")
   }
 
-  console.log(`[groq] Generating advertisement for ${healthDay.name}...`)
-
   const systemPrompt = `You are a marketing expert for a healthcare organization in India. Your task is to create compelling, informative, and engaging advertisements for health awareness days.
 
 Guidelines:
@@ -94,8 +92,6 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
   
   for (const model of modelsToTry) {
     try {
-      console.log(`[groq] Trying model: ${model}`)
-      
       const response = await fetch(GROQ_API_URL, {
         method: "POST",
         headers: {
@@ -113,8 +109,6 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
           response_format: { type: "json_object" },
         }),
       })
-      
-      console.log(`[groq] API Response status: ${response.status} for model ${model}`)
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "Unknown error")
@@ -178,9 +172,6 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
         console.error("[groq] No content in response:", JSON.stringify(data, null, 2))
         throw new Error("No content received from Groq API")
       }
-
-      console.log(`[groq] Successfully generated advertisement using model: ${model}`)
-      console.log(`[groq] Received content (${content.length} characters)`)
 
       // Parse JSON response
       let advertisement: GeneratedAdvertisement

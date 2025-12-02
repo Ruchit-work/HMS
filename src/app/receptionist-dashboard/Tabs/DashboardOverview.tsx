@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { collection, query, where, getDocs, orderBy, limit, onSnapshot } from "firebase/firestore"
 import { Appointment } from "@/types/patient"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 
 interface DashboardStats {
   todayAppointments: number
@@ -35,6 +37,7 @@ interface DashboardOverviewProps {
 }
 
 export default function DashboardOverview({ onTabChange }: DashboardOverviewProps) {
+  const { activeHospitalId } = useMultiHospital()
   const [stats, setStats] = useState<DashboardStats>({
     todayAppointments: 0,
     pendingWhatsAppBookings: 0,
@@ -47,15 +50,15 @@ export default function DashboardOverview({ onTabChange }: DashboardOverviewProp
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!activeHospitalId) return
+    
     let unsubscribeAppointments: (() => void) | null = null
 
     const setupRealtimeListeners = () => {
-      // Set up real-time listener for all appointments
-      const appointmentsRef = collection(db, "appointments")
+      // Set up real-time listener for all appointments - use hospital-scoped collection
+      const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
       
       unsubscribeAppointments = onSnapshot(appointmentsRef, (snapshot) => {
-        console.log(`[Receptionist Dashboard] Real-time update: ${snapshot.docs.length} total appointments`)
-        
         // Recalculate stats with new data
         const today = new Date().toISOString().split('T')[0]
         const allAppointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
@@ -189,8 +192,10 @@ export default function DashboardOverview({ onTabChange }: DashboardOverviewProp
   }
 
   const fetchStats = async () => {
+    if (!activeHospitalId) return
+    
     const today = new Date().toISOString().split('T')[0]
-    const appointmentsRef = collection(db, "appointments")
+    const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
 
     // Today's appointments
     const todayQuery = query(
@@ -237,10 +242,12 @@ export default function DashboardOverview({ onTabChange }: DashboardOverviewProp
   }
 
   const fetchRecentActivity = async () => {
+    if (!activeHospitalId) return
+    
     const activities: RecentActivity[] = []
     
-    // Recent appointments (last 10)
-    const appointmentsRef = collection(db, "appointments")
+    // Recent appointments (last 10) - use hospital-scoped collection
+    const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
     const recentAppointmentsQuery = query(
       appointmentsRef,
       orderBy("createdAt", "desc"),

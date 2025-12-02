@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { collection, getDocs,where,query,doc, deleteDoc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
+import { useMultiHospital } from '@/contexts/MultiHospitalContext'
+import { getHospitalCollection } from '@/utils/hospital-queries'
 import LoadingSpinner from '@/components/ui/StatusComponents'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/Modals'
@@ -52,6 +54,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
     const [search, setSearch] = useState('')
  
     const { user, loading: authLoading } = useAuth()
+    const { activeHospitalId, loading: hospitalLoading, isSuperAdmin } = useMultiHospital()
     const [sortField, setSortField] = useState<string>('')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
@@ -134,9 +137,11 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
         }
     }
     const setupPatientsListener = useCallback(() => {
+        if (!activeHospitalId) return () => {}
+        
         try{
             setLoading(true)
-            const patientsRef = collection(db,'patients')
+            const patientsRef = getHospitalCollection(activeHospitalId, 'patients')
             const q = query(patientsRef, where('status','in',['active','inactive']))
             
             const unsubscribe = onSnapshot(q, async (snapshot) => {
@@ -145,10 +150,8 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                     ...doc.data()
                 })) as Patient[]
                 
-                console.log(`[Patient Management] Real-time update: ${patientsList.length} patients loaded`)
-                
                 // Fetch appointments for each patient (keep this as one-time fetch for now)
-                const appointmentsRef = collection(db, 'appointments')
+                const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
                 const appointmentsSnapshot = await getDocs(appointmentsRef)
                 const allAppointments = appointmentsSnapshot.docs.map(doc => ({
                     id: doc.id,
@@ -227,10 +230,10 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [activeHospitalId])
 
     useEffect(() => {   
-        if (!user || authLoading) return
+        if (!user || authLoading || !activeHospitalId) return
         
         const unsubscribe = setupPatientsListener()
         
@@ -240,7 +243,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                 unsubscribe()
             }
         }
-    }, [setupPatientsListener, user, authLoading])
+    }, [setupPatientsListener, user, authLoading, activeHospitalId])
 
     const metrics = useMemo(() => {
         const total = patients.length
@@ -325,7 +328,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
         resetOnFilterChange: true,
     })
 
-    const allowAdd = canAdd && user?.role !== "admin"
+    const allowAdd = canAdd && !isSuperAdmin && user?.role === "receptionist"
 
     const openAddPatientModal = () => {
         setError(null)

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import { AppointmentsList } from "@/components/patient/AppointmentCard"
@@ -40,9 +42,10 @@ export default function PatientAppointments() {
 
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
 
     const fetchData = async () => {
       try {
@@ -55,7 +58,7 @@ export default function PatientAppointments() {
           setUserData(patientData)
         }
 
-        const appointmentsCollection = collection(db, "appointments")
+        const appointmentsCollection = getHospitalCollection(activeHospitalId, "appointments")
         const appointmentQueries: Promise<any>[] = [
           getDocs(query(appointmentsCollection, where("patientUid", "==", user.uid)))
         ]
@@ -89,11 +92,11 @@ export default function PatientAppointments() {
         const billingSnapshots: any[] = []
         if (patientData?.patientId) {
           billingSnapshots.push(
-            getDocs(query(collection(db, "billing_records"), where("patientId", "==", patientData.patientId)))
+            getDocs(query(getHospitalCollection(activeHospitalId, "billing_records"), where("patientId", "==", patientData.patientId)))
           )
         }
         billingSnapshots.push(
-          getDocs(query(collection(db, "billing_records"), where("patientId", "==", user.uid)))
+          getDocs(query(getHospitalCollection(activeHospitalId, "billing_records"), where("patientId", "==", user.uid)))
         )
 
         const resolvedBillingSnapshots = await Promise.all(billingSnapshots)
@@ -154,10 +157,23 @@ export default function PatientAppointments() {
     }
 
     fetchData()
-  }, [user])
+  }, [user, activeHospitalId])
 
-  if (loading) {
+  if (loading || hospitalLoading) {
     return <LoadingSpinner message="Loading appointments..." />
+  }
+
+  if (!activeHospitalId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-600 mb-4">No hospital selected. Please select a hospital to continue.</p>
+          <Link href="/hospital-selection" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-block">
+            Select Hospital
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   if (!user || !userData) {

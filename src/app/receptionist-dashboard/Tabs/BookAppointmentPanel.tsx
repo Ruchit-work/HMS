@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import PaymentMethodSection, {
   PaymentData as BookingPaymentData,
   PaymentMethodOption as BookingPaymentMethod,
@@ -379,15 +381,19 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     [onNotification]
   )
 
+  const { activeHospitalId } = useMultiHospital()
+
   useEffect(() => {
-    const doctorsQuery = query(collection(db, "doctors"), where("status", "==", "active"))
+    if (!activeHospitalId) return
+    
+    const doctorsQuery = query(getHospitalCollection(activeHospitalId, "doctors"), where("status", "==", "active"))
     const unsubscribe = onSnapshot(doctorsQuery, (snap) => {
       setDoctors(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     })
 
     ;(async () => {
       try {
-        const patientsQuery = query(collection(db, "patients"), where("status", "in", ["active", "inactive"]))
+        const patientsQuery = query(getHospitalCollection(activeHospitalId, "patients"), where("status", "in", ["active", "inactive"]))
         const patientSnap = await getDocs(patientsQuery)
         setPatients(patientSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
       } catch (error) {
@@ -461,9 +467,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       }
 
       try {
-        // Fetch existing appointments
+        if (!activeHospitalId) return
+        // Fetch existing appointments - use hospital-scoped collection
         const aptQuery = query(
-          collection(db, "appointments"),
+          getHospitalCollection(activeHospitalId, "appointments"),
           where("doctorId", "==", selectedDoctorId),
           where("appointmentDate", "==", appointmentDate)
         )

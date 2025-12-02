@@ -1,4 +1,5 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { getUserActiveHospitalId, getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { formatAppointmentDateTime } from "@/utils/date"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
@@ -84,8 +85,6 @@ See you soon! 🏥`
       error: result.error,
       errorCode: result.errorCode,
     })
-  } else {
-    console.log("[Appointment WhatsApp] ✅ Appointment confirmation sent successfully to:", phoneCandidates[0])
   }
 }
 
@@ -143,10 +142,16 @@ export async function POST(request: Request) {
     // Normalize appointment time to 24-hour format (HH:MM) for consistent storage
     const normalizedAppointmentTime = normalizeTime(String(appointmentData.appointmentTime))
     
-    // Get doctor's consultation fee for payment calculations
+    // Get doctor's consultation fee and hospital for payment calculations
     const doctorDoc = await admin.firestore().collection("doctors").doc(String(appointmentData.doctorId)).get()
     const doctorData = doctorDoc.exists ? doctorDoc.data() : {}
     const consultationFee = doctorData?.consultationFee || appointmentData.paymentAmount || 0
+    
+    // Get doctor's hospital ID - appointment belongs to doctor's hospital
+    const doctorHospitalId = await getDoctorHospitalId(String(appointmentData.doctorId))
+    if (!doctorHospitalId) {
+      return Response.json({ error: "Doctor's hospital not found" }, { status: 400 })
+    }
     
     const docData: any = {
       patientId: String(appointmentData.patientId),
@@ -172,7 +177,8 @@ export async function POST(request: Request) {
       
       createdAt: safeValue(appointmentData.createdAt, nowIso),
       updatedAt: nowIso,
-      createdBy: safeValue(appointmentData.createdBy, "receptionist")
+      createdBy: safeValue(appointmentData.createdBy, "receptionist"),
+      hospitalId: doctorHospitalId, // Store hospital association
     }
     
     // Include optional patient health fields only if they exist and are not undefined
@@ -221,7 +227,10 @@ export async function POST(request: Request) {
         throw new Error("SLOT_ALREADY_BOOKED")
       }
 
-      const appointmentRef = firestore.collection("appointments").doc()
+      // Create appointment in hospital-scoped subcollection
+      const appointmentRef = firestore
+        .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
+        .doc()
       appointmentId = appointmentRef.id
       transaction.set(appointmentRef, docData)
       transaction.set(slotRef, {
@@ -230,6 +239,7 @@ export async function POST(request: Request) {
         appointmentDate: docData.appointmentDate,
         appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
         createdAt: nowIso,
+        hospitalId: doctorHospitalId, // Store hospitalId in slot
       })
     })
 
@@ -262,7 +272,6 @@ export async function POST(request: Request) {
           appointmentDate: docData.appointmentDate,
           appointmentTime: docData.appointmentTime,
         })
-        console.log("[create-appointment] ✅ WhatsApp message sent successfully to:", patientPhone)
       } catch (error) {
         console.error("[create-appointment] ❌ WhatsApp notification failed:", error)
       }

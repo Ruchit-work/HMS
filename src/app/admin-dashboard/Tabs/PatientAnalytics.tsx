@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
+import { useMultiHospital } from '@/contexts/MultiHospitalContext'
+import { getHospitalCollection } from '@/utils/hospital-queries'
 import LoadingSpinner from '@/components/ui/StatusComponents'
 import { formatDate, calculateAge } from '@/utils/date'
 
@@ -56,28 +58,31 @@ interface PatientAnalytics {
 
 export default function PatientAnalytics() {
   const { user, loading: authLoading } = useAuth()
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<PatientAnalytics | null>(null)
   const [timeRange, setTimeRange] = useState<'30days' | '3months' | '6months' | '1year' | 'all'>('1year')
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
     fetchAnalytics()
-  }, [user, timeRange])
+  }, [user, activeHospitalId, timeRange])
 
   const fetchAnalytics = async () => {
+    if (!activeHospitalId) return
+    
     try {
       setLoading(true)
 
-      // Fetch all patients
-      const patientsSnapshot = await getDocs(collection(db, 'patients'))
+      // Fetch all patients - use hospital-scoped collection
+      const patientsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'patients'))
       const patients: Patient[] = patientsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Patient))
 
-      // Fetch all appointments
-      const appointmentsSnapshot = await getDocs(collection(db, 'appointments'))
+      // Fetch all appointments - use hospital-scoped collection
+      const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'appointments'))
       const appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()

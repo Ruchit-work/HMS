@@ -14,6 +14,7 @@ import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { slugify } from "@/utils/campaigns"
 import type { Firestore } from "firebase-admin/firestore"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 
 async function cleanupExpiredAutoCampaigns(db: Firestore) {
   const now = new Date()
@@ -43,31 +44,27 @@ async function cleanupExpiredAutoCampaigns(db: Firestore) {
     console.error("[auto-campaigns-generate] Failed to clean up expired auto-campaigns:", error)
   }
 
-  if (deleted > 0) {
-    console.log(`[auto-campaigns-generate] Deleted ${deleted} expired auto-generated campaign(s)`)
-  } else {
-    console.log("[auto-campaigns-generate] No expired auto-generated campaigns to delete")
-  }
-
   return deleted
 }
 
 
 export async function GET(request: Request) {
-  // Allow cron triggers or admin authentication
   const isCronTrigger = request.headers.get("x-vercel-cron") !== null
+  let adminHospitalId: string | null = null
+  
   if (!isCronTrigger) {
-    // If not a cron trigger, require admin authentication
     const auth = await authenticateRequest(request, "admin")
     if (!auth.success) {
       return createAuthErrorResponse(auth)
+    }
+    if (auth.user?.uid) {
+      const { getUserActiveHospitalId } = await import("@/utils/serverHospitalQueries")
+      adminHospitalId = await getUserActiveHospitalId(auth.user.uid)
     }
   }
 
   const startTime = Date.now()
   const triggerSource = isCronTrigger ? "cron" : "manual"
-  
-  console.log(`[auto-campaigns-generate] ${triggerSource.toUpperCase()} trigger at ${new Date().toISOString()}`)
   
   try {
     const initResult = initFirebaseAdmin("auto-campaigns-generate API")
@@ -82,26 +79,16 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const checkParam = url.searchParams.get("check") || "today"
     const publishParam = url.searchParams.get("publish") !== "false"
-    // Enable WhatsApp by default for cron jobs, but allow override via query param
-    // For manual testing, default to false unless explicitly set to true
     const sendWhatsAppParam = url.searchParams.get("sendWhatsApp") === "true" || 
                              (url.searchParams.get("sendWhatsApp") !== "false" && isCronTrigger)
-    // Test mode: Create a fake awareness day for today (for testing purposes only)
     const testMode = url.searchParams.get("test") === "true"
-    // Random mode: Create a random awareness day (for testing with variety)
     const randomMode = url.searchParams.get("random") === "true"
-
-    console.log(`[auto-campaigns-generate] Parameters: check=${checkParam}, publish=${publishParam}, sendWhatsApp=${sendWhatsAppParam}, test=${testMode}, random=${randomMode} (trigger: ${triggerSource})`)
-
-    // Get health awareness days based on check parameter
     let healthDays =
       checkParam === "tomorrow"
         ? getHealthAwarenessDaysForTomorrow()
         : getHealthAwarenessDaysForToday()
 
-    // RANDOM MODE: Create a random awareness day with random health topics
     if (randomMode && checkParam === "today") {
-      console.log(`[auto-campaigns-generate] RANDOM MODE: Creating random awareness day`)
       const now = new Date()
       const istOffset = 5.5 * 60 * 60 * 1000
       const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
@@ -135,11 +122,7 @@ export async function GET(request: Request) {
         priority: Math.floor(Math.random() * 3) + 3, // Priority 3-5
         specialization: randomTopic.specialization,
       }]
-      console.log(`[auto-campaigns-generate] RANDOM MODE: Created random awareness day: ${healthDays[0].name} (${randomDate})`)
-    }
-    // TEST MODE: If test mode is enabled and no awareness days found, create a fake one for today
-    else if (testMode && healthDays.length === 0 && checkParam === "today") {
-      console.log(`[auto-campaigns-generate] TEST MODE: Creating fake awareness day for testing`)
+    } else if (testMode && healthDays.length === 0 && checkParam === "today") {
       const now = new Date()
       const istOffset = 5.5 * 60 * 60 * 1000
       const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
@@ -157,18 +140,10 @@ export async function GET(request: Request) {
         priority: 5,
         specialization: ["General Physician"],
       }]
-      console.log(`[auto-campaigns-generate] TEST MODE: Created fake awareness day: ${healthDays[0].name} (${testDate})`)
-    }
-
-    console.log(`[auto-campaigns-generate] Found ${healthDays.length} health awareness day(s) for ${checkParam}`)
-    if (healthDays.length > 0) {
-      console.log(`[auto-campaigns-generate] Health days: ${healthDays.map(d => d.name).join(", ")}`)
     }
 
     if (healthDays.length === 0) {
       const message = `No health awareness days found for ${checkParam}`
-      console.log(`[auto-campaigns-generate] ${message}`)
-      
       let autoExpired = 0
       try {
         const db = admin.firestore()
@@ -187,34 +162,21 @@ export async function GET(request: Request) {
       })
     }
 
-    // Determine the target date for campaigns (in IST)
-    // CRON SCHEDULE: "30 00 * * *" (00:30 AM UTC = 6:00 AM IST)
-    // IST is UTC+5:30, so 6:00 AM IST = 00:30 AM UTC (00:30 UTC)
-    // Example: 6:00 AM IST on Jan 2 = 00:30 AM UTC on Jan 2
-    const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds (5 hours 30 minutes)
+    const istOffset = 5.5 * 60 * 60 * 1000
     const now = new Date()
-    // Get current UTC time
     const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
-    // Get current IST time
     const istTime = new Date(utcTime + istOffset)
     
-    // Calculate target date (today or tomorrow in IST)
     const targetIST = checkParam === "tomorrow"
-      ? new Date(istTime.getTime() + 24 * 60 * 60 * 1000) // Tomorrow in IST
-      : new Date(istTime) // Today in IST
+      ? new Date(istTime.getTime() + 24 * 60 * 60 * 1000)
+      : new Date(istTime)
     
-    // Set to midnight IST (00:00 IST)
     targetIST.setUTCHours(0, 0, 0, 0)
     targetIST.setUTCMinutes(0)
     targetIST.setUTCSeconds(0)
     targetIST.setUTCMilliseconds(0)
     
-    // Convert IST time to UTC for Firestore storage
-    // CRON SCHEDULE: "30 00 * * *" (00:30 AM UTC = 6:00 AM IST)
-    // Note: Campaigns are created for today's date in IST
     const targetDateUTC = new Date(targetIST.getTime() - istOffset)
-
-    // Generate advertisements using Groq API
     const hospitalName = process.env.HOSPITAL_NAME || "Harmony Medical Services"
     const advertisements = await generateAdvertisements(healthDays, hospitalName)
 
@@ -224,10 +186,38 @@ export async function GET(request: Request) {
       title: string
       healthDay: string
       status: string
+      hospitalId: string
     }> = []
 
-    // Create and publish campaigns
-    for (const healthDay of healthDays) {
+    let hospitalsToProcess: Array<{ id: string; name: string }> = []
+    if (isCronTrigger) {
+      hospitalsToProcess = await getAllActiveHospitals()
+    } else if (adminHospitalId) {
+      const hospitalDoc = await db.collection('hospitals').doc(adminHospitalId).get()
+      if (hospitalDoc.exists) {
+        hospitalsToProcess = [{
+          id: adminHospitalId,
+          name: hospitalDoc.data()?.name || 'Unknown Hospital'
+        }]
+      } else {
+        console.error(`[auto-campaigns-generate] Admin's hospital ${adminHospitalId} not found`)
+        return NextResponse.json({
+          success: false,
+          error: "Admin's hospital not found",
+          campaignsGenerated: 0,
+        }, { status: 400 })
+      }
+    } else {
+      console.error(`[auto-campaigns-generate] No hospital found for admin`)
+      return NextResponse.json({
+        success: false,
+        error: "No hospital associated with admin account",
+        campaignsGenerated: 0,
+      }, { status: 400 })
+    }
+
+    for (const hospital of hospitalsToProcess) {
+      for (const healthDay of healthDays) {
       const advertisement = advertisements.get(healthDay.name)
 
       if (!advertisement) {
@@ -236,55 +226,36 @@ export async function GET(request: Request) {
       }
 
       try {
-        console.log(`[auto-campaigns-generate] Processing ${healthDay.name} (date: ${healthDay.date})`)
-        
-        // Check if campaign already exists for this health day and target date
-        // We check both the healthDayDate and the target date to avoid duplicates
         const targetISTMonth = targetIST.getUTCMonth() + 1
         const targetISTDay = targetIST.getUTCDate()
         const targetDateStringIST = `${String(targetISTMonth).padStart(2, '0')}-${String(targetISTDay).padStart(2, '0')}`
         
-        console.log(`[auto-campaigns-generate] Target date (IST): ${targetDateStringIST}, Health day date: ${healthDay.date}`)
-        
-        // Check if campaign already exists for this health day date and target date
-        // This prevents creating duplicate campaigns for the same health awareness day on the same date
         let alreadyExists = false
         try {
           const existingCampaigns = await db
             .collection("campaigns")
             .where("metadata.healthDayDate", "==", healthDay.date)
             .where("metadata.autoGenerated", "==", true)
+            .where("hospitalId", "==", hospital.id)
             .get()
 
-          console.log(`[auto-campaigns-generate] Found ${existingCampaigns.size} existing campaign(s) for ${healthDay.name}`)
-          
-          // Check if we already created a campaign for this health day date and target date (compare in IST)
           existingCampaigns.forEach((doc) => {
             const data = doc.data()
-            // Check if campaign exists for the target date (compare in IST)
             if (data.startAt) {
               const startAtUTC = data.startAt?.toDate?.() || new Date(data.startAt)
-              // Convert UTC to IST for comparison
               const startAtUTC_Time = startAtUTC.getTime() + (startAtUTC.getTimezoneOffset() * 60 * 1000)
               const startAtIST = new Date(startAtUTC_Time + istOffset)
               const startISTMonth = startAtIST.getUTCMonth() + 1
               const startISTDay = startAtIST.getUTCDate()
               const startDateStringIST = `${String(startISTMonth).padStart(2, '0')}-${String(startISTDay).padStart(2, '0')}`
               
-              console.log(`[auto-campaigns-generate] Existing campaign start date (IST): ${startDateStringIST}, Target: ${targetDateStringIST}`)
-              
               if (startDateStringIST === targetDateStringIST) {
                 alreadyExists = true
-                console.log(`[auto-campaigns-generate] Campaign for ${healthDay.name} already exists for ${targetDateStringIST}`)
               }
             }
           })
         } catch (queryError) {
-          // If query fails (e.g., missing Firestore index), log error but continue to create campaign
-          // This ensures campaigns are created even if duplicate check fails
-          console.error(`[auto-campaigns-generate] Error checking for existing campaigns for ${healthDay.name}:`, queryError)
-          console.log(`[auto-campaigns-generate] Continuing to create campaign despite query error (may create duplicate if one exists)`)
-          // Set alreadyExists to false to allow campaign creation
+          console.error(`[auto-campaigns-generate] Error checking for existing campaigns:`, queryError)
           alreadyExists = false
         }
 
@@ -294,18 +265,14 @@ export async function GET(request: Request) {
         let campaignRef: admin.firestore.DocumentReference | null = null
 
         if (alreadyExists) {
-          console.log(
-            `[auto-campaigns-generate] Campaign for ${healthDay.name} already exists for ${checkParam} (${targetDateStringIST}), skipping creation...`
-          )
-          
-          // If campaign already exists but WhatsApp is requested, get existing campaign data for WhatsApp
           if (sendWhatsAppParam && checkParam === "today") {
             try {
-              // Try to get existing campaign data for WhatsApp message
+              // Try to get existing campaign data for WhatsApp message (for this hospital)
               const existingCampaignsList = await db
                 .collection("campaigns")
                 .where("metadata.healthDayDate", "==", healthDay.date)
                 .where("metadata.autoGenerated", "==", true)
+                .where("hospitalId", "==", hospital.id)
                 .limit(1)
                 .get()
               
@@ -336,38 +303,32 @@ export async function GET(request: Request) {
                     ctaText: existingCampaign.ctaText || advertisement.ctaText,
                   }
                 }
-                console.log(`[auto-campaigns-generate] Using existing campaign data for WhatsApp: ${whatsAppCampaignTitle}`)
               }
             } catch (error) {
-              console.error(`[auto-campaigns-generate] Error getting existing campaign data for WhatsApp:`, error)
-              // Continue with generated advertisement data
+              console.error(`[auto-campaigns-generate] Error getting existing campaign data:`, error)
             }
           } else {
-            // Campaign exists and WhatsApp is not requested, skip entirely
             continue
           }
         } else {
-          // Campaign doesn't exist, create it
-          console.log(`[auto-campaigns-generate] Creating new campaign for ${healthDay.name}`)
-
           const expiryDateUTC = new Date(targetDateUTC.getTime() + 24 * 60 * 60 * 1000)
           const expiryDateIST = new Date(expiryDateUTC.getTime() + istOffset)
 
-          // Create campaign document
           const campaignData = {
             title: advertisement.title,
             slug: slugify(healthDay.name),
             content: advertisement.content,
-            imageUrl: "", // Can be enhanced later to generate or fetch images
+            imageUrl: "",
             ctaText: advertisement.ctaText,
             ctaHref: advertisement.ctaHref,
             audience: healthDay.targetAudience,
             status: publishParam ? "published" : "draft",
             priority: healthDay.priority,
             startAt: admin.firestore.Timestamp.fromDate(targetDateUTC),
-            endAt: admin.firestore.Timestamp.fromDate(expiryDateUTC), // Auto-expire after 24 hours
+            endAt: admin.firestore.Timestamp.fromDate(expiryDateUTC),
             createdBy: "auto-campaign-system",
             updatedBy: "auto-campaign-system",
+            hospitalId: hospital.id,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             metadata: {
@@ -375,23 +336,22 @@ export async function GET(request: Request) {
               healthDayDate: healthDay.date,
               autoGenerated: true,
               generatedAt: new Date().toISOString(),
-              targetDate: targetIST.toISOString(), // Target date in IST
-              targetDateUTC: targetDateUTC.toISOString(), // Target date in UTC (for Firestore)
-              shortMessage: advertisement.shortMessage, // Store short message in metadata for later use
+              targetDate: targetIST.toISOString(),
+              targetDateUTC: targetDateUTC.toISOString(),
+              shortMessage: advertisement.shortMessage,
               autoExpiresAtUTC: expiryDateUTC.toISOString(),
               autoExpiresAtIST: expiryDateIST.toISOString(),
             },
           }
 
           campaignRef = await db.collection("campaigns").add(campaignData)
-          
-          console.log(`[auto-campaigns-generate] Created campaign with ID: ${campaignRef.id} for ${healthDay.name}`)
 
           campaignsCreated.push({
             id: campaignRef.id,
             title: advertisement.title,
             healthDay: healthDay.name,
             status: campaignData.status,
+            hospitalId: hospital.id,
           })
         }
 
@@ -425,22 +385,14 @@ export async function GET(request: Request) {
               appointmentUrl = `${origin}${normalizedPath}`
             }
             
-            // Use approved WhatsApp template with Content SID
-            // Content SID: HX21c0a92f2073af6a3102564e0e7c1141
             const whatsAppContentSid = process.env.WHATSAPP_CONTENT_SID || "HX42269b25d07c88206e6f00f2bfdddbd4"
             
-            // Prepare content variables for the template
-            // Using numbered variables as per Twilio Content Template format
-            // Variable mapping: "1" = name, "2" = campaignTitle, "3" = campaignMessage, "4" = appointmentUrl, "6" = appointmentUrl (for button)
-            // Note: Variables will be populated per patient in the loop below
             const baseContentVariables: Record<string, string> = {
               "2": whatsAppCampaignTitle,
               "3": whatsAppAdvertisement.shortMessage,
               "4": appointmentUrl,
-              "6": appointmentUrl, // For button URL
+              "6": appointmentUrl,
             }
-            
-            // Fallback message (used if template fails)
             const whatsAppMessage = `🏥 *${whatsAppCampaignTitle}*
 
 ${whatsAppAdvertisement.shortMessage}
@@ -449,87 +401,62 @@ To book an appointment or learn more, please use the options below:`
 
             const messageWithLink = `${whatsAppMessage}\n\nBook Appointment: ${appointmentUrl}`
 
-            // Get all active patients with phone numbers
-            const patientsSnapshot = await db
-              .collection("patients")
-              .where("status", "in", ["active"])
-              .get()
-
             const whatsAppPromises: Promise<void>[] = []
+            
+            try {
+              const patientsSnapshot = await db
+                .collection(getHospitalCollectionPath(hospital.id, "patients"))
+                .where("status", "in", ["active"])
+                .get()
 
-            patientsSnapshot.forEach((doc) => {
-              const patientData = doc.data()
-              const phone = patientData.phone || patientData.phoneNumber || patientData.contact
-              const patientName = patientData.name || patientData.fullName || `${patientData.firstName || ""} ${patientData.lastName || ""}`.trim() || "Patient"
-              const patientId = doc.id
+              patientsSnapshot.forEach((doc) => {
+                const patientData = doc.data()
+                const phone = patientData.phone || patientData.phoneNumber || patientData.contact
+                const patientName = patientData.name || patientData.fullName || `${patientData.firstName || ""} ${patientData.lastName || ""}`.trim() || "Patient"
+                const patientId = doc.id
 
-              if (phone && phone.trim() !== "") {
-                // Create booking URL with patient phone and ID for auto-fill
-                // Format: /patient-dashboard/book-appointment?phone=PHONE&patientId=PATIENT_ID
-                const bookingParams = new URLSearchParams({
-                  phone: phone.replace(/[^\d+]/g, ""), // Clean phone number (digits and + only)
-                  patientId: patientId,
-                })
-                const bookingUrl = `${appointmentUrl}?${bookingParams.toString()}`
-
-                // Update content variables with booking URL that includes patient info
-                const contentVariables = {
-                  ...baseContentVariables,
-                  "1": patientName, // Patient name for personalization
-                  "4": bookingUrl, // Booking URL with patient data
-                  "6": bookingUrl, // Button URL with patient data
-                }
-                
-                whatsAppPromises.push(
-                  sendWhatsAppNotification({
-                    to: phone,
-                    message: messageWithLink.replace(appointmentUrl, bookingUrl), // Fallback message with personalized URL
-                    contentSid: whatsAppContentSid, // Use approved template
-                    contentVariables: contentVariables, // Template variables with numbered keys
+                if (phone && phone.trim() !== "") {
+                  const bookingParams = new URLSearchParams({
+                    phone: phone.replace(/[^\d+]/g, ""),
+                    patientId: patientId,
                   })
-                    .then((result) => {
-                      if (!result.success) {
-                        console.error(
-                          `Failed to send WhatsApp to ${phone}:`,
-                          result.error
-                        )
-                      } else {
-                        console.log(`Successfully sent WhatsApp to ${phone} for campaign: ${whatsAppCampaignTitle}`)
-                      }
-                    })
-                    .catch((error) => {
-                      console.error(`Error sending WhatsApp to ${phone}:`, error)
-                    })
-                )
-              }
-            })
+                  const bookingUrl = `${appointmentUrl}?${bookingParams.toString()}`
 
-            // Send WhatsApp messages in parallel (but don't wait for all to complete)
+                  const contentVariables = {
+                    ...baseContentVariables,
+                    "1": patientName,
+                    "4": bookingUrl,
+                    "6": bookingUrl,
+                  }
+                  
+                  whatsAppPromises.push(
+                    sendWhatsAppNotification({
+                      to: phone,
+                      message: messageWithLink.replace(appointmentUrl, bookingUrl),
+                      contentSid: whatsAppContentSid,
+                      contentVariables: contentVariables,
+                    })
+                      .then((result) => {
+                        if (!result.success) {
+                          console.error(`Failed to send WhatsApp to ${phone}:`, result.error)
+                        }
+                      })
+                      .catch((error) => {
+                        console.error(`Error sending WhatsApp to ${phone}:`, error)
+                      })
+                  )
+                }
+              })
+            } catch (error) {
+              console.error(`Error querying patients for hospital ${hospital.id}:`, error)
+            }
+
             Promise.all(whatsAppPromises).catch((error) => {
               console.error("Error sending WhatsApp notifications:", error)
             })
-
-            console.log(
-              `[auto-campaigns-generate] Queued WhatsApp notifications for ${whatsAppPromises.length} patients for campaign: ${whatsAppCampaignTitle}${alreadyExists ? " (existing campaign)" : " (newly created)"}`
-            )
           } catch (error) {
             console.error("Error sending WhatsApp notifications:", error)
-            // Don't fail the entire request if WhatsApp fails
           }
-        } else if (sendWhatsAppParam && checkParam === "tomorrow") {
-          console.log(
-            `WhatsApp notifications will be sent tomorrow when campaigns go live for ${healthDay.name}`
-          )
-        }
-
-        if (!alreadyExists) {
-          console.log(
-            `[auto-campaigns-generate] Successfully created campaign "${advertisement.title}" for ${healthDay.name} (ID: ${campaignRef ? campaignRef.id : "N/A"})`
-          )
-        } else {
-          console.log(
-            `[auto-campaigns-generate] Campaign for ${healthDay.name} already exists, WhatsApp notification sent (if enabled)`
-          )
         }
       } catch (error) {
         console.error(
@@ -538,11 +465,11 @@ To book an appointment or learn more, please use the options below:`
         )
         // Continue with other campaigns even if one fails
       }
-    }
+    } // End of health day loop
+    } // End of hospital loop
 
     const autoExpired = await cleanupExpiredAutoCampaigns(db)
 
-    // Log cron execution to Firestore
     const executionTimeMs = Date.now() - startTime
     const executionLog = {
       executedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -556,14 +483,11 @@ To book an appointment or learn more, please use the options below:`
       executionTimeMs,
       autoCampaignsDeleted: autoExpired,
     }
-    
-    console.log(`[auto-campaigns-generate] Execution completed in ${executionTimeMs}ms. Generated ${campaignsCreated.length} campaign(s). Auto-deleted ${autoExpired} expired campaign(s).`)
 
     try {
       await db.collection("cron_logs").add(executionLog)
     } catch (logError) {
       console.error("Error logging cron execution:", logError)
-      // Don't fail the request if logging fails
     }
 
     return NextResponse.json({
@@ -600,7 +524,6 @@ To book an appointment or learn more, please use the options below:`
           executionTimeMs: Date.now() - startTime,
         })
         
-        console.log(`[auto-campaigns-generate] Logged failed execution to Firestore (triggered by: ${triggerSource})`)
       }
     } catch (logError) {
       console.error("[auto-campaigns-generate] Error logging failed cron execution:", logError)

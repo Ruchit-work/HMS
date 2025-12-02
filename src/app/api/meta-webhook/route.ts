@@ -5,6 +5,7 @@ import { normalizeTime, isDoctorAvailableOnDate, getDayName, DEFAULT_VISITING_HO
 import { isDateBlocked as isDateBlockedFromRaw, normalizeBlockedDates } from "@/utils/blockedDates"
 import { generateAppointmentConfirmationPDFBase64 } from "@/utils/pdfGenerators"
 import { Appointment } from "@/types/patient"
+import { getDoctorHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/serverHospitalQueries"
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -22,7 +23,6 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    console.log("WEBHOOK RECEIVED:", JSON.stringify(body, null, 2))
 
     const entry = body.entry?.[0]
     const changes = entry?.changes?.[0]
@@ -36,7 +36,6 @@ export async function POST(req: Request) {
     }
 
     if (value?.statuses) {
-      console.log("[Meta WhatsApp] Status update:", JSON.stringify(value.statuses))
       return NextResponse.json({ success: true })
     }
 
@@ -675,7 +674,6 @@ async function startBookingWithFlow(phone: string) {
     )
 
     if (flowResponse.success) {
-      console.log("[Meta WhatsApp] Flow sent successfully:", flowResponse.messageId)
       return
     } else {
       console.error("[Meta WhatsApp] Failed to send Flow, falling back to text-based booking:", flowResponse.error)
@@ -700,13 +698,6 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   const from = formatPhoneNumber(message.from)
   const flowResponse = message.flow
   const flowData = flowResponse.response?.data || {}
-
-  console.log("[Meta WhatsApp] Flow completion received:", {
-    from,
-    flowId: flowResponse.id,
-    flowToken: flowResponse.token,
-    flowData: JSON.stringify(flowData, null, 2),
-  })
 
   // Extract data from Flow (adjust field names based on your Flow structure)
   const flowDoctorId = flowData.doctor_id || flowData.doctor || ""
@@ -1283,8 +1274,6 @@ async function createPatientFromWhatsApp(
     whatsappRegistered: true, // Flag to indicate registered via WhatsApp
   })
   
-  console.log("[Meta WhatsApp] Created patient via WhatsApp:", patientUid, phone)
-  
   return { patientUid, patientId }
 }
 
@@ -1432,12 +1421,6 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
   const buttonText = language === "gujarati" ? "📅 તારીખ પસંદ કરો" : "📅 Pick a Date"
   const truncatedButtonText = buttonText.length > 20 ? buttonText.substring(0, 20) : buttonText
 
-  console.log("[Meta WhatsApp] Sending date picker list message:", {
-    phone,
-    dateCount: datesToShow.length,
-    buttonText: truncatedButtonText,
-  })
-
   const listResponse = await sendListMessage(
     phone,
     dateMsg,
@@ -1454,8 +1437,6 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
       dateCount: datesToShow.length,
     })
     
-    // Retry with simplified format
-    console.log("[Meta WhatsApp] Retrying date picker list with simplified format...")
     const simplifiedDates = datesToShow.map(date => ({
       id: date.id,
       title: date.title.length > 24 ? date.title.substring(0, 21) + "..." : date.title,
@@ -1484,12 +1465,8 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
       const errorMsg = language === "gujarati"
         ? "❌ ક્ષમા કરો, અમે તારીખ પસંદ કરવા માટે સૂચિ બતાવી શક્યા નથી. કૃપા કરીને પાછળથી પ્રયાસ કરો અથવા રિસેપ્શનનો સંપર્ક કરો."
         : "❌ Sorry, we couldn't display the date selection. Please try again later or contact reception."
-      await sendTextMessage(phone, errorMsg)
-    } else {
-      console.log("[Meta WhatsApp] ✅ Date picker list sent successfully on retry")
+        await sendTextMessage(phone, errorMsg)
     }
-  } else {
-    console.log("[Meta WhatsApp] ✅ Date picker list sent successfully")
   }
 }
 
@@ -1943,14 +1920,12 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       const hour = parseInt(slot.split(":")[0])
       return hour >= 9 && hour <= 13
     })
-    console.log("[Meta WhatsApp] Morning button clicked, found slots:", selectedSlots.length)
   } else if (buttonId === "time_quick_afternoon") {
     // Afternoon slots: 2:00 PM to 5:00 PM (14:00 to 17:00)
     selectedSlots = timeSlots.filter(slot => {
       const hour = parseInt(slot.split(":")[0])
       return hour >= 14 && hour <= 17
     })
-    console.log("[Meta WhatsApp] Afternoon button clicked, found slots:", selectedSlots.length)
   } else {
     console.error("[Meta WhatsApp] Unknown button ID:", buttonId)
     await sendTimePicker(phone, undefined, session.appointmentDate, language)
@@ -1977,8 +1952,6 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
     return hA * 60 + mA - (hB * 60 + mB)
   })
   
-  console.log("[Meta WhatsApp] Checking availability for", sortedSlots.length, "slots on", session.appointmentDate)
-  
   for (const slot of sortedSlots) {
     const normalizedTime = normalizeTime(slot)
     if (!normalizedTime) {
@@ -1993,9 +1966,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
       const slotTime = slotDateTime.getTime()
       
-      // Reject if slot is in the past or less than 15 minutes away
       if (slotTime <= minimumTime) {
-        console.log("[Meta WhatsApp] Skipping past/near slot:", normalizedTime, "Current time:", now.toISOString())
         continue
       }
     }
@@ -2072,13 +2043,8 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
 
   const sections = [{
     title: language === "gujarati" ? "ઉપલબ્ધ સમય" : "Available Times",
-    rows: availableHourlySlots.slice(0, 10) // WhatsApp limit
+    rows: availableHourlySlots.slice(0, 10)
   }]
-
-  console.log("[Meta WhatsApp] Sending hourly time slots:", {
-    phone,
-    slotCount: availableHourlySlots.length,
-  })
 
   const listResponse = await sendListMessage(
     phone,
@@ -2440,17 +2406,10 @@ async function getNextAvailable15MinSlot(
       // Create proper datetime for the slot using local timezone
       const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
       const now = new Date()
-      const minimumTime = new Date(now.getTime() + (15 * 60 * 1000)) // 15 minutes buffer
-      
-      console.log(`[WhatsApp Slot Check] Checking slot ${slot} at ${appointmentDate}:`)
-      console.log(`  Current time: ${now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`)
-      console.log(`  Slot time: ${slotDateTime.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`)
-      console.log(`  Minimum required time: ${minimumTime.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`)
-      console.log(`  Is past/too soon: ${slotDateTime <= minimumTime}`)
+      const minimumTime = new Date(now.getTime() + (15 * 60 * 1000))
       
       if (slotDateTime <= minimumTime) {
-        console.log(`  ❌ Skipping past/near slot: ${slot}`)
-        continue // Skip past/near slots
+        continue
       }
     }
     
@@ -2461,18 +2420,14 @@ async function getNextAvailable15MinSlot(
       const slotDoc = await slotRef.get()
       
       if (slotDoc.exists) {
-        console.log(`  ❌ Slot already booked: ${slot}`)
-        continue // Slot already booked
+        continue
       }
     }
     
-    // Found available slot
-    console.log(`  ✅ Available slot found: ${slot}`)
     return slot
   }
   
-  console.log(`  ❌ No available slots in hour ${hour}`)
-  return null // No available slots in this hour
+  return null
 }
 
 function generateTimeSlots(): string[] {
@@ -2586,6 +2541,25 @@ async function createAppointment(
   whatsappPending: boolean = false
 ) {
   const appointmentTime = normalizeTime(payload.appointmentTime)
+  
+  // Get hospital ID from doctor, or use first active hospital as fallback (BEFORE transaction)
+  let hospitalId: string | null = null
+  if (payload.doctorId) {
+    hospitalId = await getDoctorHospitalId(payload.doctorId)
+  }
+  
+  // If no hospital found from doctor, use first active hospital as fallback
+  if (!hospitalId) {
+    const activeHospitals = await getAllActiveHospitals()
+    if (activeHospitals.length > 0) {
+      hospitalId = activeHospitals[0].id
+    }
+  }
+  
+  if (!hospitalId) {
+    throw new Error("No hospital available for appointment creation")
+  }
+  
   let appointmentId = ""
 
   await db.runTransaction(async (transaction) => {
@@ -2606,7 +2580,8 @@ async function createAppointment(
       }
     }
 
-    const appointmentRef = db.collection("appointments").doc()
+    // Create appointment in hospital-scoped subcollection
+    const appointmentRef = db.collection(getHospitalCollectionPath(hospitalId, "appointments")).doc()
     appointmentId = appointmentRef.id
 
     const appointmentData: any = {
@@ -2638,6 +2613,7 @@ async function createAppointment(
       isRecheckup: payload.isRecheckup || false,
       recheckupNote: payload.recheckupNote || "",
       originalAppointmentId: payload.originalAppointmentId || "",
+      hospitalId: hospitalId, // Store hospital association
     }
 
     transaction.set(appointmentRef, appointmentData)
@@ -2655,6 +2631,7 @@ async function createAppointment(
       appointmentTime,
       createdAt: new Date().toISOString(),
       pending: !payload.doctorId, // Flag to indicate slot is pending doctor assignment
+      hospitalId: hospitalId, // Store hospitalId in slot
     })
   })
 
@@ -2794,8 +2771,6 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
       // Still try to send, but log the issue
     }
     
-    // Send PDF document via WhatsApp
-    console.log("[Meta WhatsApp] Attempting to send PDF:", { phone, pdfUrl, appointmentId })
     const docResult = await sendDocumentMessage(
       phone,
       pdfUrl,
@@ -2816,7 +2791,6 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
         `📄 *Download Your Appointment Confirmation*\n\nYour appointment confirmation PDF is ready:\n\n${pdfUrl}\n\nThis link is valid for 7 days.\n\nTap the link above to download your PDF.`
       )
     } else {
-      console.log("[Meta WhatsApp] PDF sent successfully:", { messageId: docResult.messageId, appointmentId })
       // Send a follow-up message confirming PDF was sent
       await sendTextMessage(
         phone,

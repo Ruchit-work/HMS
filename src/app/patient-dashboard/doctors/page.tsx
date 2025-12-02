@@ -5,6 +5,8 @@ import Link from "next/link"
 import { db } from "@/firebase/config"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import PageHeader from "@/components/ui/PageHeader"
 import Footer from "@/components/ui/Footer"
@@ -25,6 +27,7 @@ interface Doctor {
 
 export default function DoctorsPage() {
   const { user, loading: authLoading } = useAuth("patient")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,10 +35,12 @@ export default function DoctorsPage() {
   const [selectedSpecialization, setSelectedSpecialization] = useState("all")
 
   useEffect(() => {
+    if (!activeHospitalId) return
+    
     const fetchDoctors = async () => {
       try {
         const doctorsQuery = query(
-          collection(db, "doctors"),
+          getHospitalCollection(activeHospitalId, "doctors"),
           where("status", "==", "active")
         )
         const snapshot = await getDocs(doctorsQuery)

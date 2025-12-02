@@ -6,6 +6,8 @@ import { db, auth } from "@/firebase/config"
 import { Appointment } from "@/types/patient"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 
 interface WhatsAppBookingsPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
@@ -21,6 +23,7 @@ interface Doctor {
 }
 
 export default function WhatsAppBookingsPanel({ onNotification, onPendingCountChange }: WhatsAppBookingsPanelProps) {
+  const { activeHospitalId } = useMultiHospital()
   const [bookings, setBookings] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -93,8 +96,6 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
       )
       
       const unsubscribe = onSnapshot(whatsappQuery, (snapshot) => {
-        console.log(`[WhatsApp Bookings] Real-time update: ${snapshot.docs.length} pending bookings`)
-        
         const bookingsList = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -123,9 +124,11 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
   }, [onPendingCountChange])
 
   const fetchDoctors = useCallback(async () => {
+    if (!activeHospitalId) return
+    
     try {
       setDoctorsLoading(true)
-      const doctorsQuery = query(collection(db, "doctors"), where("status", "==", "active"))
+      const doctorsQuery = query(getHospitalCollection(activeHospitalId, "doctors"), where("status", "==", "active"))
       const snapshot = await getDocs(doctorsQuery)
       const doctorsList = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -137,7 +140,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
     } finally {
       setDoctorsLoading(false)
     }
-  }, [])
+  }, [activeHospitalId])
 
   useEffect(() => {
     let unsubscribeBookings: (() => void) | null = null

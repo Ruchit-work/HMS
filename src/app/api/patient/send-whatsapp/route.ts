@@ -76,8 +76,6 @@ export async function POST(request: Request) {
       )
     }
 
-    console.log("[Patient WhatsApp] ✅ Message sent successfully to:", normalizedTo)
-
     return NextResponse.json({
       success: true,
       sid: result.messageId,

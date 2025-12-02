@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import GlobalHeader from "@/components/ui/GlobalHeader";
+import { MultiHospitalProvider } from "@/contexts/MultiHospitalContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +30,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <GlobalHeader />
-        {children}
+        <MultiHospitalProvider>
+          {children}
+        </MultiHospitalProvider>
       </body>
     </html>
   );

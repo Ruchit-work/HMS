@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { signInWithEmailAndPassword, type User } from "firebase/auth"
-import { getDoc, doc } from "firebase/firestore"
+import { getDoc, doc, collection, getDocs, setDoc, serverTimestamp } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/StatusComponents"
@@ -72,10 +72,41 @@ function LoginContent() {
   }
 
   const determineUserRole = async (user: User) => {
+    // Check users collection first (multi-hospital support)
+    const userDoc = await getDoc(doc(db, "users", user.uid))
+    let isSuperAdmin = false
+    let hospitals: string[] = []
+    let activeHospital: string | null = null
+
+    if (userDoc.exists()) {
+      const userData = userDoc.data()
+      hospitals = userData?.hospitals || []
+      activeHospital = userData?.activeHospital || null
+      isSuperAdmin = userData?.role === "super_admin"
+    }
+
     // Check admin collection first
     const adminDoc = await getDoc(doc(db, "admins", user.uid))
     if (adminDoc.exists()) {
-      return { role: "admin" as DashboardRole, data: adminDoc.data(), redirect: "/admin-dashboard" }
+      const adminData = adminDoc.data()
+      // If super admin, redirect to super admin dashboard
+      if (isSuperAdmin || adminData?.isSuperAdmin) {
+        return { 
+          role: "admin" as DashboardRole, 
+          data: adminData, 
+          redirect: "/admin-dashboard",
+          isSuperAdmin: true,
+          hospitals,
+          activeHospital
+        }
+      }
+      return { 
+        role: "admin" as DashboardRole, 
+        data: adminData, 
+        redirect: "/admin-dashboard",
+        hospitals: hospitals.length > 0 ? hospitals : (adminData?.hospitalId ? [adminData.hospitalId] : []),
+        activeHospital: activeHospital || adminData?.hospitalId || null
+      }
     }
 
     // Check doctor collection
@@ -87,26 +118,156 @@ function LoginContent() {
           "Your account is pending admin approval. Please wait for approval before logging in. You will be notified once your account is approved."
         )
       }
-      return { role: "doctor" as DashboardRole, data: doctorData, redirect: "/doctor-dashboard" }
+      return { 
+        role: "doctor" as DashboardRole, 
+        data: doctorData, 
+        redirect: "/doctor-dashboard",
+        hospitals: hospitals.length > 0 ? hospitals : (doctorData?.hospitalId ? [doctorData.hospitalId] : []),
+        activeHospital: activeHospital || doctorData?.hospitalId || null
+      }
     }
 
     // Check patient collection
     const patientDoc = await getDoc(doc(db, "patients", user.uid))
     if (patientDoc.exists()) {
-      return { role: "patient" as DashboardRole, data: patientDoc.data(), redirect: "/patient-dashboard" }
+      return { 
+        role: "patient" as DashboardRole, 
+        data: patientDoc.data(), 
+        redirect: "/patient-dashboard",
+        hospitals,
+        activeHospital
+      }
     }
 
     // Check receptionist collection
     const receptionistDoc = await getDoc(doc(db, "receptionists", user.uid))
     if (receptionistDoc.exists()) {
+      const receptionistData = receptionistDoc.data()
       return {
         role: "receptionist" as DashboardRole,
-        data: receptionistDoc.data(),
+        data: receptionistData,
         redirect: "/receptionist-dashboard",
+        hospitals: hospitals.length > 0 ? hospitals : (receptionistData?.hospitalId ? [receptionistData.hospitalId] : []),
+        activeHospital: activeHospital || receptionistData?.hospitalId || null
       }
     }
 
     return null
+  }
+
+  const checkAndRedirectWithHospital = async (roleInfo: any, user: User) => {
+    // Sync user document in users collection (for multi-hospital support)
+    // This ensures super admin status and hospital associations are properly synced
+    try {
+      const userDocRef = doc(db, "users", user.uid)
+      const userDoc = await getDoc(userDocRef)
+      
+      // If super admin, fetch all hospitals and sync to users collection
+      if (roleInfo.isSuperAdmin) {
+        const hospitalsSnapshot = await getDocs(collection(db, "hospitals"))
+        const allHospitalIds = hospitalsSnapshot.docs
+          .filter(doc => doc.data().status === "active")
+          .map(doc => doc.id)
+        
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email || "",
+          role: "super_admin",
+          hospitals: allHospitalIds,
+          activeHospital: roleInfo.activeHospital || (allHospitalIds.length > 0 ? allHospitalIds[0] : null),
+          updatedAt: new Date().toISOString(),
+        }, { merge: true })
+      } else if (!userDoc.exists() && roleInfo.role === "admin") {
+        // Sync regular admin to users collection
+        const adminData = roleInfo.data || {}
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email || adminData.email || "",
+          role: "admin",
+          hospitals: roleInfo.hospitals || (adminData?.hospitalId ? [adminData.hospitalId] : []),
+          activeHospital: roleInfo.activeHospital || adminData?.hospitalId || null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }, { merge: true })
+      }
+    } catch (err) {
+      console.error("Failed to sync user document:", err)
+      // Don't block login if sync fails
+    }
+    
+    // For patients, check hospital selection
+    if (roleInfo.role === "patient") {
+      const hospitals = roleInfo.hospitals || []
+      
+      if (hospitals.length === 0) {
+        // No hospitals - redirect to hospital selection
+        router.replace("/hospital-selection?redirect=" + roleInfo.redirect)
+        return
+      } else if (hospitals.length === 1) {
+        // One hospital - auto-select and continue
+        const hospitalId = hospitals[0]
+        if (!roleInfo.activeHospital || roleInfo.activeHospital !== hospitalId) {
+          // Set active hospital
+          try {
+            const token = await user.getIdToken()
+            await fetch("/api/user/select-hospital", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+              },
+              body: JSON.stringify({ hospitalId }),
+            })
+            sessionStorage.setItem("activeHospitalId", hospitalId)
+          } catch (err) {
+            console.error("Failed to set active hospital:", err)
+          }
+        }
+        dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
+        return
+      } else {
+        // Multiple hospitals - check if activeHospital is set and valid
+        const activeHospital = roleInfo.activeHospital
+        if (activeHospital && hospitals.includes(activeHospital)) {
+          // Valid active hospital - continue
+          dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
+          return
+        } else {
+          // No valid active hospital - redirect to selection
+          router.replace("/hospital-selection?redirect=" + roleInfo.redirect)
+          return
+        }
+      }
+    }
+
+    // For staff (admin/doctor/receptionist), they belong to one hospital - auto-select
+    if (STAFF_ROLES.includes(roleInfo.role)) {
+      const hospitals = roleInfo.hospitals || []
+      if (hospitals.length > 0) {
+        const hospitalId = hospitals[0] // Staff has one hospital
+        if (!roleInfo.activeHospital || roleInfo.activeHospital !== hospitalId) {
+          try {
+            const token = await user.getIdToken()
+            await fetch("/api/user/select-hospital", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+              },
+              body: JSON.stringify({ hospitalId }),
+            })
+            sessionStorage.setItem("activeHospitalId", hospitalId)
+          } catch (err) {
+            console.error("Failed to set active hospital:", err)
+          }
+        }
+      }
+      dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
+      return
+    }
+
+    // Default redirect
+    dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
   }
 
   const sendOtpCode = async (phoneOverride?: string) => {
@@ -209,9 +370,16 @@ function LoginContent() {
       setMfaRequired(false)
       setOtpCode("")
       setOtpCountdown(0)
-      dispatchCountdownMessage("Login successful!", () =>
-        router.replace(pendingRedirect || "/")
-      )
+      
+      // Re-determine role after OTP verification and check hospitals
+      const roleInfo = await determineUserRole(pendingUser)
+      if (roleInfo) {
+        await checkAndRedirectWithHospital(roleInfo, pendingUser)
+      } else {
+        dispatchCountdownMessage("Login successful!", () =>
+          router.replace(pendingRedirect || "/")
+        )
+      }
     } catch (err: any) {
       const message = err?.message || "Failed to verify OTP. Please try again."
       setOtpError(message)
@@ -286,28 +454,9 @@ function LoginContent() {
         return
       }
 
-      if (roleInfo.role === "patient") {
-        setLoading(false)
-        dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
-        return
-      }
-
-      // ⚠️ TEMPORARILY DISABLED: 2FA for staff (doctor, admin, receptionist)
-      // TODO: Uncomment this section when ready to enable 2FA
-      // if (STAFF_ROLES.includes(roleInfo.role)) {
-      //   await beginMfaFlow(user, roleInfo)
-      //   return
-      // }
-
-      // ✅ ALLOWING DIRECT LOGIN FOR STAFF - 2FA DISABLED FOR NOW
-      if (STAFF_ROLES.includes(roleInfo.role)) {
-        setLoading(false)
-        dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
-        return
-      }
-
       setLoading(false)
-      dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
+      // Check hospitals and redirect accordingly
+      await checkAndRedirectWithHospital(roleInfo, user)
       return
     } catch (err) {
       const firebaseError = err as { code?: string; message?: string }

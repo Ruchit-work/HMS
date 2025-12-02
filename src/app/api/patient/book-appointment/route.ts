@@ -4,6 +4,7 @@ import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/rateLimit"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -58,9 +59,16 @@ export async function POST(request: Request) {
       // Set patientUid from authenticated user
       appointmentData.patientUid = auth.user?.uid
 
+      // Get doctor's hospital ID - appointment belongs to doctor's hospital
+      const doctorHospitalId = await getDoctorHospitalId(appointmentData.doctorId)
+      if (!doctorHospitalId) {
+        return NextResponse.json({ error: "Doctor's hospital not found" }, { status: 400 })
+      }
+
       // Normalize appointment time to 24-hour format for consistent storage
       const normalizedAppointmentTime = normalizeTime(appointmentData.appointmentTime)
       appointmentData.appointmentTime = normalizedAppointmentTime
+      appointmentData.hospitalId = doctorHospitalId
 
       const slotId = getSlotDocId(appointmentData.doctorId, appointmentData.appointmentDate, normalizedAppointmentTime)
       if (!slotId) {
@@ -80,7 +88,10 @@ export async function POST(request: Request) {
           throw new Error("SLOT_ALREADY_BOOKED")
         }
 
-        const appointmentRef = firestore.collection("appointments").doc()
+        // Create appointment in hospital-scoped subcollection
+        const appointmentRef = firestore
+          .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
+          .doc()
         appointmentId = appointmentRef.id
         transaction.set(appointmentRef, appointmentData)
         transaction.set(slotRef, {
@@ -89,6 +100,7 @@ export async function POST(request: Request) {
           appointmentDate: appointmentData.appointmentDate,
           appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
           createdAt: nowIso,
+          hospitalId: doctorHospitalId,
         })
       })
 
@@ -165,9 +177,7 @@ See you soon! 🏥`
             message,
           })
 
-          if (result.success) {
-            console.log("[patient/book-appointment] ✅ WhatsApp message sent successfully to:", patientPhone)
-          } else {
+          if (!result.success) {
             console.error("[patient/book-appointment] ❌ Failed to send WhatsApp message:", {
               phone: patientPhone,
               error: result.error,
@@ -197,8 +207,16 @@ See you soon! 🏥`
       // Normalize time to 24-hour format before transaction
       const normalizedNewTime = normalizeTime(appointmentTime)
 
+      // Get hospital ID from appointment - try to find appointment across hospitals
+      const appointmentHospitalId = await getAppointmentHospitalId(appointmentId)
+      if (!appointmentHospitalId) {
+        return NextResponse.json({ error: "Appointment hospital not found" }, { status: 404 })
+      }
+
       await firestore.runTransaction(async (transaction) => {
-        const appointmentRef = firestore.collection("appointments").doc(appointmentId)
+        const appointmentRef = firestore
+          .collection(getHospitalCollectionPath(appointmentHospitalId, "appointments"))
+          .doc(appointmentId)
         const appointmentSnap = await transaction.get(appointmentRef)
         if (!appointmentSnap.exists) {
           throw new Error("APPOINTMENT_NOT_FOUND")
@@ -242,6 +260,7 @@ See you soon! 🏥`
           appointmentDate,
           appointmentTime: normalizedNewTime, // Always store in 24-hour format
           createdAt: new Date().toISOString(),
+          hospitalId: appointmentHospitalId,
         })
       })
 
