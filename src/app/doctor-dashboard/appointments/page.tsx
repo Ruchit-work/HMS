@@ -1014,9 +1014,16 @@ export default function DoctorAppointments() {
       try {
         const currentUser = auth.currentUser
         if (!currentUser) {
-          console.warn("User not logged in, skipping completion WhatsApp message")
+          console.warn("[Completion WhatsApp] User not logged in, skipping completion WhatsApp message")
         } else {
           const token = await currentUser.getIdToken()
+
+          console.log("[Completion WhatsApp] Sending completion message:", {
+            appointmentId,
+            patientId: appointmentSnapshot.patientId,
+            patientPhone: appointmentSnapshot.patientPhone,
+            patientName: appointmentSnapshot.patientName,
+          })
 
           const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
             method: "POST",
@@ -1032,14 +1039,24 @@ export default function DoctorAppointments() {
             }),
           })
 
+          const responseData = await completionResponse.json().catch(() => ({}))
+          
           if (!completionResponse.ok) {
-            console.error("Failed to send completion WhatsApp message")
+            console.error("[Completion WhatsApp] Failed to send:", {
+              status: completionResponse.status,
+              statusText: completionResponse.statusText,
+              error: responseData.error || "Unknown error",
+            })
+          } else {
+            console.log("[Completion WhatsApp] Success:", responseData)
           }
         }
       } catch (error) {
-        console.error("Error sending completion WhatsApp:", error)
+        console.error("[Completion WhatsApp] Error sending completion WhatsApp:", error)
         // Don't fail the completion if WhatsApp fails
       }
+    } else {
+      console.warn("[Completion WhatsApp] Appointment snapshot not found, skipping WhatsApp message")
     }
 
     if (formData.recheckupRequired && appointmentSnapshot) {

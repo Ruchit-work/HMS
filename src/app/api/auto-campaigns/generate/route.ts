@@ -357,7 +357,10 @@ export async function GET(request: Request) {
 
 
         // Only send notifications if the campaign is for today (not tomorrow)
+        console.log(`[auto-campaigns-generate] WhatsApp send check: sendWhatsAppParam=${sendWhatsAppParam}, hasShortMessage=${!!whatsAppAdvertisement.shortMessage}, checkParam=${checkParam}`)
+        
         if (sendWhatsAppParam && whatsAppAdvertisement.shortMessage && checkParam === "today") {
+          console.log(`[auto-campaigns-generate] Sending WhatsApp notifications for campaign: ${whatsAppCampaignTitle}`)
           try {
             // Get base URL for building full links
             // Try VERCEL_URL first (for Vercel deployments), then NEXT_PUBLIC_BASE_URL, then request origin
@@ -401,13 +404,17 @@ To book an appointment or learn more, please use the options below:`
 
             const messageWithLink = `${whatsAppMessage}\n\nBook Appointment: ${appointmentUrl}`
 
-            const whatsAppPromises: Promise<void>[] = []
+            const whatsAppPromises: Promise<{ success: boolean; phone: string; error?: string }>[] = []
+            
+            console.log(`[auto-campaigns-generate] Starting WhatsApp send for campaign: ${whatsAppCampaignTitle}`)
             
             try {
               const patientsSnapshot = await db
                 .collection(getHospitalCollectionPath(hospital.id, "patients"))
                 .where("status", "in", ["active"])
                 .get()
+
+              console.log(`[auto-campaigns-generate] Found ${patientsSnapshot.size} active patients for hospital ${hospital.id}`)
 
               patientsSnapshot.forEach((doc) => {
                 const patientData = doc.data()
@@ -429,6 +436,8 @@ To book an appointment or learn more, please use the options below:`
                     "6": bookingUrl,
                   }
                   
+                  console.log(`[auto-campaigns-generate] Queuing WhatsApp for patient ${patientName} (${phone.substring(0, 3)}***)`)
+                  
                   whatsAppPromises.push(
                     sendWhatsAppNotification({
                       to: phone,
@@ -438,22 +447,44 @@ To book an appointment or learn more, please use the options below:`
                     })
                       .then((result) => {
                         if (!result.success) {
-                          console.error(`Failed to send WhatsApp to ${phone}:`, result.error)
+                          console.error(`[auto-campaigns-generate] Failed to send WhatsApp to ${phone.substring(0, 3)}***:`, result.error)
+                        } else {
+                          console.log(`[auto-campaigns-generate] Successfully sent WhatsApp to ${phone.substring(0, 3)}***`)
                         }
+                        return { success: result.success, phone: phone.substring(0, 3) + "***", error: result.error }
                       })
                       .catch((error) => {
-                        console.error(`Error sending WhatsApp to ${phone}:`, error)
+                        console.error(`[auto-campaigns-generate] Error sending WhatsApp to ${phone.substring(0, 3)}***:`, error)
+                        return { success: false, phone: phone.substring(0, 3) + "***", error: error instanceof Error ? error.message : String(error) }
                       })
                   )
+                } else {
+                  console.warn(`[auto-campaigns-generate] Patient ${patientName} (ID: ${patientId}) has no phone number, skipping`)
                 }
               })
             } catch (error) {
-              console.error(`Error querying patients for hospital ${hospital.id}:`, error)
+              console.error(`[auto-campaigns-generate] Error querying patients for hospital ${hospital.id}:`, error)
             }
 
-            Promise.all(whatsAppPromises).catch((error) => {
-              console.error("Error sending WhatsApp notifications:", error)
-            })
+            // Await all WhatsApp promises and log results
+            if (whatsAppPromises.length > 0) {
+              console.log(`[auto-campaigns-generate] Sending ${whatsAppPromises.length} WhatsApp messages...`)
+              try {
+                const results = await Promise.all(whatsAppPromises)
+                const successCount = results.filter(r => r.success).length
+                const failureCount = results.filter(r => !r.success).length
+                console.log(`[auto-campaigns-generate] WhatsApp send complete: ${successCount} succeeded, ${failureCount} failed`)
+                
+                if (failureCount > 0) {
+                  const failures = results.filter(r => !r.success)
+                  console.error(`[auto-campaigns-generate] Failed WhatsApp sends:`, failures.map(f => ({ phone: f.phone, error: f.error })))
+                }
+              } catch (error) {
+                console.error("[auto-campaigns-generate] Error awaiting WhatsApp notifications:", error)
+              }
+            } else {
+              console.warn(`[auto-campaigns-generate] No WhatsApp messages to send for campaign: ${whatsAppCampaignTitle}`)
+            }
           } catch (error) {
             console.error("Error sending WhatsApp notifications:", error)
           }
