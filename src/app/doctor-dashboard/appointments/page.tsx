@@ -15,13 +15,7 @@ import { calculateAge } from "@/utils/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
 import Pagination from "@/components/ui/Pagination"
-import {
-  fetchMedicineSuggestions,
-  MedicineSuggestion,
-  MedicineSuggestionOption,
-  recordMedicineSuggestions,
-  sanitizeMedicineName,
-} from "@/utils/medicineSuggestions"
+import { fetchMedicineSuggestions, MedicineSuggestion,  MedicineSuggestionOption,recordMedicineSuggestions, sanitizeMedicineName,} from "@/utils/medicineSuggestions"
 
 // Helper function to parse and render prescription text
 const parsePrescription = (text: string) => {
@@ -1014,6 +1008,39 @@ export default function DoctorAppointments() {
         apt.id === appointmentId ? { ...apt, ...result.updates } : apt
       )
     )
+
+    // Send completion WhatsApp message with Google Review link
+    if (appointmentSnapshot) {
+      try {
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          console.warn("User not logged in, skipping completion WhatsApp message")
+        } else {
+          const token = await currentUser.getIdToken()
+
+          const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              appointmentId,
+              patientId: appointmentSnapshot.patientId,
+              patientPhone: appointmentSnapshot.patientPhone,
+              patientName: appointmentSnapshot.patientName,
+            }),
+          })
+
+          if (!completionResponse.ok) {
+            console.error("Failed to send completion WhatsApp message")
+          }
+        }
+      } catch (error) {
+        console.error("Error sending completion WhatsApp:", error)
+        // Don't fail the completion if WhatsApp fails
+      }
+    }
 
     if (formData.recheckupRequired && appointmentSnapshot) {
       try {

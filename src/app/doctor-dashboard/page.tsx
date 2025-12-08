@@ -263,11 +263,46 @@ export default function DoctorDashboard() {
       )
 
       // Update local state
-      setAppointments(appointments.map(apt => 
+      const updatedAppointments = appointments.map(apt => 
         apt.id === selectedAppointmentId 
           ? { ...apt, ...result.updates } 
           : apt
-      ))
+      )
+      setAppointments(updatedAppointments)
+
+      // Find the completed appointment to send WhatsApp message
+      const completedAppointment = updatedAppointments.find(apt => apt.id === selectedAppointmentId)
+
+      // Send completion WhatsApp message with Google Review link
+      if (completedAppointment) {
+        try {
+          const currentUser = auth.currentUser
+          if (currentUser) {
+            const token = await currentUser.getIdToken()
+
+            const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                appointmentId: selectedAppointmentId,
+                patientId: completedAppointment.patientId,
+                patientPhone: completedAppointment.patientPhone,
+                patientName: completedAppointment.patientName,
+              }),
+            })
+
+            if (!completionResponse.ok) {
+              console.error("Failed to send completion WhatsApp message")
+            }
+          }
+        } catch (error) {
+          console.error("Error sending completion WhatsApp:", error)
+          // Don't fail the completion if WhatsApp fails
+        }
+      }
 
       setNotification({ 
         type: "success", 
