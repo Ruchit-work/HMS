@@ -23,7 +23,7 @@
     "firebase-admin": "^13.5.0",
     "isomorphic-dompurify": "^2.32.0",
     "jspdf": "^2.5.2",
-    "next": "15.5.4",
+    "next": "15.5.7",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "twilio": "^5.10.4"
@@ -35,7 +35,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.4",
+    "eslint-config-next": "15.5.7",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
