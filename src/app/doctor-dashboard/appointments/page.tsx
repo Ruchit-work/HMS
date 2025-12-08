@@ -1591,7 +1591,7 @@ export default function DoctorAppointments() {
             </div>
           </div>
           
-          <style jsx>{`
+          <style>{`
             @keyframes slide-in {
               from {
                 transform: scaleX(0);
