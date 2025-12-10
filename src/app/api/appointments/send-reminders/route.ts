@@ -30,12 +30,13 @@ export async function GET(request: Request) {
     const db = admin.firestore()
     const now = new Date()
     
-    // Since cron runs once per day, check all appointments happening in the next 24 hours
-    // that haven't been reminded yet
-    const windowStart = now // Start from now
-    const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
+    // Reminders should go ~24 hours before the appointment.
+    // With an hourly cron, check reminder times that fall within a ±60m window around "now".
+    // Also allow a small lookback (1h) to avoid missing if cron runs slightly late.
+    const windowStart = new Date(now.getTime() - 60 * 60 * 1000) // 1 hour ago
+    const windowEnd = new Date(now.getTime() + 60 * 60 * 1000) // 1 hour from now
     
-    console.log("[appointment-reminders] Target window:", {
+    console.log("[appointment-reminders] Reminder window (±60m around now):", {
       windowStart: windowStart.toISOString(),
       windowEnd: windowEnd.toISOString(),
       now: now.toISOString(),
@@ -86,9 +87,17 @@ export async function GET(request: Request) {
             // Create appointment datetime
             const appointmentDateTime = new Date(`${appointmentDateStr}T${appointmentTimeStr}`)
             
-            // Check if appointment is within our target window (24 hours ± 30 minutes)
-            if (appointmentDateTime < windowStart || appointmentDateTime > windowEnd) {
-              continue // Not in the 24-hour window
+            // Compute the intended reminder time: 24 hours before the appointment
+            const reminderTime = new Date(appointmentDateTime.getTime() - 24 * 60 * 60 * 1000)
+            
+            // Send only when the reminder time is within our check window
+            if (reminderTime < windowStart || reminderTime > windowEnd) {
+              continue // Not the right time to send the reminder
+            }
+            
+            // Ensure the appointment itself is in the future
+            if (appointmentDateTime <= now) {
+              continue // Don't remind for past appointments
             }
 
             // Check if reminder has already been sent
