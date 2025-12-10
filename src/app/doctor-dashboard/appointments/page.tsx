@@ -1579,16 +1579,7 @@ export default function DoctorAppointments() {
                       : "text-slate-500 hover:text-slate-700"
                   }`}
                 >
-                  <div className="relative">
-                    <span className="text-base">History</span>
-                    <NotificationBadge 
-                      count={historyAppointments.length}
-                      position="top-right"
-                      color="green"
-                      size="sm"
-                      animate={false}
-                    />
-                  </div>
+                  <span className="text-base">History</span>
                   {activeTab === "history" && (
                     <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
                   )}
