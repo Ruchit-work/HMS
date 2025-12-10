@@ -1023,7 +1023,12 @@ export default function DoctorAppointments() {
             patientId: appointmentSnapshot.patientId,
             patientPhone: appointmentSnapshot.patientPhone,
             patientName: appointmentSnapshot.patientName,
+            hospitalId: activeHospitalId,
           })
+
+          if (!activeHospitalId) {
+            console.error("[Completion WhatsApp] ERROR: activeHospitalId is missing!")
+          }
 
           const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
             method: "POST",
@@ -1036,27 +1041,35 @@ export default function DoctorAppointments() {
               patientId: appointmentSnapshot.patientId,
               patientPhone: appointmentSnapshot.patientPhone,
               patientName: appointmentSnapshot.patientName,
+              hospitalId: activeHospitalId, // Pass hospitalId to API
             }),
           })
 
           const responseData = await completionResponse.json().catch(() => ({}))
           
           if (!completionResponse.ok) {
-            console.error("[Completion WhatsApp] Failed to send:", {
+            console.error("[Completion WhatsApp] ❌ FAILED to send:", {
               status: completionResponse.status,
               statusText: completionResponse.statusText,
               error: responseData.error || "Unknown error",
+              responseData,
             })
           } else {
-            console.log("[Completion WhatsApp] Success:", responseData)
+            console.log("[Completion WhatsApp] ✅ SUCCESS:", responseData)
+            if (options?.showToast !== false) {
+              setNotification({
+                type: "success",
+                message: responseData.message || "Checkup completed and thank you message sent!"
+              })
+            }
           }
         }
       } catch (error) {
-        console.error("[Completion WhatsApp] Error sending completion WhatsApp:", error)
+        console.error("[Completion WhatsApp] ❌ ERROR sending completion WhatsApp:", error)
         // Don't fail the completion if WhatsApp fails
       }
     } else {
-      console.warn("[Completion WhatsApp] Appointment snapshot not found, skipping WhatsApp message")
+      console.warn("[Completion WhatsApp] ⚠️ Appointment snapshot not found, skipping WhatsApp message")
     }
 
     if (formData.recheckupRequired && appointmentSnapshot) {

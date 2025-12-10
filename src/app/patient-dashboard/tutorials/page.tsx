@@ -2,8 +2,21 @@
 
 import Link from "next/link"
 import PageHeader from "@/components/ui/PageHeader"
+import { useAuth } from "@/hooks/useAuth"
+import LoadingSpinner from "@/components/ui/StatusComponents"
 
 export default function PatientPortalTutorial() {
+  // Protect route - only allow patients
+  const { user, loading } = useAuth("patient")
+
+  if (loading) {
+    return <LoadingSpinner />
+  }
+
+  if (!user) {
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader 

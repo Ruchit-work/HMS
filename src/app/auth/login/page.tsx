@@ -35,6 +35,27 @@ function LoginContent() {
   
   // Protect route - redirect if already authenticated
   const { loading: checking } = usePublicRoute()
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+
+  // Immediate synchronous check to prevent flash
+  useEffect(() => {
+    // Check if user is already authenticated synchronously
+    const currentUser = auth.currentUser
+    if (!currentUser && !checking) {
+      setIsCheckingAuth(false)
+    }
+  }, [checking])
+
+  // Handle pageshow event (back button) - re-check auth immediately
+  useEffect(() => {
+    const handlePageshow = () => {
+      setIsCheckingAuth(true)
+      // The usePublicRoute hook will handle the redirect
+    }
+    
+    window.addEventListener('pageshow', handlePageshow)
+    return () => window.removeEventListener('pageshow', handlePageshow)
+  }, [])
 
   useEffect(() => {
     if (otpCountdown <= 0) return
@@ -507,7 +528,7 @@ function LoginContent() {
     }, 1000)
   }
 
-  if (checking) {
+  if (checking || isCheckingAuth) {
     return <LoadingSpinner />
   }
 
@@ -518,34 +539,20 @@ function LoginContent() {
       {/* Left Side - Login Form */}
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-slate-50">
         <div className="w-full max-w-sm sm:max-w-md animate-fade-in">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-3 mb-6">
-              <div className="w-14 h-14 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
+          <div className="text-center mb-6">
+            <div className="flex flex-col items-center gap-3 mb-2">
+              <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
                 <span className="text-white font-bold text-2xl">H</span>
               </div>
-              <div className="text-left">
+              <div className="text-center">
                 <h1 className="text-3xl font-bold text-slate-900">HMS</h1>
                 <p className="text-xs text-slate-500 font-medium">Hospital Management System</p>
               </div>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">
-              {role === "doctor" ? "Doctor Login" : 
-               role === "admin" ? "Admin Login" : 
-               role === "receptionist" ? "Receptionist Login" :
-               role === "patient" ? "Patient Login" :
-               "Login"}
-            </h2>
-            <p className="text-sm sm:text-base text-slate-600">
-              {role === "doctor" ? "Sign in to access your doctor dashboard" : 
-               role === "admin" ? "Sign in to access admin dashboard" : 
-               role === "receptionist" ? "Sign in to access receptionist dashboard" :
-               role === "patient" ? "Sign in to access your patient portal" :
-               "Sign in to access your dashboard"}
-            </p>
           </div>
 
           {/* Trust Indicators */}
-          <div className="flex items-center justify-center gap-6 mb-6 py-4 border-y border-slate-200">
+          <div className="flex items-center justify-center gap-6 mb-4 py-4 border-y border-slate-200">
             <div className="flex items-center gap-2 text-xs text-slate-600">
               <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -613,173 +620,220 @@ function LoginContent() {
           )}
           
           {/* Login Form */}
-          {!mfaRequired ? (
-            <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Email Address or Phone Number
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
-                  <input
-                    type="text"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-                    placeholder={
-                      role === "doctor"
-                        ? "doctor@hospital.com / +91 98765 43210"
-                        : role === "admin"
-                        ? "admin@hospital.com / +91 98765 43210"
-                        : role === "receptionist"
-                        ? "receptionist@hospital.com / +91 98765 43210"
-                        : role === "patient"
-                        ? "patient@email.com / 9876543210"
-                        : "Email or phone"
-                    }
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-slate-700">
-                    Password
+          <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl">
+            {!mfaRequired ? (
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Email Address or Phone Number
                     <span className="text-red-500 ml-1">*</span>
                   </label>
-                  <Link
-                    href="/auth/forgot-password"
-                    className="text-xs font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
-                  >
-                    Forgot password?
-                  </Link>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
+                    <input
+                      type="text"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+                      placeholder={
+                        role === "doctor"
+                          ? "doctor@hospital.com / +91 98765 43210"
+                          : role === "admin"
+                          ? "admin@hospital.com / +91 98765 43210"
+                          : role === "receptionist"
+                          ? "receptionist@hospital.com / +91 98765 43210"
+                          : role === "patient"
+                          ? "patient@email.com / 9876543210"
+                          : "Email or phone"
+                      }
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Password
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
+                    <Link
+                      href="/auth/forgot-password"
+                      className="text-xs font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg
+                      focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200
+                      bg-white text-slate-900 placeholder:text-slate-400
+                      transition-all duration-200"
+                      placeholder="••••••••"
+                      minLength={8}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                >
+                  {loading ? "Signing in..." : "Sign In"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleOtpSubmit} className="space-y-5">
+                <div className="p-4 bg-slate-100 rounded-xl border border-slate-200">
+                  <p className="text-sm text-slate-700 font-semibold mb-1">Two-Factor Authentication</p>
+                  <p className="text-xs text-slate-600">
+                    Enter the 6-digit security code we sent to{" "}
+                    <span className="font-semibold">{otpMaskedPhone}</span> to verify your identity.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Security Code
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
                   <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg
-                    focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200
-                    bg-white text-slate-900 placeholder:text-slate-400
-                    transition-all duration-200"
-                    placeholder="••••••••"
-                    minLength={8}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    className="w-full text-center tracking-widest text-2xl py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 transition-all duration-200"
+                    placeholder="••••••"
                     required
                   />
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-              >
-                {loading ? "Signing in..." : "Sign In"}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleOtpSubmit} className="space-y-5">
-              <div className="p-4 bg-slate-100 rounded-xl border border-slate-200">
-                <p className="text-sm text-slate-700 font-semibold mb-1">Two-Factor Authentication</p>
-                <p className="text-xs text-slate-600">
-                  Enter the 6-digit security code we sent to{" "}
-                  <span className="font-semibold">{otpMaskedPhone}</span> to verify your identity.
-                </p>
-              </div>
+                {otpError && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{otpError}</p>
+                )}
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Security Code
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                  className="w-full text-center tracking-widest text-2xl py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 transition-all duration-200"
-                  placeholder="••••••"
-                  required
-                />
-              </div>
+                <div className="flex items-center justify-between text-xs text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => sendOtpCode()}
+                    disabled={otpSending || otpCountdown > 0}
+                    className="text-cyan-600 font-semibold disabled:opacity-50"
+                  >
+                    {otpCountdown > 0 ? `Resend in ${otpCountdown}s` : otpSending ? "Sending..." : "Resend Code"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelMfa}
+                    className="text-slate-500 hover:text-slate-700 transition-colors font-medium"
+                  >
+                    Cancel &amp; sign out
+                  </button>
+                </div>
 
-              {otpError && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{otpError}</p>
-              )}
-
-              <div className="flex items-center justify-between text-xs text-slate-600">
                 <button
-                  type="button"
-                  onClick={() => sendOtpCode()}
-                  disabled={otpSending || otpCountdown > 0}
-                  className="text-cyan-600 font-semibold disabled:opacity-50"
+                  type="submit"
+                  disabled={otpVerifying || otpCode.length !== 6}
+                  className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
                 >
-                  {otpCountdown > 0 ? `Resend in ${otpCountdown}s` : otpSending ? "Sending..." : "Resend Code"}
+                  {otpVerifying ? "Verifying..." : "Verify & Continue"}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleCancelMfa}
-                  className="text-slate-500 hover:text-slate-700 transition-colors font-medium"
-                >
-                  Cancel &amp; sign out
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={otpVerifying || otpCode.length !== 6}
-                className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-              >
-                {otpVerifying ? "Verifying..." : "Verify & Continue"}
-              </button>
-            </form>
-          )}
+              </form>
+            )}
           
           {/* Sign Up Link - Only show for patient and doctor (admin and receptionist signup is disabled) */}
           {(role === "patient" || role === "doctor" || !role) && (
-          <div className="mt-6 text-center">
-            <p className="text-sm text-slate-600">
-              Don&apos;t have an account?{" "}
-              <a 
+            <div className="mt-6 text-center">
+              <p className="text-sm text-slate-600">
+                Don&apos;t have an account?{" "}
+                <a 
                   href={role ? `/auth/signup?role=${role}` : "/auth/signup?role=patient"} 
-                className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
-              >
+                  className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
+                >
                   Create {role === "doctor" ? "doctor" : 
                           role === "patient" ? "patient" :
                           "account"}
-              </a>
-            </p>
-          </div>
-          )}
-
-          {/* Info Box for Admin/Receptionist - No signup available */}
-          {(role === "admin" || role === "receptionist") && (
-            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-900 mb-1">
-                    Need an account?
-                  </p>
-                  <p className="text-xs text-blue-700 leading-relaxed">
-                    {role === "admin" 
-                      ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
-                      : "Receptionist accounts are created by administrators. Please contact your supervisor or system administrator for access."}
-                  </p>
-                </div>
-              </div>
+                </a>
+              </p>
             </div>
           )}
+
+            {/* Info Box for Admin/Receptionist - No signup available */}
+            {(role === "admin" || role === "receptionist") && (
+              <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-900 mb-1">
+                      Need an account?
+                    </p>
+                    <p className="text-xs text-blue-700 leading-relaxed">
+                      {role === "admin" 
+                        ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
+                        : "Receptionist accounts are created by administrators. Please contact your supervisor or system administrator for access."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Test Credentials Table */}
+          <div className="space-y-4 pt-6 border-t border-gray-200">
+            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider text-center mb-3">
+              Test Credentials
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-lg text-left text-xs">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Email ID</th>
+                    <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Password</th>
+                    <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Role</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Patient1@gmail.com"); setPassword("Patient1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Doctor1@gmail.com"); setPassword("Doctor1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600">Patient</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* Divider */}
           <div className="relative my-8">
@@ -810,14 +864,14 @@ function LoginContent() {
       </div>
 
       {/* Right Side - Healthcare Imagery & Info */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-cyan-600 via-teal-600 to-cyan-700 p-12 items-center justify-center relative overflow-hidden">
+      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-cyan-600 via-teal-600 to-cyan-700 p-12 items-start justify-center relative overflow-hidden">
         {/* Decorative Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-10 left-10 w-64 h-64 bg-white rounded-full blur-3xl"></div>
           <div className="absolute bottom-10 right-10 w-96 h-96 bg-white rounded-full blur-3xl"></div>
         </div>
 
-        <div className="relative z-10 text-white max-w-lg">
+        <div className="relative z-10 text-white max-w-lg pt-8">
           <div className="mb-8">
             <div className="inline-block p-4 bg-white/20 backdrop-blur-sm rounded-2xl mb-6">
               <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

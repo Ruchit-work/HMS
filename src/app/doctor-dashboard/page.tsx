@@ -298,6 +298,7 @@ export default function DoctorDashboard() {
                 patientId: completedAppointment.patientId,
                 patientPhone: completedAppointment.patientPhone,
                 patientName: completedAppointment.patientName,
+                hospitalId: activeHospitalId, // Pass hospitalId to API
               }),
             })
 

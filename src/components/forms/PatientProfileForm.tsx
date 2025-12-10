@@ -403,9 +403,9 @@ export default function PatientProfileForm({
             setAddress(e.target.value)
             clearErrors()
           }}
-          className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 resize-none"
+          className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 resize-none"
           placeholder="123 Main St, City, State, ZIP"
-          rows={3}
+          rows={2}
         />
       </div>
 

@@ -7,6 +7,7 @@ import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/utils/serverHospitalQueries"
 
 export async function POST(request: Request) {
   console.log("[send-completion-whatsapp] Request received")
@@ -28,13 +29,14 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { appointmentId, patientId, patientPhone, patientName } = body
+    const { appointmentId, patientId, patientPhone, patientName, hospitalId } = body
 
     console.log("[send-completion-whatsapp] Request body:", {
       appointmentId,
       patientId,
       patientPhone: patientPhone ? `${patientPhone.substring(0, 3)}***` : "not provided",
       patientName,
+      hospitalId,
     })
 
     if (!appointmentId || !patientId) {
@@ -44,6 +46,13 @@ export async function POST(request: Request) {
 
     const db = admin.firestore()
 
+    // Get hospitalId - try from request body first, then from appointment
+    let appointmentHospitalId = hospitalId
+    if (!appointmentHospitalId) {
+      console.log("[send-completion-whatsapp] HospitalId not provided, trying to get from appointment...")
+      appointmentHospitalId = await getAppointmentHospitalId(appointmentId)
+    }
+
     // Get patient data to find phone number and name
     let phone = patientPhone
     let name = patientName || "Patient"
@@ -51,29 +60,64 @@ export async function POST(request: Request) {
     console.log("[send-completion-whatsapp] Initial patient data:", {
       phone: phone ? `${phone.substring(0, 3)}***` : "empty",
       name,
+      hospitalId: appointmentHospitalId,
     })
     
     // First, try to get data from appointment document (it might have patientPhone and patientName)
     if ((!phone || phone.trim() === "") || (!name || name.trim() === "" || name === "Patient")) {
       console.log("[send-completion-whatsapp] Fetching appointment data from Firestore...")
       try {
-        // Try to find appointment in the global appointments collection
-        const appointmentDoc = await db.collection("appointments").doc(appointmentId).get()
-        
-        if (appointmentDoc.exists) {
-          const appointmentData = appointmentDoc.data()
-          console.log("[send-completion-whatsapp] Appointment document found")
+        // Try hospital-scoped collection first
+        if (appointmentHospitalId) {
+          const hospitalAppointmentPath = getHospitalCollectionPath(appointmentHospitalId, "appointments")
+          const appointmentDoc = await db.collection(hospitalAppointmentPath).doc(appointmentId).get()
           
-          if ((!phone || phone.trim() === "") && appointmentData?.patientPhone) {
-            phone = appointmentData.patientPhone
-            console.log("[send-completion-whatsapp] Phone from appointment:", phone ? `${phone.substring(0, 3)}***` : "not found")
-          }
-          if ((!name || name.trim() === "" || name === "Patient") && appointmentData?.patientName) {
-            name = appointmentData.patientName
-            console.log("[send-completion-whatsapp] Name from appointment:", name)
+          if (appointmentDoc.exists) {
+            const appointmentData = appointmentDoc.data()
+            console.log("[send-completion-whatsapp] Appointment document found in hospital collection")
+            
+            if ((!phone || phone.trim() === "") && appointmentData?.patientPhone) {
+              phone = appointmentData.patientPhone
+              console.log("[send-completion-whatsapp] Phone from appointment:", phone ? `${phone.substring(0, 3)}***` : "not found")
+            }
+            if ((!name || name.trim() === "" || name === "Patient") && appointmentData?.patientName) {
+              name = appointmentData.patientName
+              console.log("[send-completion-whatsapp] Name from appointment:", name)
+            }
+          } else {
+            console.warn("[send-completion-whatsapp] Appointment document not found in hospital collection, trying global...")
+            // Fallback to global collection
+            const appointmentDocGlobal = await db.collection("appointments").doc(appointmentId).get()
+            if (appointmentDocGlobal.exists) {
+              const appointmentData = appointmentDocGlobal.data()
+              console.log("[send-completion-whatsapp] Appointment document found in global collection")
+              
+              if ((!phone || phone.trim() === "") && appointmentData?.patientPhone) {
+                phone = appointmentData.patientPhone
+              }
+              if ((!name || name.trim() === "" || name === "Patient") && appointmentData?.patientName) {
+                name = appointmentData.patientName
+              }
+            }
           }
         } else {
-          console.warn("[send-completion-whatsapp] Appointment document not found in global collection")
+          // No hospitalId - try global collection as fallback
+          console.log("[send-completion-whatsapp] No hospitalId, trying global appointments collection...")
+          const appointmentDoc = await db.collection("appointments").doc(appointmentId).get()
+          
+          if (appointmentDoc.exists) {
+            const appointmentData = appointmentDoc.data()
+            console.log("[send-completion-whatsapp] Appointment document found in global collection")
+            
+            if ((!phone || phone.trim() === "") && appointmentData?.patientPhone) {
+              phone = appointmentData.patientPhone
+            }
+            if ((!name || name.trim() === "" || name === "Patient") && appointmentData?.patientName) {
+              name = appointmentData.patientName
+            }
+          } else {
+            console.warn("[send-completion-whatsapp] Appointment document not found in any collection")
+          }
         }
       } catch (error) {
         console.error("[send-completion-whatsapp] Error fetching appointment:", error)

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 
 interface Slide {
   id: number
@@ -26,7 +27,7 @@ const slides: Slide[] = [
     title: "24/7 Emergency Services",
     description: "Round-the-clock emergency care with our dedicated trauma team and advanced life support systems",
     cta: "Emergency Contact",
-    ctaLink: "/patient-dashboard/emergency"
+    ctaLink: "/patient-dashboard/about"
   },
   {
     id: 3,
@@ -127,14 +128,14 @@ export default function HeroCarousel() {
                         {slide.description}
                       </p>
 
-                      {slide.cta && (
-                        <a
+                      {slide.cta && slide.ctaLink && (
+                        <Link
                           href={slide.ctaLink}
                           className={`inline-block px-6 sm:px-8 py-3 sm:py-4 bg-white text-blue-600 font-semibold rounded-lg shadow-lg hover:bg-blue-50 hover:scale-105 active:scale-95 transition-all duration-300 hover-lift ${isActive ? 'opacity-100 translate-y-0 delay-300' : 'opacity-0 translate-y-8'}`}
                         >
                           {slide.cta}
                           <span className="ml-2">→</span>
-                        </a>
+                        </Link>
                       )}
                     </div>
                   </div>

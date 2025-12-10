@@ -128,6 +128,20 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
         const userRoleData = await getUserRole(currentUser.uid, requiredRole)
         
         if (!userRoleData) {
+          // If requiredRole was specified and userRoleData is null,
+          // it might mean the user doesn't have that specific role.
+          // Check their actual role instead.
+          if (requiredRole) {
+            const actualUserRoleData = await getUserRole(currentUser.uid)
+            if (actualUserRoleData) {
+              // User has a different role - redirect to their dashboard
+              const dashboardPath = `/${actualUserRoleData.role}-dashboard`
+              router.replace(dashboardPath)
+              setLoading(false)
+              return
+            }
+          }
+          
           // User exists in auth but not in any collection - sign them out
           await signOut(auth)
           router.replace("/")
@@ -189,12 +203,12 @@ export function usePublicRoute() {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        // User is logged in - check their role and redirect to dashboard using cached data
-        const userRoleData = await getUserRole(currentUser.uid)
-        if (userRoleData) {
+  const checkAndRedirect = async () => {
+    const currentUser = auth.currentUser
+    if (currentUser) {
+      // User is logged in - check their role and redirect to dashboard using cached data
+      const userRoleData = await getUserRole(currentUser.uid)
+      if (userRoleData) {
         // ⚠️ TEMPORARILY DISABLED: MFA check for staff roles in public routes (for testing with trial Twilio account)
         // TODO: Uncomment this section when ready for production 2FA
         // if (
@@ -214,16 +228,66 @@ export function usePublicRoute() {
         //     }
         // }
 
-          router.replace(`/${userRoleData.role}-dashboard`)
-        } else {
-          // User exists but no data - sign them out
-          await signOut(auth)
-        }
+        router.replace(`/${userRoleData.role}-dashboard`)
+        return true // Indicates redirect happened
+      } else {
+        // User exists but no data - sign them out
+        await signOut(auth)
       }
-      setLoading(false)
+    }
+    return false // No redirect needed
+  }
+
+  useEffect(() => {
+    // Immediate synchronous check
+    const immediateCheck = async () => {
+      const redirected = await checkAndRedirect()
+      if (!redirected) {
+        setLoading(false)
+      }
+    }
+    
+    immediateCheck()
+
+    // Listen for auth state changes
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        const redirected = await checkAndRedirect()
+        if (!redirected) {
+          setLoading(false)
+        }
+      } else {
+        setLoading(false)
+      }
     })
 
-    return () => unsubscribe()
+    // Handle browser back button and page visibility
+    const handlePageshow = async (event: PageTransitionEvent) => {
+      // Re-check auth when page is shown (back button or forward button)
+      // event.persisted means page was loaded from cache (back button)
+      setLoading(true)
+      const redirected = await checkAndRedirect()
+      if (!redirected) {
+        setLoading(false)
+      }
+    }
+
+    const handleFocus = async () => {
+      // When tab/window regains focus, re-check auth
+      const redirected = await checkAndRedirect()
+      if (!redirected) {
+        setLoading(false)
+      }
+    }
+
+    window.addEventListener('pageshow', handlePageshow)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('pageshow', handlePageshow)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [router])
 
   return { loading }

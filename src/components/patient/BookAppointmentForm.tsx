@@ -68,6 +68,7 @@ export default function BookAppointmentForm({
   const [localUserData, setLocalUserData] = useState<UserData>(userData)
   // Symptom selection state
   const [selectedSymptomCategory, setSelectedSymptomCategory] = useState<string | null>(null)
+  const [previousSymptomCategory, setPreviousSymptomCategory] = useState<string | null>(null)
   const [symptomAnswers, setSymptomAnswers] = useState<any>({})
   const [medicalConditions, setMedicalConditions] = useState<string[]>([])
   const [allergies, setAllergies] = useState(userData?.allergies || "")
@@ -297,20 +298,42 @@ export default function BookAppointmentForm({
 
   // Auto-generate chief complaint from structured data
   useEffect(() => {
-    if (!selectedSymptomCategory) return
+    if (!selectedSymptomCategory) {
+      // If category is cleared, also clear previous category tracking
+      if (previousSymptomCategory) {
+        setPreviousSymptomCategory(null)
+      }
+      return
+    }
 
     const category = SYMPTOM_CATEGORIES.find(c => c.id === selectedSymptomCategory)
     if (!category) return
 
     const categoryLabel = category.label
+    const currentProblem = (appointmentData.problem || '').trim()
+
+    // If category changed (not first selection), reset problem to new category only
+    if (previousSymptomCategory && previousSymptomCategory !== selectedSymptomCategory) {
+      // Category changed - reset to just the new category label (user is changing their selection)
+      setAppointmentData(prev => ({ ...prev, problem: categoryLabel }))
+      setPreviousSymptomCategory(selectedSymptomCategory)
+      return
+    }
+
+    // First time selecting this category
+    if (!previousSymptomCategory) {
+      setPreviousSymptomCategory(selectedSymptomCategory)
+    }
 
     // If user already typed a free-text complaint, preserve it and prefix with the category (once)
-    if ((appointmentData.problem || '').trim().length > 0) {
-      const current = appointmentData.problem.trim()
-      const alreadyPrefixed = current.toLowerCase().startsWith(categoryLabel.toLowerCase())
-      const nextProblem = alreadyPrefixed ? current : `${categoryLabel}: ${current}`
-      if (nextProblem !== appointmentData.problem) {
-        setAppointmentData(prev => ({ ...prev, problem: nextProblem }))
+    if (currentProblem.length > 0) {
+      const alreadyPrefixed = currentProblem.toLowerCase().startsWith(categoryLabel.toLowerCase() + ':') || 
+                              currentProblem.toLowerCase().startsWith(categoryLabel.toLowerCase() + ' :')
+      if (!alreadyPrefixed) {
+        const nextProblem = `${categoryLabel}: ${currentProblem}`
+        if (nextProblem !== appointmentData.problem) {
+          setAppointmentData(prev => ({ ...prev, problem: nextProblem }))
+        }
       }
       return
     }
@@ -1016,6 +1039,33 @@ export default function BookAppointmentForm({
                   ) : (
                     <>
                       <p className="text-xs font-semibold text-slate-800 break-words whitespace-pre-wrap">{appointmentData.problem}</p>
+                      
+                      {/* Symptom Details */}
+                      {(appointmentData.symptomDuration || appointmentData.symptomProgression || appointmentData.symptomTriggers || appointmentData.associatedSymptoms) && (
+                        <div className="mt-2 pt-2 border-t border-teal-200 space-y-1">
+                          {appointmentData.symptomDuration && (
+                            <p className="text-xs text-slate-700">
+                              <span className="font-semibold text-teal-600">Duration:</span> {appointmentData.symptomDuration}
+                            </p>
+                          )}
+                          {appointmentData.symptomProgression && (
+                            <p className="text-xs text-slate-700">
+                              <span className="font-semibold text-teal-600">Progression:</span> {appointmentData.symptomProgression}
+                            </p>
+                          )}
+                          {appointmentData.symptomTriggers && (
+                            <p className="text-xs text-slate-700">
+                              <span className="font-semibold text-teal-600">Triggers/Relievers:</span> {appointmentData.symptomTriggers}
+                            </p>
+                          )}
+                          {appointmentData.associatedSymptoms && (
+                            <p className="text-xs text-slate-700">
+                              <span className="font-semibold text-teal-600">Associated Symptoms:</span> {appointmentData.associatedSymptoms}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
                       {appointmentData.medicalHistory && (
                         <p className="text-xs text-slate-600 mt-1 break-words whitespace-pre-wrap">{appointmentData.medicalHistory}</p>
                       )}
