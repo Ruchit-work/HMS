@@ -30,18 +30,15 @@ export async function GET(request: Request) {
     const db = admin.firestore()
     const now = new Date()
     
-    // Calculate target time: 24 hours from now
-    const targetTime = new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
-    
-    // Create a window: appointments between 23.5 and 24.5 hours from now
-    // This ensures we catch appointments even if cron runs slightly off schedule
-    const windowStart = new Date(targetTime.getTime() - 30 * 60 * 1000) // 30 minutes before
-    const windowEnd = new Date(targetTime.getTime() + 30 * 60 * 1000) // 30 minutes after
+    // Since cron runs once per day, check all appointments happening in the next 24 hours
+    // that haven't been reminded yet
+    const windowStart = now // Start from now
+    const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
     
     console.log("[appointment-reminders] Target window:", {
       windowStart: windowStart.toISOString(),
       windowEnd: windowEnd.toISOString(),
-      targetTime: targetTime.toISOString(),
+      now: now.toISOString(),
     })
 
     // Get all active hospitals
