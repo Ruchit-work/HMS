@@ -31,12 +31,11 @@ export async function GET(request: Request) {
     const now = new Date()
     
     // Reminders should go ~24 hours before the appointment.
-    // With an hourly cron, check reminder times that fall within a ±60m window around "now".
-    // Also allow a small lookback (1h) to avoid missing if cron runs slightly late.
-    const windowStart = new Date(now.getTime() - 60 * 60 * 1000) // 1 hour ago
-    const windowEnd = new Date(now.getTime() + 60 * 60 * 1000) // 1 hour from now
+    // Hobby cron can be up to ~1h late; with hourly runs, use a wider ±90m window to avoid misses.
+    const windowStart = new Date(now.getTime() - 90 * 60 * 1000) // 90 minutes ago
+    const windowEnd = new Date(now.getTime() + 90 * 60 * 1000) // 90 minutes from now
     
-    console.log("[appointment-reminders] Reminder window (±60m around now):", {
+    console.log("[appointment-reminders] Reminder window (±90m around now):", {
       windowStart: windowStart.toISOString(),
       windowEnd: windowEnd.toISOString(),
       now: now.toISOString(),
