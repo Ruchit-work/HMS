@@ -25,9 +25,20 @@ interface Patient {
 interface Appointment {
   id: string
   patientId: string
+  doctorId?: string
+  doctorName?: string
+  doctorSpecialization?: string
   appointmentDate: string
+  appointmentTime?: string
+  chiefComplaint?: string
   status: string
   createdAt: string
+  updatedAt?: string
+  totalConsultationFee?: number
+  paymentAmount?: number
+  paymentStatus?: string
+  createdBy?: string
+  medicine?: string
 }
 
 interface PatientAnalytics {
@@ -54,6 +65,49 @@ interface PatientAnalytics {
   }>
   inactivePatients: number // No visits in last 6 months
   activePatients: number // Visits in last 3 months
+  totalAppointments: number // Total appointments in filtered range
+  peakVisitingHour: {
+    hour: number // 0-23
+    hour12: string // "12 AM", "1 PM", etc.
+    count: number
+  }
+  peakVisitingDay: {
+    day: string // "Monday", "Tuesday", etc.
+    dayShort: string // "Mon", "Tue", etc.
+    count: number
+  }
+  seasonalDiseaseTrends: {
+    season: string // "Winter", "Spring", "Summer", "Fall"
+    topDiseases: Array<{
+      disease: string
+      count: number
+      percentage: number
+    }>
+    totalAppointments: number
+  }[]
+  ageWiseDiseaseBreakdown: {
+    ageGroup: string
+    topDiseases: Array<{
+      disease: string
+      count: number
+      percentage: number
+    }>
+    totalAppointments: number
+  }[]
+  genderWiseDiseaseBreakdown: {
+    gender: string
+    topDiseases: Array<{
+      disease: string
+      count: number
+      percentage: number
+    }>
+    totalAppointments: number
+  }[]
+  areaWiseDistribution: Array<{
+    area: string
+    patientCount: number
+    percentage: number
+  }>
 }
 
 export default function PatientAnalytics() {
@@ -244,6 +298,393 @@ export default function PatientAnalytics() {
 
       const inactivePatients = totalPatients - activePatients
 
+      // Calculate peak visiting hour
+      const hourCounts: Record<number, number> = {}
+      filteredAppointments.forEach(apt => {
+        if (apt.appointmentTime) {
+          // Extract hour from time string (e.g., "14:30" -> 14)
+          const timeParts = apt.appointmentTime.split(':')
+          if (timeParts.length >= 1) {
+            const hour = parseInt(timeParts[0], 10)
+            if (!isNaN(hour) && hour >= 0 && hour <= 23) {
+              hourCounts[hour] = (hourCounts[hour] || 0) + 1
+            }
+          }
+        }
+      })
+      
+      let peakHour = 9 // Default to 9 AM if no data
+      let peakHourCount = 0
+      if (Object.keys(hourCounts).length > 0) {
+        Object.entries(hourCounts).forEach(([hourStr, count]) => {
+          const hour = parseInt(hourStr, 10)
+          if (count > peakHourCount) {
+            peakHourCount = count
+            peakHour = hour
+          }
+        })
+      }
+
+      // Format hour for display (12-hour format)
+      const formatHour12 = (hour: number): string => {
+        if (hour === 0) return '12 AM'
+        if (hour < 12) return `${hour} AM`
+        if (hour === 12) return '12 PM'
+        return `${hour - 12} PM`
+      }
+
+      // Calculate peak visiting day
+      const dayCounts: Record<string, number> = {}
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      
+      filteredAppointments.forEach(apt => {
+        if (apt.appointmentDate) {
+          const date = new Date(apt.appointmentDate)
+          if (!isNaN(date.getTime())) {
+            const dayIndex = date.getDay()
+            const dayName = dayNames[dayIndex]
+            dayCounts[dayName] = (dayCounts[dayName] || 0) + 1
+          }
+        }
+      })
+
+      let peakDay = 'Monday'
+      let peakDayCount = 0
+      if (Object.keys(dayCounts).length > 0) {
+        Object.entries(dayCounts).forEach(([day, count]) => {
+          if (count > peakDayCount) {
+            peakDayCount = count
+            peakDay = day
+          }
+        })
+      }
+
+      const peakDayIndex = dayNames.indexOf(peakDay)
+      const peakDayShort = peakDayIndex >= 0 ? dayNamesShort[peakDayIndex] : peakDay.substring(0, 3)
+
+      // Helper function to get season from date
+      const getSeason = (date: Date): string => {
+        const month = date.getMonth() + 1 // getMonth() returns 0-11
+        if (month >= 12 || month <= 2) return 'Winter'
+        if (month >= 3 && month <= 5) return 'Spring'
+        if (month >= 6 && month <= 8) return 'Summer'
+        return 'Fall'
+      }
+
+      // Helper function to categorize disease from chiefComplaint
+      const categorizeDisease = (complaint: string): string => {
+        if (!complaint) return 'General Consultation'
+        
+        const lowerComplaint = complaint.toLowerCase()
+        
+        // Common disease patterns (including Hindi/regional terms)
+        const diseasePatterns: Record<string, string> = {
+          // Cold & Cough (Winter diseases)
+          'cold': 'Cold',
+          'sardi': 'Cold',
+          'cough': 'Cough',
+          'khasi': 'Cough',
+          'kukhar': 'Cough',
+          'sore throat': 'Sore Throat',
+          'throat pain': 'Sore Throat',
+          'runny nose': 'Cold',
+          'nasal congestion': 'Cold',
+          'blocked nose': 'Cold',
+          'sneezing': 'Cold',
+          
+          // Fever
+          'fever': 'Fever',
+          'bukhar': 'Fever',
+          'temperature': 'Fever',
+          'high temperature': 'Fever',
+          
+          // Flu
+          'flu': 'Flu',
+          'influenza': 'Flu',
+          'body ache': 'Flu',
+          'body pain': 'Flu',
+          'muscle pain': 'Flu',
+          
+          // Respiratory
+          'asthma': 'Asthma',
+          'breathing': 'Breathing Issues',
+          'shortness of breath': 'Breathing Issues',
+          'wheezing': 'Asthma',
+          
+          // Digestive
+          'stomach': 'Stomach Issues',
+          'diarrhea': 'Diarrhea',
+          'diarrhoea': 'Diarrhea',
+          'vomiting': 'Vomiting',
+          'nausea': 'Nausea',
+          'constipation': 'Constipation',
+          'indigestion': 'Indigestion',
+          'gas': 'Gas',
+          'acidity': 'Acidity',
+          
+          // Skin
+          'rash': 'Skin Rash',
+          'itching': 'Skin Issues',
+          'allergy': 'Allergy',
+          'hives': 'Skin Rash',
+          
+          // Headache & Pain
+          'headache': 'Headache',
+          'migraine': 'Migraine',
+          'pain': 'Pain',
+          'joint pain': 'Joint Pain',
+          'back pain': 'Back Pain',
+          
+          // Infections
+          'infection': 'Infection',
+          'uti': 'UTI',
+          'urinary': 'UTI',
+          
+          // Seasonal allergies (Spring/Summer)
+          'allergic': 'Allergy',
+          'hay fever': 'Allergy',
+          'pollen': 'Allergy',
+          
+          // Heat-related (Summer)
+          'heat': 'Heat Related',
+          'dehydration': 'Dehydration',
+          'sunburn': 'Sunburn',
+          
+          // Mental health
+          'anxiety': 'Anxiety',
+          'stress': 'Stress',
+          'depression': 'Depression',
+        }
+
+        // Check for matches (prioritize more specific matches)
+        for (const [pattern, disease] of Object.entries(diseasePatterns)) {
+          if (lowerComplaint.includes(pattern)) {
+            return disease
+          }
+        }
+
+        // If no match, return as general consultation or use first few words
+        const words = complaint.split(/\s+/).slice(0, 3).join(' ')
+        return words.length > 30 ? 'General Consultation' : words
+      }
+
+      // Calculate seasonal disease trends
+      const seasonalData: Record<string, Record<string, number>> = {
+        'Winter': {},
+        'Spring': {},
+        'Summer': {},
+        'Fall': {}
+      }
+
+      filteredAppointments.forEach(apt => {
+        if (apt.appointmentDate && apt.chiefComplaint) {
+          const date = new Date(apt.appointmentDate)
+          if (!isNaN(date.getTime())) {
+            const season = getSeason(date)
+            const disease = categorizeDisease(apt.chiefComplaint)
+            
+            if (seasonalData[season]) {
+              seasonalData[season][disease] = (seasonalData[season][disease] || 0) + 1
+            }
+          }
+        }
+      })
+
+      // Convert to array format with top diseases per season
+      const seasonalDiseaseTrends = Object.entries(seasonalData).map(([season, diseases]) => {
+        const totalAppointments = Object.values(diseases).reduce((sum, count) => sum + count, 0)
+        
+        // Get top 5 diseases for this season
+        const topDiseases = Object.entries(diseases)
+          .map(([disease, count]) => ({
+            disease,
+            count,
+            percentage: totalAppointments > 0 ? (count / totalAppointments) * 100 : 0
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+
+        return {
+          season,
+          topDiseases,
+          totalAppointments
+        }
+      }).filter(season => season.totalAppointments > 0) // Only include seasons with data
+
+      // Helper function to get age group from patient
+      const getAgeGroup = (patient: Patient): string => {
+        if (patient.dateOfBirth) {
+          const age = calculateAge(patient.dateOfBirth)
+          if (age !== null && age >= 0) {
+            if (age < 18) return '0-17 (Pediatric)'
+            else if (age < 30) return '18-29 (Young Adult)'
+            else if (age < 45) return '30-44 (Adult)'
+            else if (age < 60) return '45-59 (Middle Age)'
+            else return '60+ (Senior)'
+          }
+        }
+        return 'Unknown'
+      }
+
+      // Calculate age-wise disease breakdown
+      const ageWiseDiseaseData: Record<string, Record<string, number>> = {}
+      
+      filteredAppointments.forEach(apt => {
+        if (apt.chiefComplaint && apt.patientId) {
+          const patient = patients.find(p => p.id === apt.patientId)
+          if (patient) {
+            const ageGroup = getAgeGroup(patient)
+            const disease = categorizeDisease(apt.chiefComplaint)
+            
+            if (!ageWiseDiseaseData[ageGroup]) {
+              ageWiseDiseaseData[ageGroup] = {}
+            }
+            ageWiseDiseaseData[ageGroup][disease] = (ageWiseDiseaseData[ageGroup][disease] || 0) + 1
+          }
+        }
+      })
+
+      // Convert to array format with top diseases per age group
+      const ageWiseDiseaseBreakdown = Object.entries(ageWiseDiseaseData).map(([ageGroup, diseases]) => {
+        const totalAppointments = Object.values(diseases).reduce((sum, count) => sum + count, 0)
+        
+        // Get top 5 diseases for this age group
+        const topDiseases = Object.entries(diseases)
+          .map(([disease, count]) => ({
+            disease,
+            count,
+            percentage: totalAppointments > 0 ? (count / totalAppointments) * 100 : 0
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+
+        return {
+          ageGroup,
+          topDiseases,
+          totalAppointments
+        }
+      }).filter(group => group.totalAppointments > 0) // Only include groups with data
+
+      // Calculate gender-wise disease breakdown
+      const genderWiseDiseaseData: Record<string, Record<string, number>> = {}
+      
+      filteredAppointments.forEach(apt => {
+        if (apt.chiefComplaint && apt.patientId) {
+          const patient = patients.find(p => p.id === apt.patientId)
+          if (patient) {
+            const gender = patient.gender || 'Unknown'
+            const disease = categorizeDisease(apt.chiefComplaint)
+            
+            if (!genderWiseDiseaseData[gender]) {
+              genderWiseDiseaseData[gender] = {}
+            }
+            genderWiseDiseaseData[gender][disease] = (genderWiseDiseaseData[gender][disease] || 0) + 1
+          }
+        }
+      })
+
+      // Convert to array format with top diseases per gender
+      const genderWiseDiseaseBreakdown = Object.entries(genderWiseDiseaseData).map(([gender, diseases]) => {
+        const totalAppointments = Object.values(diseases).reduce((sum, count) => sum + count, 0)
+        
+        // Get top 5 diseases for this gender
+        const topDiseases = Object.entries(diseases)
+          .map(([disease, count]) => ({
+            disease,
+            count,
+            percentage: totalAppointments > 0 ? (count / totalAppointments) * 100 : 0
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+
+        return {
+          gender,
+          topDiseases,
+          totalAppointments
+        }
+      }).filter(group => group.totalAppointments > 0) // Only include groups with data
+
+      // Helper function to extract area from address
+      const extractArea = (address: string | undefined): string => {
+        if (!address || address.trim() === '') return 'Unknown'
+        
+        const addressLower = address.toLowerCase().trim()
+        
+        // List of known areas/cities (case-insensitive matching)
+        const knownAreas = [
+          'hathuka', 'valod', 'bardoli', 'surat', 'navsari', 'vadodara', 'ahmedabad',
+          'bharuch', 'anand', 'vapi', 'valsad', 'gandhinagar', 'rajkot', 'jamnagar',
+          'bhavnagar', 'mehsana', 'palanpur', 'patan', 'godhra', 'dahod', 'nadiad',
+          'anand', 'kalol', 'halol', 'modasa', 'himmatnagar', 'palanpur', 'deesa',
+          'unja', 'vyara', 'songadh', 'mahuva', 'veraval', 'porbandar', 'junagadh',
+          'amreli', 'botad', 'dhoraji', 'gondal', 'jetpur', 'morbi', 'wankaner',
+          'dhrangadhra', 'surendranagar', 'limbdi', 'chotila', 'sayla', 'lakhtar',
+          'dasada', 'thangadh', 'dhandhuka', 'dholka', 'bavla', 'sanand', 'daskroi',
+          'mandvi', 'anjar', 'bhuj', 'gandhidham', 'rapar', 'bhachau', 'mundra',
+          'adipur', 'lakhpat', 'naliya', 'kachchh', 'kutch'
+        ]
+        
+        // Try to find known areas in the address
+        for (const area of knownAreas) {
+          // Check if area name appears in address (as whole word or part of word)
+          const areaRegex = new RegExp(`\\b${area}\\b`, 'i')
+          if (areaRegex.test(addressLower)) {
+            // Capitalize first letter of each word
+            return area.split(' ').map(word => 
+              word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ')
+          }
+        }
+        
+        // If no known area found, try to extract city/area from common patterns
+        // Look for patterns like "City, State" or "Area, City"
+        const cityPatterns = [
+          /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*,\s*[A-Z][a-z]+/g, // "City, State"
+          /in\s+([A-Z][a-z]+)/gi, // "in City"
+          /at\s+([A-Z][a-z]+)/gi, // "at City"
+          /near\s+([A-Z][a-z]+)/gi, // "near City"
+        ]
+        
+        for (const pattern of cityPatterns) {
+          const match = address.match(pattern)
+          if (match && match[0]) {
+            const extracted = match[0].replace(/^(in|at|near)\s+/i, '').replace(/,.*$/, '').trim()
+            if (extracted && extracted.length > 2) {
+              return extracted
+            }
+          }
+        }
+        
+        // Try to extract first capitalized word (likely city/area name)
+        const words = address.split(/[\s,]+/)
+        for (const word of words) {
+          if (word.length > 2 && /^[A-Z]/.test(word) && /^[A-Za-z]+$/.test(word)) {
+            return word
+          }
+        }
+        
+        // If nothing found, return "Unknown"
+        return 'Unknown'
+      }
+
+      // Calculate area-wise patient distribution
+      const areaCounts: Record<string, number> = {}
+      
+      patients.forEach(patient => {
+        const area = extractArea(patient.address)
+        areaCounts[area] = (areaCounts[area] || 0) + 1
+      })
+
+      // Convert to array format and sort by count
+      const areaWiseDistribution = Object.entries(areaCounts)
+        .map(([area, count]) => ({
+          area,
+          patientCount: count,
+          percentage: totalPatients > 0 ? (count / totalPatients) * 100 : 0
+        }))
+        .sort((a, b) => b.patientCount - a.patientCount) // Sort by count descending
+
       setAnalytics({
         totalPatients,
         newPatients,
@@ -258,7 +699,22 @@ export default function PatientAnalytics() {
         topVisitingPatients,
         monthlyGrowth,
         inactivePatients,
-        activePatients
+        activePatients,
+        totalAppointments: filteredAppointments.length,
+        peakVisitingHour: {
+          hour: peakHour,
+          hour12: formatHour12(peakHour),
+          count: peakHourCount
+        },
+        peakVisitingDay: {
+          day: peakDay,
+          dayShort: peakDayShort,
+          count: peakDayCount
+        },
+        seasonalDiseaseTrends,
+        ageWiseDiseaseBreakdown,
+        genderWiseDiseaseBreakdown,
+        areaWiseDistribution
       })
     } catch (error) {
       console.error('Error fetching patient analytics:', error)
@@ -290,12 +746,12 @@ export default function PatientAnalytics() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Patient Analytics & Insights</h2>
-          <p className="text-sm text-slate-600 mt-1">Comprehensive patient statistics and metrics</p>
+          <h2 className="text-xl font-bold text-slate-800">Patient Analytics & Insights</h2>
+          <p className="text-xs text-slate-600 mt-0.5">Comprehensive patient statistics and metrics</p>
         </div>
         
         {/* Time Range Selector */}
@@ -315,7 +771,7 @@ export default function PatientAnalytics() {
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Patients */}
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-blue-700">Total Patients</span>
             <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
@@ -324,12 +780,12 @@ export default function PatientAnalytics() {
               </svg>
             </div>
           </div>
-          <p className="text-3xl font-bold text-blue-900">{analytics.totalPatients.toLocaleString()}</p>
+          <p className="text-xl font-bold text-blue-900">{analytics.totalPatients.toLocaleString()}</p>
           <p className="text-xs text-blue-600 mt-1">All registered patients</p>
         </div>
 
         {/* New Patients */}
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-green-700">New Patients</span>
             <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
@@ -338,12 +794,12 @@ export default function PatientAnalytics() {
               </svg>
             </div>
           </div>
-          <p className="text-3xl font-bold text-green-900">{analytics.newPatients.toLocaleString()}</p>
+          <p className="text-xl font-bold text-green-900">{analytics.newPatients.toLocaleString()}</p>
           <p className="text-xs text-green-600 mt-1">Last 30 days</p>
         </div>
 
         {/* Returning Patients */}
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-purple-700">Returning Patients</span>
             <div className="w-10 h-10 bg-purple-200 rounded-lg flex items-center justify-center">
@@ -352,12 +808,12 @@ export default function PatientAnalytics() {
               </svg>
             </div>
           </div>
-          <p className="text-3xl font-bold text-purple-900">{analytics.returningPatients.toLocaleString()}</p>
+          <p className="text-xl font-bold text-purple-900">{analytics.returningPatients.toLocaleString()}</p>
           <p className="text-xs text-purple-600 mt-1">2+ appointments</p>
         </div>
 
         {/* Average Visits/Year */}
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-orange-700">Avg Visits/Year</span>
             <div className="w-10 h-10 bg-orange-200 rounded-lg flex items-center justify-center">
@@ -366,7 +822,7 @@ export default function PatientAnalytics() {
               </svg>
             </div>
           </div>
-          <p className="text-3xl font-bold text-orange-900">{analytics.averageVisitsPerYear}</p>
+          <p className="text-xl font-bold text-orange-900">{analytics.averageVisitsPerYear}</p>
           <p className="text-xs text-orange-600 mt-1">Per patient</p>
         </div>
       </div>
@@ -374,13 +830,13 @@ export default function PatientAnalytics() {
       {/* Additional Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Patient Retention */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-slate-700">Patient Retention Rate</span>
-            <span className="text-2xl">📈</span>
+            <span className="text-xl">📈</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-slate-900">{analytics.patientRetentionRate}%</p>
+            <p className="text-xl font-bold text-slate-900">{analytics.patientRetentionRate}%</p>
           </div>
           <div className="mt-3 w-full bg-slate-200 rounded-full h-2">
             <div 
@@ -392,32 +848,606 @@ export default function PatientAnalytics() {
         </div>
 
         {/* Active Patients */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-slate-700">Active Patients</span>
-            <span className="text-2xl">✅</span>
+            <span className="text-xl">✅</span>
           </div>
-          <p className="text-3xl font-bold text-green-600">{analytics.activePatients.toLocaleString()}</p>
+          <p className="text-xl font-bold text-green-600">{analytics.activePatients.toLocaleString()}</p>
           <p className="text-xs text-slate-500 mt-2">Visits in last 3 months</p>
         </div>
 
         {/* Inactive Patients */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium text-slate-700">Inactive Patients</span>
-            <span className="text-2xl">⏸️</span>
+            <span className="text-xl">⏸️</span>
           </div>
-          <p className="text-3xl font-bold text-orange-600">{analytics.inactivePatients.toLocaleString()}</p>
+          <p className="text-xl font-bold text-orange-600">{analytics.inactivePatients.toLocaleString()}</p>
           <p className="text-xs text-slate-500 mt-2">No visits in last 6 months</p>
         </div>
       </div>
 
+      {/* Peak Visiting Time Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Peak Visiting Hour */}
+        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-indigo-700">Peak Visiting Hour</span>
+            <div className="w-10 h-10 bg-indigo-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <p className="text-xl font-bold text-indigo-900">{analytics.peakVisitingHour.hour12}</p>
+          </div>
+          <p className="text-sm text-indigo-600 mb-3">
+            {analytics.peakVisitingHour.count} {analytics.peakVisitingHour.count === 1 ? 'appointment' : 'appointments'}
+          </p>
+          <div className="w-full bg-indigo-200 rounded-full h-2">
+            <div 
+              className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 rounded-full transition-all"
+              style={{ width: `${Math.min((analytics.peakVisitingHour.count / Math.max(analytics.totalAppointments, 1)) * 100, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-indigo-500 mt-2">Most popular time slot</p>
+        </div>
+
+        {/* Peak Visiting Day */}
+        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-4 border border-teal-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium text-teal-700">Peak Visiting Day</span>
+            <div className="w-10 h-10 bg-teal-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <p className="text-xl font-bold text-teal-900">{analytics.peakVisitingDay.day}</p>
+          </div>
+          <p className="text-sm text-teal-600 mb-3">
+            {analytics.peakVisitingDay.count} {analytics.peakVisitingDay.count === 1 ? 'appointment' : 'appointments'}
+          </p>
+          <div className="w-full bg-teal-200 rounded-full h-2">
+            <div 
+              className="bg-gradient-to-r from-teal-500 to-teal-600 h-2 rounded-full transition-all"
+              style={{ width: `${Math.min((analytics.peakVisitingDay.count / Math.max(analytics.totalAppointments, 1)) * 100, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-teal-500 mt-2">Most popular day of the week</p>
+        </div>
+      </div>
+
+      {/* Seasonal Disease Trends */}
+      {analytics.seasonalDiseaseTrends.length > 0 && (
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-base font-semibold text-slate-800">Seasonal Disease Trends</h3>
+              <p className="text-sm text-slate-600 mt-1">Disease patterns by season</p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-rose-100 to-rose-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {analytics.seasonalDiseaseTrends.map((seasonData, idx) => {
+              // Get season color scheme
+              const seasonColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+                'Winter': {
+                  bg: 'from-blue-50 to-cyan-50',
+                  border: 'border-blue-200',
+                  text: 'text-blue-700',
+                  accent: 'bg-blue-500'
+                },
+                'Spring': {
+                  bg: 'from-green-50 to-emerald-50',
+                  border: 'border-green-200',
+                  text: 'text-green-700',
+                  accent: 'bg-green-500'
+                },
+                'Summer': {
+                  bg: 'from-orange-50 to-amber-50',
+                  border: 'border-orange-200',
+                  text: 'text-orange-700',
+                  accent: 'bg-orange-500'
+                },
+                'Fall': {
+                  bg: 'from-amber-50 to-yellow-50',
+                  border: 'border-amber-200',
+                  text: 'text-amber-700',
+                  accent: 'bg-amber-500'
+                }
+              }
+              
+              const colors = seasonColors[seasonData.season] || seasonColors['Winter']
+              const seasonEmoji: Record<string, string> = {
+                'Winter': '❄️',
+                'Spring': '🌸',
+                'Summer': '☀️',
+                'Fall': '🍂'
+              }
+              
+              return (
+                <div
+                  key={seasonData.season}
+                  className={`bg-gradient-to-br ${colors.bg} rounded-xl p-5 border ${colors.border} shadow-sm`}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{seasonEmoji[seasonData.season] || '📅'}</span>
+                      <h4 className={`text-base font-bold ${colors.text}`}>{seasonData.season}</h4>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-600">
+                      {seasonData.totalAppointments} {seasonData.totalAppointments === 1 ? 'visit' : 'visits'}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {seasonData.topDiseases.length > 0 ? (
+                      seasonData.topDiseases.map((disease, diseaseIdx) => (
+                        <div key={diseaseIdx} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-700 truncate flex-1 mr-2">
+                              {disease.disease}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+                              {disease.count} ({disease.percentage.toFixed(0)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-1.5">
+                            <div
+                              className={`${colors.accent} h-1.5 rounded-full transition-all`}
+                              style={{ width: `${Math.min(disease.percentage, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">No data available</p>
+                    )}
+                  </div>
+                  
+                  {/* Highlight top disease with spike indicator */}
+                  {seasonData.topDiseases.length > 0 && seasonData.topDiseases[0].count > 0 && (
+                    <div className="mt-4 pt-3 border-t border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-600">Top:</span>
+                        <span className="text-sm font-bold text-slate-800">
+                          {seasonData.topDiseases[0].disease}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          ({seasonData.topDiseases[0].count} cases)
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          
+          {/* Summary insights */}
+          {analytics.seasonalDiseaseTrends.length > 1 && (
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <h4 className="text-sm font-semibold text-slate-700 mb-3">Key Insights</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {analytics.seasonalDiseaseTrends
+                  .filter(s => s.topDiseases.length > 0)
+                  .map((seasonData) => {
+                    const topDisease = seasonData.topDiseases[0]
+                    const isWinterSpike = seasonData.season === 'Winter' && 
+                      (topDisease.disease.toLowerCase().includes('cold') || 
+                       topDisease.disease.toLowerCase().includes('cough') ||
+                       topDisease.disease.toLowerCase().includes('fever'))
+                    
+                    return (
+                      <div key={seasonData.season} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                        <p className="text-xs text-slate-700">
+                          <span className="font-semibold">{seasonData.season}:</span>{' '}
+                          {isWinterSpike && '❄️ '}
+                          <span className="font-medium">{topDisease.disease}</span> spike 
+                          ({topDisease.count} cases, {topDisease.percentage.toFixed(1)}% of {seasonData.season.toLowerCase()} visits)
+                        </p>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Age-wise Disease Breakdown */}
+      {analytics.ageWiseDiseaseBreakdown.length > 0 && (
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-base font-semibold text-slate-800">Age-wise Disease Breakdown</h3>
+              <p className="text-sm text-slate-600 mt-1">Most common diseases by age group</p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-violet-100 to-violet-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {analytics.ageWiseDiseaseBreakdown.map((ageData, idx) => {
+              // Get age group color scheme
+              const ageGroupColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+                '0-17 (Pediatric)': {
+                  bg: 'from-pink-50 to-rose-50',
+                  border: 'border-pink-200',
+                  text: 'text-pink-700',
+                  accent: 'bg-pink-500'
+                },
+                '18-29 (Young Adult)': {
+                  bg: 'from-blue-50 to-indigo-50',
+                  border: 'border-blue-200',
+                  text: 'text-blue-700',
+                  accent: 'bg-blue-500'
+                },
+                '30-44 (Adult)': {
+                  bg: 'from-green-50 to-emerald-50',
+                  border: 'border-green-200',
+                  text: 'text-green-700',
+                  accent: 'bg-green-500'
+                },
+                '45-59 (Middle Age)': {
+                  bg: 'from-amber-50 to-orange-50',
+                  border: 'border-amber-200',
+                  text: 'text-amber-700',
+                  accent: 'bg-amber-500'
+                },
+                '60+ (Senior)': {
+                  bg: 'from-purple-50 to-violet-50',
+                  border: 'border-purple-200',
+                  text: 'text-purple-700',
+                  accent: 'bg-purple-500'
+                },
+                'Unknown': {
+                  bg: 'from-slate-50 to-gray-50',
+                  border: 'border-slate-200',
+                  text: 'text-slate-700',
+                  accent: 'bg-slate-500'
+                }
+              }
+              
+              const colors = ageGroupColors[ageData.ageGroup] || ageGroupColors['Unknown']
+              const ageEmoji: Record<string, string> = {
+                '0-17 (Pediatric)': '👶',
+                '18-29 (Young Adult)': '🧑',
+                '30-44 (Adult)': '👨',
+                '45-59 (Middle Age)': '👴',
+                '60+ (Senior)': '👵',
+                'Unknown': '❓'
+              }
+              
+              return (
+                <div
+                  key={ageData.ageGroup}
+                  className={`bg-gradient-to-br ${colors.bg} rounded-xl p-5 border ${colors.border} shadow-sm`}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{ageEmoji[ageData.ageGroup] || '📊'}</span>
+                      <h4 className={`text-sm font-bold ${colors.text} truncate`}>{ageData.ageGroup}</h4>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-600">
+                      {ageData.totalAppointments} {ageData.totalAppointments === 1 ? 'visit' : 'visits'}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {ageData.topDiseases.length > 0 ? (
+                      ageData.topDiseases.map((disease, diseaseIdx) => (
+                        <div key={diseaseIdx} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-slate-700 truncate flex-1 mr-2">
+                              {disease.disease}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+                              {disease.count} ({disease.percentage.toFixed(0)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-1.5">
+                            <div
+                              className={`${colors.accent} h-1.5 rounded-full transition-all`}
+                              style={{ width: `${Math.min(disease.percentage, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">No data available</p>
+                    )}
+                  </div>
+                  
+                  {/* Highlight top disease */}
+                  {ageData.topDiseases.length > 0 && ageData.topDiseases[0].count > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-600">Top:</span>
+                        <span className="text-xs font-bold text-slate-800 truncate">
+                          {ageData.topDiseases[0].disease}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          ({ageData.topDiseases[0].count})
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Gender-wise Disease Breakdown */}
+      {analytics.genderWiseDiseaseBreakdown.length > 0 && (
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-base font-semibold text-slate-800">Gender-wise Disease Breakdown</h3>
+              <p className="text-sm text-slate-600 mt-1">Most common diseases by gender</p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-cyan-100 to-cyan-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {analytics.genderWiseDiseaseBreakdown.map((genderData, idx) => {
+              // Get gender color scheme
+              const genderColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+                'Male': {
+                  bg: 'from-blue-50 to-cyan-50',
+                  border: 'border-blue-200',
+                  text: 'text-blue-700',
+                  accent: 'bg-blue-500'
+                },
+                'Female': {
+                  bg: 'from-pink-50 to-rose-50',
+                  border: 'border-pink-200',
+                  text: 'text-pink-700',
+                  accent: 'bg-pink-500'
+                },
+                'Other': {
+                  bg: 'from-purple-50 to-violet-50',
+                  border: 'border-purple-200',
+                  text: 'text-purple-700',
+                  accent: 'bg-purple-500'
+                },
+                'Unknown': {
+                  bg: 'from-slate-50 to-gray-50',
+                  border: 'border-slate-200',
+                  text: 'text-slate-700',
+                  accent: 'bg-slate-500'
+                }
+              }
+              
+              const colors = genderColors[genderData.gender] || genderColors['Unknown']
+              const genderEmoji: Record<string, string> = {
+                'Male': '♂️',
+                'Female': '♀️',
+                'Other': '⚧️',
+                'Unknown': '❓'
+              }
+              
+              return (
+                <div
+                  key={genderData.gender}
+                  className={`bg-gradient-to-br ${colors.bg} rounded-xl p-5 border ${colors.border} shadow-sm`}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{genderEmoji[genderData.gender] || '👤'}</span>
+                      <h4 className={`text-base font-bold ${colors.text}`}>{genderData.gender}</h4>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-600">
+                      {genderData.totalAppointments} {genderData.totalAppointments === 1 ? 'visit' : 'visits'}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {genderData.topDiseases.length > 0 ? (
+                      genderData.topDiseases.map((disease, diseaseIdx) => (
+                        <div key={diseaseIdx} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-slate-700 truncate flex-1 mr-2">
+                              {disease.disease}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+                              {disease.count} ({disease.percentage.toFixed(0)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-1.5">
+                            <div
+                              className={`${colors.accent} h-1.5 rounded-full transition-all`}
+                              style={{ width: `${Math.min(disease.percentage, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">No data available</p>
+                    )}
+                  </div>
+                  
+                  {/* Highlight top disease */}
+                  {genderData.topDiseases.length > 0 && genderData.topDiseases[0].count > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-600">Top:</span>
+                        <span className="text-xs font-bold text-slate-800 truncate">
+                          {genderData.topDiseases[0].disease}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          ({genderData.topDiseases[0].count})
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Area-wise Patient Distribution */}
+      {analytics.areaWiseDistribution.length > 0 && (
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-base font-semibold text-slate-800">Area-wise Patient Distribution</h3>
+              <p className="text-sm text-slate-600 mt-1">Patient distribution across different areas</p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {analytics.areaWiseDistribution.map((areaData, idx) => {
+              // Color scheme based on rank
+              const getAreaColors = (index: number) => {
+                if (index === 0) {
+                  return {
+                    bg: 'from-emerald-50 to-green-50',
+                    border: 'border-emerald-200',
+                    text: 'text-emerald-700',
+                    accent: 'bg-emerald-500',
+                    badge: 'bg-emerald-100 text-emerald-700'
+                  }
+                } else if (index === 1) {
+                  return {
+                    bg: 'from-blue-50 to-cyan-50',
+                    border: 'border-blue-200',
+                    text: 'text-blue-700',
+                    accent: 'bg-blue-500',
+                    badge: 'bg-blue-100 text-blue-700'
+                  }
+                } else if (index === 2) {
+                  return {
+                    bg: 'from-purple-50 to-violet-50',
+                    border: 'border-purple-200',
+                    text: 'text-purple-700',
+                    accent: 'bg-purple-500',
+                    badge: 'bg-purple-100 text-purple-700'
+                  }
+                } else {
+                  return {
+                    bg: 'from-slate-50 to-gray-50',
+                    border: 'border-slate-200',
+                    text: 'text-slate-700',
+                    accent: 'bg-slate-500',
+                    badge: 'bg-slate-100 text-slate-700'
+                  }
+                }
+              }
+              
+              const colors = getAreaColors(idx)
+              
+              return (
+                <div
+                  key={areaData.area}
+                  className={`bg-gradient-to-br ${colors.bg} rounded-xl p-5 border ${colors.border} shadow-sm hover:shadow-md transition-shadow`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-xl">📍</span>
+                      <h4 className={`text-sm font-bold ${colors.text} truncate`}>
+                        {areaData.area}
+                      </h4>
+                    </div>
+                    {idx < 3 && (
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${colors.badge}`}>
+                        #{idx + 1}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-xl font-bold text-slate-900">
+                        {areaData.patientCount.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        {areaData.patientCount === 1 ? 'patient' : 'patients'}
+                      </p>
+                    </div>
+                    
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div
+                        className={`${colors.accent} h-2 rounded-full transition-all`}
+                        style={{ width: `${Math.min(areaData.percentage, 100)}%` }}
+                      />
+                    </div>
+                    
+                    <p className="text-xs font-semibold text-slate-600">
+                      {areaData.percentage.toFixed(1)}% of total patients
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          
+          {/* Summary Statistics */}
+          {analytics.areaWiseDistribution.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 mb-1">Total Areas</p>
+                  <p className="text-xl font-bold text-slate-900">
+                    {analytics.areaWiseDistribution.length}
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 mb-1">Top Area</p>
+                  <p className="text-base font-bold text-slate-900 truncate">
+                    {analytics.areaWiseDistribution[0]?.area || 'N/A'}
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    {analytics.areaWiseDistribution[0]?.patientCount || 0} patients
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                  <p className="text-xs font-semibold text-slate-600 mb-1">Top 3 Areas</p>
+                  <p className="text-xl font-bold text-slate-900">
+                    {analytics.areaWiseDistribution.slice(0, 3).reduce((sum, area) => sum + area.patientCount, 0)}
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    {((analytics.areaWiseDistribution.slice(0, 3).reduce((sum, area) => sum + area.patientCount, 0) / analytics.totalPatients) * 100).toFixed(1)}% of total
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Charts and Detailed Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Growth Chart */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Monthly Patient Growth</h3>
-          <div className="space-y-3">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-4">Monthly Patient Growth</h3>
+          <div className="space-y-2">
             {analytics.monthlyGrowth.slice(-6).map((month, idx) => (
               <div key={idx} className="flex items-center gap-3">
                 <div className="w-20 text-xs text-slate-600 font-medium">{month.month}</div>
@@ -443,9 +1473,9 @@ export default function PatientAnalytics() {
         </div>
 
         {/* Top Visiting Patients */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Top Visiting Patients</h3>
-          <div className="space-y-3">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-4">Top Visiting Patients</h3>
+          <div className="space-y-2">
             {analytics.topVisitingPatients.slice(0, 5).map((patient, idx) => (
               <div key={patient.patientId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center gap-3">
@@ -460,7 +1490,7 @@ export default function PatientAnalytics() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-slate-800">{patient.visitCount}</p>
+                  <p className="text-base font-bold text-slate-800">{patient.visitCount}</p>
                   <p className="text-xs text-slate-500">visits</p>
                 </div>
               </div>
@@ -469,9 +1499,9 @@ export default function PatientAnalytics() {
         </div>
 
         {/* Demographic Distribution */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Gender Distribution</h3>
-          <div className="space-y-3">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-4">Gender Distribution</h3>
+          <div className="space-y-2">
             {Object.entries(analytics.demographicDistribution.gender).map(([gender, count]) => {
               const percentage = (count / analytics.totalPatients) * 100
               return (
@@ -495,9 +1525,9 @@ export default function PatientAnalytics() {
         </div>
 
         {/* Age Groups */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Age Distribution</h3>
-          <div className="space-y-3">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-4">Age Distribution</h3>
+          <div className="space-y-2">
             {Object.entries(analytics.demographicDistribution.ageGroups)
               .sort((a, b) => b[1] - a[1])
               .map(([ageGroup, count]) => {

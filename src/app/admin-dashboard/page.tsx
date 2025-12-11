@@ -24,7 +24,11 @@ import FinancialAnalytics from "./Tabs/FinancialAnalytics"
 import HospitalManagement from "./Tabs/HospitalManagement"
 import AdminAssignment from "./Tabs/AdminAssignment"
 import ReceptionistManagement from "./Tabs/ReceptionistManagement"
+import DoctorPerformanceAnalytics from "./Tabs/DoctorPerformanceAnalytics"
+import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnalytics"
 import AdminProtected from "@/components/AdminProtected"
+import PieChart, { DEFAULT_COLORS, DEFAULT_COLORS_ALT } from "./components/PieChart"
+import StatCard from "./components/StatCard"
 
 interface UserData {
   id: string;
@@ -55,6 +59,11 @@ interface DashboardStats {
     yearly: number;
   };
   commonConditions: { condition: string; count: number }[];
+  mostPrescribedMedicines: Array<{
+    medicineName: string;
+    prescriptionCount: number;
+    percentage: number;
+  }>;
 }
 
 interface TrendPoint {
@@ -85,14 +94,16 @@ export default function AdminDashboard() {
       monthly: 0,
       yearly: 0
     },
-    commonConditions: []
+    commonConditions: [],
+    mostPrescribedMedicines: []
   })
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "hospitals" | "admins" | "receptionists">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "receptionists">("overview")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
+  const [analyticsSubTab, setAnalyticsSubTab] = useState<"overview" | "patients" | "financial" | "doctors" | "receptionists">("overview")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
@@ -200,11 +211,11 @@ export default function AdminDashboard() {
         .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= sevenDaysAgo)
         .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
 
-      // Get recent appointments (last 10) - use hospital-scoped collection
+      // Get recent appointments (last 5) - use hospital-scoped collection
       const recentAppointmentsQuery = query(
         getHospitalCollection(activeHospitalId, "appointments"),
         orderBy("createdAt", "desc"),
-        limit(10)
+        limit(5)
       )
       const recentSnapshot = await getDocs(recentAppointmentsQuery)
       const recent = recentSnapshot.docs.map(doc => ({ 
@@ -320,6 +331,98 @@ export default function AdminDashboard() {
         .sort((a, b) => b.count - a.count)
         .slice(0, 8) // Top 8 conditions
 
+      // Helper function to extract medicine names from prescription text
+      const extractMedicines = (medicineText: string | undefined): string[] => {
+        if (!medicineText || medicineText.trim() === '') return []
+        
+        const medicines: string[] = []
+        const lines = medicineText.split('\n').filter(line => line.trim())
+        
+        for (const line of lines) {
+          const lowerLine = line.toLowerCase().trim()
+          if (lowerLine.includes('prescription') || 
+              lowerLine.includes('advice') || 
+              lowerLine.includes('diet') ||
+              lowerLine.includes('follow') ||
+              lowerLine.includes('next') ||
+              lowerLine.includes('visit') ||
+              lowerLine.includes('days') && !/[a-zA-Z]/.test(lowerLine.replace(/\d+\s*days?/gi, '')) ||
+              lowerLine.startsWith('•') && (lowerLine.includes('times') || lowerLine.includes('daily'))) {
+            continue
+          }
+          
+          let medicineName = ''
+          const emojiMatch = line.match(/\*[1-9]️⃣\s+(.+?)\*/)
+          if (emojiMatch && emojiMatch[1]) {
+            medicineName = emojiMatch[1]
+          } else {
+            const numberMatch = line.match(/^\d+[.)]\s*(.+?)(?:\s*[-–—]|$)/)
+            if (numberMatch && numberMatch[1]) {
+              medicineName = numberMatch[1]
+            } else if (/^[A-Z][a-z]+/.test(line.trim())) {
+              medicineName = line.trim()
+            }
+          }
+          
+          if (medicineName) {
+            const cleanName = medicineName
+              .replace(/\d+(?:\.\d+)?\s*(?:mg|g|ml|mcg|microgram|gram|milligram|capsule|tablet|tab|cap|drops?|syrup|injection|amp|vial)/gi, '')
+              .replace(/\b(?:daily|once|twice|thrice|three times|four times|\d+\s*times|after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime)\b/gi, '')
+              .replace(/\b(?:for|duration|continue|take)\s+\d+\s*(?:days?|weeks?|months?|hours?)\b/gi, '')
+              .replace(/\b(?:after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime|times|per day|as directed|as needed)\b/gi, '')
+              .replace(/\[.*?\]/g, '')
+              .replace(/\(.*?\)/g, '')
+              .replace(/\s*[-–—]\s*/g, ' ')
+              .replace(/\s*:\s*/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+            
+            const words = cleanName.split(/\s+/).filter(word => {
+              const lowerWord = word.toLowerCase()
+              return !['take', 'give', 'use', 'apply', 'drink', 'eat', 'with', 'after', 'before'].includes(lowerWord) &&
+                     word.length > 1 &&
+                     /[a-zA-Z]/.test(word)
+            })
+            
+            if (words.length > 0) {
+              const name = words.slice(0, 3).join(' ').trim()
+              if (name && name.length > 2 && name.length < 50) {
+                medicines.push(name)
+              }
+            }
+          }
+        }
+        
+        return medicines
+      }
+
+      // Calculate most prescribed medicines
+      const medicineCounts: Record<string, number> = {}
+      let totalPrescriptions = 0
+      
+      allAppointments.forEach(apt => {
+        if ((apt as any).medicine && apt.status === 'completed') {
+          const medicines = extractMedicines((apt as any).medicine)
+          medicines.forEach(medicine => {
+            const normalizedName = medicine
+              .split(' ')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(' ')
+            medicineCounts[normalizedName] = (medicineCounts[normalizedName] || 0) + 1
+            totalPrescriptions++
+          })
+        }
+      })
+
+      const mostPrescribedMedicines = Object.entries(medicineCounts)
+        .map(([medicineName, prescriptionCount]) => ({
+          medicineName,
+          prescriptionCount,
+          percentage: totalPrescriptions > 0 ? (prescriptionCount / totalPrescriptions) * 100 : 0
+        }))
+        .sort((a, b) => b.prescriptionCount - a.prescriptionCount)
+        .slice(0, 10)
+
       setStats({
         totalPatients,
         totalDoctors,
@@ -340,7 +443,8 @@ export default function AdminDashboard() {
           monthly: monthlyTotal,
           yearly: yearlyTotal
         },
-        commonConditions
+        commonConditions,
+        mostPrescribedMedicines
       })
 
       setRecentAppointments(recent)
@@ -830,6 +934,23 @@ export default function AdminDashboard() {
               />
             </div>
 
+            {/* Analytics */}
+            <button 
+              onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }} 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                activeTab === "analytics" 
+                  ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md" 
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <div className={`p-1.5 rounded-md ${activeTab === "analytics" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <span className="font-medium text-sm">Analytics Hub</span>
+            </button>
+
             {/* Super Admin Only Tabs */}
             {isSuperAdmin && (
               <>
@@ -951,6 +1072,7 @@ export default function AdminDashboard() {
                    activeTab === "campaigns" ? "Campaigns" :
                    activeTab === "appointments" ? "Appointment Management" :
                    activeTab === "billing" ? "Revenue & Analytics" :
+                   activeTab === "analytics" ? "Analytics Hub" :
                    activeTab === "hospitals" ? "Hospital Management" :
                    activeTab === "admins" ? "Admin Assignment" :
                    activeTab === "receptionists" ? "Receptionist Management" :
@@ -961,8 +1083,9 @@ export default function AdminDashboard() {
                    activeTab === "patients" ? "Manage patient records and information" :
                    activeTab === "doctors" ? "Manage doctor profiles and schedules" :
                    activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
-                   activeTab === "appointments" ? "Monitor and manage all appointments" :
-                   activeTab === "billing" ? "Comprehensive revenue analytics, billing records, and financial insights" :
+                  activeTab === "appointments" ? "Monitor and manage all appointments" :
+                  activeTab === "billing" ? "Comprehensive revenue analytics, billing records, and financial insights" :
+                  activeTab === "analytics" ? "Unified analytics dashboard - patient, financial, and doctor performance insights" :
                    activeTab === "hospitals" ? "Create and manage hospitals in the system" :
                    activeTab === "admins" ? "Create and assign admins to hospitals" :
                    activeTab === "receptionists" ? "Create and manage receptionists for your hospital" :
@@ -1134,7 +1257,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="h-56 sm:h-72 relative overflow-hidden">
+                  <div className="h-56 sm:h-64 relative overflow-hidden">
                     {trendData.length > 0 && (
                       <div className="absolute right-6 top-4 bg-white/80 backdrop-blur-sm border border-blue-100 text-blue-600 rounded-md px-3 py-1 text-xs font-semibold z-10">
                         Total: {trendTotal}
@@ -1266,148 +1389,90 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Common Conditions - Bar Chart */}
+                {/* Quick Appointment Stats */}
+                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Appointment Status</h3>
+                  <div className="space-y-4">
+                    <StatCard
+                      label="Today's Appointments"
+                      value={stats.todayAppointments}
+                      icon={
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      }
+                      bgColor="bg-blue-50"
+                      borderColor="border-blue-100"
+                      iconBgColor="bg-blue-500"
+                    />
+                    <StatCard
+                      label="Pending"
+                      value={stats.pendingAppointments}
+                      icon={
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      }
+                      bgColor="bg-yellow-50"
+                      borderColor="border-yellow-100"
+                      iconBgColor="bg-yellow-500"
+                    />
+                    <StatCard
+                      label="Completed"
+                      value={stats.completedAppointments}
+                      icon={
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      }
+                      bgColor="bg-green-50"
+                      borderColor="border-green-100"
+                      iconBgColor="bg-green-500"
+                    />
+                    <StatCard
+                      label="Total Appointments"
+                      value={stats.totalAppointments}
+                      icon={
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      }
+                      bgColor="bg-purple-50"
+                      borderColor="border-purple-100"
+                      iconBgColor="bg-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Common Conditions - Pie Chart */}
                 <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Common Patient Conditions</h3>
                   <div className="h-72 sm:h-80">
-                    {stats.commonConditions.length > 0 ? (() => {
-                      const chartConditions = [...stats.commonConditions]
-
-                      const sortedConditions = [...chartConditions].sort((a, b) => b.count - a.count)
-                      const MAX_SLICES = 6
-                      const primaryConditions = sortedConditions.slice(0, MAX_SLICES)
-                      const remainingConditions = sortedConditions.slice(MAX_SLICES)
-
-                      const displayConditions: (typeof chartConditions[number] & { isOther?: boolean; mergedConditions?: string[] })[] = [...primaryConditions]
-                      if (remainingConditions.length > 0) {
-                        const otherCount = remainingConditions.reduce((sum, condition) => sum + condition.count, 0)
-                        if (otherCount > 0) {
-                          displayConditions.push({
-                            condition: "Other",
-                            count: otherCount,
-                            isOther: true,
-                            mergedConditions: remainingConditions.map(c => c.condition)
-                          })
-                        }
-                      }
-
-                      const totalCount = displayConditions.reduce((sum, condition) => sum + condition.count, 0)
-                      if (totalCount === 0) {
-                        return (
-                          <div className="flex items-center justify-center h-full text-gray-500">
-                            <div className="text-center">
-                              <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                              </svg>
-                              <p className="text-sm">No condition data available</p>
-                            </div>
-                          </div>
-                        )
-                      }
-
-                      const pieColors = ["#2563eb", "#10b981", "#f97316", "#8b5cf6", "#ef4444", "#14b8a6", "#f59e0b", "#6366f1", "#ec4899", "#6b7280"]
-                      const center = 110
-                      const radius = 100
-
-                      const polarToCartesian = (cx: number, cy: number, r: number, angleInDegrees: number) => {
-                        const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180
-                        return {
-                          x: cx + r * Math.cos(angleInRadians),
-                          y: cy + r * Math.sin(angleInRadians)
-                        }
-                      }
-
-                      const describeArc = (cx: number, cy: number, r: number, startAngle: number, endAngle: number) => {
-                        const start = polarToCartesian(cx, cy, r, endAngle)
-                        const end = polarToCartesian(cx, cy, r, startAngle)
-                        const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1"
-
-                        return [
-                          "M", cx, cy,
-                          "L", start.x, start.y,
-                          "A", r, r, 0, largeArcFlag, 0, end.x, end.y,
-                          "Z"
-                        ].join(" ")
-                      }
-
-                      let currentAngle = 0
-
-                      return (
-                        <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-between gap-6 lg:gap-8 h-full">
-                          <svg className="w-72 h-72 sm:w-80 sm:h-80" viewBox="0 0 220 220">
-                            <circle cx={center} cy={center} r={radius} fill="#f1f5f9" />
-                            {displayConditions.map((condition, index) => {
-                              const value = condition.count
-                              const sliceAngle = (value / totalCount) * 360
-                              if (sliceAngle === 0) {
-                                return null
-                              }
-                              const startAngle = currentAngle
-                              const endAngle = currentAngle + sliceAngle
-                              currentAngle = endAngle
-
-                              const path = describeArc(center, center, radius, startAngle, endAngle)
-                              const midAngle = startAngle + sliceAngle / 2
-                              const labelPosition = polarToCartesian(center, center, radius * 0.6, midAngle)
-                              const percentage = (value / totalCount) * 100
-
-                              return (
-                                <g key={condition.condition}>
-                                  <path d={path} fill={pieColors[index % pieColors.length]} className="transition-transform duration-300 hover:scale-[1.02]" />
-                                  <text
-                                    x={labelPosition.x}
-                                    y={labelPosition.y}
-                                    className="text-[10px] fill-gray-800 font-semibold"
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                  >
-                                    {`${Math.round(percentage)}%`}
-                                  </text>
-                                </g>
-                              )
-                            })}
-                          </svg>
-
-                          <div className="w-full lg:w-56 space-y-1">
-                            {displayConditions.map((condition, index) => {
-                              const percentage = (condition.count / totalCount) * 100
-                              return (
-                                <div key={condition.condition} className="flex items-center gap-2">
-                                  <span
-                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                    style={{ backgroundColor: pieColors[index % pieColors.length] }}
-                                  />
-                                  <p className="text-[11px] leading-tight text-slate-600">
-                                    <span className="font-semibold text-slate-700">
-                                      {condition.isOther
-                                        ? `Other (${condition.mergedConditions?.length || 0} conditions)`
-                                        : condition.condition.replace(/_/g, " ")}
-                                    </span>{" "}
-                                    {condition.count} {condition.count === 1 ? "patient" : "patients"} • {percentage.toFixed(1)}%
-                                    {condition.isOther && condition.mergedConditions && condition.mergedConditions.length > 0 && (
-                                      <span className="block text-[10px] text-slate-400 mt-0.5">
-                                        {condition.mergedConditions.map(label => label.replace(/_/g, " ")).join(", ")}
-                                      </span>
-                                    )}
-                                  </p>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })() : (
-                      <div className="flex items-center justify-center h-full text-gray-500">
-                        <div className="text-center">
-                          <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                          </svg>
-                          <p className="text-sm">No condition data available</p>
-                        </div>
-                      </div>
-                    )}
+                    <PieChart
+                      data={stats.commonConditions.map(c => ({ name: c.condition, value: c.count }))}
+                      colors={DEFAULT_COLORS}
+                      emptyMessage="No condition data available"
+                      getLabel={(item) => item.name.replace(/_/g, " ")}
+                      getCountLabel={(item, count) => `${count} ${count === 1 ? "patient" : "patients"}`}
+                    />
                   </div>
                 </div>
+
+                {/* Most Prescribed Medicines Chart */}
+                {stats.mostPrescribedMedicines.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Most Prescribed Medicines</h3>
+                    <div className="h-72 sm:h-80">
+                      <PieChart
+                        data={stats.mostPrescribedMedicines.map(m => ({ name: m.medicineName, value: m.prescriptionCount }))}
+                        colors={DEFAULT_COLORS_ALT}
+                        emptyMessage="No medicine data available"
+                        getLabel={(item) => item.name}
+                        getCountLabel={(item, count) => `${count} ${count === 1 ? "prescription" : "prescriptions"}`}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Revenue Overview */}
@@ -1752,6 +1817,11 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Doctor Performance Analytics */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                <DoctorPerformanceAnalytics />
+              </div>
             </div>
           )}
 
@@ -1841,6 +1911,199 @@ export default function AdminDashboard() {
               <div className="p-6">
                 {billingSubTab === "all" && <BillingManagement />}
                 {billingSubTab === "analytics" && <FinancialAnalytics />}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "analytics" && (
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+              {/* Analytics Sub-Tabs */}
+              <div className="border-b border-slate-200 px-6 pt-6">
+                <div className="flex gap-4 flex-wrap">
+                  <button
+                    onClick={() => setAnalyticsSubTab("overview")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      analyticsSubTab === "overview"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setAnalyticsSubTab("patients")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      analyticsSubTab === "patients"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Patient Analytics
+                  </button>
+                  <button
+                    onClick={() => setAnalyticsSubTab("financial")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      analyticsSubTab === "financial"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Financial Analytics
+                  </button>
+                  <button
+                    onClick={() => setAnalyticsSubTab("doctors")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      analyticsSubTab === "doctors"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Doctor Performance
+                  </button>
+                  <button
+                    onClick={() => setAnalyticsSubTab("receptionists")}
+                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
+                      analyticsSubTab === "receptionists"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Staff Performance
+                  </button>
+                </div>
+              </div>
+
+              {/* Analytics Content */}
+              <div className="p-6">
+                {analyticsSubTab === "overview" && (
+                  <div className="space-y-6">
+                    {/* Quick Stats Overview */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-blue-700">Patient Analytics</span>
+                          <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                          </div>
+                        </div>
+                        <p className="text-xs text-blue-600 mt-2">Demographics, trends, seasonal diseases, area distribution</p>
+                        <button
+                          onClick={() => setAnalyticsSubTab("patients")}
+                          className="mt-4 text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+                        >
+                          View Details →
+                        </button>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-green-700">Financial Analytics</span>
+                          <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        </div>
+                        <p className="text-xs text-green-600 mt-2">Revenue prediction, seasonal changes, anomalies</p>
+                        <button
+                          onClick={() => setAnalyticsSubTab("financial")}
+                          className="mt-4 text-xs font-semibold text-green-600 hover:text-green-700 underline"
+                        >
+                          View Details →
+                        </button>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-purple-700">Doctor Performance</span>
+                          <div className="w-10 h-10 bg-purple-200 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                        </div>
+                        <p className="text-xs text-purple-600 mt-2">Patient count, revenue, consultation time, peak hours</p>
+                        <button
+                          onClick={() => setAnalyticsSubTab("doctors")}
+                          className="mt-4 text-xs font-semibold text-purple-600 hover:text-purple-700 underline"
+                        >
+                          View Details →
+                        </button>
+                      </div>
+                      <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-orange-700">Staff Performance</span>
+                          <div className="w-10 h-10 bg-orange-200 rounded-lg flex items-center justify-center">
+                            <span className="text-xl">👥</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-orange-600 mt-2">Patients added, appointments booked, booking ratio, leaderboard</p>
+                        <button
+                          onClick={() => setAnalyticsSubTab("receptionists")}
+                          className="mt-4 text-xs font-semibold text-orange-600 hover:text-orange-700 underline"
+                        >
+                          View Details →
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Links */}
+                    <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                      <h3 className="text-lg font-semibold text-slate-800 mb-4">Quick Navigation</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <button
+                          onClick={() => setAnalyticsSubTab("patients")}
+                          className="text-left p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-2xl">👥</span>
+                            <span className="font-semibold text-blue-800">Patient Analytics</span>
+                          </div>
+                          <p className="text-xs text-blue-600">View patient demographics, trends, and insights</p>
+                        </button>
+
+                        <button
+                          onClick={() => setAnalyticsSubTab("financial")}
+                          className="text-left p-4 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-2xl">💰</span>
+                            <span className="font-semibold text-green-800">Financial Analytics</span>
+                          </div>
+                          <p className="text-xs text-green-600">Revenue predictions and financial insights</p>
+                        </button>
+
+                        <button
+                          onClick={() => setAnalyticsSubTab("doctors")}
+                          className="text-left p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-2xl">👨‍⚕️</span>
+                            <span className="font-semibold text-purple-800">Doctor Performance</span>
+                          </div>
+                          <p className="text-xs text-purple-600">Doctor metrics and performance analytics</p>
+                        </button>
+
+                        <button
+                          onClick={() => setAnalyticsSubTab("receptionists")}
+                          className="text-left p-4 bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-200 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-2xl">👥</span>
+                            <span className="font-semibold text-orange-800">Staff Performance</span>
+                          </div>
+                          <p className="text-xs text-orange-600">Receptionist metrics and booking analytics</p>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {analyticsSubTab === "patients" && <PatientAnalytics />}
+                {analyticsSubTab === "financial" && <FinancialAnalytics />}
+                {analyticsSubTab === "doctors" && <DoctorPerformanceAnalytics />}
+                {analyticsSubTab === "receptionists" && <ReceptionistPerformanceAnalytics />}
               </div>
             </div>
           )}

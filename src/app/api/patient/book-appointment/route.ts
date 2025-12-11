@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       const nowIso = new Date().toISOString()
       appointmentData.createdAt = appointmentData.createdAt || nowIso
       appointmentData.updatedAt = nowIso
+      appointmentData.createdBy = appointmentData.createdBy || "patient" // Mark as patient portal booking
 
       let appointmentId = ""
 

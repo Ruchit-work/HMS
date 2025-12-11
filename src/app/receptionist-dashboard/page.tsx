@@ -91,7 +91,10 @@ export default function ReceptionistDashboard() {
   const refreshWhatsappPendingCount = useCallback(async () => {
     try {
       const currentUser = auth.currentUser
-      if (!currentUser) return
+      if (!currentUser) {
+        setWhatsappPendingCount(0)
+        return
+      }
       const token = await currentUser.getIdToken()
       const res = await fetch("/api/receptionist/whatsapp-bookings", {
         headers: {
@@ -100,13 +103,17 @@ export default function ReceptionistDashboard() {
         },
       })
       if (!res.ok) {
-        throw new Error("Failed to load WhatsApp bookings")
+        const text = await res.text().catch(() => "")
+        console.warn("[ReceptionistDashboard] WhatsApp bookings fetch failed", res.status, text)
+        setWhatsappPendingCount(0)
+        return
       }
       const data = await res.json().catch(() => ({}))
       const appointments = Array.isArray(data?.appointments) ? data.appointments : []
       setWhatsappPendingCount(appointments.length)
     } catch (error) {
       console.error("[ReceptionistDashboard] Failed to refresh WhatsApp badge:", error)
+      setWhatsappPendingCount(0)
     }
   }, [])
 

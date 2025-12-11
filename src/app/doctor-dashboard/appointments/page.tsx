@@ -120,6 +120,26 @@ type CompletionFormEntry = {
 const hasValidPrescriptionInput = (entry?: CompletionFormEntry) =>
   Boolean(entry?.medicines?.some((med) => med.name && med.name.trim()))
 
+type TabKey = "today" | "tomorrow" | "thisWeek" | "nextWeek" | "history"
+
+const StatPill = ({
+  label,
+  value,
+  icon,
+}: {
+  label: string
+  value: number
+  icon: string
+}) => (
+  <div className="rounded-xl bg-white/10 border border-white/20 px-3 py-2 shadow-sm backdrop-blur">
+    <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-100/80">
+      <span>{icon}</span>
+      <span>{label}</span>
+    </div>
+    <div className="mt-1 text-lg font-semibold text-white">{value}</div>
+  </div>
+)
+
 interface UserData {
   id: string;
   name: string;
@@ -134,7 +154,7 @@ export default function DoctorAppointments() {
   const [userData, setUserData] = useState<UserData | null>(null)
   const [appointments, setAppointments] = useState<AppointmentType[]>([])
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"today" | "tomorrow" | "thisWeek" | "nextWeek" | "history">("today")
+  const [activeTab, setActiveTab] = useState<TabKey>("today")
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [updating, setUpdating] = useState<{[key: string]: boolean}>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{[key: string]: boolean}>({})
@@ -225,7 +245,7 @@ export default function DoctorAppointments() {
   }
 
   useEffect(() => {
-    if (!user) return
+    if (!user || hospitalLoading || !activeHospitalId) return
 
     let unsubscribe: (() => void) | null = null
 
@@ -241,7 +261,7 @@ export default function DoctorAppointments() {
         unsubscribe()
       }
     }
-  }, [user])
+  }, [user, activeHospitalId, hospitalLoading])
 
   // Auto-expand appointment if redirected from dashboard
   useEffect(() => {
@@ -347,6 +367,25 @@ export default function DoctorAppointments() {
   }
 
   const toggleCompletionForm = (appointmentId: string) => {
+    const appointment = appointments.find(apt => apt.id === appointmentId)
+    if (!appointment) return
+    
+    // Prevent opening form for future appointments
+    const appointmentDate = new Date(appointment.appointmentDate)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    appointmentDate.setHours(0, 0, 0, 0)
+    const isToday = appointmentDate.getTime() === today.getTime()
+    const isFutureAppointment = appointmentDate > today
+    
+    if (isFutureAppointment && !isToday) {
+      setNotification({
+        type: "error",
+        message: "You can only complete appointments scheduled for today. Future appointments cannot be completed."
+      })
+      return
+    }
+    
     const isOpen = showCompletionForm[appointmentId] || false
     setShowCompletionForm({...showCompletionForm, [appointmentId]: !isOpen})
     
@@ -362,7 +401,6 @@ export default function DoctorAppointments() {
       }))
       setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: true})
       // Auto-generate AI prescription when form opens
-      const appointment = appointments.find(apt => apt.id === appointmentId)
       if (appointment) {
         handleGenerateAiPrescription(appointmentId)
       }
@@ -1148,6 +1186,25 @@ export default function DoctorAppointments() {
     
     if (!appointmentId) return
     
+    // Find the appointment and validate date
+    const appointment = appointments.find(apt => apt.id === appointmentId)
+    if (appointment) {
+      const appointmentDate = new Date(appointment.appointmentDate)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      appointmentDate.setHours(0, 0, 0, 0)
+      const isToday = appointmentDate.getTime() === today.getTime()
+      const isFutureAppointment = appointmentDate > today
+      
+      if (isFutureAppointment && !isToday) {
+        setNotification({
+          type: "error",
+          message: "Cannot complete future appointments. You can only complete appointments scheduled for today."
+        })
+        return
+      }
+    }
+    
     const currentData: CompletionFormEntry = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
     
     // Validate that at least one medicine has a name
@@ -1456,179 +1513,119 @@ export default function DoctorAppointments() {
   
   const displayedAppointments = getDisplayedAppointments()
 
+  const tabItems: { key: TabKey; label: string; count: number }[] = [
+    { key: "today", label: "Today", count: todayAppointments.length },
+    { key: "tomorrow", label: "Tomorrow", count: tomorrowAppointments.length },
+    { key: "thisWeek", label: "This Week", count: thisWeekAppointments.length },
+    { key: "nextWeek", label: "Next Week", count: nextWeekAppointments.length },
+    { key: "history", label: "History", count: historyAppointments.length },
+  ]
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* Page Header */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 mb-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center text-3xl text-slate-700">
-              📋
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-white">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Hero */}
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm mb-6">
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 opacity-90" />
+          <div className="relative px-6 sm:px-8 py-6 sm:py-8 flex flex-col gap-4 sm:gap-0 sm:flex-row sm:items-center sm:justify-between text-white">
+            <div className="flex items-start gap-3">
+              <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center text-2xl">📋</div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-semibold">Appointments</h1>
+                <p className="text-sm text-slate-200/90 mt-1">Manage today’s schedule and history in one place.</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Patient Appointments</h1>
-              <p className="text-slate-500 text-sm mt-1">Manage and complete patient consultations</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <StatPill label="Today" value={todayAppointments.length} icon="☀️" />
+              <StatPill label="Tomorrow" value={tomorrowAppointments.length} icon="⏭️" />
+              <StatPill label="This week" value={thisWeekAppointments.length} icon="📆" />
+              <StatPill label="History" value={historyAppointments.length} icon="🗂️" />
             </div>
           </div>
         </div>
 
-        {/* Appointments Section */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6">
-          <h2 className="text-2xl font-bold text-slate-800 mb-6">
-            All Appointments
-          </h2>
-
-          {/* Tabs - Clean Professional Design */}
-          <div className="border-b border-slate-200 mb-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex gap-4 sm:gap-6 lg:gap-8 overflow-x-auto pb-px w-full sm:w-auto">
-            <button
-              onClick={() => setActiveTab("today")}
-                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
-                activeTab === "today"
-                      ? "text-slate-800"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  <div className="relative">
-                    <span className="text-base">Today</span>
-                    <NotificationBadge 
-                      count={todayAppointments.length}
-                      position="top-right"
-                      color="orange"
-                      size="sm"
-                    />
-                  </div>
-                  {activeTab === "today" && (
-                    <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
-                  )}
-            </button>
-                
-            <button
-              onClick={() => setActiveTab("tomorrow")}
-                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
-                activeTab === "tomorrow"
-                      ? "text-slate-800"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  <div className="relative">
-                    <span className="text-base">Tomorrow</span>
-                    <NotificationBadge 
-                      count={tomorrowAppointments.length}
-                      position="top-right"
-                      color="orange"
-                      size="sm"
-                    />
-                  </div>
-                  {activeTab === "tomorrow" && (
-                    <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
-                  )}
-            </button>
-                
-            <button
-              onClick={() => setActiveTab("thisWeek")}
-                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
-                activeTab === "thisWeek"
-                      ? "text-slate-800"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  <div className="relative">
-                    <span className="text-base">This Week</span>
-                    <NotificationBadge 
-                      count={thisWeekAppointments.length}
-                      position="top-right"
-                      color="orange"
-                      size="sm"
-                    />
-                  </div>
-                  {activeTab === "thisWeek" && (
-                    <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
-                  )}
-            </button>
-                
-            <button
-              onClick={() => setActiveTab("nextWeek")}
-                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
-                activeTab === "nextWeek"
-                      ? "text-slate-800"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  <div className="relative">
-                    <span className="text-base">Next Week</span>
-                    <NotificationBadge 
-                      count={nextWeekAppointments.length}
-                      position="top-right"
-                      color="orange"
-                      size="sm"
-                    />
-                  </div>
-                  {activeTab === "nextWeek" && (
-                    <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
-                  )}
-            </button>
-                
-            <button
-              onClick={() => setActiveTab("history")}
-                  className={`relative flex items-center justify-center py-4 px-4 font-semibold transition-all whitespace-nowrap ${
-                activeTab === "history"
-                      ? "text-slate-800"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  <span className="text-base">History</span>
-                  {activeTab === "history" && (
-                    <span className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 rounded-t-full animate-slide-in"></span>
-                  )}
-            </button>
-          </div>
-              
-        {/* Refresh Button */}
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium text-xs sm:text-sm"
-        >
-                {refreshing ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Refreshing...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>Refresh</span>
-                  </>
-                )}
-              </button>
-            </div>
+        {/* Main Card */}
+        <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm p-6 overflow-hidden">
+          {/* Background Pattern */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-blue-500"></div>
+            <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="schedule-pattern-appointments" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <circle cx="20" cy="20" r="1.5" fill="currentColor" className="text-indigo-600" />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#schedule-pattern-appointments)" />
+            </svg>
           </div>
           
-          <style>{`
-            @keyframes slide-in {
-              from {
-                transform: scaleX(0);
-                opacity: 0;
-              }
-              to {
-                transform: scaleX(1);
-                opacity: 1;
-              }
-            }
-            
-            .animate-slide-in {
-              animation: slide-in 0.3s ease-out;
-              transform-origin: left;
-            }
-          `}</style>
+          {/* Content */}
+          <div className="relative z-10">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative">
+                  <h2 className="text-xl font-semibold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                    Schedule
+                  </h2>
+                  <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full"></div>
+                </div>
+                <span className="px-2.5 py-1 text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full shadow-sm animate-pulse">
+                  <span className="relative flex items-center gap-1">
+                    <span className="absolute h-2 w-2 bg-white rounded-full animate-ping"></span>
+                    <span className="relative h-2 w-2 bg-white rounded-full"></span>
+                    Live synced
+                  </span>
+                </span>
+              </div>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg border-2 border-blue-300 text-blue-700 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm hover:shadow-md"
+            >
+              {refreshing ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </>
+              )}
+            </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="relative flex flex-wrap items-center gap-2 rounded-xl p-2 bg-slate-50/60 mb-4 shadow-sm border border-slate-200">
+            <div className="relative flex flex-wrap items-center gap-2 w-full z-10">
+            {tabItems.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`relative inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 min-w-[80px] ${
+                  activeTab === tab.key
+                    ? "bg-slate-600 text-white shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white bg-white/60"
+                }`}
+              >
+                <span className="whitespace-nowrap">{tab.label}</span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
+                  activeTab === tab.key
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-200 text-slate-700"
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+            </div>
+          </div>
 
           {activeTab === "history" && (
             <div className="mb-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4 space-y-3">
@@ -1795,138 +1792,163 @@ export default function DoctorAppointments() {
           ) : (
             <div className="space-y-4">
               {displayedAppointments.map((appointment) => (
-                <div key={appointment.id} id={`appointment-${appointment.id}`} className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden hover:border-teal-300 hover:shadow-lg transition-all">
+                <div
+                  key={appointment.id}
+                  id={`appointment-${appointment.id}`}
+                  className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden transition-all hover:shadow-lg hover:border-slate-300"
+                >
                   {/* Accordion Header */}
-                  <div 
+                  <button
+                    type="button"
                     onClick={() => toggleAccordion(appointment.id)}
-                    className="p-5 cursor-pointer group"
+                    className="w-full text-left p-5 sm:p-6 bg-gradient-to-r from-slate-50 to-white hover:from-slate-100/80 hover:to-white transition-colors"
                   >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                       {/* Patient Avatar */}
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto sm:mx-0 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-full flex items-center justify-center text-xl sm:text-2xl font-bold text-teal-700 group-hover:scale-110 transition-transform flex-shrink-0">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 rounded-xl bg-gradient-to-br from-indigo-100 via-sky-100 to-cyan-100 text-indigo-700 font-bold text-xl sm:text-2xl flex items-center justify-center shadow-sm">
                         {appointment.patientName.charAt(0).toUpperCase()}
                       </div>
 
                       {/* Patient Info */}
-                      <div className="flex-1 min-w-0 text-center sm:text-left">
-                        <div className="flex flex-col items-center sm:items-start gap-2 mb-1 sm:flex-row sm:flex-wrap">
-                          <h3 className="font-bold text-lg text-slate-900 group-hover:text-teal-700 transition-colors leading-tight break-words">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-semibold text-slate-900 truncate">
                             {appointment.patientName}
                           </h3>
-                          <div className="flex flex-wrap gap-2">
-                            {appointment.patientGender && (
-                              <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                                {appointment.patientGender === "Male" ? "👨" : appointment.patientGender === "Female" ? "👩" : "👤"} {appointment.patientGender}
-                              </span>
-                            )}
-                            {appointment.patientBloodGroup && (
-                              <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded-full font-semibold">
-                                🩸 {appointment.patientBloodGroup}
-                              </span>
-                            )}
-                          </div>
+                          {appointment.patientGender && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700 border border-slate-200">
+                              {appointment.patientGender === "Male"
+                                ? "👨"
+                                : appointment.patientGender === "Female"
+                                ? "👩"
+                                : "👤"}{" "}
+                              {appointment.patientGender}
+                            </span>
+                          )}
+                          {appointment.patientBloodGroup && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-red-50 text-red-700 border border-red-200 font-semibold">
+                              🩸 {appointment.patientBloodGroup}
+                            </span>
+                          )}
                         </div>
-                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-slate-600">
-                          <span className="flex items-center gap-1">
-                            <span>📅</span>
-                            {new Date(appointment.appointmentDate).toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric',
-                              year: 'numeric'
+                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm text-slate-600">
+                          <span className="inline-flex items-center gap-1">
+                            📅{" "}
+                            {new Date(appointment.appointmentDate).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
                             })}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <span>🕐</span>
-                            {appointment.appointmentTime}
+                          <span className="inline-flex items-center gap-1">
+                            🕐 {appointment.appointmentTime}
                           </span>
                           {appointment.patientPhone && (
-                            <span className="flex items-center gap-1">
-                              <span>📱</span>
-                              {appointment.patientPhone}
+                            <span className="inline-flex items-center gap-1">
+                              📱 {appointment.patientPhone}
                             </span>
                           )}
                         </div>
                       </div>
 
-                      {/* Status Badge */}
-                      <div className="flex items-center justify-between sm:justify-end gap-3">
-                        <span className={`px-4 py-2 rounded-lg text-sm font-bold ${getStatusColor(appointment.status)}`}>
-                          {appointment.status === "confirmed" ? "✓ Confirmed" : 
-                           appointment.status === "completed" ? "✓ Completed" : 
-                           appointment.status}
+                      {/* Status / Chevron */}
+                      <div className="flex items-center gap-3 justify-between sm:justify-end">
+                        <span
+                          className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${getStatusColor(
+                            appointment.status
+                          )}`}
+                        >
+                          {appointment.status === "confirmed"
+                            ? "✓ Confirmed"
+                            : appointment.status === "completed"
+                            ? "✓ Completed"
+                            : appointment.status}
                         </span>
-                        
-                        {/* Expand Icon */}
-                        <div className={`w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center transition-transform duration-300 ${expandedAppointment === appointment.id ? 'rotate-180 bg-teal-100' : ''}`}>
-                          <span className="text-slate-600 text-sm">▼</span>
+                        <div
+                          className={`w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 transition-transform duration-300 ease-in-out ${
+                            expandedAppointment === appointment.id ? "rotate-180" : ""
+                          }`}
+                        >
+                          <span className="text-sm">▼</span>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
                   {/* Accordion Body */}
-                  {expandedAppointment === appointment.id && (
-                    <div className="p-6 bg-gradient-to-br from-slate-50 to-white border-t-2 border-slate-200">
+                  <div
+                    className={`overflow-hidden transition-all duration-500 ease-in-out ${
+                      expandedAppointment === appointment.id
+                        ? "max-h-[10000px] opacity-100 translate-y-0"
+                        : "max-h-0 opacity-0 -translate-y-4"
+                    }`}
+                  >
+                    {expandedAppointment === appointment.id && (
+                      <div className="p-6 bg-gradient-to-br from-emerald-50/30 via-cyan-50/20 to-white border-t-2 border-emerald-200/50">
                       {/* Top Section: Patient Info (Left) + Lifestyle & Appointment (Right) */}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                         {/* LEFT: Patient Information Only */}
                         <div>
-                          <div className="bg-white rounded-xl p-5 border-2 border-slate-200 shadow-sm">
-                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-base pb-3 border-b border-slate-200">
-                              <span className="text-xl">👤</span>
-                              <span>Patient Information</span>
-                            </h4>
+                          <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
+                            <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-400 flex items-center justify-center text-white shadow-md">
+                                <span className="text-xl">👤</span>
+                              </div>
+                              <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                                Patient Information
+                              </h4>
+                            </div>
                             <div className="space-y-3 text-sm">
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold">Patient ID</span>
-                                <p className="font-mono text-slate-800 mt-1 text-xs break-all">{appointment.patientId}</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
+                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Patient ID</span>
+                                <p className="font-mono text-slate-800 mt-2 text-sm font-semibold break-all">{appointment.patientId}</p>
                               </div>
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold">Full Name</span>
-                                <p className="text-slate-900 mt-1 font-semibold">{appointment.patientName}</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
+                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Full Name</span>
+                                <p className="text-slate-900 mt-2 text-base font-bold">{appointment.patientName}</p>
                               </div>
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold">Email</span>
-                                <p className="text-slate-900 mt-1">{appointment.patientEmail}</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
+                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Email</span>
+                                <p className="text-slate-900 mt-2">{appointment.patientEmail}</p>
                               </div>
                               {appointment.patientPhone && (
-                                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                  <span className="text-slate-500 text-xs font-semibold">Phone</span>
-                                  <p className="text-slate-900 mt-1 font-semibold">{appointment.patientPhone}</p>
+                                <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
+                                  <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Phone</span>
+                                  <p className="text-slate-900 mt-2 font-semibold text-base">{appointment.patientPhone}</p>
                                 </div>
                               )}
                               <div className="grid grid-cols-2 gap-3">
                                 {appointment.patientGender && (
-                                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                    <span className="text-slate-500 text-xs font-semibold">Gender</span>
-                                    <p className="text-slate-900 mt-1 font-semibold">{appointment.patientGender}</p>
+                                  <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2.5 border border-emerald-100/50 hover:shadow-md transition-all">
+                                    <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wide">Gender</span>
+                                    <p className="text-slate-900 mt-1 font-semibold text-sm">{appointment.patientGender}</p>
                                   </div>
                                 )}
                                 {appointment.patientBloodGroup && (
-                                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                    <span className="text-slate-500 text-xs font-semibold">Blood Group</span>
-                                    <p className="text-slate-900 mt-1 font-bold text-lg">{appointment.patientBloodGroup}</p>
+                                  <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-lg p-2.5 border-2 border-red-200 hover:shadow-md transition-all">
+                                    <span className="text-red-600 text-[10px] font-bold uppercase tracking-wide">Blood Group</span>
+                                    <p className="text-red-700 mt-1 font-bold text-base">{appointment.patientBloodGroup}</p>
                                   </div>
                                 )}
                             {appointment.patientHeightCm != null && (
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold">Height</span>
-                                <p className="text-slate-900 mt-1 font-semibold">{appointment.patientHeightCm} cm</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
+                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Height</span>
+                                <p className="text-slate-900 mt-2 font-semibold text-base">{appointment.patientHeightCm} cm</p>
                               </div>
                             )}
                             {appointment.patientWeightKg != null && (
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold">Weight</span>
-                                <p className="text-slate-900 mt-1 font-semibold">{appointment.patientWeightKg} kg</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
+                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Weight</span>
+                                <p className="text-slate-900 mt-2 font-semibold text-base">{appointment.patientWeightKg} kg</p>
                               </div>
                             )}
                               </div>
                               {appointment.patientDateOfBirth && (
-                                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                  <span className="text-slate-600 text-xs font-semibold uppercase">Date of Birth</span>
-                                  <p className="text-slate-900 mt-1 font-semibold">
+                                <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
+                                  <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Date of Birth</span>
+                                  <p className="text-slate-900 mt-2 font-semibold text-base">
                                     {new Date(appointment.patientDateOfBirth).toLocaleDateString()}
-                                    <span className="text-slate-500 text-xs ml-2">
+                                    <span className="text-emerald-600 text-sm ml-2 font-medium">
                                       {(() => {
                                         const age = calculateAge(appointment.patientDateOfBirth)
                                         return age !== null ? `(Age: ${age} years)` : '(Age: N/A)'
@@ -2023,40 +2045,44 @@ export default function DoctorAppointments() {
                         <div className="space-y-4">
                           {/* Social & Lifestyle Information */}
                           {(appointment.patientDrinkingHabits || appointment.patientSmokingHabits || appointment.patientVegetarian) && (
-                            <div className="bg-white rounded-xl p-5 border-2 border-slate-200 shadow-sm">
-                              <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-base pb-3 border-b border-slate-200">
-                                <span className="text-xl">🌱</span>
-                                <span>Lifestyle</span>
-                              </h4>
+                            <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
+                              <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-emerald-400 flex items-center justify-center text-white shadow-md">
+                                  <span className="text-xl">🌱</span>
+                                </div>
+                                <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                                  Lifestyle
+                                </h4>
+                              </div>
                               <div className="space-y-3 text-sm">
                                 {appointment.patientDrinkingHabits && (
-                                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex items-center justify-between">
-                                    <span className="text-slate-600 font-medium">Drinking</span>
-                                    <span className="bg-slate-200 px-3 py-1 rounded-full text-slate-800 font-semibold capitalize text-xs">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
+                                    <span className="text-emerald-700 font-semibold">Drinking</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold capitalize text-xs shadow-sm">
                                       {appointment.patientDrinkingHabits}
                                     </span>
                                   </div>
                                 )}
                                 {appointment.patientSmokingHabits && (
-                                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex items-center justify-between">
-                                    <span className="text-slate-600 font-medium">Smoking</span>
-                                    <span className="bg-slate-200 px-3 py-1 rounded-full text-slate-800 font-semibold capitalize text-xs">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
+                                    <span className="text-emerald-700 font-semibold">Smoking</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold capitalize text-xs shadow-sm">
                                       {appointment.patientSmokingHabits}
                                     </span>
                                   </div>
                                 )}
                                 {appointment.patientOccupation && (
-                                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex items-center justify-between">
-                                    <span className="text-slate-600 font-medium">Occupation</span>
-                                    <span className="bg-slate-200 px-3 py-1 rounded-full text-slate-800 font-semibold text-xs">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
+                                    <span className="text-emerald-700 font-semibold">Occupation</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold text-xs shadow-sm">
                                       {appointment.patientOccupation}
                                     </span>
                                   </div>
                                 )}
                                 {appointment.patientVegetarian && (
-                                  <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex items-center justify-between">
-                                    <span className="text-slate-600 font-medium">Diet</span>
-                                    <span className="bg-slate-200 px-3 py-1 rounded-full text-slate-800 font-semibold capitalize text-xs">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
+                                    <span className="text-emerald-700 font-semibold">Diet</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold capitalize text-xs shadow-sm">
                                       {appointment.patientVegetarian}
                                     </span>
                                   </div>
@@ -2066,23 +2092,27 @@ export default function DoctorAppointments() {
                           )}
 
                           {/* Appointment Details */}
-                          <div className="bg-white rounded-xl p-5 border-2 border-slate-200 shadow-sm">
-                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-base pb-3 border-b border-slate-200">
-                              <span className="text-xl">📅</span>
-                              <span>Appointment Details</span>
-                            </h4>
+                          <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
+                            <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white shadow-md">
+                                <span className="text-xl">📅</span>
+                              </div>
+                              <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                                Appointment Details
+                              </h4>
+                            </div>
                             <div className="space-y-3 text-sm">
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold">Date</span>
-                                <p className="text-slate-900 mt-1 font-bold">{new Date(appointment.appointmentDate).toLocaleDateString('en-US', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</p>
+                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-xl p-4 border border-blue-100/50 hover:shadow-md transition-all">
+                                <span className="text-blue-600 text-xs font-bold uppercase tracking-wide">Date</span>
+                                <p className="text-slate-900 mt-2 font-bold text-base">{new Date(appointment.appointmentDate).toLocaleDateString('en-US', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</p>
                               </div>
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold">Time</span>
-                                <p className="text-slate-900 mt-1 font-bold text-lg">{appointment.appointmentTime}</p>
+                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-xl p-4 border border-blue-100/50 hover:shadow-md transition-all">
+                                <span className="text-blue-600 text-xs font-bold uppercase tracking-wide">Time</span>
+                                <p className="text-slate-900 mt-2 font-bold text-xl">{appointment.appointmentTime}</p>
                               </div>
-                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold mb-2 block">Status</span>
-                                <span className={`px-4 py-2 rounded-lg text-sm font-bold inline-block ${getStatusColor(appointment.status)}`}>
+                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-xl p-4 border border-blue-100/50 hover:shadow-md transition-all">
+                                <span className="text-blue-600 text-xs font-bold uppercase tracking-wide mb-2 block">Status</span>
+                                <span className={`px-4 py-2 rounded-lg text-sm font-bold inline-block shadow-sm ${getStatusColor(appointment.status)}`}>
                                   {appointment.status === "confirmed" ? "✓ Confirmed" : 
                                    appointment.status === "completed" ? "✓ Completed" : 
                                    appointment.status}
@@ -2096,64 +2126,80 @@ export default function DoctorAppointments() {
                       {/* Bottom Section: Medical Info + AI Diagnosis (Full Width) */}
                       <div className="space-y-6">
                         {/* Medical Information */}
-                        <div className="bg-white rounded-xl p-5 border-2 border-slate-200 shadow-sm">
-                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-base pb-3 border-b border-slate-200">
-                              <span className="text-xl">🩺</span>
-                              <span>Medical Information</span>
-                            </h4>
-                            <div className="space-y-3 text-sm">
-                              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Chief Complaint</span>
-                                <p className="text-slate-900 font-medium leading-relaxed">
+                        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
+                            <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white shadow-md">
+                                <span className="text-xl">🩺</span>
+                              </div>
+                              <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                                Medical Information
+                              </h4>
+                            </div>
+                            <div className="space-y-4 text-sm">
+                              <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
+                                <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
+                                  <span className="text-base">📋</span> Chief Complaint
+                                </span>
+                                <p className="text-slate-900 font-semibold text-base leading-relaxed">
                                   {appointment.chiefComplaint || "No chief complaint provided"}
                                 </p>
                               </div>
                               {appointment.patientAdditionalConcern && (
-                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Additional Details</span>
-                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
+                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
+                                    <span className="text-base">➕</span> Additional Details
+                                  </span>
+                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
                                     {appointment.patientAdditionalConcern}
                                   </p>
                                 </div>
                               )}
                               {appointment.medicalHistory && (
-                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Medical History</span>
-                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
+                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
+                                    <span className="text-base">📜</span> Medical History
+                                  </span>
+                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
                                     {appointment.medicalHistory}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientAllergies && (
-                                <div className="bg-red-50 rounded-lg p-4 border-2 border-red-400">
-                                  <span className="text-red-700 text-xs font-bold uppercase mb-2 block flex items-center gap-1">
-                                    <span>⚠️</span> ALLERGIES - DO NOT PRESCRIBE
+                                <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-5 border-2 border-red-300 shadow-lg hover:shadow-xl transition-all animate-pulse">
+                                  <span className="text-red-700 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
+                                    <span className="text-xl">⚠️</span> ALLERGIES - DO NOT PRESCRIBE
                                   </span>
-                                  <p className="text-red-900 font-bold leading-relaxed">
+                                  <p className="text-red-900 font-bold text-base leading-relaxed">
                                     {appointment.patientAllergies}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientCurrentMedications && (
-                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Current Medications</span>
-                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
+                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
+                                    <span className="text-base">💊</span> Current Medications
+                                  </span>
+                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
                                     {appointment.patientCurrentMedications}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientFamilyHistory && (
-                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Family History</span>
-                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
+                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
+                                    <span className="text-base">👨‍👩‍👧</span> Family History
+                                  </span>
+                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
                                     {appointment.patientFamilyHistory}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientPregnancyStatus && (
-                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                  <span className="text-slate-500 text-xs font-semibold uppercase mb-2 block">Pregnancy Status</span>
-                                  <p className="text-slate-900 font-medium leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
+                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
+                                    <span className="text-base">🤰</span> Pregnancy Status
+                                  </span>
+                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
                                     {appointment.patientPregnancyStatus}
                                   </p>
                                 </div>
@@ -2163,18 +2209,27 @@ export default function DoctorAppointments() {
 
                           {/* AI Diagnosis Button - Only show if not already generated */}
                           {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (
-                            <div className="bg-white rounded-xl p-5 border-2 border-slate-300 shadow-sm">
-                              <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2 text-base">
-                                <span className="text-2xl">🤖</span>
-                                <span>AI Diagnostic Assistant</span>
-                            </h4>
-                              <p className="text-xs text-slate-600 mb-4">
+                            <div className="bg-gradient-to-br from-indigo-50/80 to-purple-50/60 rounded-2xl p-6 border-2 border-indigo-200/50 shadow-lg hover:shadow-xl transition-all">
+                              <div className="flex items-center gap-3 mb-4">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
+                                  <span className="text-2xl">🤖</span>
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                                    AI Diagnostic Assistant
+                                  </h4>
+                                  <p className="text-xs text-slate-600 mt-1">
+                                    Powered by Groq Llama 3.3 70B
+                                  </p>
+                                </div>
+                              </div>
+                              <p className="text-sm text-slate-700 mb-5 leading-relaxed">
                                 Get AI-powered diagnosis suggestions using patient&apos;s symptoms and medical history
                               </p>
                               <button
                                 onClick={() => getAIDiagnosisSuggestion(appointment)}
                                 disabled={loadingAiDiagnosis[appointment.id]}
-                                className="w-full px-4 py-2.5 bg-slate-900 text-white rounded-md hover:bg-black transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm"
+                                className="w-full px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
                               >
                                 {loadingAiDiagnosis[appointment.id] ? (
                                   <>
@@ -2317,15 +2372,29 @@ export default function DoctorAppointments() {
                                     >
                                       <span>🔄</span> Regenerate
                                     </button>
-                              {appointment.status === "confirmed" && (
-                                      <button
-                                        onClick={() => toggleCompletionForm(appointment.id)}
-                                        disabled={updating[appointment.id] || false}
-                                        className="px-3 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm"
-                                      >
-                                        <span>✓</span> Complete Checkup
-                                      </button>
-                              )}
+                              {appointment.status === "confirmed" && (() => {
+                                const appointmentDate = new Date(appointment.appointmentDate)
+                                const today = new Date()
+                                today.setHours(0, 0, 0, 0)
+                                appointmentDate.setHours(0, 0, 0, 0)
+                                const isToday = appointmentDate.getTime() === today.getTime()
+                                const isFutureAppointment = appointmentDate > today
+                                
+                                return (
+                                  <button
+                                    onClick={() => toggleCompletionForm(appointment.id)}
+                                    disabled={updating[appointment.id] || isFutureAppointment}
+                                    className={`px-3 py-2 rounded-md transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm ${
+                                      isFutureAppointment
+                                        ? 'bg-gray-400 text-white cursor-not-allowed'
+                                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                    }`}
+                                    title={isFutureAppointment ? "Can only complete today's appointments" : ""}
+                                  >
+                                    <span>✓</span> Complete Checkup
+                                  </button>
+                                )
+                              })()}
                                   </div>
                                 </div>
                               </div>
@@ -2505,7 +2574,17 @@ export default function DoctorAppointments() {
                           )}
 
                           {/* Complete Checkup Form Accordion */}
-                          {showCompletionForm[appointment.id] && appointment.status === "confirmed" && (
+                          {showCompletionForm[appointment.id] && appointment.status === "confirmed" && (() => {
+                            const appointmentDate = new Date(appointment.appointmentDate)
+                            const today = new Date()
+                            today.setHours(0, 0, 0, 0)
+                            appointmentDate.setHours(0, 0, 0, 0)
+                            const isToday = appointmentDate.getTime() === today.getTime()
+                            const isFutureAppointment = appointmentDate > today
+                            
+                            // Only render form for today's appointments
+                            return isToday && !isFutureAppointment
+                          })() && (
                             <div className="mt-3 bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
                               <div className="bg-slate-50 border-b border-slate-200 px-3 py-2">
                                 <div className="flex items-center justify-between">
@@ -2964,16 +3043,33 @@ export default function DoctorAppointments() {
                                 </div>
 
                                 <div className="flex gap-2 pt-2">
-                                  <button
-                                    type="submit"
-                                    disabled={
-                                      updating[appointment.id] ||
-                                      !hasValidPrescriptionInput(completionData[appointment.id])
-                                    }
-                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {updating[appointment.id] ? "Completing..." : "Complete Checkup"}
-                                  </button>
+                                  {(() => {
+                                    const appointmentDate = new Date(appointment.appointmentDate)
+                                    const today = new Date()
+                                    today.setHours(0, 0, 0, 0)
+                                    appointmentDate.setHours(0, 0, 0, 0)
+                                    const isToday = appointmentDate.getTime() === today.getTime()
+                                    const isFutureAppointment = appointmentDate > today
+                                    
+                                    return (
+                                      <button
+                                        type="submit"
+                                        disabled={
+                                          updating[appointment.id] ||
+                                          !hasValidPrescriptionInput(completionData[appointment.id]) ||
+                                          isFutureAppointment
+                                        }
+                                        className={`flex-1 py-2 rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                                          isFutureAppointment
+                                            ? 'bg-gray-400 text-white cursor-not-allowed'
+                                            : 'bg-green-600 hover:bg-green-700 text-white'
+                                        }`}
+                                        title={isFutureAppointment ? "Can only complete today's appointments" : ""}
+                                      >
+                                        {updating[appointment.id] ? "Completing..." : "Complete Checkup"}
+                                      </button>
+                                    )
+                                  })()}
                                   <button
                                     type="button"
                                     onClick={() => openAdmitDialog(appointment)}
@@ -3080,7 +3176,8 @@ export default function DoctorAppointments() {
                           )}
                       </div>
                     </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -3098,6 +3195,7 @@ export default function DoctorAppointments() {
               className="mt-4 rounded-xl"
             />
           )}
+          </div>
         </div>
       </main>
 

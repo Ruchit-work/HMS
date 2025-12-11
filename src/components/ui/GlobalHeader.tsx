@@ -225,24 +225,31 @@ export default function GlobalHeader() {
           <nav className="hidden lg:flex items-center gap-4 xl:gap-6">
             {navLinks.map((link) => (
               <div key={link.href} className="relative">
-                <Link 
-                  href={link.href} 
-                  className={`text-sm font-medium transition-colors whitespace-nowrap ${
-                    pathname === link.href 
-                      ? 'text-slate-800 border-b-2 border-slate-800' 
-                      : 'text-slate-600 hover:text-slate-800'
+                <Link
+                  href={link.href}
+                  className={`text-sm font-medium transition-colors whitespace-nowrap relative pb-1 ${
+                    pathname === link.href
+                      ? "text-slate-800"
+                      : "text-slate-600 hover:text-slate-800"
                   }`}
                 >
                   {link.label}
+                  {/* Active underline */}
+                  {pathname === link.href && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-800"></span>
+                  )}
                 </Link>
-                {link.showBadge && isDoctor && appointmentsBadge.displayCount > 0 && (
-                  <NotificationBadge 
-                    count={appointmentsBadge.displayCount} 
-                    size="sm" 
-                    position="top-right"
-                    className="translate-x-2 -translate-y-1"
-                  />
-                )}
+                {/* Notification badge only for doctor */}
+                {link.showBadge &&
+                  isDoctor &&
+                  appointmentsBadge.displayCount > 0 && (
+                    <NotificationBadge
+                      count={appointmentsBadge.displayCount}
+                      size="sm"
+                      position="top-right"
+                      className="translate-x-2 -translate-y-1"
+                    />
+                  )}
               </div>
             ))}
           </nav>
@@ -252,7 +259,7 @@ export default function GlobalHeader() {
             {/* Mobile Menu Button */}
             <button
               onClick={() => setShowMobileMenu(!showMobileMenu)}
-              className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-all duration-300 hover:scale-105 active:scale-95"
+              className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
               aria-label={showMobileMenu ? "Close menu" : "Open menu"}
               data-mobile-menu-button
             >
@@ -292,7 +299,7 @@ export default function GlobalHeader() {
               <button
                 type="button"
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg border border-slate-200 hover:bg-slate-200 hover:text-slate-900 transition-all duration-300 hover:scale-105 active:scale-95"
+                className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg border border-slate-200 hover:bg-slate-200 hover:text-slate-900 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -342,37 +349,39 @@ export default function GlobalHeader() {
       </div>
 
       {/* Mobile Navigation Menu */}
+      {/* MOBILE MENU */}
       {showMobileMenu && (
-        <div 
+        <div
           ref={mobileMenuRef}
-          className="lg:hidden border-t border-slate-200 bg-white shadow-lg animate-slide-down overflow-hidden"
+          className="lg:hidden absolute top-full left-0 right-0 bg-white border-b border-slate-200 shadow-md py-4 px-4 z-40"
         >
-          <nav className="max-w-7xl mx-auto px-3 sm:px-4 py-4 space-y-1">
-            {navLinks.map((link, index) => (
-              <div key={link.href} className="relative">
-                <Link
-                  href={link.href}
-                  onClick={handleNavClick}
-                  className={`block px-4 py-3 rounded-lg font-medium transition-all duration-300 hover:scale-[1.02] hover:shadow-sm animate-slide-in-right ${
-                    pathname === link.href
-                      ? 'bg-slate-100 text-slate-900 shadow-sm'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
+          <div className="flex flex-col gap-2">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={handleNavClick}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  pathname === link.href
+                    ? "bg-slate-100 text-slate-900"
+                    : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center justify-between">
                   {link.label}
-                </Link>
-                {link.showBadge && isDoctor && appointmentsBadge.displayCount > 0 && (
-                  <NotificationBadge 
-                    count={appointmentsBadge.displayCount} 
-                    size="sm" 
-                    position="top-right"
-                    className="translate-x-2 -translate-y-1"
-                  />
-                )}
-              </div>
+                  {link.showBadge &&
+                    isDoctor &&
+                    appointmentsBadge.displayCount > 0 && (
+                      <NotificationBadge
+                        count={appointmentsBadge.displayCount}
+                        size="sm"
+                        position="top-right"
+                      />
+                    )}
+                </div>
+              </Link>
             ))}
-          </nav>
+          </div>
         </div>
       )}
     </header>

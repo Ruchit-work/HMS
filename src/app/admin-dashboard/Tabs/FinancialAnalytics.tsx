@@ -111,6 +111,28 @@ interface FinancialAnalytics {
     daysOverdue: number
     type: string
   }>
+  
+  // Revenue Prediction & Analysis
+  nextMonthPrediction: {
+    predictedRevenue: number
+    confidence: 'high' | 'medium' | 'low'
+    trend: 'increasing' | 'decreasing' | 'stable'
+    percentageChange: number
+  }
+  seasonalRevenueChanges: {
+    season: string
+    averageRevenue: number
+    percentageChange: number
+    trend: 'up' | 'down' | 'stable'
+  }[]
+  revenueAnomalies: Array<{
+    month: string
+    revenue: number
+    type: 'spike' | 'drop'
+    percentageChange: number
+    previousMonth: number
+    reason?: string
+  }>
 }
 
 export default function FinancialAnalytics() {
@@ -395,6 +417,168 @@ export default function FinancialAnalytics() {
         })
       }
 
+      // Predict next month revenue using past 6 months
+      const last6Months = monthlyTrends.slice(-6)
+      let nextMonthPrediction = {
+        predictedRevenue: 0,
+        confidence: 'low' as 'high' | 'medium' | 'low',
+        trend: 'stable' as 'increasing' | 'decreasing' | 'stable',
+        percentageChange: 0
+      }
+
+      if (last6Months.length >= 3) {
+        // Calculate average of last 6 months
+        const avgRevenue = last6Months.reduce((sum, m) => sum + m.revenue, 0) / last6Months.length
+        
+        // Calculate trend (simple linear regression)
+        const revenues = last6Months.map(m => m.revenue)
+        const n = revenues.length
+        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0
+        revenues.forEach((y, i) => {
+          const x = i + 1
+          sumX += x
+          sumY += y
+          sumXY += x * y
+          sumX2 += x * x
+        })
+        
+        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)
+        const intercept = (sumY - slope * sumX) / n
+        
+        // Predict next month (x = n + 1)
+        const predictedRevenue = slope * (n + 1) + intercept
+        
+        // Determine trend
+        const trend = slope > 0 ? 'increasing' : slope < 0 ? 'decreasing' : 'stable'
+        
+        // Calculate percentage change from last month
+        const lastMonthRevenue = revenues[revenues.length - 1]
+        const percentageChange = lastMonthRevenue > 0 
+          ? ((predictedRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 
+          : 0
+        
+        // Determine confidence based on data consistency
+        const variance = revenues.reduce((sum, r) => sum + Math.pow(r - avgRevenue, 2), 0) / n
+        const stdDev = Math.sqrt(variance)
+        const coefficientOfVariation = avgRevenue > 0 ? (stdDev / avgRevenue) * 100 : 100
+        
+        let confidence: 'high' | 'medium' | 'low' = 'low'
+        if (coefficientOfVariation < 20) confidence = 'high'
+        else if (coefficientOfVariation < 40) confidence = 'medium'
+        
+        nextMonthPrediction = {
+          predictedRevenue: Math.max(0, Math.round(predictedRevenue)),
+          confidence,
+          trend,
+          percentageChange: Math.round(percentageChange * 10) / 10
+        }
+      }
+
+      // Seasonal revenue changes
+      const getSeason = (date: Date): string => {
+        const month = date.getMonth() + 1
+        if (month >= 12 || month <= 2) return 'Winter'
+        if (month >= 3 && month <= 5) return 'Spring'
+        if (month >= 6 && month <= 8) return 'Summer'
+        return 'Fall'
+      }
+
+      const seasonalData: Record<string, number[]> = {
+        'Winter': [],
+        'Spring': [],
+        'Summer': [],
+        'Fall': []
+      }
+
+      // Recalculate dates for seasonal analysis (more reliable than parsing strings)
+      for (let i = 11; i >= 0; i--) {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const season = getSeason(monthDate)
+        const trendIndex = 11 - i
+        if (monthlyTrends[trendIndex]) {
+          seasonalData[season].push(monthlyTrends[trendIndex].revenue)
+        }
+      }
+
+      const seasonalRevenueChanges = Object.entries(seasonalData)
+        .map(([season, revenues]) => {
+          if (revenues.length === 0) return null
+          const averageRevenue = revenues.reduce((sum, r) => sum + r, 0) / revenues.length
+          
+          // Calculate trend (compare first half vs second half)
+          const mid = Math.floor(revenues.length / 2)
+          const firstHalf = revenues.slice(0, mid)
+          const secondHalf = revenues.slice(mid)
+          const firstHalfAvg = firstHalf.length > 0 
+            ? firstHalf.reduce((sum, r) => sum + r, 0) / firstHalf.length 
+            : averageRevenue
+          const secondHalfAvg = secondHalf.length > 0 
+            ? secondHalf.reduce((sum, r) => sum + r, 0) / secondHalf.length 
+            : averageRevenue
+          
+          const percentageChange = firstHalfAvg > 0 
+            ? ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100 
+            : 0
+          
+          const trend: 'up' | 'down' | 'stable' = 
+            percentageChange > 5 ? 'up' : 
+            percentageChange < -5 ? 'down' : 
+            'stable'
+          
+          return {
+            season,
+            averageRevenue: Math.round(averageRevenue),
+            percentageChange: Math.round(percentageChange * 10) / 10,
+            trend
+          }
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+
+      // Identify revenue drops or growth spikes
+      const revenueAnomalies: Array<{
+        month: string
+        revenue: number
+        type: 'spike' | 'drop'
+        percentageChange: number
+        previousMonth: number
+        reason?: string
+      }> = []
+
+      for (let i = 1; i < monthlyTrends.length; i++) {
+        const current = monthlyTrends[i]
+        const previous = monthlyTrends[i - 1]
+        
+        if (previous.revenue > 0) {
+          const percentageChange = ((current.revenue - previous.revenue) / previous.revenue) * 100
+          
+          // Identify significant changes (>20% increase or decrease)
+          if (Math.abs(percentageChange) > 20) {
+            const type: 'spike' | 'drop' = percentageChange > 0 ? 'spike' : 'drop'
+            
+            // Determine potential reason based on magnitude
+            let reason: string | undefined
+            if (type === 'spike' && percentageChange > 50) {
+              reason = 'Major growth - possible campaign success or seasonal peak'
+            } else if (type === 'spike' && percentageChange > 30) {
+              reason = 'Significant growth - new doctor or service launch'
+            } else if (type === 'drop' && percentageChange < -50) {
+              reason = 'Major decline - investigate operational issues'
+            } else if (type === 'drop' && percentageChange < -30) {
+              reason = 'Significant decline - check for service disruptions'
+            }
+            
+            revenueAnomalies.push({
+              month: current.month,
+              revenue: current.revenue,
+              type,
+              percentageChange: Math.round(percentageChange * 10) / 10,
+              previousMonth: previous.revenue,
+              reason
+            })
+          }
+        }
+      }
+
       // Top transactions - avoid duplicates by excluding appointments that have billing records
       const appointmentIdsWithBilling = new Set(
         filteredBillingRecords
@@ -463,7 +647,10 @@ export default function FinancialAnalytics() {
         revenueBySpecialty,
         monthlyTrends,
         topTransactions: allTransactions,
-        outstandingPayments
+        outstandingPayments,
+        nextMonthPrediction,
+        seasonalRevenueChanges,
+        revenueAnomalies
       })
     } catch (error) {
       console.error('Error fetching financial analytics:', error)
@@ -609,25 +796,25 @@ export default function FinancialAnalytics() {
       {/* Charts and Detailed Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Revenue Trend */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Monthly Revenue Trend</h3>
-          <div className="space-y-4">
+        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-3">Monthly Revenue Trend</h3>
+          <div className="space-y-2 max-h-96 overflow-y-auto hide-scrollbar">
             {analytics.monthlyTrends.map((month, idx) => (
-              <div key={idx}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-slate-700">{month.month}</span>
-                  <span className="text-sm font-semibold text-slate-900">
+              <div key={idx} className="pb-2 border-b border-slate-100 last:border-b-0 last:pb-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-slate-700">{month.month}</span>
+                  <span className="text-xs font-semibold text-slate-900">
                     ₹{month.revenue.toLocaleString('en-IN')}
                   </span>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div 
-                    className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all"
+                    className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all"
                     style={{ width: `${(month.revenue / maxMonthlyRevenue) * 100}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-slate-500">{month.transactions} transactions</span>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-xs text-slate-500">{month.transactions} txns</span>
                   {month.pending > 0 && (
                     <span className="text-xs text-red-600">₹{month.pending.toLocaleString('en-IN')} pending</span>
                   )}
@@ -812,6 +999,243 @@ export default function FinancialAnalytics() {
           </div>
         </div>
       )}
+
+      {/* Revenue Prediction & Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Next Month Revenue Prediction */}
+        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">Next Month Prediction</h3>
+              <p className="text-xs text-slate-600 mt-1">Based on past 6 months</p>
+            </div>
+            <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-1">Predicted Revenue</p>
+              <p className="text-3xl font-bold text-indigo-900">
+                ₹{analytics.nextMonthPrediction.predictedRevenue.toLocaleString('en-IN')}
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">Trend:</span>
+              <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                analytics.nextMonthPrediction.trend === 'increasing' 
+                  ? 'bg-green-100 text-green-700' 
+                  : analytics.nextMonthPrediction.trend === 'decreasing'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-slate-100 text-slate-700'
+              }`}>
+                {analytics.nextMonthPrediction.trend === 'increasing' ? '📈 Increasing' :
+                 analytics.nextMonthPrediction.trend === 'decreasing' ? '📉 Decreasing' :
+                 '➡️ Stable'}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">Change:</span>
+              <span className={`text-sm font-bold ${
+                analytics.nextMonthPrediction.percentageChange > 0 
+                  ? 'text-green-600' 
+                  : analytics.nextMonthPrediction.percentageChange < 0
+                  ? 'text-red-600'
+                  : 'text-slate-600'
+              }`}>
+                {analytics.nextMonthPrediction.percentageChange > 0 ? '+' : ''}
+                {analytics.nextMonthPrediction.percentageChange.toFixed(1)}%
+              </span>
+            </div>
+            
+            <div className="pt-3 border-t border-slate-200">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-600">Confidence:</span>
+                <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                  analytics.nextMonthPrediction.confidence === 'high'
+                    ? 'bg-green-100 text-green-700'
+                    : analytics.nextMonthPrediction.confidence === 'medium'
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-red-100 text-red-700'
+                }`}>
+                  {analytics.nextMonthPrediction.confidence === 'high' ? '🔵 High' :
+                   analytics.nextMonthPrediction.confidence === 'medium' ? '🟡 Medium' :
+                   '🔴 Low'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Seasonal Revenue Changes */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">Seasonal Revenue</h3>
+              <p className="text-xs text-slate-600 mt-1">Revenue by season</p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-rose-100 to-rose-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            {analytics.seasonalRevenueChanges.length > 0 ? (
+              analytics.seasonalRevenueChanges.map((season, idx) => {
+                const seasonEmoji: Record<string, string> = {
+                  'Winter': '❄️',
+                  'Spring': '🌸',
+                  'Summer': '☀️',
+                  'Fall': '🍂'
+                }
+                
+                const seasonColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+                  'Winter': {
+                    bg: 'from-blue-50 to-cyan-50',
+                    border: 'border-blue-200',
+                    text: 'text-blue-700',
+                    accent: 'bg-blue-500'
+                  },
+                  'Spring': {
+                    bg: 'from-green-50 to-emerald-50',
+                    border: 'border-green-200',
+                    text: 'text-green-700',
+                    accent: 'bg-green-500'
+                  },
+                  'Summer': {
+                    bg: 'from-orange-50 to-amber-50',
+                    border: 'border-orange-200',
+                    text: 'text-orange-700',
+                    accent: 'bg-orange-500'
+                  },
+                  'Fall': {
+                    bg: 'from-amber-50 to-yellow-50',
+                    border: 'border-amber-200',
+                    text: 'text-amber-700',
+                    accent: 'bg-amber-500'
+                  }
+                }
+                
+                const colors = seasonColors[season.season] || seasonColors['Winter']
+                
+                return (
+                  <div
+                    key={season.season}
+                    className={`bg-gradient-to-br ${colors.bg} rounded-lg p-4 border ${colors.border}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{seasonEmoji[season.season] || '📅'}</span>
+                        <span className={`text-sm font-bold ${colors.text}`}>{season.season}</span>
+                      </div>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        season.trend === 'up' ? 'bg-green-100 text-green-700' :
+                        season.trend === 'down' ? 'bg-red-100 text-red-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        {season.trend === 'up' ? '↑' : season.trend === 'down' ? '↓' : '→'}
+                        {Math.abs(season.percentageChange).toFixed(1)}%
+                      </span>
+                    </div>
+                    <p className="text-lg font-bold text-slate-900 mb-2">
+                      ₹{season.averageRevenue.toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-xs text-slate-600">Average revenue</p>
+                  </div>
+                )
+              })
+            ) : (
+              <p className="text-xs text-slate-500 italic text-center py-4">No seasonal data available</p>
+            )}
+          </div>
+        </div>
+
+        {/* Revenue Anomalies */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">Revenue Anomalies</h3>
+              <p className="text-xs text-slate-600 mt-1">Drops & growth spikes</p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-orange-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            {analytics.revenueAnomalies.length > 0 ? (
+              analytics.revenueAnomalies.slice(0, 5).map((anomaly, idx) => (
+                <div
+                  key={idx}
+                  className={`rounded-lg p-4 border ${
+                    anomaly.type === 'spike'
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-red-50 border-red-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">
+                          {anomaly.type === 'spike' ? '📈' : '📉'}
+                        </span>
+                        <span className={`text-sm font-bold ${
+                          anomaly.type === 'spike' ? 'text-green-700' : 'text-red-700'
+                        }`}>
+                          {anomaly.type === 'spike' ? 'Growth Spike' : 'Revenue Drop'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-700">{anomaly.month}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                      anomaly.type === 'spike'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {anomaly.percentageChange > 0 ? '+' : ''}
+                      {anomaly.percentageChange.toFixed(1)}%
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">Revenue:</span>
+                      <span className="text-sm font-bold text-slate-900">
+                        ₹{anomaly.revenue.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-600">Previous:</span>
+                      <span className="text-xs text-slate-500">
+                        ₹{anomaly.previousMonth.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    {anomaly.reason && (
+                      <p className="text-xs text-slate-600 mt-2 italic border-t border-slate-200 pt-2">
+                        💡 {anomaly.reason}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-6">
+                <p className="text-xs text-slate-500">No significant anomalies detected</p>
+                <p className="text-xs text-slate-400 mt-1">Revenue changes are within normal range</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

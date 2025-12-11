@@ -633,30 +633,46 @@ export default function DoctorDashboard() {
         {/* Schedule Configuration */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Visiting Hours */}
-          <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                  <span className="text-lg">🕐</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-800">Weekly Schedule</h3>
-                  <p className="text-sm text-slate-500">Configure your availability</p>
-                </div>
-              </div>
-              <button
-                onClick={handleSaveSchedule}
-                disabled={savingSchedule}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {savingSchedule ? "Saving..." : "Save Changes"}
-              </button>
+          <div className="lg:col-span-2 relative bg-white rounded-xl p-6 shadow-sm border border-slate-200 overflow-hidden">
+            {/* Background Pattern */}
+            <div className="absolute inset-0 opacity-5">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-blue-500"></div>
+              <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="schedule-pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <circle cx="20" cy="20" r="1.5" fill="currentColor" className="text-indigo-600" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#schedule-pattern)" />
+              </svg>
             </div>
             
-            <VisitingHoursEditor 
-              value={visitingHours}
-              onChange={setVisitingHours}
-            />
+            {/* Content */}
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
+                    <span className="text-lg">🕐</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-800">Weekly Schedule</h3>
+                    <p className="text-sm text-slate-500">Configure your availability</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSaveSchedule}
+                  disabled={savingSchedule}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingSchedule ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+              
+              <VisitingHoursEditor 
+                value={visitingHours}
+                onChange={setVisitingHours}
+              />
+            </div>
           </div>
 
           {/* Blocked Dates */}
