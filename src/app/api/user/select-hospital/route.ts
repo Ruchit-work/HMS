@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { hospitalId, remember } = await request.json()
+    const { hospitalId } = await request.json()
 
     if (!hospitalId) {
       return NextResponse.json(

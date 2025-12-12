@@ -1,5 +1,5 @@
 import { db } from "@/firebase/config"
-import { doc, updateDoc, getDoc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore"
+import { doc, updateDoc, getDoc, query, where, getDocs, deleteDoc } from "firebase/firestore"
 import { getHospitalCollection } from "@/utils/hospital-queries"
 const SLOT_COLLECTION = "appointmentSlots"
 const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {

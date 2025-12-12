@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { sendTextMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
+import { sendTextMessage } from "@/server/metaWhatsApp"
 
 // MIGRATED TO META WHATSAPP - Twilio code kept for rollback reference
 // Twilio credentials kept in env but not used (for rollback if needed)

@@ -409,12 +409,42 @@ To book an appointment or learn more, please use the options below:`
             console.log(`[auto-campaigns-generate] Starting WhatsApp send for campaign: ${whatsAppCampaignTitle}`)
             
             try {
-              const patientsSnapshot = await db
-                .collection(getHospitalCollectionPath(hospital.id, "patients"))
-                .where("status", "in", ["active"])
-                .get()
-
-              console.log(`[auto-campaigns-generate] Found ${patientsSnapshot.size} active patients for hospital ${hospital.id}`)
+              // Try to get active patients first, but also check for patients without status field
+              let patientsSnapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>
+              try {
+                patientsSnapshot = await db
+                  .collection(getHospitalCollectionPath(hospital.id, "patients"))
+                  .where("status", "in", ["active"])
+                  .get()
+                console.log(`[auto-campaigns-generate] Found ${patientsSnapshot.size} active patients (with status='active') for hospital ${hospital.id}`)
+              } catch (indexError: any) {
+                // If index doesn't exist, try getting all patients and filter
+                console.warn(`[auto-campaigns-generate] Status index query failed, fetching all patients:`, indexError.message)
+                const allPatients = await db
+                  .collection(getHospitalCollectionPath(hospital.id, "patients"))
+                  .get()
+                // Filter for active patients or patients without status (default to active)
+                const filteredDocs = allPatients.docs.filter(doc => {
+                  const data = doc.data()
+                  return !data.status || data.status === "active"
+                })
+                // Create a QuerySnapshot-like object
+                patientsSnapshot = {
+                  size: filteredDocs.length,
+                  forEach: (callback: (doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => void) => {
+                    filteredDocs.forEach((doc) => {
+                      callback(doc)
+                    })
+                  },
+                  docs: filteredDocs,
+                  empty: filteredDocs.length === 0,
+                  query: allPatients.query,
+                  readTime: allPatients.readTime,
+                  docChanges: () => [],
+                  isEqual: allPatients.isEqual.bind(allPatients),
+                } as FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>
+                console.log(`[auto-campaigns-generate] Found ${patientsSnapshot.size} active patients (including those without status field) for hospital ${hospital.id}`)
+              }
 
               patientsSnapshot.forEach((doc) => {
                 const patientData = doc.data()

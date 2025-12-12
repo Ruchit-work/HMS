@@ -171,7 +171,7 @@ export async function GET(request: Request) {
       for (const doc of appointmentsDocs) {
         seenAppointmentIds.add(doc.id)
       }
-    } catch (error: any) {
+    } catch {
       // Final fallback: fetch without orderBy
       try {
         const allAppointmentsSnapshot = await firestore

@@ -7,9 +7,8 @@ import NotificationBadge from "@/components/ui/NotificationBadge"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalQuery, getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
-import { useRouter } from "next/navigation"
 import { ConfirmDialog } from "@/components/ui/Modals"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import Notification from "@/components/ui/Notification"
@@ -109,7 +108,7 @@ export default function AdminDashboard() {
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
   const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
-  const [loadingRefunds, setLoadingRefunds] = useState(false)
+  const [loadingRefunds, _setLoadingRefunds] = useState(false)
   const [newAppointmentsCount, setNewAppointmentsCount] = useState(0)
   const [newPatientsCount, setNewPatientsCount] = useState(0)
   const [pendingBillingCount, setPendingBillingCount] = useState(0)
@@ -151,8 +150,7 @@ export default function AdminDashboard() {
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
-  const { activeHospitalId, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital, activeHospital } = useMultiHospital()
-  const router = useRouter()
+  const { activeHospitalId, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
 
   const fetchDashboardData = async () => {
     if (!user || !activeHospitalId) return
@@ -491,6 +489,7 @@ export default function AdminDashboard() {
         if (cleanup) cleanup()
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId, hospitalLoading])
 
   // Setup real-time listeners for badge counts
@@ -636,7 +635,7 @@ export default function AdminDashboard() {
     }
   }, [isSuperAdmin, activeTab])
 
-  const handleRefresh = async (e?: React.MouseEvent) => {
+  const _handleRefresh = async (e?: React.MouseEvent) => {
     e?.preventDefault()
     e?.stopPropagation()
     await fetchDashboardData()

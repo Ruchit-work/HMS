@@ -81,7 +81,6 @@ export function generateAppointmentConfirmationPDF(appointment: Appointment) {
     pdf.setTextColor(71, 85, 105)
 
     yPos += 14
-    const startY = yPos
     body()
     const endY = yPos + padding
 
@@ -208,7 +207,6 @@ export function generateAppointmentConfirmationPDFBase64(appointment: Appointmen
     pdf.setTextColor(71, 85, 105)
 
     yPos += 14
-    const startY = yPos
     body()
     const endY = yPos + padding
 

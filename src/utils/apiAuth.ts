@@ -155,12 +155,13 @@ interface AuthenticateOptions {
   skipMfaCheck?: boolean
 }
 
-const MFA_REQUIRED_ROLES: UserRole[] = ["admin", "doctor", "receptionist"]
+// const MFA_REQUIRED_ROLES: UserRole[] = ["admin", "doctor", "receptionist"] // Commented out - not currently used
 
 export async function authenticateRequest(
   request: Request,
   requiredRole?: UserRole,
-  options?: AuthenticateOptions
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _options?: AuthenticateOptions
 ): Promise<AuthResult> {
   // Extract token from Authorization header
   const token = extractAuthToken(request)

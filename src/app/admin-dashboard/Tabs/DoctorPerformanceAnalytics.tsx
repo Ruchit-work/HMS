@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { getDocs } from 'firebase/firestore'
-import { db } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/hospital-queries'
@@ -54,6 +53,7 @@ export default function DoctorPerformanceAnalytics() {
   useEffect(() => {
     if (!user || !activeHospitalId) return
     fetchDoctorAnalytics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId, timeRange])
 
   const formatHour12 = (hour: number): string => {

@@ -3,7 +3,7 @@
  * Handles visiting hours, slot generation, and availability checking
  */
 
-import { VisitingHours, DaySchedule, TimeSlot, Appointment, Doctor } from "@/types/patient"
+import { VisitingHours, DaySchedule, Appointment, Doctor } from "@/types/patient"
 
 // Default visiting hours (9 AM - 5 PM with 1-2 PM lunch break)
 export const DEFAULT_VISITING_HOURS: VisitingHours = {

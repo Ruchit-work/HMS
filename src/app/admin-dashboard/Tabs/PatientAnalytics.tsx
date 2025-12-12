@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore'
-import { db } from '@/firebase/config'
+import { useState, useEffect } from 'react'
+import { getDocs } from 'firebase/firestore'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/hospital-queries'
@@ -112,7 +111,7 @@ interface PatientAnalytics {
 
 export default function PatientAnalytics() {
   const { user, loading: authLoading } = useAuth()
-  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { activeHospitalId } = useMultiHospital()
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<PatientAnalytics | null>(null)
   const [timeRange, setTimeRange] = useState<'30days' | '3months' | '6months' | '1year' | 'all'>('1year')
@@ -120,6 +119,7 @@ export default function PatientAnalytics() {
   useEffect(() => {
     if (!user || !activeHospitalId) return
     fetchAnalytics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId, timeRange])
 
   const fetchAnalytics = async () => {
@@ -937,7 +937,7 @@ export default function PatientAnalytics() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {analytics.seasonalDiseaseTrends.map((seasonData, idx) => {
+            {analytics.seasonalDiseaseTrends.map((seasonData) => {
               // Get season color scheme
               const seasonColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
                 'Winter': {
@@ -1080,7 +1080,7 @@ export default function PatientAnalytics() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {analytics.ageWiseDiseaseBreakdown.map((ageData, idx) => {
+            {analytics.ageWiseDiseaseBreakdown.map((ageData) => {
               // Get age group color scheme
               const ageGroupColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
                 '0-17 (Pediatric)': {
@@ -1208,7 +1208,7 @@ export default function PatientAnalytics() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {analytics.genderWiseDiseaseBreakdown.map((genderData, idx) => {
+            {analytics.genderWiseDiseaseBreakdown.map((genderData) => {
               // Get gender color scheme
               const genderColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
                 'Male': {

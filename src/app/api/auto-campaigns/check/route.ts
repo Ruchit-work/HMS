@@ -27,17 +27,31 @@ export async function GET(request: Request) {
       firestoreError?: string
       healthAwarenessDays: boolean
       healthAwarenessDaysError?: string
+      whatsappConfigured: boolean
+      whatsappError?: string
       allOk: boolean
     } = {
       groqApiKey: false,
       firebaseAdmin: false,
       firestoreAccess: false,
       healthAwarenessDays: false,
+      whatsappConfigured: false,
       allOk: false,
     }
 
     // Check GROQ_API_KEY
     diagnostics.groqApiKey = !!process.env.GROQ_API_KEY
+
+    // Check WhatsApp configuration
+    const metaAccessToken = process.env.META_WHATSAPP_ACCESS_TOKEN
+    const metaPhoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID
+    diagnostics.whatsappConfigured = !!(metaAccessToken && metaPhoneNumberId)
+    if (!diagnostics.whatsappConfigured) {
+      const missing = []
+      if (!metaAccessToken) missing.push("META_WHATSAPP_ACCESS_TOKEN")
+      if (!metaPhoneNumberId) missing.push("META_WHATSAPP_PHONE_NUMBER_ID")
+      diagnostics.whatsappError = `Missing: ${missing.join(", ")}`
+    }
 
     // Check Firebase Admin
     const adminResult = initFirebaseAdmin("auto-campaigns-check API")
@@ -76,7 +90,8 @@ export async function GET(request: Request) {
       diagnostics.groqApiKey &&
       diagnostics.firebaseAdmin &&
       diagnostics.firestoreAccess &&
-      diagnostics.healthAwarenessDays
+      diagnostics.healthAwarenessDays &&
+      diagnostics.whatsappConfigured
 
     return NextResponse.json({
       success: true,
@@ -97,6 +112,9 @@ export async function GET(request: Request) {
         healthAwarenessDays: diagnostics.healthAwarenessDays
           ? "✓ Health awareness days are loaded"
           : `✗ Health awareness days failed: ${diagnostics.healthAwarenessDaysError}`,
+        whatsappConfigured: diagnostics.whatsappConfigured
+          ? "✓ WhatsApp (Meta) is configured"
+          : `✗ WhatsApp not configured: ${diagnostics.whatsappError}. Set META_WHATSAPP_ACCESS_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID in Vercel environment variables`,
       },
     })
   } catch (error: any) {

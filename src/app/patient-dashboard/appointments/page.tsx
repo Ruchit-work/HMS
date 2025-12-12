@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where } from "firebase/firestore"
+import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -10,7 +10,6 @@ import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import { AppointmentsList } from "@/components/patient/AppointmentCard"
 import { CancelAppointmentModal } from "@/components/patient/AppointmentModals"
-import PageHeader from "@/components/ui/PageHeader"
 import PaymentMethodSection, {
   PaymentData as PaymentMethodData,
   PaymentMethodOption,

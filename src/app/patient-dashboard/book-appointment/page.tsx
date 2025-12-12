@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where, onSnapshot, updateDoc, increment } from "firebase/firestore"
+import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -16,7 +16,6 @@ import Footer from "@/components/ui/Footer"
 import { useSearchParams, useRouter } from "next/navigation"
 import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/whatsapp"
 import { isDateBlocked } from "@/utils/blockedDates"
-import { formatAppointmentDateTime } from "@/utils/date"
 
 export default function BookAppointmentPage() {
   return (
@@ -35,7 +34,7 @@ function BookAppointmentContent() {
   const [successAppointmentData, setSuccessAppointmentData] = useState<any>(null)
 
   const { user, loading } = useAuth("patient")
-  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { activeHospitalId } = useMultiHospital()
   const searchParams = useSearchParams()
   const router = useRouter()
  
@@ -74,7 +73,7 @@ function BookAppointmentContent() {
       chiefComplaint?: string
     }) => {
       const fullName = [opts.patientFirstName, opts.patientLastName].filter(Boolean).join(" ") || "there"
-      const friendlyName = opts.patientFirstName || "there"
+      const _friendlyName = opts.patientFirstName || "there"
 
       let doctorLabel = opts.doctorName?.trim() || ""
       if (doctorLabel) {
@@ -160,7 +159,8 @@ See you soon! 🏥`
         ;(maybeUnsubPromise as any)()
       }
     }
-  }, [user])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activeHospitalId])
 
   if (loading) {
     return <LoadingSpinner message="Loading Booking Form..." />

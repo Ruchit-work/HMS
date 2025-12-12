@@ -1,4 +1,4 @@
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest } from "@/utils/apiAuth"
 
 export async function POST(req) {
   try {

@@ -21,7 +21,7 @@ import CampaignCarousel from "@/components/patient/CampaignCarousel"
 
 export default function PatientDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [, setDoctors] = useState<Doctor[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [notification, setNotification] = useState<NotificationData | null>(null)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -114,7 +114,7 @@ export default function PatientDashboard() {
 
 
   // Open cancel confirmation modal
-  const openCancelModal = (appointment: Appointment) => {
+  const _openCancelModal = (appointment: Appointment) => {
     setAppointmentToCancel(appointment)
     setShowCancelModal(true)
   }
@@ -166,8 +166,8 @@ export default function PatientDashboard() {
       return dateA - dateB // Earlier appointments first
     })
   
-  const completedAppointments = appointments.filter(apt => String(apt.status || "").toLowerCase() === "completed")
-  const upcomingAppointments = activeAppointments
+  const _completedAppointments = appointments.filter(apt => String(apt.status || "").toLowerCase() === "completed")
+  const _upcomingAppointments = activeAppointments
     .filter(apt => new Date(`${apt.appointmentDate} ${apt.appointmentTime}`).getTime() > Date.now())
     .length
   const awaitingReschedule = appointments.filter(

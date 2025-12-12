@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Campaign, getContentPreview, getPlainText, shouldTruncate } from "@/utils/campaigns"
+import { Campaign, getContentPreview, shouldTruncate } from "@/utils/campaigns"
 import { sanitizeForInnerHTML } from "@/utils/sanitizeHtml"
 
 interface CampaignCarouselProps {
@@ -12,11 +12,10 @@ interface CampaignCarouselProps {
 interface CampaignCardProps {
   campaign: Campaign
   gradient: string
-  index: number
 }
 
 // CampaignCard component - merged into carousel
-function CampaignCard({ campaign, gradient, index }: CampaignCardProps) {
+function CampaignCard({ campaign, gradient }: CampaignCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   
   const isExternal = campaign.ctaHref?.startsWith("http")
@@ -24,7 +23,6 @@ function CampaignCard({ campaign, gradient, index }: CampaignCardProps) {
   
   // Get content preview (first 150 characters)
   const fullContent = campaign.content || ""
-  const plainTextLength = getPlainText(fullContent).length
   const shouldShowTruncate = shouldTruncate(fullContent, 150)
   const displayContent = isExpanded || !shouldShowTruncate 
     ? fullContent 
@@ -201,7 +199,6 @@ export default function CampaignCarousel({ campaigns }: CampaignCarouselProps) {
         <CampaignCard
           campaign={campaigns[0]}
           gradient={gradients[0]}
-          index={0}
         />
       </div>
     )
@@ -235,7 +232,6 @@ export default function CampaignCarousel({ campaigns }: CampaignCarouselProps) {
                 <CampaignCard
                   campaign={campaign}
                   gradient={gradient}
-                  index={index}
                 />
               </div>
             )

@@ -32,7 +32,8 @@ function HospitalSelectionContent() {
     }
 
     loadHospitals()
-  }, [user, authLoading])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading, router])
 
   const loadHospitals = async () => {
     try {

@@ -14,7 +14,6 @@ import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 export default function GlobalHeader() {
   const [user, setUser] = useState<any>(null)
   const [userData, setUserData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
@@ -53,11 +52,10 @@ export default function GlobalHeader() {
         setUserData(null)
         setAppointmentCount(0)
       }
-      setLoading(false)
     })
 
     return () => unsubscribe()
-  }, [])
+  }, [userData])
 
   // Set up real-time appointment listener for doctors
   useEffect(() => {
@@ -160,7 +158,7 @@ export default function GlobalHeader() {
       } else {
         router.replace("/auth/login")
       }
-    } catch (e) {
+    } catch {
       // optional: surface error feedback later
     } finally {
       setLogoutLoading(false)

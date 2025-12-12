@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db, auth } from '@/firebase/config'
+import { useState, useEffect } from 'react'
+import { getDocs } from 'firebase/firestore'
+import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/hospital-queries'
@@ -137,7 +137,7 @@ interface FinancialAnalytics {
 
 export default function FinancialAnalytics() {
   const { user, loading: authLoading } = useAuth()
-  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { activeHospitalId } = useMultiHospital()
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<FinancialAnalytics | null>(null)
   const [timeRange, setTimeRange] = useState<'7days' | '30days' | '3months' | '6months' | '1year' | 'all'>('1year')
@@ -145,6 +145,7 @@ export default function FinancialAnalytics() {
   useEffect(() => {
     if (!user || !activeHospitalId) return
     fetchFinancialAnalytics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId, timeRange])
 
   const fetchFinancialAnalytics = async () => {
@@ -1088,7 +1089,7 @@ export default function FinancialAnalytics() {
           
           <div className="space-y-3">
             {analytics.seasonalRevenueChanges.length > 0 ? (
-              analytics.seasonalRevenueChanges.map((season, idx) => {
+              analytics.seasonalRevenueChanges.map((season) => {
                 const seasonEmoji: Record<string, string> = {
                   'Winter': '❄️',
                   'Spring': '🌸',

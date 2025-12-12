@@ -10,6 +10,7 @@ import {
   setDoc,
   getDoc,
 } from "firebase/firestore";
+import { getHospitalCollection } from "@/utils/hospital-queries";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePublicRoute } from "@/hooks/useAuth";
@@ -19,7 +20,6 @@ import Notification from "@/components/ui/Notification";
 import PatientProfileForm, {
   PatientProfileFormValues,
 } from "@/components/forms/PatientProfileForm";
-import { sendWhatsAppMessage } from "@/utils/whatsapp";
 
 function SignUpContent() {
   const searchParams = useSearchParams();
@@ -49,7 +49,7 @@ function SignUpContent() {
   const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [loadingHospitals, setLoadingHospitals] = useState(false);
-  const [showHospitalSelection, setShowHospitalSelection] = useState(false);
+  const [, setShowHospitalSelection] = useState(false);
 
   const { loading: checking } = usePublicRoute();
 
@@ -193,8 +193,11 @@ function SignUpContent() {
       const patientId = await getNextPatientId();
       const selectedHospital = selectedHospitalId || null;
 
-      // Create patient document
-      await setDoc(doc(db, "patients", user.uid), {
+      if (!selectedHospital) {
+        throw new Error("Hospital selection is required. Please select a hospital.");
+      }
+
+      const patientData = {
         email: values.email,
         status: values.status ?? "active",
         firstName: values.firstName,
@@ -209,8 +212,18 @@ function SignUpContent() {
         patientId,
         hospitalId: selectedHospital, // Store hospital association
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdBy: "self",
-      });
+      };
+
+      // Create patient document in legacy collection (for backward compatibility)
+      await setDoc(doc(db, "patients", user.uid), patientData);
+
+      // ALSO create patient in hospital-scoped subcollection (required for patient list)
+      await setDoc(
+        doc(getHospitalCollection(selectedHospital, "patients"), user.uid),
+        patientData
+      );
 
       // Create/update user document in users collection for multi-hospital support
       const userDocRef = doc(db, "users", user.uid);

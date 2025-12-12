@@ -1,6 +1,6 @@
 'use client'
 import { db, auth } from '@/firebase/config'
-import { getDocs, where, query, collection, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore'
+import { where, query, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
@@ -42,7 +42,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     const [showAddModal, setShowAddModal] = useState(false)
 
     const { user, loading: authLoading } = useAuth()
-    const { activeHospitalId, loading: hospitalLoading, isSuperAdmin } = useMultiHospital()
+    const { activeHospitalId, isSuperAdmin } = useMultiHospital()
 
     const filteredActiveDoctors = useMemo(() => {
         if (!search.trim()) return doctors

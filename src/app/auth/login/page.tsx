@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { signInWithEmailAndPassword, type User } from "firebase/auth"
-import { getDoc, doc, collection, getDocs, setDoc, serverTimestamp } from "firebase/firestore"
+import { getDoc, doc, collection, getDocs, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/StatusComponents"
@@ -28,7 +28,7 @@ function LoginContent() {
   const [otpVerifying, setOtpVerifying] = useState(false)
   const [otpCountdown, setOtpCountdown] = useState(0)
   const [pendingUser, setPendingUser] = useState<User | null>(null)
-  const [pendingRole, setPendingRole] = useState<DashboardRole | null>(null)
+  const [, setPendingRole] = useState<DashboardRole | null>(null)
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
   const [pendingPhone, setPendingPhone] = useState<string>("")
   const router = useRouter()
@@ -320,7 +320,7 @@ function LoginContent() {
     }
   }
 
-  const beginMfaFlow = async (user: User, roleInfo: { role: DashboardRole; data: any; redirect: string }) => {
+  const _beginMfaFlow = async (user: User, roleInfo: { role: DashboardRole; data: any; redirect: string }) => {
     const phone = extractPhoneNumber(roleInfo.data)
     if (!phone) {
       setError(

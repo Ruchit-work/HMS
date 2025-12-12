@@ -1,8 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { auth, db } from "@/firebase/config"
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore"
+import { auth } from "@/firebase/config"
 import PaymentMethodSection, {
   PaymentData as BillingPaymentData,
   PaymentMethodOption as BillingPaymentMethod,

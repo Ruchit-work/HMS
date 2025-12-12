@@ -363,9 +363,9 @@ function ProfileEditForm({
   // Ensure pregnancy status is only applicable for Female
   useEffect(() => {
     if (formData.gender !== "Female" && formData.pregnancyStatus) {
-      setFormData({ ...formData, pregnancyStatus: "" })
+      setFormData(prev => ({ ...prev, pregnancyStatus: "" }))
     }
-  }, [formData.gender])
+  }, [formData.gender, formData.pregnancyStatus])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

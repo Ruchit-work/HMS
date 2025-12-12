@@ -6,9 +6,7 @@
 
 "use client"
 
-import { useState } from "react"
-import { VisitingHours, DaySchedule, TimeSlot } from "@/types/patient"
-import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import { VisitingHours } from "@/types/patient"
 
 interface VisitingHoursEditorProps {
   value: VisitingHours

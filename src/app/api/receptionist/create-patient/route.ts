@@ -45,37 +45,35 @@ export async function POST(request: Request) {
     return createAuthErrorResponse(auth)
   }
   
-  // Only receptionists can create patients (admins cannot)
-  if (!auth.user || auth.user.role !== "receptionist") {
+  // Allow receptionists and regular admins (but not super admins)
+  if (!auth.user || (auth.user.role !== "receptionist" && auth.user.role !== "admin")) {
     return Response.json(
-      { error: "Access denied. Only receptionists can create patients." },
+      { error: "Access denied. Only receptionists and admins can create patients." },
       { status: 403 }
     )
   }
 
   // Check if user is super admin and block them
+  let isSuperAdmin = false
   try {
     const userDoc = await admin.firestore().collection('users').doc(auth.user.uid).get()
     if (userDoc.exists) {
       const userData = userDoc.data()
-      if (userData?.role === 'super_admin') {
-        return Response.json(
-          { error: "Super admins cannot create patients. Please use a regular admin or receptionist account." },
-          { status: 403 }
-        )
-      }
+      isSuperAdmin = userData?.role === 'super_admin'
     } else {
       // Fallback: Check admins collection
       const adminDoc = await admin.firestore().collection('admins').doc(auth.user.uid).get()
       if (adminDoc.exists) {
         const adminData = adminDoc.data()
-        if (adminData?.isSuperAdmin === true) {
-          return Response.json(
-            { error: "Super admins cannot create patients. Please use a regular admin or receptionist account." },
-            { status: 403 }
-          )
-        }
+        isSuperAdmin = adminData?.isSuperAdmin === true
       }
+    }
+    
+    if (isSuperAdmin) {
+      return Response.json(
+        { error: "Super admins cannot create patients. Please use a regular admin or receptionist account." },
+        { status: 403 }
+      )
     }
   } catch (err) {
     console.error('[create-patient] Error checking super admin status:', err)
@@ -116,7 +114,7 @@ export async function POST(request: Request) {
       // If exists, update password
       authUid = existing.uid
       await admin.auth().updateUser(authUid, { password })
-    } catch (_e) {
+    } catch {
       const created = await admin.auth().createUser({
         email: String(email).trim().toLowerCase(),
         emailVerified: false,
@@ -126,10 +124,10 @@ export async function POST(request: Request) {
       authUid = created.uid
     }
 
-    // Get receptionist's hospital ID
-    const receptionistHospitalId = await getUserActiveHospitalId(auth.user!.uid)
-    if (!receptionistHospitalId) {
-      return Response.json({ error: "Receptionist's hospital not found" }, { status: 400 })
+    // Get user's active hospital ID (works for both receptionists and admins)
+    const userHospitalId = await getUserActiveHospitalId(auth.user!.uid)
+    if (!userHospitalId) {
+      return Response.json({ error: "User's hospital not found. Please ensure you have an active hospital selected." }, { status: 400 })
     }
 
     const db = admin.firestore()
@@ -175,11 +173,11 @@ export async function POST(request: Request) {
       updatedAt: nowIso,
       createdBy: patientData.createdBy || "receptionist",
       patientId,
-      hospitalId: receptionistHospitalId, // Store hospital association
+      hospitalId: userHospitalId, // Store hospital association
     }
 
     // Store patient doc in hospital-scoped subcollection
-    await db.collection(getHospitalCollectionPath(receptionistHospitalId, "patients")).doc(authUid).set(docData, { merge: true })
+    await db.collection(getHospitalCollectionPath(userHospitalId, "patients")).doc(authUid).set(docData, { merge: true })
     
     // Also store in legacy collection for backward compatibility (patient dashboard uses user.uid)
     await db.collection("patients").doc(authUid).set(docData, { merge: true })
@@ -192,12 +190,12 @@ export async function POST(request: Request) {
       // User exists - add hospital to hospitals array if not already present
       const userData = existingUserDoc.data()
       const hospitals = userData?.hospitals || []
-      if (!hospitals.includes(receptionistHospitalId)) {
-        hospitals.push(receptionistHospitalId)
+      if (!hospitals.includes(userHospitalId)) {
+        hospitals.push(userHospitalId)
       }
       await userDocRef.update({
         hospitals,
-        activeHospital: receptionistHospitalId, // Set as active if not set
+        activeHospital: userHospitalId, // Set as active if not set
         updatedAt: nowIso,
       })
     } else {
@@ -206,8 +204,8 @@ export async function POST(request: Request) {
         uid: authUid,
         email: String(email).trim().toLowerCase(),
         role: "patient",
-        hospitals: [receptionistHospitalId],
-        activeHospital: receptionistHospitalId,
+        hospitals: [userHospitalId],
+        activeHospital: userHospitalId,
         createdAt: nowIso,
         updatedAt: nowIso,
       })

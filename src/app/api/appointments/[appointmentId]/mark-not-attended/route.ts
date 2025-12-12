@@ -129,7 +129,7 @@ export async function POST(
               month: 'long',
               day: 'numeric'
             })
-          } catch (e) {
+          } catch {
             // Keep original date if parsing fails
           }
         }
@@ -145,7 +145,7 @@ export async function POST(
             const ampm = hour >= 12 ? 'PM' : 'AM'
             const hour12 = hour % 12 || 12
             formattedTime = `${hour12}:${min} ${ampm}`
-          } catch (e) {
+          } catch {
             // Keep original time if parsing fails
           }
         }

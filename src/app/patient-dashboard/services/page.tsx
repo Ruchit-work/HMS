@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/StatusComponents"
 import PageHeader from "@/components/ui/PageHeader"
 
 interface Service {

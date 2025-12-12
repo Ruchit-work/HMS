@@ -16,7 +16,6 @@ import { bloodGroups } from "@/constants/signup"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, normalizeTime } from "@/utils/timeSlots"
 import { isDateBlocked } from "@/utils/blockedDates"
-import { formatAppointmentDateTime } from "@/utils/date"
 
 interface BookAppointmentPanelProps {
   patientMode: "existing" | "new"
@@ -197,7 +196,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
 
   const paymentMethods = useMemo<BookingPaymentMethod[]>(() => {
     return ["card", "upi", "cash"]
-  }, [patientMode])
+  }, [])
 
   const isSelectedDateBlocked = useMemo(() => {
     if (!selectedDoctorId || !appointmentDate) return false
@@ -402,7 +401,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     })()
 
     return () => unsubscribe()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHospitalId])
 
   useEffect(() => {
     if (patientMode === "new") {
@@ -516,7 +516,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     }
 
     computeSlots()
-  }, [selectedDoctorId, appointmentDate, doctors])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDoctorId, appointmentDate, doctors, activeHospitalId])
 
   useEffect(() => {
     if (!bookError) return

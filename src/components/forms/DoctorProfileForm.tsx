@@ -90,7 +90,7 @@ export default function DoctorProfileForm({
   const [showSpecializationDropdown, setShowSpecializationDropdown] = useState(false)
   const [showQualificationDropdown, setShowQualificationDropdown] = useState(false)
 
-  const allSpecializations = useMemo(
+  const _allSpecializations = useMemo(
     () => specializationCategories.flatMap((cat) => cat.specializations),
     []
   )
@@ -197,7 +197,7 @@ export default function DoctorProfileForm({
         setCustomSpecialization('')
       }
     }
-  }, [qualification, specialization, specializationCategory, specializationCategories])
+  }, [qualification, specialization, specializationCategory])
 
   useEffect(() => {
     if (!specialization || specializationCategory === 'other') return

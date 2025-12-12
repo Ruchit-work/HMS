@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useState } from "react"
-import { db } from "@/firebase/config"
-import { collection, query, where, getDocs, orderBy, limit, onSnapshot } from "firebase/firestore"
-import { Appointment } from "@/types/patient"
+import { query, where, getDocs, orderBy, limit, onSnapshot } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
 
@@ -122,7 +120,8 @@ export default function DashboardOverview({ onTabChange }: DashboardOverviewProp
         unsubscribeAppointments()
       }
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHospitalId])
 
   const updateRecentActivity = (allAppointments: any[]) => {
     const activities: RecentActivity[] = []
@@ -176,7 +175,7 @@ export default function DashboardOverview({ onTabChange }: DashboardOverviewProp
     setRecentActivity(activities.slice(0, 8))
   }
 
-  const fetchDashboardData = async () => {
+  const _fetchDashboardData = async () => {
     try {
       setLoading(true)
       await Promise.all([

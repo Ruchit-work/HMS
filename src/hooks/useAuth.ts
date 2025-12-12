@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 
 type UserRole = "patient" | "doctor" | "admin" | "receptionist" | null
-const STAFF_ROLES: Exclude<UserRole, "patient" | null>[] = ["admin", "doctor", "receptionist"]
+// const STAFF_ROLES: Exclude<UserRole, "patient" | null>[] = ["admin", "doctor", "receptionist"] // Not currently used
 
 interface AuthUser {
   uid: string
@@ -203,7 +203,7 @@ export function usePublicRoute() {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  const checkAndRedirect = async () => {
+  const checkAndRedirect = useCallback(async () => {
     const currentUser = auth.currentUser
     if (currentUser) {
       // User is logged in - check their role and redirect to dashboard using cached data
@@ -236,7 +236,7 @@ export function usePublicRoute() {
       }
     }
     return false // No redirect needed
-  }
+  }, [router])
 
   useEffect(() => {
     // Immediate synchronous check
@@ -262,7 +262,8 @@ export function usePublicRoute() {
     })
 
     // Handle browser back button and page visibility
-    const handlePageshow = async (event: PageTransitionEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handlePageshow = async (_event: PageTransitionEvent) => {
       // Re-check auth when page is shown (back button or forward button)
       // event.persisted means page was loaded from cache (back button)
       setLoading(true)
@@ -288,7 +289,7 @@ export function usePublicRoute() {
       window.removeEventListener('pageshow', handlePageshow)
       window.removeEventListener('focus', handleFocus)
     }
-  }, [router])
+  }, [router, checkAndRedirect])
 
   return { loading }
 }

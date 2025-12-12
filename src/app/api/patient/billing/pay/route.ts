@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   // Declare variables outside try block for catch block access
   let billingId: string | undefined
   let method: "card" | "upi" | "cash" | "demo" = "card"
-  const isAdmissionBilling = false
+  const _isAdmissionBilling = false
   let totalAmount = 0
 
   try {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const actor = body?.actor
     const type = body?.type
     const actorType: "patient" | "receptionist" | "admin" = actor || (isPatient ? "patient" : "receptionist")
-    const billingType: "admission" | "appointment" | undefined = type
+    const _billingType: "admission" | "appointment" | undefined = type
 
     if (!billingId || typeof billingId !== "string") {
       return Response.json({ error: "Missing billingId" }, { status: 400 })
@@ -134,8 +134,8 @@ export async function POST(req: Request) {
         ? Number(billingData.totalAmount || 0)
         : Number(billingData.paymentAmount || billingData.totalConsultationFee || 0)
 
-      const patientUid = billingData.patientUid ? String(billingData.patientUid) : null
-      const patientId = billingData.patientId ? String(billingData.patientId) : null
+      const _patientUid = billingData.patientUid ? String(billingData.patientUid) : null
+      const _patientId = billingData.patientId ? String(billingData.patientId) : null
 
 
       const paymentMetadata =

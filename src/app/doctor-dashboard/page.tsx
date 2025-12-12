@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, collection, query, where, getDocs, updateDoc, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -11,9 +11,6 @@ import Link from "next/link"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns"
 import CampaignCarousel from "@/components/patient/CampaignCarousel"
 import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
-import DashboardCard from "@/components/ui/DashboardCard"
-import PageHeader from "@/components/ui/PageHeader"
 import VisitingHoursEditor from "@/components/doctor/VisitingHoursEditor"
 import BlockedDatesManager from "@/components/doctor/BlockedDatesManager"
 import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
@@ -36,10 +33,10 @@ export default function DoctorDashboard() {
   const router = useRouter()
   const [userData, setUserData] = useState<UserData | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
-  const [updating, setUpdating] = useState(false)
+  const [, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
+  const [, setUpdating] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [showCompletionModal, setShowCompletionModal] = useState(false)
+  const [, setShowCompletionModal] = useState(false)
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
   const [completionData, setCompletionData] = useState({
     medicine: "",
@@ -52,7 +49,7 @@ export default function DoctorDashboard() {
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
-  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { activeHospitalId } = useMultiHospital()
 
   // Function to set up real-time appointments listener
   const setupAppointmentsListener = (doctorId: string) => {
@@ -115,6 +112,7 @@ export default function DoctorDashboard() {
         unsubscribeAppointments()
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   // Manual refresh function
@@ -219,7 +217,7 @@ export default function DoctorDashboard() {
   }
 
   // Open completion modal
-  const openCompletionModal = (appointmentId: string) => {
+  const _openCompletionModal = (appointmentId: string) => {
     setSelectedAppointmentId(appointmentId)
     setShowCompletionModal(true)
   }
@@ -232,7 +230,7 @@ export default function DoctorDashboard() {
   }
 
   // Complete appointment with medicine and notes
-  const handleCompleteAppointment = async (e: React.FormEvent) => {
+  const _handleCompleteAppointment = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!selectedAppointmentId) return

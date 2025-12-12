@@ -7,10 +7,8 @@
 import {
   collection,
   query,
-  where,
   doc,
   getDoc,
-  getDocs,
   Query,
   CollectionReference,
   DocumentReference,

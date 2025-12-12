@@ -18,6 +18,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [saving, setSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [publishingCampaignId, setPublishingCampaignId] = useState<string | null>(null)
+  const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null)
   const createInitialFormState = (): Campaign => ({
     title: "",
     slug: "",
@@ -37,7 +39,13 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const [filter, setFilter] = useState<{status: CampaignStatus|"all"}>({ status: "all" })
   const [cronStatus, setCronStatus] = useState<any>(null)
   const [loadingCronStatus, setLoadingCronStatus] = useState(false)
+  const [reminderStatus, setReminderStatus] = useState<any>(null)
+  const [loadingReminderStatus, setLoadingReminderStatus] = useState(false)
+  const [reminderStatusError, setReminderStatusError] = useState<string | null>(null)
+  const [testingReminders, setTestingReminders] = useState(false)
   const [sendWhatsAppOnManualGenerate, setSendWhatsAppOnManualGenerate] = useState(true)
+  const [generatingToday, setGeneratingToday] = useState(false)
+  const [generatingRandom, setGeneratingRandom] = useState(false)
 
   const reloadCampaigns = async (): Promise<Campaign[]> => {
     try {
@@ -76,6 +84,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
     if (!user || authLoading) return
     reloadCampaigns()
     checkCronStatus()
+    checkReminderStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading])
 
   const checkCronStatus = async () => {
@@ -104,6 +114,98 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       console.error("Error checking cron status:", error)
     } finally {
       setLoadingCronStatus(false)
+    }
+  }
+
+  const checkReminderStatus = async () => {
+    try {
+      setLoadingReminderStatus(true)
+      setReminderStatusError(null)
+
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to check reminder status")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const response = await fetch("/api/appointments/reminders-status", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+      const data = await response.json()
+      if (data.success) {
+        setReminderStatus(data)
+        setSuccessMessage("✅ Reminder status updated!")
+        setTimeout(() => setSuccessMessage(null), 3000)
+      } else {
+        const errorMsg = data.error || "Failed to check reminder status"
+        setReminderStatusError(errorMsg)
+        setSuccessMessage(`❌ Error: ${errorMsg}`)
+        setTimeout(() => setSuccessMessage(null), 5000)
+        console.error("Error checking reminder status:", data.error)
+      }
+    } catch (error: any) {
+      const errorMsg = error?.message || "Failed to check reminder status"
+      setReminderStatusError(errorMsg)
+      setSuccessMessage(`❌ Error: ${errorMsg}`)
+      setTimeout(() => setSuccessMessage(null), 5000)
+      console.error("Error checking reminder status:", error)
+    } finally {
+      setLoadingReminderStatus(false)
+    }
+  }
+
+  const testReminders = async () => {
+    if (testingReminders) return
+    try {
+      setTestingReminders(true)
+      setSuccessMessage("🔄 Testing appointment reminders...")
+
+      // Get Firebase Auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in to test reminders")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const response = await fetch("/api/appointments/send-reminders", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+      const data = await response.json()
+      if (data.success) {
+        const summary = data.summary || {}
+        const remindersSent = summary.totalRemindersSent || 0
+        const remindersSkipped = summary.totalRemindersSkipped || 0
+        const errors = summary.totalErrors || 0
+        
+        if (remindersSent > 0) {
+          setSuccessMessage(`✅ Success! Sent ${remindersSent} reminder(s). Skipped: ${remindersSkipped}, Errors: ${errors}`)
+        } else if (remindersSkipped > 0) {
+          setSuccessMessage(`ℹ️ No reminders sent. ${remindersSkipped} appointment(s) already have reminders sent.`)
+        } else {
+          setSuccessMessage(`ℹ️ No reminders sent. No appointments found in the 24-hour reminder window (±90 minutes).`)
+        }
+        
+        // Refresh status after testing
+        setTimeout(async () => {
+          await checkReminderStatus()
+        }, 1000)
+      } else {
+        setSuccessMessage(`❌ Error: ${data.error || "Failed to test reminders"}`)
+      }
+    } catch (error: any) {
+      console.error("Error testing reminders:", error)
+      setSuccessMessage(`❌ Error: ${error?.message || "Failed to test reminders"}`)
+    } finally {
+      setTestingReminders(false)
     }
   }
 
@@ -201,7 +303,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         setSelectedCampaignId(editingId)
         setSuccessMessage("Campaign updated successfully!")
       } else {
-        const newCampaignId = await createCampaign({
+        await createCampaign({
           title: form.title,
           slug: slugify(form.slug),
           content: form.content,
@@ -230,21 +332,30 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   }
 
   const handlePublishToggle = async (id?: string, current?: CampaignStatus) => {
-    if (!id) return
+    if (!id || publishingCampaignId) return
     const next: CampaignStatus = current === 'published' ? 'draft' : 'published'
     try {
+      setPublishingCampaignId(id)
+      setSuccessMessage(`🔄 ${next === 'published' ? 'Publishing' : 'Unpublishing'} campaign...`)
       await updateCampaign(id, { status: next })
       await reloadCampaigns()
-      setSuccessMessage(`Campaign ${next === 'published' ? 'published' : 'unpublished'} successfully!`)
+      setSuccessMessage(`✅ Campaign ${next === 'published' ? 'published' : 'unpublished'} successfully!`)
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error) {
       console.error("Error updating campaign:", error)
+      setSuccessMessage(`❌ Failed to ${next === 'published' ? 'publish' : 'unpublish'} campaign. Please try again.`)
+      setTimeout(() => setSuccessMessage(null), 4000)
+    } finally {
+      setPublishingCampaignId(null)
     }
   }
 
   const handleDelete = async (id?: string) => {
-    if (!id) return
+    if (!id || deletingCampaignId) return
     try {
+      setDeletingCampaignId(id)
+      setSuccessMessage("🔄 Deleting campaign...")
+      
       // Get Firebase Auth token
       const currentUser = auth.currentUser
       if (!currentUser) {
@@ -262,6 +373,21 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         body: JSON.stringify({ id }),
       })
       const data = await response.json()
+      
+      // Handle 404 - campaign might have already been deleted
+      if (response.status === 404 || (data?.error && data.error.includes("not found"))) {
+        // Campaign doesn't exist - refresh list and show success (it's already gone)
+        await reloadCampaigns()
+        setSelectedCampaignId(prev => (prev === id ? null : prev))
+        if (editingId === id) {
+          resetForm()
+          setEditingId(null)
+        }
+        setSuccessMessage("ℹ️ Campaign was already deleted or doesn't exist.")
+        setTimeout(() => setSuccessMessage(null), 3000)
+        return
+      }
+      
       if (!response.ok || !data.success) {
         throw new Error(data?.error || "Failed to delete campaign")
       }
@@ -272,12 +398,15 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         resetForm()
         setEditingId(null)
       }
-      setSuccessMessage("Campaign deleted successfully!")
+      setSuccessMessage("✅ Campaign deleted successfully!")
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting campaign:", error)
-      setSuccessMessage("Failed to delete campaign. Please try again.")
+      const errorMsg = error?.message || "Failed to delete campaign"
+      setSuccessMessage(`❌ ${errorMsg}. Please try again.`)
       setTimeout(() => setSuccessMessage(null), 4000)
+    } finally {
+      setDeletingCampaignId(null)
     }
   }
 
@@ -302,11 +431,13 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
   const content = (
     <div className="space-y-8">
       {successMessage && (
-        <SuccessToast
-          message={successMessage}
-          onClose={() => setSuccessMessage(null)}
-          className="shadow-xl"
-        />
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 max-w-md">
+          <SuccessToast
+            message={successMessage}
+            onClose={() => setSuccessMessage(null)}
+            className="shadow-2xl border-2 border-teal-200"
+          />
+        </div>
       )}
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-teal-700 text-white shadow-lg">
@@ -499,16 +630,207 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                 )}
               </div>
             )}
+            {/* Appointment Reminders Status Display */}
+            {(reminderStatus || reminderStatusError) && (
+              <div className="rounded-lg border border-slate-200 bg-blue-50 p-4 mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-slate-900">📅 Appointment Reminders Status</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={checkReminderStatus}
+                      disabled={loadingReminderStatus}
+                      className="rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                      title="Refresh reminder status"
+                    >
+                      {loadingReminderStatus ? "Refreshing..." : "Refresh"}
+                    </button>
+                    {reminderStatus && (
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        reminderStatus.status === "healthy" 
+                          ? "bg-green-100 text-green-800" 
+                          : reminderStatus.status === "error"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-yellow-100 text-yellow-800"
+                      }`}>
+                        {reminderStatus.status === "healthy" ? "✓ Healthy" : reminderStatus.status === "error" ? "✗ Error" : "? Unknown"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {reminderStatusError && (
+                  <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg">
+                    <p className="text-sm text-red-800 font-semibold">❌ Error loading reminder status</p>
+                    <p className="text-xs text-red-600 mt-1">{reminderStatusError}</p>
+                  </div>
+                )}
+                {reminderStatus && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-slate-600 font-medium">Schedule</p>
+                        <p className="text-slate-900">
+                          {reminderStatus.cron.scheduleDisplay || reminderStatus.cron.schedule || "11:30 AM IST (6:00 AM UTC)"}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Cron format: {reminderStatus.cron.scheduleUTC || "0 6 * * *"} (6:00 AM UTC)
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-600 font-medium">Next Execution</p>
+                        <p className="text-slate-900">{reminderStatus.cron.nextExecutionFormatted}</p>
+                      </div>
+                      {reminderStatus.lastExecution && (
+                        <>
+                          <div>
+                            <p className="text-slate-600 font-medium">Last Reminder Sent</p>
+                            <p className="text-slate-900">
+                              {new Date(reminderStatus.lastExecution.sentAt).toLocaleString("en-IN", {
+                                timeZone: "Asia/Kolkata",
+                                weekday: "long",
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                timeZoneName: "short",
+                              })}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Patient: {reminderStatus.lastExecution.patientName || "N/A"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-600 font-medium">Last Status</p>
+                            <p className={`font-semibold ${
+                              reminderStatus.lastExecution.status === "sent" ? "text-green-600" : "text-red-600"
+                            }`}>
+                              {reminderStatus.lastExecution.status === "sent" 
+                                ? "✓ Sent Successfully"
+                                : `✗ Failed: ${reminderStatus.lastExecution.error || "Unknown error"}`
+                              }
+                            </p>
+                          </div>
+                        </>
+                      )}
+                      <div>
+                        <p className="text-slate-600 font-medium">Statistics</p>
+                        <p className="text-slate-900">
+                          {reminderStatus.statistics.upcomingAppointments} upcoming appointment(s)
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {reminderStatus.statistics.appointmentsInWindow} in reminder window (±90m)
+                        </p>
+                      </div>
+                  <div>
+                    <p className="text-slate-600 font-medium">Recent Activity (Last 7 Days)</p>
+                    <p className="text-slate-900">
+                      {reminderStatus.statistics.remindersSentLast7Days} sent, {reminderStatus.statistics.remindersFailedLast7Days} failed
+                    </p>
+                  </div>
+                  </div>
+                    {reminderStatus.recentReminders && reminderStatus.recentReminders.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-slate-600 font-medium mb-2">Recent Reminders (Last 5)</p>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {reminderStatus.recentReminders.slice(0, 5).map((reminder: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between text-xs bg-white p-2 rounded">
+                              <span className="text-slate-600">
+                                {new Date(reminder.sentAt).toLocaleString("en-IN", {
+                                  timeZone: "Asia/Kolkata",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              <span className="text-slate-600">
+                                {reminder.patientName} → {reminder.doctorName}
+                              </span>
+                              <span className={`font-semibold ${
+                                reminder.status === "sent" ? "text-green-600" : "text-red-600"
+                              }`}>
+                                {reminder.status === "sent" ? "✓ Sent" : "✗ Failed"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             {/* Generate Campaigns Buttons - Always Visible */}
             <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-4">
               <button
                 type="button"
                 onClick={checkCronStatus}
-                disabled={loadingCronStatus}
-                className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                disabled={loadingCronStatus || generatingToday || generatingRandom}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                  loadingCronStatus
+                    ? "border-blue-400 bg-blue-200 text-blue-500 cursor-not-allowed"
+                    : "border-blue-600 bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95 disabled:opacity-60"
+                }`}
                 title="Check cron job status and execution history"
               >
-                {loadingCronStatus ? "Checking..." : "Check Cron Status"}
+                {loadingCronStatus ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Checking...
+                  </span>
+                ) : (
+                  "🔄 Check Campaign Cron Status"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={checkReminderStatus}
+                disabled={loadingReminderStatus || generatingToday || generatingRandom}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                  loadingReminderStatus
+                    ? "border-purple-400 bg-purple-200 text-purple-500 cursor-not-allowed"
+                    : "border-purple-600 bg-purple-600 text-white hover:bg-purple-700 hover:shadow-md active:scale-95 disabled:opacity-60"
+                }`}
+                title="Check appointment reminder cron job status"
+              >
+                {loadingReminderStatus ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Checking...
+                  </span>
+                ) : (
+                  "📅 Check Reminder Status"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={testReminders}
+                disabled={testingReminders || loadingReminderStatus || generatingToday || generatingRandom}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                  testingReminders
+                    ? "border-orange-400 bg-orange-200 text-orange-500 cursor-not-allowed"
+                    : "border-orange-600 bg-orange-600 text-white hover:bg-orange-700 hover:shadow-md active:scale-95 disabled:opacity-60"
+                }`}
+                title="Manually trigger appointment reminder check (for testing)"
+              >
+                {testingReminders ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Testing...
+                  </span>
+                ) : (
+                  "🧪 Test Reminders Now"
+                )}
               </button>
               <div className="flex flex-col gap-1">
                 <div className="space-y-3">
@@ -528,7 +850,11 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                   <button
                     type="button"
                     onClick={async () => {
+                      if (generatingToday) return // Prevent double-click
                       try {
+                        setGeneratingToday(true)
+                        setSuccessMessage(null)
+                        
                         // Get Firebase Auth token
                         const currentUser = auth.currentUser
                         if (!currentUser) {
@@ -537,7 +863,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
 
                         const token = await currentUser.getIdToken()
 
-                        setSuccessMessage("Checking today's health awareness days...")
+                        setSuccessMessage("🔍 Checking today's health awareness days...")
                         // First check what health awareness days are for today
                         const checkResponse = await fetch("/api/auto-campaigns/test?date=today", {
                           headers: {
@@ -548,11 +874,11 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                         const checkData = await checkResponse.json()
                         
                         if (checkData.healthDaysFound === 0) {
-                          setSuccessMessage(`No health awareness days found for today (${checkData.dateFormatted}). Check healthAwarenessDays.ts for available dates.`)
+                          setSuccessMessage(`ℹ️ No health awareness days found for today (${checkData.dateFormatted}). Check healthAwarenessDays.ts for available dates.`)
                           return
                         }
                         
-                        setSuccessMessage(`Found ${checkData.healthDaysFound} health awareness day(s) for today: ${checkData.healthDays.map((d: any) => d.name).join(", ")}. Generating campaigns...`)
+                        setSuccessMessage(`✅ Found ${checkData.healthDaysFound} health awareness day(s): ${checkData.healthDays.map((d: any) => d.name).join(", ")}. Generating campaigns...`)
                         
                         const sendWhatsApp = sendWhatsAppOnManualGenerate ? "true" : "false"
                         const response = await fetch(`/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=${sendWhatsApp}`, {
@@ -564,35 +890,56 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                         const data = await response.json()
                         if (data.success) {
                           if (data.campaignsGenerated === 0) {
-                            setSuccessMessage(`No new campaigns generated. ${data.message || "Campaigns may already exist for today."}`)
+                            setSuccessMessage(`ℹ️ No new campaigns generated. ${data.message || "Campaigns may already exist for today."}`)
                           } else {
                             const whatsAppMsg = sendWhatsAppOnManualGenerate 
-                              ? ` Generated ${data.campaignsGenerated} campaign(s) and sent WhatsApp notifications to all active patients!` 
-                              : ` Generated ${data.campaignsGenerated} campaign(s) for today!`
+                              ? `✅ Generated ${data.campaignsGenerated} campaign(s) and sent WhatsApp notifications to all active patients!` 
+                              : `✅ Generated ${data.campaignsGenerated} campaign(s) for today!`
                             setSuccessMessage(whatsAppMsg)
                             setTimeout(async () => {
                               await reloadCampaigns()
                               await checkCronStatus()
-                              setSuccessMessage("Campaigns refreshed!")
+                              setSuccessMessage("🔄 Campaigns refreshed!")
                             }, 1000)
                           }
                         } else {
-                          setSuccessMessage(`Error: ${data.error || "Failed to generate campaigns"}`)
+                          setSuccessMessage(`❌ Error: ${data.error || "Failed to generate campaigns"}`)
                         }
                       } catch (error: any) {
                         console.error("Error generating campaigns:", error)
-                        setSuccessMessage(`Error: ${error?.message || "Failed to generate campaigns"}`)
+                        setSuccessMessage(`❌ Error: ${error?.message || "Failed to generate campaigns"}`)
+                      } finally {
+                        setGeneratingToday(false)
                       }
                     }}
-                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                    disabled={generatingToday || generatingRandom}
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                      generatingToday
+                        ? "border-slate-400 bg-slate-200 text-slate-500 cursor-not-allowed"
+                        : "border-teal-600 bg-teal-600 text-white hover:bg-teal-700 hover:shadow-md active:scale-95"
+                    }`}
                     title="Manually generate campaigns for today (useful for testing/local development). In production, campaigns are generated automatically via cron job at midnight IST (6:30 PM UTC) with WhatsApp notifications enabled."
                   >
-                    Generate Auto Campaigns (Today) - Manual Test
+                    {generatingToday ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Generating...
+                      </span>
+                    ) : (
+                      "🚀 Generate Auto Campaigns (Today)"
+                    )}
                   </button>
               <button
                 type="button"
                 onClick={async () => {
+                  if (generatingRandom) return // Prevent double-click
                   try {
+                    setGeneratingRandom(true)
+                    setSuccessMessage(null)
+                    
                     // Get Firebase Auth token
                     const currentUser = auth.currentUser
                     if (!currentUser) {
@@ -601,7 +948,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
 
                     const token = await currentUser.getIdToken()
 
-                    setSuccessMessage("Generating random awareness day campaign...")
+                    setSuccessMessage("🎲 Generating random awareness day campaign...")
 
                     const sendWhatsApp = sendWhatsAppOnManualGenerate ? "true" : "false"
                     const response = await fetch(
@@ -616,7 +963,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                     const data = await response.json()
                     if (data.success) {
                       if (data.campaignsGenerated === 0) {
-                        setSuccessMessage(`No new campaigns generated. ${data.message || "Campaigns may already exist for today."}`)
+                        setSuccessMessage(`ℹ️ No new campaigns generated. ${data.message || "Campaigns may already exist for today."}`)
                       } else {
                         const whatsAppMsg = sendWhatsAppOnManualGenerate
                           ? "✅ Generated random campaign and sent WhatsApp messages with the booking link!"
@@ -625,7 +972,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                         setTimeout(async () => {
                           await reloadCampaigns()
                           await checkCronStatus()
-                          setSuccessMessage("Campaigns refreshed!")
+                          setSuccessMessage("🔄 Campaigns refreshed!")
                         }, 1000)
                       }
                     } else {
@@ -634,12 +981,29 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                   } catch (error: any) {
                     console.error("Error generating random campaign:", error)
                     setSuccessMessage(`❌ Error: ${error?.message || "Failed to generate random campaign"}`)
+                  } finally {
+                    setGeneratingRandom(false)
                   }
                 }}
-                className="rounded-lg border border-purple-600 bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-purple-700"
+                disabled={generatingToday || generatingRandom}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                  generatingRandom
+                    ? "border-purple-400 bg-purple-200 text-purple-500 cursor-not-allowed"
+                    : "border-purple-600 bg-purple-600 text-white hover:bg-purple-700 hover:shadow-md active:scale-95"
+                }`}
                 title="Generate a random awareness day campaign for quick WhatsApp testing."
               >
-                🎲 Generate Random Campaign (Test)
+                {generatingRandom ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </span>
+                ) : (
+                  "🎲 Generate Random Campaign (Test)"
+                )}
               </button>
                   <p className="text-xs text-slate-500 italic">
                 Note: In production, campaigns are automatically generated daily at midnight IST (6:30 PM UTC) via cron job with WhatsApp notifications enabled. These manual buttons are for testing/local development. Enable the checkbox above to send WhatsApp messages to patients.
@@ -702,9 +1066,24 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                         e.stopPropagation()
                         handlePublishToggle(campaign.id, campaign.status)
                       }}
-                      className="rounded-lg border border-teal-600 bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-teal-700"
+                      disabled={publishingCampaignId !== null || deletingCampaignId !== null}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all duration-200 ${
+                        publishingCampaignId === campaign.id
+                          ? "border-teal-400 bg-teal-200 text-teal-500 cursor-not-allowed"
+                          : "border-teal-600 bg-teal-600 text-white hover:bg-teal-700 hover:shadow-md active:scale-95 disabled:opacity-60"
+                      }`}
                     >
-                      {campaign.status === "published" ? "Unpublish" : "Publish"}
+                      {publishingCampaignId === campaign.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          {campaign.status === "published" ? "Unpublishing..." : "Publishing..."}
+                        </span>
+                      ) : (
+                        campaign.status === "published" ? "Unpublish" : "Publish"
+                      )}
                     </button>
                     <button
                       type="button"
@@ -712,9 +1091,14 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                         e.stopPropagation()
                         startEditing(campaign)
                       }}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                      disabled={publishingCampaignId !== null || deletingCampaignId !== null || editingId === campaign.id}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all duration-200 ${
+                        editingId === campaign.id
+                          ? "border-blue-400 bg-blue-100 text-blue-600 cursor-not-allowed"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:shadow-md active:scale-95 disabled:opacity-60"
+                      }`}
                     >
-                      Edit
+                      {editingId === campaign.id ? "Editing..." : "Edit"}
                     </button>
                     <button
                       type="button"
@@ -722,9 +1106,24 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                         e.stopPropagation()
                         handleDelete(campaign.id)
                       }}
-                      className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                      disabled={publishingCampaignId !== null || deletingCampaignId !== null}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all duration-200 ${
+                        deletingCampaignId === campaign.id
+                          ? "border-rose-400 bg-rose-200 text-rose-500 cursor-not-allowed"
+                          : "border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:shadow-md active:scale-95 disabled:opacity-60"
+                      }`}
                     >
-                      Delete
+                      {deletingCampaignId === campaign.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Deleting...
+                        </span>
+                      ) : (
+                        "Delete"
+                      )}
                     </button>
                   </div>
                 </article>

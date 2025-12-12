@@ -134,7 +134,7 @@ export async function GET(request: Request) {
                 month: 'long',
                 day: 'numeric'
               })
-            } catch (e) {
+            } catch {
               // Keep original if parsing fails
             }
 
@@ -147,7 +147,7 @@ export async function GET(request: Request) {
               const ampm = hour >= 12 ? 'PM' : 'AM'
               const hour12 = hour % 12 || 12
               formattedTime = `${hour12}:${min} ${ampm}`
-            } catch (e) {
+            } catch {
               // Keep original if parsing fails
             }
 

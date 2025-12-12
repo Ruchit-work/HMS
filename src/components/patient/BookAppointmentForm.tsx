@@ -6,7 +6,7 @@ import DoctorCard from "@/components/ui/DoctorCard"
 import SymptomSelector, { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import SmartQuestions from "./SmartQuestions"
 import MedicalHistoryChecklist from "./MedicalHistoryChecklist"
-import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, isDateBlocked, getBlockedDateInfo, generateTimeSlots, isTimeSlotAvailable, timeToMinutes, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import { isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, isDateBlocked, getBlockedDateInfo, generateTimeSlots, isTimeSlotAvailable, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/blockedDates"
 import PaymentMethodSection, { PaymentData as PPaymentData, PaymentMethodOption } from "@/components/payments/PaymentMethodSection"
 import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore"
@@ -90,7 +90,8 @@ export default function BookAppointmentForm({
     if (initialDoctorId && !selectedDoctor) {
       setSelectedDoctor(initialDoctorId)
     }
-  }, [initialDoctorId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDoctorId, selectedDoctor])
 
   // Keep local view in sync if parent sends fresh data
   useEffect(() => {
@@ -241,6 +242,7 @@ export default function BookAppointmentForm({
     }
 
     fetchAvailableSlots()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDoctor, appointmentData.date, selectedDoctorData])
 
   const nextStep = () => {
@@ -366,7 +368,8 @@ export default function BookAppointmentForm({
     const complaint = detail ? `${categoryLabel}: ${detail}` : categoryLabel
 
     setAppointmentData(prev => ({ ...prev, problem: complaint }))
-  }, [selectedSymptomCategory, symptomAnswers, appointmentData.problem])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSymptomCategory, symptomAnswers, appointmentData.problem, appointmentData.additionalConcern, previousSymptomCategory])
 
   // Auto-generate medical history from selections
   useEffect(() => {
@@ -423,7 +426,8 @@ export default function BookAppointmentForm({
         setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
       }
     }
-  }, [symptomAnswers, selectedSymptomCategory])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symptomAnswers, selectedSymptomCategory, appointmentData.additionalConcern, appointmentData.problem])
 
   // Reset payment method to null whenever step 5 becomes active
   useEffect(() => {
@@ -437,7 +441,8 @@ export default function BookAppointmentForm({
         upiId: ""
       })
     }
-  }, [currentStep])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, rescheduleMode])
 
   // Filter doctors based on symptom category
   const filteredDoctors = selectedSymptomCategory 

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import Footer from "@/components/ui/Footer"
 

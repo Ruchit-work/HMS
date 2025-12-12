@@ -1,5 +1,5 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { getUserActiveHospitalId, getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { formatAppointmentDateTime } from "@/utils/date"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
@@ -8,11 +8,11 @@ import { applyRateLimit } from "@/utils/rateLimit"
 
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
-  const friendlyName = patientName.trim().split(" ")[0] || "there"
+  const _friendlyName = patientName.trim().split(" ")[0] || "there"
   const fullName = patientName.trim() || "Patient"
   const doctorName: string = appointmentData.doctorName || "our doctor"
   const doctorSpecialization: string = appointmentData.doctorSpecialization || ""
-  const schedule = formatAppointmentDateTime(appointmentData.appointmentDate, appointmentData.appointmentTime)
+  const _schedule = formatAppointmentDateTime(appointmentData.appointmentDate, appointmentData.appointmentTime)
   const appointmentId = appointmentData.appointmentId || appointmentData.id || "N/A"
   const paymentMethod = appointmentData.paymentMethod || appointmentData.paymentOption || "Cash"
   const paymentAmount = appointmentData.paymentAmount || appointmentData.totalConsultationFee || 0

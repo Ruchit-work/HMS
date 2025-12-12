@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
-import { collection, getDocs,where,query,doc, deleteDoc, onSnapshot } from 'firebase/firestore'
+import { getDocs, where, query, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
@@ -54,7 +54,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
     const [search, setSearch] = useState('')
  
     const { user, loading: authLoading } = useAuth()
-    const { activeHospitalId, loading: hospitalLoading, isSuperAdmin } = useMultiHospital()
+    const { activeHospitalId, isSuperAdmin } = useMultiHospital()
     const [sortField, setSortField] = useState<string>('')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)

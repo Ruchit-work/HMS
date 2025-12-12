@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, sendFlowMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { normalizeTime, isDoctorAvailableOnDate, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import { normalizeTime, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked as isDateBlockedFromRaw, normalizeBlockedDates } from "@/utils/blockedDates"
 import { generateAppointmentConfirmationPDFBase64 } from "@/utils/pdfGenerators"
 import { Appointment } from "@/types/patient"
@@ -173,23 +173,21 @@ async function handleGreeting(phone: string) {
       )
     }
   } else {
-    // Registered patient - show booking options
-    const buttonResponse = await sendMultiButtonMessage(
+    // Registered patient - greet and ask about booking
+    const buttonResponse = await sendButtonMessage(
       phone,
-      "Hello! 👋\n\nHow can I help you today?",
-      [
-        { id: "book_appointment", title: "📅 Book Appointment" },
-        { id: "help_center", title: "🆘 Help Center" },
-      ],
-      "Harmony Medical Services"
+      "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?",
+      "Harmony Medical Services",
+      "book_appointment",
+      "📅 Book Appointment"
     )
 
     if (!buttonResponse.success) {
-      console.error("[Meta WhatsApp] Failed to send greeting buttons:", buttonResponse.error)
+      console.error("[Meta WhatsApp] Failed to send greeting button:", buttonResponse.error)
       // Fallback to text message
       await sendTextMessage(
         phone,
-        "Hello! 👋\n\nHow can I help you today?\n\n• Type 'Book' to book an appointment\n• Type 'Help' for assistance\n\nOr contact our reception at +91-XXXXXXXXXX"
+        "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?\n\nType 'Book' to book an appointment or 'Help' for assistance."
       )
     }
   }
@@ -204,7 +202,7 @@ async function handleHelpCenter(phone: string) {
   )
 }
 
-async function handleIncomingText(phone: string, text: string) {
+async function handleIncomingText(phone: string, _text: string) {
   // Send button message instead of Flow directly
   const buttonResponse = await sendButtonMessage(
     phone,
@@ -264,7 +262,7 @@ function getTranslation(key: keyof typeof translations, language: Language = "en
   return translations[key]?.[language] || translations[key]?.english || ""
 }
 
-function formatTranslation(template: string, vars: Record<string, string | number>): string {
+function _formatTranslation(template: string, vars: Record<string, string | number>): string {
   let result = template
   Object.keys(vars).forEach((key) => {
     result = result.replace(new RegExp(`\\{${key}\\}`, "g"), String(vars[key]))
@@ -272,7 +270,7 @@ function formatTranslation(template: string, vars: Record<string, string | numbe
   return result
 }
 
-function capitalizeName(value: string): string {
+function _capitalizeName(value: string): string {
   if (!value) return ""
   return value
     .split(" ")
@@ -281,7 +279,7 @@ function capitalizeName(value: string): string {
     .join(" ")
 }
 
-async function ensureDefaultDoctor(
+async function _ensureDefaultDoctor(
   db: FirebaseFirestore.Firestore,
   sessionRef: FirebaseFirestore.DocumentReference,
   session: BookingSession | null,
@@ -572,6 +570,14 @@ async function processBookingConfirmation(
           : "❌ That slot was just booked. Please choose another time."
       await sendTextMessage(phone, msg)
       await sessionRef.update({ state: "selecting_time" })
+    } else if (error.message?.startsWith("DATE_BLOCKED:")) {
+      const reason = error.message.replace("DATE_BLOCKED: ", "")
+      const errorMsg = language === "gujarati"
+        ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
+        : `❌ *Date Not Available*\n\n${reason}\n\nPlease select another date.`
+      await sendTextMessage(phone, errorMsg)
+      await sendDatePicker(phone, assignedDoctorId, language)
+      await sessionRef.update({ state: "selecting_date" })
     } else {
       await sendTextMessage(
         phone,
@@ -919,6 +925,12 @@ async function handleFlowCompletion(value: any): Promise<Response> {
       await sendTextMessage(
         from,
         "❌ That slot was just booked by another patient. Please try booking again."
+      )
+    } else if (error.message?.startsWith("DATE_BLOCKED:")) {
+      const reason = error.message.replace("DATE_BLOCKED: ", "")
+      await sendTextMessage(
+        from,
+        `❌ *Date Not Available*\n\n${reason}\n\nPlease try booking again by clicking 'Book Appointment' and selecting a different date.`
       )
     } else {
       await sendTextMessage(
@@ -1554,7 +1566,7 @@ async function sendTimeSlotListForPeriod(
   }
 }
 
-async function handleListSelection(phone: string, selectedId: string, selectedTitle: string) {
+async function handleListSelection(phone: string, selectedId: string, _selectedTitle: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
@@ -1998,7 +2010,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   await sendTimeSlotListForPeriod(phone, availableSlotsForPeriod, language, periodLabel)
 }
 
-async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english", showButtons: boolean = true) {
+async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english", _showButtons: boolean = true) {
   const db = admin.firestore()
   
   // Use new hourly slot system
@@ -2343,6 +2355,14 @@ async function handleConfirmation(
     console.error("[Meta WhatsApp] Error creating appointment:", error)
     if (error.message === "SLOT_ALREADY_BOOKED") {
       await sendTextMessage(phone, "❌ That slot was just booked. Please try again.")
+    } else if (error.message?.startsWith("DATE_BLOCKED:")) {
+      const reason = error.message.replace("DATE_BLOCKED: ", "")
+      const language = session.language || "english"
+      const errorMsg = language === "gujarati"
+        ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
+        : `❌ *Date Not Available*\n\n${reason}\n\nPlease select another date.`
+      await sendTextMessage(phone, errorMsg)
+      await sendDatePicker(phone, session.doctorId, language)
     } else {
       await sendTextMessage(phone, "❌ Error creating appointment. Please contact reception.")
     }
@@ -2489,7 +2509,7 @@ function checkDateAvailability(dateStr: string, doctorData: any): { isBlocked: b
   if (blockedDates.length > 0) {
     if (isDateBlockedFromRaw(dateStr, blockedDates)) {
       // Find the reason for the blocked date
-      const normalizedDates = normalizeBlockedDates(blockedDates)
+      const _normalizedDates = normalizeBlockedDates(blockedDates)
       const blockedDate = blockedDates.find((bd: any) => {
         const normalizedDate = bd?.date ? String(bd.date).slice(0, 10) : ""
         return normalizedDate === dateStr
@@ -2569,6 +2589,14 @@ async function createAppointment(
   
   if (!hospitalId) {
     throw new Error("No hospital available for appointment creation")
+  }
+  
+  // Validate blocked date BEFORE creating appointment (if doctor is assigned)
+  if (payload.doctorId && doctor) {
+    const availabilityCheck = checkDateAvailability(payload.appointmentDate, doctor.data)
+    if (availabilityCheck.isBlocked) {
+      throw new Error(`DATE_BLOCKED: ${availabilityCheck.reason || "Doctor is not available on this date"}`)
+    }
   }
   
   let appointmentId = ""

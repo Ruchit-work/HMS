@@ -88,6 +88,7 @@ export default function ReceptionistPerformanceAnalytics() {
   useEffect(() => {
     if (!user || !activeHospitalId) return
     fetchReceptionistAnalytics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId, timeRange])
 
   const fetchReceptionistAnalytics = async () => {

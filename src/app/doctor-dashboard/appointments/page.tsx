@@ -10,7 +10,6 @@ import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import { generatePrescriptionPDF } from "@/utils/pdfGenerators"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
-import NotificationBadge from "@/components/ui/NotificationBadge"
 import { calculateAge } from "@/utils/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
@@ -261,6 +260,7 @@ export default function DoctorAppointments() {
         unsubscribe()
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId, hospitalLoading])
 
   // Auto-expand appointment if redirected from dashboard
@@ -329,7 +329,7 @@ export default function DoctorAppointments() {
     }
   }
 
-  const handleHistorySearchChange = (appointmentId: string, field: "text" | "date", value: string) => {
+  const _handleHistorySearchChange = (appointmentId: string, field: "text" | "date", value: string) => {
     setHistorySearchFilters(prev => ({
       ...prev,
       [appointmentId]: {
@@ -339,7 +339,7 @@ export default function DoctorAppointments() {
     }))
   }
 
-  const clearHistoryFilters = (appointmentId: string) => {
+  const _clearHistoryFilters = (appointmentId: string) => {
     setHistorySearchFilters(prev => ({
       ...prev,
       [appointmentId]: { text: "", date: "" }
@@ -756,13 +756,13 @@ export default function DoctorAppointments() {
       
       // Extract error message from response
       let errorMessage = "Failed to get AI diagnosis"
-      let errorDetails: any = null
+      let _errorDetails: any = null
       
       if (errorResponse?.data) {
         if (typeof errorResponse.data === 'object') {
           const data = errorResponse.data as { error?: string; details?: any }
           errorMessage = data.error || errorMessage
-          errorDetails = data.details
+          _errorDetails = data.details
         } else if (typeof errorResponse.data === 'string') {
           errorMessage = errorResponse.data
         }
@@ -3048,7 +3048,7 @@ export default function DoctorAppointments() {
                                     const today = new Date()
                                     today.setHours(0, 0, 0, 0)
                                     appointmentDate.setHours(0, 0, 0, 0)
-                                    const isToday = appointmentDate.getTime() === today.getTime()
+                                    const _isToday = appointmentDate.getTime() === today.getTime()
                                     const isFutureAppointment = appointmentDate > today
                                     
                                     return (

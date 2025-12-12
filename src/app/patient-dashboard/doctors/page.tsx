@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { db } from "@/firebase/config"
-import { collection, query, where, getDocs } from "firebase/firestore"
+import { query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -27,7 +26,7 @@ interface Doctor {
 
 export default function DoctorsPage() {
   const { user, loading: authLoading } = useAuth("patient")
-  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { activeHospitalId } = useMultiHospital()
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,7 +60,8 @@ export default function DoctorsPage() {
     if (user) {
       fetchDoctors()
     }
-  }, [user])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activeHospitalId])
 
   useEffect(() => {
     let filtered = doctors

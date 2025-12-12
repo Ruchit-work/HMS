@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { collection, getDocs, onSnapshot } from "firebase/firestore"
+import { collection, getDocs } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import { Admission, AdmissionRequest, Room } from "@/types/patient"

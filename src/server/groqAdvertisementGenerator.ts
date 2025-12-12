@@ -28,7 +28,7 @@ const GROQ_MODELS = [
   // - gemma2-9b-it (decommissioned)
 ]
 // Allow override via environment variable
-const GROQ_MODEL = process.env.GROQ_MODEL || GROQ_MODELS[0]
+// const GROQ_MODEL = process.env.GROQ_MODEL || GROQ_MODELS[0] // Not currently used
 
 /**
  * Generate an advertisement using Groq API for a health awareness day
@@ -177,7 +177,7 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
       let advertisement: GeneratedAdvertisement
       try {
         advertisement = JSON.parse(content)
-      } catch (parseError) {
+      } catch {
         // If JSON parsing fails, try to extract JSON from markdown code blocks
         const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
         if (jsonMatch) {

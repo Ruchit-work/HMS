@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { db, auth } from "@/firebase/config"
-import { doc, getDoc, collection, query, where, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/NotificationBadge"
 import { useAuth } from "@/hooks/useAuth"
@@ -36,7 +36,7 @@ export default function ReceptionistDashboard() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
   const [newAppointmentsCount, setNewAppointmentsCount] = useState(0)
-  const [newPatientsCount, setNewPatientsCount] = useState(0)
+  const [, setNewPatientsCount] = useState(0)
   const [pendingBillingCount, setPendingBillingCount] = useState(0)
   const [admitRequestsCount, setAdmitRequestsCount] = useState(0)
   const [whatsappPendingCount, setWhatsappPendingCount] = useState(0)

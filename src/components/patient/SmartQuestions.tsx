@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { QuestionRenderer } from "./QuestionRenderer"
-import { QUESTIONS_CONFIG, QuestionsConfig } from "@/constants/questions"
+import { QUESTIONS_CONFIG } from "@/constants/questions"
 
 interface SmartQuestionsProps {
   category: string
