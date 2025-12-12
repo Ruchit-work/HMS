@@ -100,26 +100,65 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true })
     }
 
-    // Handle text messages - check if user is in booking conversation
+    // Handle text messages - check greetings first, then booking conversation
     if (messageType === "text") {
       const text = message.text?.body ?? ""
+      const trimmedText = text.trim().toLowerCase()
+      
+      // Check for greetings FIRST (before booking conversation check)
+      // This ensures greetings always show, even if there's an existing booking session
+      const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
+      if (greetings.some(greeting => trimmedText === greeting || trimmedText.startsWith(greeting + " "))) {
+        // Clear any existing booking session when greeting
+        const db = admin.firestore()
+        const normalizedPhone = formatPhoneNumber(from)
+        const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+        const sessionDoc = await sessionRef.get()
+        if (sessionDoc.exists) {
+          await sessionRef.delete()
+        }
+        await handleGreeting(from)
+        return NextResponse.json({ success: true })
+      }
+      
+      // Check for cancel/stop keywords even when not in booking (to acknowledge the command)
+      const cancelKeywords = [
+        "cancel", "stop", "abort", "quit", "exit", "no", "nevermind", 
+        "never mind", "don't", "dont", "skip", "end", "finish"
+      ]
+      if (cancelKeywords.some(keyword => trimmedText === keyword || trimmedText.includes(keyword))) {
+        // Check if there's a booking session to cancel
+        const db = admin.firestore()
+        const normalizedPhone = formatPhoneNumber(from)
+        const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+        const sessionDoc = await sessionRef.get()
+        
+        if (sessionDoc.exists) {
+          // Cancel existing booking session
+          await sessionRef.delete()
+          await sendTextMessage(
+            from,
+            "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
+          )
+        } else {
+          // No active booking, just acknowledge
+          await sendTextMessage(
+            from,
+            "✅ Understood. No active booking to cancel.\n\nHow can I help you today? Type 'hi' to see options or 'Book' to start booking an appointment."
+          )
+        }
+        return NextResponse.json({ success: true })
+      }
+      
+      // Check if user is in booking conversation
       const isInBooking = await handleBookingConversation(from, text)
       if (!isInBooking) {
-        const trimmedText = text.trim().toLowerCase()
-        
         // Check for "thanks" message
         if (trimmedText === "thanks" || trimmedText === "thank you" || trimmedText === "thankyou" || trimmedText.includes("thank")) {
           await sendTextMessage(
             from,
             "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥"
           )
-          return NextResponse.json({ success: true })
-        }
-        
-        // Check for greetings (hello, hi, hy, etc.)
-        const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
-        if (greetings.some(greeting => trimmedText === greeting || trimmedText.startsWith(greeting + " "))) {
-          await handleGreeting(from)
           return NextResponse.json({ success: true })
         }
         
