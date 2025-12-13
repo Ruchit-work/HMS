@@ -1731,7 +1731,7 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
     
     // Validate that the selected time is not in the past (for today's appointments)
     const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
-    if (isToday) {
+    if (isToday && session.appointmentDate) {
       const now = new Date()
       const currentTime = now.getTime()
       const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
@@ -1774,7 +1774,7 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
 
     // Validate that the selected time is not in the past (for today's appointments)
     const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
-    if (isToday) {
+    if (isToday && session.appointmentDate) {
       const now = new Date()
       const currentTime = now.getTime()
       const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
@@ -1791,7 +1791,7 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
           ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
           : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
         await sendTextMessage(phone, errorMsg)
-        await sendTimePicker(phone, undefined, session.appointmentDate!, language)
+        await sendTimePicker(phone, undefined, session.appointmentDate, language)
         return
       }
     }
@@ -2018,7 +2018,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       continue
     }
 
-    if (isToday) {
+    if (isToday && session.appointmentDate) {
       const now = new Date()
       const currentTime = now.getTime()
       const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
@@ -2236,7 +2236,7 @@ async function handleTimeSelection(
   const normalizedTime = normalizeTime(selectedTime)
 
   const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
-  if (isToday) {
+  if (isToday && session.appointmentDate) {
     const now = new Date()
     const currentTime = now.getTime()
     const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
@@ -2253,7 +2253,7 @@ async function handleTimeSelection(
         ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
         : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
       await sendTextMessage(phone, errorMsg)
-      await sendTimePicker(phone, undefined, session.appointmentDate!, language)
+      await sendTimePicker(phone, undefined, session.appointmentDate, language)
       return true
     }
   }
@@ -2477,13 +2477,15 @@ async function getNextAvailable15MinSlot(
     const todayDateString = today.toISOString().split("T")[0]
     const isToday = appointmentDate === todayDateString
     
-    if (isToday) {
+    if (isToday && appointmentDate) {
       // Create proper datetime for the slot using local timezone
-      const slotDateTime = new Date(`${appointmentDate}T${normalizedTime}:00`)
+      const [year, month, day] = appointmentDate.split('-').map(Number)
+      const [hours, minutes] = normalizedTime.split(':').map(Number)
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
       const now = new Date()
-      const minimumTime = new Date(now.getTime() + (15 * 60 * 1000))
+      const minimumTime = now.getTime() + (15 * 60 * 1000)
       
-      if (slotDateTime <= minimumTime) {
+      if (slotDateTime.getTime() <= minimumTime) {
         continue
       }
     }
@@ -2648,7 +2650,7 @@ async function createAppointment(
   
   // Validate that appointment time is not in the past (for today's appointments)
   const isToday = payload.appointmentDate === new Date().toISOString().split("T")[0]
-  if (isToday) {
+  if (isToday && payload.appointmentDate) {
     const now = new Date()
     const currentTime = now.getTime()
     const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
