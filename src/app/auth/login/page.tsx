@@ -818,7 +818,7 @@ function LoginContent() {
                   <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Super Admin</td>
                   </tr>
                   <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
@@ -828,7 +828,7 @@ function LoginContent() {
                   <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600">Patient</td>
+                    <td className="px-2 py-2 text-slate-600">Admin</td>
                   </tr>
                 </tbody>
               </table>

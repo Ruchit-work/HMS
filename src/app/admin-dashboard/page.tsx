@@ -107,6 +107,8 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [loadingRequests, setLoadingRequests] = useState(false)
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null)
+  const [processingRefundId, setProcessingRefundId] = useState<string | null>(null)
   const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
   const [loadingRefunds, _setLoadingRefunds] = useState(false)
   const [newAppointmentsCount, setNewAppointmentsCount] = useState(0)
@@ -643,6 +645,7 @@ export default function AdminDashboard() {
   }
 
   const approveRequest = async (request: any) => {
+    setProcessingRequestId(request.id)
     try {
       // Get Firebase Auth token
       const currentUser = auth.currentUser
@@ -669,10 +672,13 @@ export default function AdminDashboard() {
       setNotification({ type: 'success', message: `Approved. Conflicts: ${data.conflicts}, awaiting: ${data.awaitingCount}, cancelled: ${data.cancelledCount}` })
     } catch (e: any) {
       setNotification({ type: 'error', message: e?.message || 'Failed to approve request' })
+    } finally {
+      setProcessingRequestId(null)
     }
   }
 
   const rejectRequest = async (request: any) => {
+    setProcessingRequestId(request.id)
     try {
       await updateDoc(doc(db, 'doctor_schedule_requests', request.id), {
         status: 'rejected',
@@ -683,10 +689,13 @@ export default function AdminDashboard() {
       setNotification({ type: 'success', message: 'Request rejected.' })
     } catch (e: any) {
       setNotification({ type: 'error', message: e?.message || 'Failed to reject request' })
+    } finally {
+      setProcessingRequestId(null)
     }
   }
 
   const approveRefund = async (refund: any) => {
+    setProcessingRefundId(refund.id)
     try {
       // Get Firebase Auth token
       const currentUser = auth.currentUser
@@ -713,6 +722,8 @@ export default function AdminDashboard() {
       setNotification({ type: 'success', message: `Refund approved. Amount: ₹${data.amountRefunded || 0}` })
     } catch (e: any) {
       setNotification({ type: 'error', message: e?.message || 'Failed to approve refund' })
+    } finally {
+      setProcessingRefundId(null)
     }
   }
 
@@ -1605,13 +1616,15 @@ export default function AdminDashboard() {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => approveRequest(req)}
-                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                  disabled={processingRequestId === req.id}
+                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   Approve
                                 </button>
                                 <button
                                   onClick={() => rejectRequest(req)}
-                                  className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700"
+                                  disabled={processingRequestId === req.id}
+                                  className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   Reject
                                 </button>
@@ -1666,7 +1679,8 @@ export default function AdminDashboard() {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => approveRefund(r)}
-                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                  disabled={processingRefundId === r.id}
+                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   Approve
                                 </button>

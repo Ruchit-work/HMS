@@ -72,9 +72,19 @@ export function normalizeBlockedDates(blockedDates: any[]): string[] {
  * @returns true if the date is blocked, false otherwise
  */
 export function isDateBlocked(date: string, blockedDates: any[]): boolean {
-  if (!date) return false
+  if (!date || !blockedDates || !Array.isArray(blockedDates) || blockedDates.length === 0) {
+    return false
+  }
   
-  const normalized = normalizeBlockedDates(blockedDates)
-  return normalized.includes(date)
+  // Ensure date is in YYYY-MM-DD format (take first 10 characters)
+  const normalizedDate = date.slice(0, 10)
+  if (!normalizedDate || normalizedDate.length !== 10) {
+    return false
+  }
+  
+  const normalizedBlockedDates = normalizeBlockedDates(blockedDates)
+  const isBlocked = normalizedBlockedDates.includes(normalizedDate)
+  
+  return isBlocked
 }
 

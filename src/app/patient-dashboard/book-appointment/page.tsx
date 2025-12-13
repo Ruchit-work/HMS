@@ -209,13 +209,19 @@ See you soon! 🏥`
     // Blocked date guard (client-side)
     const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
     if (selectedDoctorData) {
-      try {
-        const blockedDates: any[] = Array.isArray((selectedDoctorData as any).blockedDates) ? (selectedDoctorData as any).blockedDates : []
-        if (isDateBlocked(appointmentData.date, blockedDates)) {
-          setNotification({ type: 'error', message: 'Doctor is not available on the selected date' })
-          return
-        }
-      } catch {}
+      const blockedDates: any[] = Array.isArray((selectedDoctorData as any).blockedDates) ? (selectedDoctorData as any).blockedDates : []
+      if (blockedDates.length > 0 && isDateBlocked(appointmentData.date, blockedDates)) {
+        const blockedDateInfo = blockedDates.find((bd: any) => {
+          const normalizedDate = bd?.date ? String(bd.date).slice(0, 10) : ""
+          return normalizedDate === appointmentData.date
+        })
+        const reason = blockedDateInfo?.reason || "Doctor is not available"
+        setNotification({ 
+          type: 'error', 
+          message: `Selected date is not available. ${reason}. Please choose another date.` 
+        })
+        return
+      }
     }
 
     setSubmitting(true)

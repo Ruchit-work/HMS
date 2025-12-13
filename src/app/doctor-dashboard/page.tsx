@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, query, where, onSnapshot, collection } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -17,6 +17,7 @@ import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
 import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
 import NotificationBadge from "@/components/ui/NotificationBadge"
+import Notification from "@/components/ui/Notification"
 
 interface UserData {
   id: string;
@@ -33,7 +34,7 @@ export default function DoctorDashboard() {
   const router = useRouter()
   const [userData, setUserData] = useState<UserData | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
+  const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [, setUpdating] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [, setShowCompletionModal] = useState(false)
@@ -46,6 +47,9 @@ export default function DoctorDashboard() {
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
   const [blockedDrafts, setBlockedDrafts] = useState<BlockedDate[]>([])
   const [savingSchedule, setSavingSchedule] = useState(false)
+  const [pendingRequests, setPendingRequests] = useState<any[]>([])
+  const [rejectedRequests, setRejectedRequests] = useState<any[]>([])
+  const [dismissedRequestIds, setDismissedRequestIds] = useState<string[]>([])
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
@@ -87,6 +91,7 @@ export default function DoctorDashboard() {
     if (!user) return
 
     let unsubscribeAppointments: (() => void) | null = null
+    let unsubscribeScheduleRequests: (() => void) | null = null
 
     const fetchData = async () => {
       // Get doctor data from Firestore
@@ -101,6 +106,28 @@ export default function DoctorDashboard() {
         
         // Set up real-time appointments listener
         unsubscribeAppointments = setupAppointmentsListener(user.uid)
+        
+        // Set up real-time listener for schedule requests (pending and rejected)
+        const scheduleRequestsQuery = query(
+          collection(db, 'doctor_schedule_requests'),
+          where('doctorId', '==', user.uid),
+          where('status', 'in', ['pending', 'rejected'])
+        )
+        
+        unsubscribeScheduleRequests = onSnapshot(scheduleRequestsQuery, (snapshot) => {
+          const requests = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          
+          const pending = requests.filter((r: any) => r.status === 'pending')
+          const rejected = requests.filter((r: any) => r.status === 'rejected')
+          
+          setPendingRequests(pending)
+          setRejectedRequests(rejected)
+        }, (error) => {
+          console.error('Error listening to schedule requests:', error)
+        })
       }
     }
 
@@ -110,6 +137,9 @@ export default function DoctorDashboard() {
     return () => {
       if (unsubscribeAppointments) {
         unsubscribeAppointments()
+      }
+      if (unsubscribeScheduleRequests) {
+        unsubscribeScheduleRequests()
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -624,6 +654,67 @@ export default function DoctorDashboard() {
                 )}
               </div>
             </div>
+
+            {/* Leave Request Status */}
+            {(pendingRequests.length > 0 || rejectedRequests.length > 0) && (
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Leave Request Status</h3>
+                <div className="space-y-3">
+                  {/* Pending Requests */}
+                  {pendingRequests.map((req: any) => {
+                    const blockedDates = Array.isArray(req.blockedDates) ? req.blockedDates : []
+                    const dateStrings = blockedDates.map((bd: any) => {
+                      return typeof bd === 'string' ? bd : bd?.date || ''
+                    }).filter(Boolean)
+                    const reasons = blockedDates.map((bd: any) => {
+                      return typeof bd === 'object' && bd?.reason ? bd.reason : ''
+                    }).filter(Boolean)
+                    const uniqueReasons = [...new Set(reasons)]
+                    
+                    return (
+                      <div key={req.id} className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <p className="text-sm text-yellow-800">
+                          Your leave {dateStrings.length > 0 && (
+                            <>
+                              <span className="font-semibold">{dateStrings.join(', ')}</span>
+                            </>
+                          )} {uniqueReasons.length > 0 && `(${uniqueReasons.join(', ')})`} is still pending
+                        </p>
+                      </div>
+                    )
+                  })}
+
+                  {/* Rejected Requests */}
+                  {rejectedRequests
+                    .filter((req: any) => !dismissedRequestIds.includes(req.id))
+                    .map((req: any) => {
+                      const blockedDates = Array.isArray(req.blockedDates) ? req.blockedDates : []
+                      const dateStrings = blockedDates.map((bd: any) => {
+                        return typeof bd === 'string' ? bd : bd?.date || ''
+                      }).filter(Boolean)
+                      
+                      return (
+                        <div key={req.id} className="p-3 bg-red-50 rounded-lg border border-red-200 flex items-center justify-between">
+                          <p className="text-sm text-red-800">
+                            Your request for leave {dateStrings.length > 0 && (
+                              <span className="font-semibold">{dateStrings.join(', ')}</span>
+                            )} is rejected
+                          </p>
+                          <button
+                            onClick={() => {
+                              // Add to dismissed list so it won't show again even if real-time listener updates
+                              setDismissedRequestIds(prev => [...prev, req.id])
+                            }}
+                            className="ml-3 px-2 py-1 text-xs font-medium text-red-700 hover:text-red-900 hover:bg-red-100 rounded transition-colors"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      )
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -660,9 +751,23 @@ export default function DoctorDashboard() {
                 <button
                   onClick={handleSaveSchedule}
                   disabled={savingSchedule}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-indigo-600"
                 >
-                  {savingSchedule ? "Saving..." : "Save Changes"}
+                  {savingSchedule ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Changes</span>
+                  )}
                 </button>
               </div>
               
@@ -703,9 +808,9 @@ export default function DoctorDashboard() {
                   <button
                     onClick={handleSubmitBlockedDrafts}
                     disabled={savingSchedule}
-                    className="px-3 py-1.5 bg-yellow-600 text-white rounded-lg text-xs hover:bg-yellow-700 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-xs font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Submit
+                    Submit for Approval
                   </button>
                 </div>
               </div>
@@ -806,6 +911,14 @@ export default function DoctorDashboard() {
           )}
         </div>
       </main>
+      
+      {notification && (
+        <Notification 
+          type={notification.type}
+          message={notification.message}
+          onClose={() => setNotification(null)}
+        />
+      )}
     </div>
   )
 }

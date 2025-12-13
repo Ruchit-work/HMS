@@ -1298,7 +1298,17 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     }`}
                   />
                   {isSelectedDateBlocked && (
-                    <p className="mt-2 text-xs font-medium text-red-600">Doctor is not available on the selected date.</p>
+                    <div className="mt-2 text-sm bg-red-50 border-l-4 border-red-400 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <p className="font-semibold text-red-800 text-xs mb-1">Date Not Available</p>
+                          <p className="text-red-700 text-xs">Please select another date to continue.</p>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
                 <div className="sm:col-span-2">
@@ -1313,7 +1323,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                       {!selectedDoctorId || !appointmentDate
                         ? "Select doctor and date first"
                         : isSelectedDateBlocked
-                        ? "Doctor not available on selected date"
+                        ? "Sorry, doctor not available"
                         : availableSlots.length
                         ? "Select time"
                         : "No slots available"}

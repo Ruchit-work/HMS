@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
+import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 
 export async function POST(req: NextRequest) {
   // Apply rate limiting first
@@ -48,11 +49,25 @@ export async function POST(req: NextRequest) {
     const applyVisitingHours = request.requestType === 'visitingHours' || request.requestType === 'both'
     const applyBlockedDates = request.requestType === 'blockedDates' || request.requestType === 'both'
 
+    // Get doctor's hospital ID to update hospital-scoped collection
+    const doctorHospitalId = await getDoctorHospitalId(doctorId)
+    
     // Start batch to update doctor doc and mark request approved
     const batch = db.batch()
+    const updateData: any = {}
+    if (applyVisitingHours) updateData.visitingHours = request.visitingHours || null
+    if (applyBlockedDates) updateData.blockedDates = request.blockedDates || []
+    updateData.updatedAt = new Date().toISOString()
+    
+    // Update legacy doctors collection (for backward compatibility)
     const doctorRef = db.collection('doctors').doc(doctorId)
-    if (applyVisitingHours) batch.update(doctorRef, { visitingHours: request.visitingHours || null, updatedAt: new Date().toISOString() })
-    if (applyBlockedDates) batch.update(doctorRef, { blockedDates: request.blockedDates || [], updatedAt: new Date().toISOString() })
+    batch.update(doctorRef, updateData)
+    
+    // Also update hospital-scoped doctors collection (where booking form reads from)
+    if (doctorHospitalId) {
+      const hospitalDoctorRef = db.collection(getHospitalCollectionPath(doctorHospitalId, 'doctors')).doc(doctorId)
+      batch.update(hospitalDoctorRef, updateData)
+    }
 
     // Collect conflicting appointments (confirmed on blocked dates)
     let conflicts: admin.firestore.QueryDocumentSnapshot[] = []

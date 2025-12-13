@@ -306,7 +306,7 @@ export default function PatientProfileForm({
                 clearErrors()
               }}
               className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-              placeholder={enableCountryCode ? '7359057367' : 'Phone number'}
+              placeholder={enableCountryCode ? '9876543210' : 'Phone number'}
             />
           </div>
         </div>

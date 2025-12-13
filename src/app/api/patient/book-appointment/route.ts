@@ -5,6 +5,7 @@ import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/rateLimit"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { isDateBlocked } from "@/utils/blockedDates"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -63,6 +64,16 @@ export async function POST(request: Request) {
       const doctorHospitalId = await getDoctorHospitalId(appointmentData.doctorId)
       if (!doctorHospitalId) {
         return NextResponse.json({ error: "Doctor's hospital not found" }, { status: 400 })
+      }
+
+      // Validate blocked date on server side
+      const doctorDoc = await firestore.collection("doctors").doc(appointmentData.doctorId).get()
+      if (doctorDoc.exists) {
+        const doctorData = doctorDoc.data()
+        const blockedDates: any[] = Array.isArray(doctorData?.blockedDates) ? doctorData.blockedDates : []
+        if (isDateBlocked(appointmentData.appointmentDate, blockedDates)) {
+          return NextResponse.json({ error: "Doctor is not available on the selected date. Please choose another date." }, { status: 400 })
+        }
       }
 
       // Normalize appointment time to 24-hour format for consistent storage
@@ -212,6 +223,26 @@ See you soon! 🏥`
       const appointmentHospitalId = await getAppointmentHospitalId(appointmentId)
       if (!appointmentHospitalId) {
         return NextResponse.json({ error: "Appointment hospital not found" }, { status: 404 })
+      }
+
+      // Validate blocked date for reschedule
+      const appointmentDocRef = firestore
+        .collection(getHospitalCollectionPath(appointmentHospitalId, "appointments"))
+        .doc(appointmentId)
+      const appointmentDoc = await appointmentDocRef.get()
+      if (!appointmentDoc.exists) {
+        return NextResponse.json({ error: "Appointment not found" }, { status: 404 })
+      }
+      const appointment = appointmentDoc.data()
+      if (appointment?.doctorId) {
+        const doctorDoc = await firestore.collection("doctors").doc(appointment.doctorId).get()
+        if (doctorDoc.exists) {
+          const doctorData = doctorDoc.data()
+          const blockedDates: any[] = Array.isArray(doctorData?.blockedDates) ? doctorData.blockedDates : []
+          if (isDateBlocked(appointmentDate, blockedDates)) {
+            return NextResponse.json({ error: "Doctor is not available on the selected date. Please choose another date." }, { status: 400 })
+          }
+        }
       }
 
       await firestore.runTransaction(async (transaction) => {

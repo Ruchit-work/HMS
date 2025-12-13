@@ -4,6 +4,7 @@
  */
 
 import { VisitingHours, DaySchedule, Appointment, Doctor } from "@/types/patient"
+import { normalizeBlockedDates } from "@/utils/blockedDates"
 
 // Default visiting hours (9 AM - 5 PM with 1-2 PM lunch break)
 export const DEFAULT_VISITING_HOURS: VisitingHours = {
@@ -135,7 +136,9 @@ export function isDateBlocked(doctor: Doctor, date: Date): boolean {
   if (!doctor.blockedDates || doctor.blockedDates.length === 0) return false
   
   const dateString = date.toISOString().split('T')[0]
-  return doctor.blockedDates.some(blocked => blocked.date === dateString)
+  // Normalize blocked dates to handle various formats (string, object with date property, Firestore Timestamp, etc.)
+  const normalizedBlockedDates = normalizeBlockedDates(doctor.blockedDates as any[])
+  return normalizedBlockedDates.includes(dateString)
 }
 
 // Get blocked date info if date is blocked
@@ -143,8 +146,24 @@ export function getBlockedDateInfo(doctor: Doctor, date: Date): { reason: string
   if (!doctor.blockedDates) return null
   
   const dateString = date.toISOString().split('T')[0]
-  const blocked = doctor.blockedDates.find(b => b.date === dateString)
-  return blocked ? { reason: blocked.reason } : null
+  // Find blocked date - handle various formats (normalize for comparison but return original for reason)
+  const blocked = (doctor.blockedDates as any[]).find((b: any) => {
+    // Normalize the blocked date for comparison
+    let normalizedDate = ""
+    if (typeof b === "string") {
+      normalizedDate = b.slice(0, 10)
+    } else if (b && typeof b.date === "string") {
+      normalizedDate = String(b.date).slice(0, 10)
+    } else if (b?.toDate && typeof b.toDate === "function") {
+      const dt = b.toDate() as Date
+      normalizedDate = dt.toISOString().split('T')[0]
+    } else if (b?.seconds && typeof b.seconds === "number") {
+      const dt = new Date(b.seconds * 1000)
+      normalizedDate = dt.toISOString().split('T')[0]
+    }
+    return normalizedDate === dateString
+  })
+  return blocked ? { reason: (blocked.reason || "Doctor not available") as string } : null
 }
 
 // Get available time slots for a specific doctor on a specific date
