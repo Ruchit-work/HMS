@@ -473,34 +473,6 @@ async function processBookingConfirmation(
     return
   }
 
-  // Validate that appointment time is not in the past (for today's appointments) - BEFORE creating appointment
-  const { normalizeTime } = await import("@/utils/timeSlots")
-  const normalizedTime = normalizeTime(session.appointmentTime)
-  const today = new Date()
-  const todayDateString = today.toISOString().split("T")[0]
-  const isToday = session.appointmentDate === todayDateString
-  
-  if (isToday) {
-    const now = new Date()
-    const currentTime = now.getTime()
-    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-    
-    // Create slot datetime in local timezone
-    const [year, month, day] = session.appointmentDate.split('-').map(Number)
-    const [hours, minutes] = normalizedTime.split(':').map(Number)
-    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-    const slotTime = slotDateTime.getTime()
-    
-    // Reject if slot is in the past or less than 15 minutes away
-    if (slotTime <= minimumTime) {
-      const errorMsg = language === "gujarati"
-        ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ફરીથી બુકિંગ કરો અને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
-        : "❌ This time has already passed or is too soon. Please book again and select a future time (at least 15 minutes from now)."
-      await sendTextMessage(phone, errorMsg)
-      await sessionRef.delete()
-      return
-    }
-  }
 
   const patient = await findPatientByPhone(db, normalizedPhone)
   if (!patient) {
@@ -918,33 +890,10 @@ async function handleFlowCompletion(value: any): Promise<Response> {
     return NextResponse.json({ success: true })
   }
   
-  // Validate that appointment time is not in the past (for today's appointments) - BEFORE creating appointment
-  const normalizedTime = normalizeTime(appointmentTime)
-  const today = new Date()
-  const todayDateString = today.toISOString().split("T")[0]
-  const isToday = appointmentDate === todayDateString
-  
-  if (isToday) {
-    const now = new Date()
-    const currentTime = now.getTime()
-    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-    
-    // Create slot datetime in local timezone
-    const [year, month, day] = appointmentDate.split('-').map(Number)
-    const [hours, minutes] = normalizedTime.split(':').map(Number)
-    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-    const slotTime = slotDateTime.getTime()
-    
-    // Reject if slot is in the past or less than 15 minutes away
-    if (slotTime <= minimumTime) {
-      await sendTextMessage(
-        from,
-        `❌ *Time Slot Not Available*\n\nThis time (${appointmentTime}) has already passed or is too soon. Please book again and select a future time (at least 15 minutes from now).`
-      )
-      return NextResponse.json({ success: true })
-    }
-  }
 
+  // Normalize time for slot checking
+  const normalizedTime = normalizeTime(appointmentTime)
+  
   // Check if time slot is already booked
   const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
   const slotRef = db.collection("appointmentSlots").doc(slotDocId)
@@ -1783,30 +1732,6 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
     }
     
     const normalizedTime = normalizeTime(nextAvailableSlot)
-    
-    // Validate that the selected time is not in the past (for today's appointments)
-    const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
-    if (isToday && session.appointmentDate) {
-      const now = new Date()
-      const currentTime = now.getTime()
-      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-      
-      // Create slot datetime in local timezone to avoid timezone issues
-      const [year, month, day] = session.appointmentDate.split('-').map(Number)
-      const [hours, minutes] = normalizedTime.split(':').map(Number)
-      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-      const slotTime = slotDateTime.getTime()
-      
-      // Reject if slot is in the past or less than 15 minutes away
-      if (slotTime <= minimumTime) {
-        const errorMsg = language === "gujarati"
-          ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
-          : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
-        await sendTextMessage(phone, errorMsg)
-        await sendTimePicker(phone, undefined, session.appointmentDate!, language)
-        return
-      }
-    }
 
     await sessionRef.update({
       appointmentTime: normalizedTime,
@@ -1826,30 +1751,6 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
   if (selectedId.startsWith("time_")) {
     const selectedTime = selectedId.replace("time_", "")
     const normalizedTime = normalizeTime(selectedTime)
-
-    // Validate that the selected time is not in the past (for today's appointments)
-    const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
-    if (isToday && session.appointmentDate) {
-      const now = new Date()
-      const currentTime = now.getTime()
-      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-      
-      // Create slot datetime in local timezone to avoid timezone issues
-      const [year, month, day] = session.appointmentDate.split('-').map(Number)
-      const [hours, minutes] = normalizedTime.split(':').map(Number)
-      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-      const slotTime = slotDateTime.getTime()
-      
-      // Reject if slot is in the past or less than 15 minutes away
-      if (slotTime <= minimumTime) {
-        const errorMsg = language === "gujarati"
-          ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
-          : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
-        await sendTextMessage(phone, errorMsg)
-        await sendTimePicker(phone, undefined, session.appointmentDate, language)
-        return
-      }
-    }
 
     // Skip slot checking since no doctor is assigned yet - receptionist will check when assigning doctor
 
@@ -2073,21 +1974,6 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       continue
     }
 
-    if (isToday && session.appointmentDate) {
-      const now = new Date()
-      const currentTime = now.getTime()
-      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-      
-      // Create slot datetime in local timezone
-      const [year, month, day] = session.appointmentDate.split('-').map(Number)
-      const [hours, minutes] = normalizedTime.split(':').map(Number)
-      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-      const slotTime = slotDateTime.getTime()
-      
-      if (slotTime <= minimumTime) {
-        continue // Skip past slots
-      }
-    }
     
     // Skip slot checking since no doctor is assigned yet - show all slots, receptionist will check when assigning doctor
     availableSlotsForPeriod.push({ raw: slot, normalized: normalizedTime })
@@ -2123,28 +2009,32 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   const hourlySlots = generateHourlyTimeSlots()
   const availableHourlySlots: Array<{ id: string; title: string; description?: string }> = []
   
-  // Check if appointment is today - need to filter out past hourly slots
+  // SINGLE VALIDATION POINT: Check if appointment is today - filter out past hourly slots
   const now = new Date()
   const today = new Date()
   today.setHours(0, 0, 0, 0) // Normalize to start of day for comparison
   const todayDateString = today.toISOString().split("T")[0]
   const isToday = appointmentDate === todayDateString
-  const minimumTime = now.getTime() + (15 * 60 * 1000) // 15 minutes buffer
+  
+  // Use IST timezone for accurate comparison (IST = UTC+5:30)
+  const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds
+  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
+  const istNow = new Date(utcTime + istOffset)
+  const minimumTime = isToday ? istNow.getTime() + (15 * 60 * 1000) : undefined // 15 minutes buffer in IST (only for today)
   
   // Check availability for each hourly slot
   for (const hourlySlot of hourlySlots) {
     // For today's appointments, filter out hourly slots that are completely in the past
-    if (isToday && appointmentDate) {
+    if (isToday && minimumTime !== undefined) {
       const [year, month, day] = appointmentDate.split('-').map(Number)
       
-      // Check if the hour END has passed
-      // If the hour end time has passed the minimum time (now + 15 min buffer), skip the entire hour
+      // Check if the hour END has passed (in IST)
       const hourEndTime = hourlySlot.hour + 1
-      const hourEndDateTime = new Date(year, month - 1, day, hourEndTime, 0, 0)
-      const hourEndTimeMs = hourEndDateTime.getTime()
+      // Create hour end time in IST
+      const hourEndDateUTC = new Date(Date.UTC(year, month - 1, day, hourEndTime, 0, 0))
+      const hourEndTimeMs = hourEndDateUTC.getTime() + istOffset // Convert to IST timestamp
       
       // If the hour end has passed the minimum acceptable time, skip it
-      // Example: At 12:04 PM, minimumTime = 12:19 PM. If hour ends at 10:00 AM, skip it.
       if (hourEndTimeMs <= minimumTime) {
         continue // Skip this hourly slot - it's completely in the past
       }
@@ -2154,22 +2044,24 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
       db,
       hourlySlot.hour,
       appointmentDate,
-      doctorId
+      doctorId,
+      minimumTime // Pass minimumTime only for today
     )
     
-    // Double-check: Even if getNextAvailable15MinSlot returns a slot, verify it's not in the past
-    if (nextAvailableSlot) {
-      // For today, verify the returned slot is actually in the future
-      if (isToday && appointmentDate) {
-        const [year, month, day] = appointmentDate.split('-').map(Number)
-        const [hours, minutes] = nextAvailableSlot.split(':').map(Number)
-        const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-        
-        if (slotDateTime.getTime() <= minimumTime) {
-          continue // Skip this slot - it's in the past
-        }
-      }
+    // Double-check: Even if getNextAvailable15MinSlot returns a slot, verify it's not in the past (for today only)
+    if (nextAvailableSlot && isToday && minimumTime !== undefined) {
+      const [year, month, day] = appointmentDate.split('-').map(Number)
+      const [hours, minutes] = nextAvailableSlot.split(':').map(Number)
+      // Create slot time in IST
+      const slotDateUTC = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0))
+      const slotTimeMs = slotDateUTC.getTime() + istOffset // Convert to IST timestamp
       
+      if (slotTimeMs <= minimumTime) {
+        continue // Skip this slot - it's in the past
+      }
+    }
+    
+    if (nextAvailableSlot) {
       // This hourly slot has at least one available 15-minute slot that's in the future
       availableHourlySlots.push({
         id: hourlySlot.id,
@@ -2327,29 +2219,6 @@ async function handleTimeSelection(
 
   const normalizedTime = normalizeTime(selectedTime)
 
-  const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
-  if (isToday && session.appointmentDate) {
-    const now = new Date()
-    const currentTime = now.getTime()
-    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-    
-    // Create slot datetime in local timezone to avoid timezone issues
-    const [year, month, day] = session.appointmentDate.split('-').map(Number)
-    const [hours, minutes] = normalizedTime.split(':').map(Number)
-    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-    const slotTime = slotDateTime.getTime()
-    
-    // Reject if slot is in the past or less than 15 minutes away
-    if (slotTime <= minimumTime) {
-      const errorMsg = language === "gujarati"
-        ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
-        : "❌ That time has already passed or is too soon. Please pick a future slot (at least 15 minutes from now)."
-      await sendTextMessage(phone, errorMsg)
-      await sendTimePicker(phone, undefined, session.appointmentDate, language)
-      return true
-    }
-  }
-
   // Skip slot checking since no doctor is assigned yet - receptionist will check when assigning doctor
 
   await sessionRef.update({
@@ -2390,36 +2259,6 @@ async function handleConfirmation(
     return true
   }
 
-  // Validate that appointment time is not in the past (for today's appointments)
-  if (session.appointmentDate && session.appointmentTime) {
-    const { normalizeTime } = await import("@/utils/timeSlots")
-    const normalizedTime = normalizeTime(session.appointmentTime)
-    const today = new Date()
-    const todayDateString = today.toISOString().split("T")[0]
-    const isToday = session.appointmentDate === todayDateString
-    
-    if (isToday) {
-      const now = new Date()
-      const currentTime = now.getTime()
-      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-      
-      // Create slot datetime in local timezone
-      const [year, month, day] = session.appointmentDate.split('-').map(Number)
-      const [hours, minutes] = normalizedTime.split(':').map(Number)
-      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-      const slotTime = slotDateTime.getTime()
-      
-      // Reject if slot is in the past or less than 15 minutes away
-      if (slotTime <= minimumTime) {
-        const errorMsg = language === "gujarati"
-          ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ફરીથી બુકિંગ કરો અને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
-          : "❌ This time has already passed or is too soon. Please book again and select a future time (at least 15 minutes from now)."
-        await sendTextMessage(phone, errorMsg)
-        await sessionRef.delete()
-        return true
-      }
-    }
-  }
 
   // Create appointment
   try {
@@ -2587,7 +2426,8 @@ async function getNextAvailable15MinSlot(
   db: FirebaseFirestore.Firestore,
   hour: number,
   appointmentDate: string,
-  doctorId?: string
+  doctorId?: string,
+  minimumTime?: number // Optional minimum time in milliseconds (IST) - only passed when date is today
 ): Promise<string | null> {
   const subSlots = generate15MinuteSubSlots(hour)
   
@@ -2595,20 +2435,16 @@ async function getNextAvailable15MinSlot(
   for (const slot of subSlots) {
     const normalizedTime = normalizeTime(slot)
     
-    // Skip past slots for today with proper time validation
-    const today = new Date()
-    const todayDateString = today.toISOString().split("T")[0]
-    const isToday = appointmentDate === todayDateString
-    
-    if (isToday && appointmentDate) {
-      // Create proper datetime for the slot using local timezone
+    // Skip past slots for today (only if minimumTime is provided)
+    if (minimumTime !== undefined) {
       const [year, month, day] = appointmentDate.split('-').map(Number)
       const [hours, minutes] = normalizedTime.split(':').map(Number)
-      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-      const now = new Date()
-      const minimumTime = now.getTime() + (15 * 60 * 1000)
+      // Create slot time in IST
+      const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds
+      const slotDateUTC = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0))
+      const slotTimeMs = slotDateUTC.getTime() + istOffset // Convert to IST timestamp
       
-      if (slotDateTime.getTime() <= minimumTime) {
+      if (slotTimeMs <= minimumTime) {
         continue
       }
     }
@@ -2771,24 +2607,6 @@ async function createAppointment(
     throw new Error("No hospital available for appointment creation")
   }
   
-  // Validate that appointment time is not in the past (for today's appointments)
-  const isToday = payload.appointmentDate === new Date().toISOString().split("T")[0]
-  if (isToday && payload.appointmentDate) {
-    const now = new Date()
-    const currentTime = now.getTime()
-    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-    
-    // Create slot datetime in local timezone to avoid timezone issues
-    const [year, month, day] = payload.appointmentDate.split('-').map(Number)
-    const [hours, minutes] = appointmentTime.split(':').map(Number)
-    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
-    const slotTime = slotDateTime.getTime()
-    
-    // Reject if slot is in the past or less than 15 minutes away
-    if (slotTime <= minimumTime) {
-      throw new Error("Cannot book appointment: Selected time has already passed or is too soon (must be at least 15 minutes from now)")
-    }
-  }
   
   // Validate blocked date BEFORE creating appointment (if doctor is assigned)
   if (payload.doctorId && doctor) {
