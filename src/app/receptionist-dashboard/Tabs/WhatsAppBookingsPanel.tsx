@@ -32,6 +32,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [doctorsLoading, setDoctorsLoading] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
 
   // Form state
   const [formDoctorId, setFormDoctorId] = useState("")
@@ -386,6 +387,48 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
     }
   }
 
+  const handleDeleteBooking = async (booking: Appointment) => {
+    const confirmation = window.confirm(
+      `Are you sure you want to delete this WhatsApp booking?\n\nPatient: ${booking.patientName}\nDate: ${booking.appointmentDate}\nTime: ${booking.appointmentTime}\n\nThis action cannot be undone.`
+    )
+    
+    if (!confirmation) return
+
+    setDeleteLoading(booking.id)
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error("You must be logged in")
+      }
+
+      const token = await currentUser.getIdToken()
+
+      const res = await fetch(`/api/receptionist/whatsapp-bookings/${booking.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          hospitalId: (booking as any).hospitalId,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || data?.details || "Failed to delete booking")
+      }
+
+      notify({ type: "success", message: "WhatsApp booking deleted successfully!" })
+      // Real-time listener will automatically update the list
+    } catch (error: any) {
+      console.error("Failed to delete booking", error)
+      notify({ type: "error", message: error?.message || "Failed to delete booking" })
+    } finally {
+      setDeleteLoading(null)
+    }
+  }
+
   const pendingCount = bookings.length
 
   const summaryCards = useMemo(() => {
@@ -506,12 +549,21 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       </span>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => handleOpenEditModal(booking)}
-                        className="text-purple-600 hover:text-purple-900"
-                      >
-                        Add Details
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleOpenEditModal(booking)}
+                          className="text-purple-600 hover:text-purple-900 font-medium"
+                        >
+                          Add Details
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBooking(booking)}
+                          disabled={deleteLoading === booking.id}
+                          className="text-red-600 hover:text-red-900 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {deleteLoading === booking.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

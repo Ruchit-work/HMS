@@ -473,6 +473,35 @@ async function processBookingConfirmation(
     return
   }
 
+  // Validate that appointment time is not in the past (for today's appointments) - BEFORE creating appointment
+  const { normalizeTime } = await import("@/utils/timeSlots")
+  const normalizedTime = normalizeTime(session.appointmentTime)
+  const today = new Date()
+  const todayDateString = today.toISOString().split("T")[0]
+  const isToday = session.appointmentDate === todayDateString
+  
+  if (isToday) {
+    const now = new Date()
+    const currentTime = now.getTime()
+    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+    
+    // Create slot datetime in local timezone
+    const [year, month, day] = session.appointmentDate.split('-').map(Number)
+    const [hours, minutes] = normalizedTime.split(':').map(Number)
+    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
+    const slotTime = slotDateTime.getTime()
+    
+    // Reject if slot is in the past or less than 15 minutes away
+    if (slotTime <= minimumTime) {
+      const errorMsg = language === "gujarati"
+        ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ફરીથી બુકિંગ કરો અને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
+        : "❌ This time has already passed or is too soon. Please book again and select a future time (at least 15 minutes from now)."
+      await sendTextMessage(phone, errorMsg)
+      await sessionRef.delete()
+      return
+    }
+  }
+
   const patient = await findPatientByPhone(db, normalizedPhone)
   if (!patient) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
@@ -889,8 +918,34 @@ async function handleFlowCompletion(value: any): Promise<Response> {
     return NextResponse.json({ success: true })
   }
   
-  // Check if time slot is already booked
+  // Validate that appointment time is not in the past (for today's appointments) - BEFORE creating appointment
   const normalizedTime = normalizeTime(appointmentTime)
+  const today = new Date()
+  const todayDateString = today.toISOString().split("T")[0]
+  const isToday = appointmentDate === todayDateString
+  
+  if (isToday) {
+    const now = new Date()
+    const currentTime = now.getTime()
+    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+    
+    // Create slot datetime in local timezone
+    const [year, month, day] = appointmentDate.split('-').map(Number)
+    const [hours, minutes] = normalizedTime.split(':').map(Number)
+    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
+    const slotTime = slotDateTime.getTime()
+    
+    // Reject if slot is in the past or less than 15 minutes away
+    if (slotTime <= minimumTime) {
+      await sendTextMessage(
+        from,
+        `❌ *Time Slot Not Available*\n\nThis time (${appointmentTime}) has already passed or is too soon. Please book again and select a future time (at least 15 minutes from now).`
+      )
+      return NextResponse.json({ success: true })
+    }
+  }
+
+  // Check if time slot is already booked
   const slotDocId = `${doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
   const slotRef = db.collection("appointmentSlots").doc(slotDocId)
   const slotDoc = await slotRef.get()
@@ -2333,6 +2388,37 @@ async function handleConfirmation(
     await sendTextMessage(phone, "❌ Payment information missing. Please start booking again.")
     await sessionRef.delete()
     return true
+  }
+
+  // Validate that appointment time is not in the past (for today's appointments)
+  if (session.appointmentDate && session.appointmentTime) {
+    const { normalizeTime } = await import("@/utils/timeSlots")
+    const normalizedTime = normalizeTime(session.appointmentTime)
+    const today = new Date()
+    const todayDateString = today.toISOString().split("T")[0]
+    const isToday = session.appointmentDate === todayDateString
+    
+    if (isToday) {
+      const now = new Date()
+      const currentTime = now.getTime()
+      const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+      
+      // Create slot datetime in local timezone
+      const [year, month, day] = session.appointmentDate.split('-').map(Number)
+      const [hours, minutes] = normalizedTime.split(':').map(Number)
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
+      const slotTime = slotDateTime.getTime()
+      
+      // Reject if slot is in the past or less than 15 minutes away
+      if (slotTime <= minimumTime) {
+        const errorMsg = language === "gujarati"
+          ? "❌ આ સમય પસાર થઈ ગયો છે અથવા ખૂબ નજીક છે. કૃપા કરીને ફરીથી બુકિંગ કરો અને ભવિષ્યનો સમય પસંદ કરો (ઓછામાં ઓછું 15 મિનિટ અંતર)."
+          : "❌ This time has already passed or is too soon. Please book again and select a future time (at least 15 minutes from now)."
+        await sendTextMessage(phone, errorMsg)
+        await sessionRef.delete()
+        return true
+      }
+    }
   }
 
   // Create appointment

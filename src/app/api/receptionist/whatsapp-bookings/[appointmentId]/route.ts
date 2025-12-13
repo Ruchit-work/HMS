@@ -31,7 +31,25 @@ export async function PUT(
     }
 
     const { appointmentId } = await context.params
-    const body = await request.json()
+    
+    // Parse request body with error handling
+    let body: any
+    try {
+      body = await request.json()
+    } catch (parseError) {
+      console.error("[WhatsApp Bookings API] Failed to parse request body:", parseError)
+      return Response.json(
+        { error: "Invalid request body", details: "Failed to parse JSON" },
+        { status: 400 }
+      )
+    }
+    
+    if (!appointmentId) {
+      return Response.json(
+        { error: "Appointment ID is required" },
+        { status: 400 }
+      )
+    }
 
     const firestore = admin.firestore()
 
@@ -109,60 +127,79 @@ export async function PUT(
         const newSlotDocId = `${body.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
         const newSlotRef = firestore.collection("appointmentSlots").doc(newSlotDocId)
         
-        // Check if the new slot is available (unless it's for this same appointment)
-        const newSlotDoc = await newSlotRef.get()
-        if (newSlotDoc.exists && newSlotDoc.data()?.appointmentId !== appointmentId) {
-          return Response.json(
-            { error: "Time slot is already booked for this doctor and date" },
-            { status: 400 }
-          )
-        }
+        // Check if doctor, date, or time is being changed
+        const isDoctorChanged = appointmentData.doctorId !== body.doctorId
+        const isDateChanged = body.appointmentDate && body.appointmentDate !== appointmentData.appointmentDate
+        const oldAppointmentTime = appointmentData.appointmentTime || ""
+        const newAppointmentTime = body.appointmentTime || ""
+        const isTimeChanged = newAppointmentTime && normalizeTime(newAppointmentTime) !== normalizeTime(oldAppointmentTime)
+        
+        // Only check slot availability and update slot if doctor, date, or time is being changed
+        if (isDoctorChanged || isDateChanged || isTimeChanged) {
+          // Check if the new slot is already booked by another appointment
+          const newSlotDoc = await newSlotRef.get()
+          if (newSlotDoc.exists && newSlotDoc.data()?.appointmentId !== appointmentId) {
+            return Response.json(
+              { error: "Time slot is already booked for this doctor and date" },
+              { status: 400 }
+            )
+          }
 
-        // Update slot in transaction - ensure no duplicates and proper cleanup
-        await firestore.runTransaction(async (transaction) => {
-          // STEP 1: DO ALL READS FIRST (Firestore requirement)
-          
-          // Read old PENDING slot
-          const oldPendingSlotId = `PENDING_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-          const oldPendingSlotRef = firestore.collection("appointmentSlots").doc(oldPendingSlotId)
-          const oldPendingSlotSnap = await transaction.get(oldPendingSlotRef)
-          
-          // Read old doctor slot (if doctor is being changed)
-          let oldDoctorSlotRef = null
-          let oldDoctorSlotSnap = null
-          if (appointmentData.doctorId && appointmentData.doctorId !== body.doctorId) {
-            const oldDoctorSlotId = `${appointmentData.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
-            oldDoctorSlotRef = firestore.collection("appointmentSlots").doc(oldDoctorSlotId)
-            oldDoctorSlotSnap = await transaction.get(oldDoctorSlotRef)
-          }
-          
-          // Read new slot to check availability
-          const newSlotSnap = await transaction.get(newSlotRef)
-          
-          // STEP 2: VALIDATE READS
-          if (newSlotSnap.exists && newSlotSnap.data()?.appointmentId !== appointmentId) {
-            throw new Error("SLOT_ALREADY_BOOKED")
-          }
-          
-          // STEP 3: DO ALL WRITES AFTER READS
-          
-          if (oldPendingSlotSnap.exists && oldPendingSlotSnap.data()?.appointmentId === appointmentId) {
-            transaction.delete(oldPendingSlotRef)
-          }
-          
-          if (oldDoctorSlotRef && oldDoctorSlotSnap && oldDoctorSlotSnap.exists && oldDoctorSlotSnap.data()?.appointmentId === appointmentId) {
-            transaction.delete(oldDoctorSlotRef)
-          }
-          
-          transaction.set(newSlotRef, {
-            appointmentId,
-            doctorId: body.doctorId,
-            appointmentDate,
-            appointmentTime: normalizedTime,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+          // Update slot in transaction - ensure no duplicates and proper cleanup
+          await firestore.runTransaction(async (transaction) => {
+            // STEP 1: DO ALL READS FIRST (Firestore requirement)
+            
+            // Get old date and time for cleanup
+            const oldAppointmentDate = appointmentData.appointmentDate
+            const oldAppointmentTime = appointmentData.appointmentTime
+            const oldNormalizedTime = oldAppointmentTime ? normalizeTime(oldAppointmentTime) : null
+            
+            // Read old PENDING slot (if date/time changed or if it was pending)
+            let oldPendingSlotRef = null
+            let oldPendingSlotSnap = null
+            if (oldAppointmentDate && oldNormalizedTime) {
+              const oldPendingSlotId = `PENDING_${oldAppointmentDate}_${oldNormalizedTime}`.replace(/[:\s]/g, "-")
+              oldPendingSlotRef = firestore.collection("appointmentSlots").doc(oldPendingSlotId)
+              oldPendingSlotSnap = await transaction.get(oldPendingSlotRef)
+            }
+            
+            // Read old doctor slot (if doctor, date, or time is being changed)
+            let oldDoctorSlotRef = null
+            let oldDoctorSlotSnap = null
+            if (appointmentData.doctorId && (isDoctorChanged || isDateChanged || isTimeChanged) && oldAppointmentDate && oldNormalizedTime) {
+              const oldDoctorSlotId = `${appointmentData.doctorId}_${oldAppointmentDate}_${oldNormalizedTime}`.replace(/[:\s]/g, "-")
+              oldDoctorSlotRef = firestore.collection("appointmentSlots").doc(oldDoctorSlotId)
+              oldDoctorSlotSnap = await transaction.get(oldDoctorSlotRef)
+            }
+            
+            // Read new slot to check availability
+            const newSlotSnap = await transaction.get(newSlotRef)
+            
+            // STEP 2: VALIDATE READS
+            if (newSlotSnap.exists && newSlotSnap.data()?.appointmentId !== appointmentId) {
+              throw new Error("SLOT_ALREADY_BOOKED")
+            }
+            
+            // STEP 3: DO ALL WRITES AFTER READS
+            
+            if (oldPendingSlotRef && oldPendingSlotSnap && oldPendingSlotSnap.exists && oldPendingSlotSnap.data()?.appointmentId === appointmentId) {
+              transaction.delete(oldPendingSlotRef)
+            }
+            
+            if (oldDoctorSlotRef && oldDoctorSlotSnap && oldDoctorSlotSnap.exists && oldDoctorSlotSnap.data()?.appointmentId === appointmentId) {
+              transaction.delete(oldDoctorSlotRef)
+            }
+            
+            transaction.set(newSlotRef, {
+              appointmentId,
+              doctorId: body.doctorId,
+              appointmentDate,
+              appointmentTime: normalizedTime,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            })
           })
-        })
+        }
       }
     }
 
@@ -184,18 +221,15 @@ export async function PUT(
     if (body.paymentMethod !== undefined) updateData.paymentMethod = body.paymentMethod
     if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus
 
-    // Update status - if doctor is assigned, always mark as confirmed so it appears in appointment lists
-    // This ensures appointments show up for doctors regardless of billing status
+   
     let shouldSendNotification = false
     if (updateData.doctorId && body.markConfirmed !== false) {
-      // Always mark as confirmed when receptionist assigns doctor and saves
-      // This makes the appointment visible in doctor's dashboard regardless of payment status
+  
       updateData.status = "confirmed"
       updateData.whatsappPending = false
       shouldSendNotification = true // Send WhatsApp notification to patient
     } else if (updateData.doctorId) {
-      // Even if markConfirmed is false, still mark as confirmed when doctor is assigned
-      // Real-world scenario: patients often pay after checkup or through different methods
+   
       updateData.status = "confirmed"
       updateData.whatsappPending = false
       // Don't send notification if markConfirmed is explicitly false
@@ -350,8 +384,135 @@ See you soon! 🏥`
         { status: 400 }
       )
     }
+    // Ensure we always return a proper error response
+    const errorMessage = error?.message || error?.toString() || "Unknown error occurred"
     return Response.json(
-      { error: "Failed to update WhatsApp booking", details: error.message },
+      { 
+        error: "Failed to update WhatsApp booking", 
+        details: errorMessage 
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
+  // Authenticate request - requires receptionist or admin role
+  const auth = await authenticateRequest(request)
+  if (!auth.success) {
+    return createAuthErrorResponse(auth)
+  }
+  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
+    return Response.json(
+      { error: "Access denied. This endpoint requires receptionist or admin role." },
+      { status: 403 }
+    )
+  }
+
+  try {
+    const initResult = initFirebaseAdmin("receptionist whatsapp-bookings delete API")
+    if (!initResult.ok) {
+      return Response.json({ error: "Server not configured" }, { status: 500 })
+    }
+
+    const { appointmentId } = await context.params
+    
+    if (!appointmentId) {
+      return Response.json(
+        { error: "Appointment ID is required" },
+        { status: 400 }
+      )
+    }
+
+    const firestore = admin.firestore()
+    const body = await request.json().catch(() => ({}))
+    const hospitalId = body.hospitalId
+
+    // Prefer hospital-scoped appointment based on provided hospitalId
+    let appointmentRef: FirebaseFirestore.DocumentReference | null = null
+    let appointmentDoc = null as FirebaseFirestore.DocumentSnapshot | null
+
+    if (hospitalId) {
+      appointmentRef = firestore
+        .collection(getHospitalCollectionPath(hospitalId, "appointments"))
+        .doc(appointmentId)
+      appointmentDoc = await appointmentRef.get()
+    }
+
+    // Fallback to legacy global collection if not found or no hospitalId
+    if (!appointmentDoc || !appointmentDoc.exists) {
+      appointmentRef = firestore.collection("appointments").doc(appointmentId)
+      appointmentDoc = await appointmentRef.get()
+    }
+
+    if (!appointmentDoc.exists) {
+      return Response.json(
+        { error: "Appointment not found" },
+        { status: 404 }
+      )
+    }
+
+    const appointmentData = appointmentDoc.data()!
+
+    // Validate that this is a WhatsApp booking
+    if (!appointmentData.whatsappPending && appointmentData.status !== "whatsapp_pending") {
+      return Response.json(
+        { error: "This appointment is not a WhatsApp pending booking" },
+        { status: 400 }
+      )
+    }
+
+    // Delete associated appointment slot if exists
+    const appointmentDate = appointmentData.appointmentDate
+    const appointmentTime = appointmentData.appointmentTime
+    
+    if (appointmentDate && appointmentTime) {
+      const { normalizeTime } = await import("@/utils/timeSlots")
+      const normalizedTime = normalizeTime(appointmentTime)
+      
+      // Delete PENDING slot if exists
+      const pendingSlotId = `PENDING_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+      const pendingSlotRef = firestore.collection("appointmentSlots").doc(pendingSlotId)
+      const pendingSlotDoc = await pendingSlotRef.get()
+      
+      if (pendingSlotDoc.exists && pendingSlotDoc.data()?.appointmentId === appointmentId) {
+        await pendingSlotRef.delete()
+      }
+      
+      // Delete doctor slot if exists
+      if (appointmentData.doctorId) {
+        const doctorSlotId = `${appointmentData.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
+        const doctorSlotRef = firestore.collection("appointmentSlots").doc(doctorSlotId)
+        const doctorSlotDoc = await doctorSlotRef.get()
+        
+        if (doctorSlotDoc.exists && doctorSlotDoc.data()?.appointmentId === appointmentId) {
+          await doctorSlotRef.delete()
+        }
+      }
+    }
+
+    // Delete the appointment
+    if (!appointmentRef) {
+      throw new Error("Internal error: appointmentRef not initialized")
+    }
+
+    await appointmentRef.delete()
+
+    return Response.json({
+      success: true,
+      message: "WhatsApp booking deleted successfully"
+    })
+  } catch (error: any) {
+    console.error("[WhatsApp Bookings API] Error deleting booking:", error)
+    const errorMessage = error?.message || error?.toString() || "Unknown error occurred"
+    return Response.json(
+      { 
+        error: "Failed to delete WhatsApp booking", 
+        details: errorMessage 
+      },
       { status: 500 }
     )
   }
