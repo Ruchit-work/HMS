@@ -2069,24 +2069,28 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   const availableHourlySlots: Array<{ id: string; title: string; description?: string }> = []
   
   // Check if appointment is today - need to filter out past hourly slots
+  const now = new Date()
   const today = new Date()
+  today.setHours(0, 0, 0, 0) // Normalize to start of day for comparison
   const todayDateString = today.toISOString().split("T")[0]
   const isToday = appointmentDate === todayDateString
-  const now = new Date()
   const minimumTime = now.getTime() + (15 * 60 * 1000) // 15 minutes buffer
   
   // Check availability for each hourly slot
   for (const hourlySlot of hourlySlots) {
     // For today's appointments, filter out hourly slots that are completely in the past
     if (isToday && appointmentDate) {
-      // Check if the entire hour is in the past
-      // The hour ends at (hour + 1):00, so check if (hour + 1):00 is in the past
-      const hourEndTime = hourlySlot.hour + 1
       const [year, month, day] = appointmentDate.split('-').map(Number)
-      const hourEndDateTime = new Date(year, month - 1, day, hourEndTime, 0, 0)
       
-      // If the entire hour has passed (including 15 min buffer), skip it
-      if (hourEndDateTime.getTime() <= minimumTime) {
+      // Check if the hour END has passed
+      // If the hour end time has passed the minimum time (now + 15 min buffer), skip the entire hour
+      const hourEndTime = hourlySlot.hour + 1
+      const hourEndDateTime = new Date(year, month - 1, day, hourEndTime, 0, 0)
+      const hourEndTimeMs = hourEndDateTime.getTime()
+      
+      // If the hour end has passed the minimum acceptable time, skip it
+      // Example: At 12:04 PM, minimumTime = 12:19 PM. If hour ends at 10:00 AM, skip it.
+      if (hourEndTimeMs <= minimumTime) {
         continue // Skip this hourly slot - it's completely in the past
       }
     }
@@ -2098,8 +2102,20 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
       doctorId
     )
     
+    // Double-check: Even if getNextAvailable15MinSlot returns a slot, verify it's not in the past
     if (nextAvailableSlot) {
-      // This hourly slot has at least one available 15-minute slot
+      // For today, verify the returned slot is actually in the future
+      if (isToday && appointmentDate) {
+        const [year, month, day] = appointmentDate.split('-').map(Number)
+        const [hours, minutes] = nextAvailableSlot.split(':').map(Number)
+        const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
+        
+        if (slotDateTime.getTime() <= minimumTime) {
+          continue // Skip this slot - it's in the past
+        }
+      }
+      
+      // This hourly slot has at least one available 15-minute slot that's in the future
       availableHourlySlots.push({
         id: hourlySlot.id,
         title: hourlySlot.title,
