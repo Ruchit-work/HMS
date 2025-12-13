@@ -2011,52 +2011,58 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   
   // SINGLE VALIDATION POINT: Check if appointment is today - filter out past hourly slots
   const now = new Date()
-  const today = new Date()
-  today.setHours(0, 0, 0, 0) // Normalize to start of day for comparison
-  const todayDateString = today.toISOString().split("T")[0]
+  
+  // Get current time in IST (Asia/Kolkata timezone = UTC+5:30)
+  const istOffset = 5.5 * 60 * 60 * 1000 // IST offset: 5 hours 30 minutes in milliseconds
+  const utcNow = now.getTime() + (now.getTimezoneOffset() * 60 * 1000) // Convert to UTC milliseconds
+  const istNowMs = utcNow + istOffset // Current time in IST (milliseconds)
+  const istNow = new Date(istNowMs)
+  
+  // Get today's date string in IST for comparison
+  const istYear = istNow.getUTCFullYear()
+  const istMonth = istNow.getUTCMonth() + 1
+  const istDay = istNow.getUTCDate()
+  const todayDateString = `${istYear}-${String(istMonth).padStart(2, "0")}-${String(istDay).padStart(2, "0")}`
   const isToday = appointmentDate === todayDateString
   
-  // Use IST timezone for accurate comparison (IST = UTC+5:30)
-  const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000)
-  const istNow = new Date(utcTime + istOffset)
-  const minimumTime = isToday ? istNow.getTime() + (15 * 60 * 1000) : undefined // 15 minutes buffer in IST (only for today)
+  // Get current hour and minute in IST for simple comparison
+  const currentHourIST = istNow.getUTCHours()
+  const currentMinuteIST = istNow.getUTCMinutes()
+  const currentTimeInMinutes = currentHourIST * 60 + currentMinuteIST
+  const minimumTimeInMinutes = currentTimeInMinutes + 15 // 15 minutes buffer
   
   // Check availability for each hourly slot
   for (const hourlySlot of hourlySlots) {
     // For today's appointments, filter out hourly slots that are completely in the past
-    if (isToday && minimumTime !== undefined) {
-      const [year, month, day] = appointmentDate.split('-').map(Number)
-      
+    if (isToday) {
       // Check if the hour END has passed (in IST)
-      const hourEndTime = hourlySlot.hour + 1
-      // Create hour end time in IST
-      const hourEndDateUTC = new Date(Date.UTC(year, month - 1, day, hourEndTime, 0, 0))
-      const hourEndTimeMs = hourEndDateUTC.getTime() + istOffset // Convert to IST timestamp
+      // e.g., for 9-10 slot, check if 10:00 (600 minutes) has passed
+      const hourEndTimeInMinutes = (hourlySlot.hour + 1) * 60
       
       // If the hour end has passed the minimum acceptable time, skip it
-      if (hourEndTimeMs <= minimumTime) {
+      if (hourEndTimeInMinutes <= minimumTimeInMinutes) {
         continue // Skip this hourly slot - it's completely in the past
       }
     }
+    
+    // Calculate minimum time in milliseconds for getNextAvailable15MinSlot (only for today)
+    const minimumTimeMs = isToday ? istNowMs + (15 * 60 * 1000) : undefined
     
     const nextAvailableSlot = await getNextAvailable15MinSlot(
       db,
       hourlySlot.hour,
       appointmentDate,
       doctorId,
-      minimumTime // Pass minimumTime only for today
+      minimumTimeMs // Pass minimumTime only for today
     )
     
     // Double-check: Even if getNextAvailable15MinSlot returns a slot, verify it's not in the past (for today only)
-    if (nextAvailableSlot && isToday && minimumTime !== undefined) {
-      const [year, month, day] = appointmentDate.split('-').map(Number)
+    if (nextAvailableSlot && isToday) {
       const [hours, minutes] = nextAvailableSlot.split(':').map(Number)
-      // Create slot time in IST
-      const slotDateUTC = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0))
-      const slotTimeMs = slotDateUTC.getTime() + istOffset // Convert to IST timestamp
+      const slotTimeInMinutes = hours * 60 + minutes
       
-      if (slotTimeMs <= minimumTime) {
+      // If slot time has passed the minimum acceptable time, skip it
+      if (slotTimeInMinutes <= minimumTimeInMinutes) {
         continue // Skip this slot - it's in the past
       }
     }
@@ -2435,16 +2441,22 @@ async function getNextAvailable15MinSlot(
   for (const slot of subSlots) {
     const normalizedTime = normalizeTime(slot)
     
-    // Skip past slots for today (only if minimumTime is provided)
+    // Skip past slots for today (only if minimumTime is provided in milliseconds)
     if (minimumTime !== undefined) {
-      const [year, month, day] = appointmentDate.split('-').map(Number)
       const [hours, minutes] = normalizedTime.split(':').map(Number)
-      // Create slot time in IST
-      const istOffset = 5.5 * 60 * 60 * 1000 // IST offset in milliseconds
-      const slotDateUTC = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0))
-      const slotTimeMs = slotDateUTC.getTime() + istOffset // Convert to IST timestamp
+      const slotTimeInMinutes = hours * 60 + minutes
       
-      if (slotTimeMs <= minimumTime) {
+      // Get current time in IST to calculate minimum time in minutes
+      const istOffset = 5.5 * 60 * 60 * 1000
+      const utcNow = new Date().getTime() + (new Date().getTimezoneOffset() * 60 * 1000)
+      const istNowMs = utcNow + istOffset
+      const istNow = new Date(istNowMs)
+      const currentHourIST = istNow.getUTCHours()
+      const currentMinuteIST = istNow.getUTCMinutes()
+      const currentTimeInMinutes = currentHourIST * 60 + currentMinuteIST
+      const minimumTimeInMinutes = currentTimeInMinutes + 15 // 15 minutes buffer
+      
+      if (slotTimeInMinutes <= minimumTimeInMinutes) {
         continue
       }
     }
@@ -2497,12 +2509,7 @@ function generateTimeSlots(): string[] {
   return slots
 }
 
-/**
- * Check if a date is blocked (system-wide like Sunday OR doctor-specific blocked dates)
- * @param dateStr - Date string in YYYY-MM-DD format
- * @param doctorData - Doctor data from Firestore
- * @returns Object with isBlocked boolean and reason string if blocked
- */
+
 function checkDateAvailability(dateStr: string, doctorData: any): { isBlocked: boolean; reason?: string } {
   if (!dateStr) return { isBlocked: false }
 
