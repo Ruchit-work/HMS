@@ -2068,8 +2068,29 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   const hourlySlots = generateHourlyTimeSlots()
   const availableHourlySlots: Array<{ id: string; title: string; description?: string }> = []
   
+  // Check if appointment is today - need to filter out past hourly slots
+  const today = new Date()
+  const todayDateString = today.toISOString().split("T")[0]
+  const isToday = appointmentDate === todayDateString
+  const now = new Date()
+  const minimumTime = now.getTime() + (15 * 60 * 1000) // 15 minutes buffer
+  
   // Check availability for each hourly slot
   for (const hourlySlot of hourlySlots) {
+    // For today's appointments, filter out hourly slots that are completely in the past
+    if (isToday && appointmentDate) {
+      // Check if the entire hour is in the past
+      // The hour ends at (hour + 1):00, so check if (hour + 1):00 is in the past
+      const hourEndTime = hourlySlot.hour + 1
+      const [year, month, day] = appointmentDate.split('-').map(Number)
+      const hourEndDateTime = new Date(year, month - 1, day, hourEndTime, 0, 0)
+      
+      // If the entire hour has passed (including 15 min buffer), skip it
+      if (hourEndDateTime.getTime() <= minimumTime) {
+        continue // Skip this hourly slot - it's completely in the past
+      }
+    }
+    
     const nextAvailableSlot = await getNextAvailable15MinSlot(
       db,
       hourlySlot.hour,
