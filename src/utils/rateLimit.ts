@@ -1,7 +1,3 @@
-/**
- * Rate Limiting Utility
- * Prevents abuse of sensitive API endpoints by limiting requests per time window
- */
 
 interface RateLimitConfig {
   windowMs: number // Time window in milliseconds

@@ -1,8 +1,3 @@
-/**
- * Groq API Service for Generating Advertisements
- * Uses Groq API to generate compelling advertisements for health awareness days
- */
-
 import type { HealthAwarenessDay } from "./healthAwarenessDays"
 
 export interface GeneratedAdvertisement {
@@ -14,25 +9,14 @@ export interface GeneratedAdvertisement {
 }
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-// Try multiple models in order of preference - if one fails with 403, try the next
+
 // Updated list based on available models (some models have been decommissioned)
 const GROQ_MODELS = [
   "llama-3.1-8b-instant",      // Most commonly available - WORKING ✅
   "llama-3.3-70b-versatile",   // Latest model - WORKING ✅
-  // Deprecated models removed:
-  // - llama-3.2-11b-v2.1 (does not exist)
-  // - llama-3.2-90b-v2.1 (does not exist)
-  // - llama-3.1-70b-versatile (decommissioned)
-  // - mixtral-8x7b-32768 (decommissioned)
-  // - gemma-7b-it (decommissioned)
-  // - gemma2-9b-it (decommissioned)
+ 
 ]
-// Allow override via environment variable
-// const GROQ_MODEL = process.env.GROQ_MODEL || GROQ_MODELS[0] // Not currently used
 
-/**
- * Generate an advertisement using Groq API for a health awareness day
- */
 export async function generateAdvertisement(
   healthDay: HealthAwarenessDay,
   hospitalName: string = "Harmony Medical Services"

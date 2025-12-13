@@ -1,7 +1,3 @@
-/**
- * Meta WhatsApp Business API Integration
- * Handles sending messages via Meta's WhatsApp Cloud API
- */
 
 const META_ACCESS_TOKEN = process.env.META_WHATSAPP_ACCESS_TOKEN
 const META_PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID

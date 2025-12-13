@@ -1,7 +1,3 @@
-/**
- * API Authentication Utilities
- * Verifies Firebase Auth tokens and checks user roles for API route authorization
- */
 
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
@@ -21,10 +17,7 @@ export interface AuthResult {
   statusCode?: number
 }
 
-/**
- * Extract Firebase Auth token from Authorization header
- * Expected format: "Bearer <token>"
- */
+
 function extractAuthToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization")
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -129,33 +122,12 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
   }
 }
 
-/**
- * Authenticate API request and verify user role
- * 
- * @param request - The incoming Request object
- * @param requiredRole - Optional role requirement. If provided, only users with this role can access
- * @returns AuthResult with success status, user info, and error details
- * 
- * @example
- * // Require any authenticated user
- * const auth = await authenticateRequest(request)
- * if (!auth.success) {
- *   return Response.json({ error: auth.error }, { status: auth.statusCode })
- * }
- * 
- * @example
- * // Require admin role
- * const auth = await authenticateRequest(request, "admin")
- * if (!auth.success) {
- *   return Response.json({ error: auth.error }, { status: auth.statusCode })
- * }
- * const adminUser = auth.user
- */
+
 interface AuthenticateOptions {
   skipMfaCheck?: boolean
 }
 
-// const MFA_REQUIRED_ROLES: UserRole[] = ["admin", "doctor", "receptionist"] // Commented out - not currently used
+
 
 export async function authenticateRequest(
   request: Request,

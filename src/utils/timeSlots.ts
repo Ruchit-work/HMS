@@ -17,15 +17,7 @@ export const DEFAULT_VISITING_HOURS: VisitingHours = {
   sunday: { isAvailable: false, slots: [] }
 }
 
-/**
- * Normalize time string to 24-hour format (HH:MM)
- * Handles various input formats:
- * - "16:45" (already 24-hour) -> "16:45"
- * - "16-45" (with dash) -> "16:45"
- * - "4:45 PM" (12-hour) -> "16:45"
- * - "4:45PM" (no space) -> "16:45"
- * - "4:45 AM" -> "04:45"
- */
+
 export function normalizeTime(time: string): string {
   if (!time || typeof time !== "string") return time
   
@@ -234,12 +226,6 @@ export function getVisitingHoursText(daySchedule: DaySchedule): string {
     .join(', ')
 }
 
-/**
- * Check if a time slot is in the past
- * @param slotTime - Time in "HH:MM" format (e.g., "09:30")
- * @param selectedDate - Date string in "YYYY-MM-DD" format
- * @returns true if slot is in the past, false otherwise
- */
 export function isSlotInPast(slotTime: string, selectedDate: string): boolean {
   const now = new Date()
   const slotDateTime = new Date(`${selectedDate}T${slotTime}:00`)

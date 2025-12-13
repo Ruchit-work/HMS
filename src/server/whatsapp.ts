@@ -1,23 +1,9 @@
-// MIGRATED TO META WHATSAPP - Twilio code kept for rollback reference
-// All WhatsApp messaging now uses Meta WhatsApp Business API
-
 import { sendTextMessage as metaSendTextMessage } from "@/server/metaWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/whatsapp"
 
-// Twilio credentials kept in env but not used (for rollback if needed)
-// const accountSid = process.env.TWILIO_ACCOUNT_SID
-// const authToken = process.env.TWILIO_AUTH_TOKEN
-// const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM
-
-/**
- * Fetch message status from Meta WhatsApp
- * Note: Meta doesn't provide real-time status fetching like Twilio
- * This function is kept for compatibility but returns limited info
- */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function getMessageStatus(_messageId: string): Promise<{ status?: string; errorCode?: number; errorMessage?: string; dateSent?: Date; dateUpdated?: Date } | null> {
-  // Meta WhatsApp status is tracked via webhooks, not direct API calls
-  // For compatibility, we return null (status tracking happens via webhook)
+ 
   console.warn("[WhatsApp] Message status fetching not available with Meta WhatsApp. Status is tracked via webhooks.")
   return null
 }
@@ -29,13 +15,6 @@ export interface WhatsAppButton {
   phone?: string
 }
 
-/**
- * Send WhatsApp notification via Meta WhatsApp Business API
- * This replaces the previous Twilio implementation
- * 
- * @param options - Notification options
- * @returns Promise with send result
- */
 export async function sendWhatsAppNotification(options: {
   to?: string | null | undefined
   fallbackRecipients?: Array<string | null | undefined>

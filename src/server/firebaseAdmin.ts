@@ -1,24 +1,4 @@
-/**
-
- * @returns { ok: boolean, error?: string } - Returns an object with ok status and optional error message
- * 
- * @example
- * // Basic usage (returns boolean-like object)
- * const result = initFirebaseAdmin()
- * if (!result.ok) {
- *   return NextResponse.json({ error: result.error }, { status: 500 })
- * }
- * 
- * @example
- * // With custom error context
- * const result = initFirebaseAdmin('API endpoint')
- * if (!result.ok) {
- *   console.error(`Failed to initialize Firebase Admin for ${result.context}:`, result.error)
- * }
- */
-
 import admin from "firebase-admin"
-
 export interface InitAdminResult {
   ok: boolean
   error?: string

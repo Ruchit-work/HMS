@@ -1,8 +1,4 @@
-/**
- * Health Awareness Days Database
- * This file contains information about health awareness days throughout the year
- * Used for auto-generating advertisements
- */
+
 
 export interface HealthAwarenessDay {
   name: string
@@ -238,11 +234,7 @@ export const HEALTH_AWARENESS_DAYS: HealthAwarenessDay[] = [
   },
 ]
 
-/**
- * Get health awareness days for a specific date
- * @param date - Date to check (defaults to today in IST)
- * @returns Array of health awareness days for that date
- */
+
 export function getHealthAwarenessDaysForDate(date: Date = new Date()): HealthAwarenessDay[] {
   // Convert to IST (Asia/Kolkata) timezone
   // IST is UTC+5:30
@@ -257,20 +249,12 @@ export function getHealthAwarenessDaysForDate(date: Date = new Date()): HealthAw
   return HEALTH_AWARENESS_DAYS.filter(day => day.date === dateString)
 }
 
-/**
- * Get health awareness days for tomorrow
- * @returns Array of health awareness days for tomorrow
- */
 export function getHealthAwarenessDaysForTomorrow(): HealthAwarenessDay[] {
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   return getHealthAwarenessDaysForDate(tomorrow)
 }
 
-/**
- * Get health awareness days for today
- * @returns Array of health awareness days for today
- */
 export function getHealthAwarenessDaysForToday(): HealthAwarenessDay[] {
   return getHealthAwarenessDaysForDate(new Date())
 }

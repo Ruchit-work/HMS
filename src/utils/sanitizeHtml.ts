@@ -1,14 +1,4 @@
-/**
- * HTML Sanitization Utility
- * Sanitizes HTML content to prevent XSS attacks before using dangerouslySetInnerHTML
- * Uses regex-based sanitization to avoid jsdom/parse5 ES module compatibility issues
- */
 
-/**
- * HTML sanitizer using regex (lightweight, no DOM/parse5 required)
- * @param html - The HTML string to sanitize
- * @returns Sanitized HTML string
- */
 function sanitizeHtmlRegex(html: string): string {
   if (!html || typeof html !== 'string') {
     return ''
@@ -72,11 +62,7 @@ function sanitizeHtmlRegex(html: string): string {
   return sanitized
 }
 
-/**
- * Sanitize HTML content to prevent XSS attacks
- * @param html - The HTML string to sanitize
- * @returns Sanitized HTML string safe for dangerouslySetInnerHTML
- */
+
 export function sanitizeHtml(html: string): string {
   if (!html || typeof html !== 'string') {
     return ''
@@ -86,11 +72,7 @@ export function sanitizeHtml(html: string): string {
   return sanitizeHtmlRegex(html)
 }
 
-/**
- * Sanitize HTML and return an object ready for dangerouslySetInnerHTML
- * @param html - The HTML string to sanitize
- * @returns Object with __html property for dangerouslySetInnerHTML
- */
+
 export function sanitizeForInnerHTML(html: string): { __html: string } {
   return { __html: sanitizeHtml(html) }
 }

@@ -1735,7 +1735,11 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
       const now = new Date()
       const currentTime = now.getTime()
       const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-      const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+      
+      // Create slot datetime in local timezone to avoid timezone issues
+      const [year, month, day] = session.appointmentDate.split('-').map(Number)
+      const [hours, minutes] = normalizedTime.split(':').map(Number)
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
       const slotTime = slotDateTime.getTime()
       
       // Reject if slot is in the past or less than 15 minutes away
@@ -1774,7 +1778,11 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
       const now = new Date()
       const currentTime = now.getTime()
       const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-      const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+      
+      // Create slot datetime in local timezone to avoid timezone issues
+      const [year, month, day] = session.appointmentDate.split('-').map(Number)
+      const [hours, minutes] = normalizedTime.split(':').map(Number)
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
       const slotTime = slotDateTime.getTime()
       
       // Reject if slot is in the past or less than 15 minutes away
@@ -2014,11 +2022,15 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       const now = new Date()
       const currentTime = now.getTime()
       const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-      const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+      
+      // Create slot datetime in local timezone
+      const [year, month, day] = session.appointmentDate.split('-').map(Number)
+      const [hours, minutes] = normalizedTime.split(':').map(Number)
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
       const slotTime = slotDateTime.getTime()
       
       if (slotTime <= minimumTime) {
-        continue
+        continue // Skip past slots
       }
     }
     
@@ -2228,7 +2240,11 @@ async function handleTimeSelection(
     const now = new Date()
     const currentTime = now.getTime()
     const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
-    const slotDateTime = new Date(`${session.appointmentDate}T${normalizedTime}:00`)
+    
+    // Create slot datetime in local timezone to avoid timezone issues
+    const [year, month, day] = session.appointmentDate.split('-').map(Number)
+    const [hours, minutes] = normalizedTime.split(':').map(Number)
+    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
     const slotTime = slotDateTime.getTime()
     
     // Reject if slot is in the past or less than 15 minutes away
@@ -2628,6 +2644,25 @@ async function createAppointment(
   
   if (!hospitalId) {
     throw new Error("No hospital available for appointment creation")
+  }
+  
+  // Validate that appointment time is not in the past (for today's appointments)
+  const isToday = payload.appointmentDate === new Date().toISOString().split("T")[0]
+  if (isToday) {
+    const now = new Date()
+    const currentTime = now.getTime()
+    const minimumTime = currentTime + (15 * 60 * 1000) // 15 minutes buffer
+    
+    // Create slot datetime in local timezone to avoid timezone issues
+    const [year, month, day] = payload.appointmentDate.split('-').map(Number)
+    const [hours, minutes] = appointmentTime.split(':').map(Number)
+    const slotDateTime = new Date(year, month - 1, day, hours, minutes, 0)
+    const slotTime = slotDateTime.getTime()
+    
+    // Reject if slot is in the past or less than 15 minutes away
+    if (slotTime <= minimumTime) {
+      throw new Error("Cannot book appointment: Selected time has already passed or is too soon (must be at least 15 minutes from now)")
+    }
   }
   
   // Validate blocked date BEFORE creating appointment (if doctor is assigned)

@@ -1,8 +1,3 @@
-/**
- * Calculate age in completed years from a date-of-birth string.
- * @param dateOfBirth ISO date string (YYYY-MM-DD) or any parsable date.
- * @returns Age in years, or null if the input is missing/invalid.
- */
 export function calculateAge(dateOfBirth?: string | null): number | null {
   if (!dateOfBirth) return null
 
@@ -48,15 +43,7 @@ export const formatDateTime = (dateString: string) => {
   }
 }
 
-/**
- * Format appointment date and time to a human-readable string
- * @param date - Date string in YYYY-MM-DD format
- * @param time - Time string in HH:MM format (24-hour)
- * @returns Formatted string like "15 Jan 2024 at 2:30 PM" or "the scheduled time" if date is missing
- * @example
- * formatAppointmentDateTime("2024-01-15", "14:30")
- * // Returns: "15 Jan 2024 at 2:30 PM"
- */
+
 export function formatAppointmentDateTime(date: string, time: string): string {
   if (!date) return "the scheduled time"
   
