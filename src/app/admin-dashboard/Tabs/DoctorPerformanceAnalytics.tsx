@@ -43,7 +43,7 @@ interface DoctorAnalytics {
   availabilityDays: number
 }
 
-export default function DoctorPerformanceAnalytics() {
+export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const [loading, setLoading] = useState(true)
@@ -54,7 +54,7 @@ export default function DoctorPerformanceAnalytics() {
     if (!user || !activeHospitalId) return
     fetchDoctorAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeHospitalId, timeRange])
+  }, [user, activeHospitalId, timeRange, selectedBranchId])
 
   const formatHour12 = (hour: number): string => {
     if (hour === 0) return '12 AM'
@@ -71,10 +71,15 @@ export default function DoctorPerformanceAnalytics() {
 
       // Fetch all appointments - use hospital-scoped collection
       const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'appointments'))
-      const appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
+      let appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Appointment))
+
+      // Filter by branch if selected
+      if (selectedBranchId !== "all") {
+        appointments = appointments.filter((apt: any) => apt.branchId === selectedBranchId)
+      }
 
       // Calculate date ranges
       const now = new Date()

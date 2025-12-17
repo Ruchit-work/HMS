@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Doctor, UserData, AppointmentFormData, PaymentData, Appointment } from "@/types/patient"
+import { Branch } from "@/types/branch"
 import DoctorCard from "@/components/ui/DoctorCard"
 import SymptomSelector, { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import SmartQuestions from "./SmartQuestions"
@@ -10,7 +11,8 @@ import { isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, g
 import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/blockedDates"
 import PaymentMethodSection, { PaymentData as PPaymentData, PaymentMethodOption } from "@/components/payments/PaymentMethodSection"
 import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore"
-import { db } from "@/firebase/config"
+import { db, auth } from "@/firebase/config"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 
 interface BookAppointmentFormProps {
   user: { uid: string; email: string | null }
@@ -38,8 +40,14 @@ export default function BookAppointmentForm({
   rescheduleMode = false,
   initialDoctorId
 }: BookAppointmentFormProps) {
+  const { activeHospitalId } = useMultiHospital()
   const [currentStep, setCurrentStep] = useState(rescheduleMode ? 4 : 1)
   const [selectedDoctor, setSelectedDoctor] = useState(initialDoctorId || "")
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("")
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null)
+  const [showBranchConfirm, setShowBranchConfirm] = useState(false)
+  const [loadingBranches, setLoadingBranches] = useState(false)
   const [appointmentData, setAppointmentData] = useState<AppointmentFormData>({
     date: "",
     time: "",
@@ -85,6 +93,61 @@ export default function BookAppointmentForm({
 
   const totalSteps = rescheduleMode ? 4 : 5
 
+  // Fetch branches on mount
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!activeHospitalId) return
+      
+      try {
+        setLoadingBranches(true)
+
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          console.error("Error fetching branches: user not authenticated")
+          setBranches([])
+          return
+        }
+
+        const token = await currentUser.getIdToken()
+        if (!token) {
+          console.error("Error fetching branches: authentication token not found")
+          setBranches([])
+          return
+        }
+
+        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+        const data = await response.json()
+        
+        if (data.success && data.branches) {
+          setBranches(data.branches)
+          
+          // Set default branch from patient's defaultBranchId if available
+          if (userData?.defaultBranchId) {
+            const defaultBranch = data.branches.find((b: Branch) => b.id === userData.defaultBranchId)
+            if (defaultBranch) {
+              setSelectedBranchId(defaultBranch.id)
+              setSelectedBranch(defaultBranch)
+            }
+          } else if (data.branches.length > 0) {
+            // If no default branch, select first branch
+            setSelectedBranchId(data.branches[0].id)
+            setSelectedBranch(data.branches[0])
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching branches:", error)
+      } finally {
+        setLoadingBranches(false)
+      }
+    }
+
+    fetchBranches()
+  }, [activeHospitalId, userData?.defaultBranchId])
+
   // Ensure doctor stays preselected if provided later (doctors load async)
   useEffect(() => {
     if (initialDoctorId && !selectedDoctor) {
@@ -122,13 +185,21 @@ export default function BookAppointmentForm({
 
       setLoadingSlots(true)
       try {
-        // Fetch all confirmed appointments for this doctor on this date
-        const appointmentsQuery = query(
-          collection(db, "appointments"),
-          where("doctorId", "==", selectedDoctor),
-          where("appointmentDate", "==", appointmentData.date),
-          where("status", "==", "confirmed")
-        )
+        // Fetch all confirmed appointments for this doctor on this date (and branch if selected)
+        const appointmentsQuery = selectedBranchId
+          ? query(
+              collection(db, "appointments"),
+              where("doctorId", "==", selectedDoctor),
+              where("appointmentDate", "==", appointmentData.date),
+              where("branchId", "==", selectedBranchId),
+              where("status", "==", "confirmed")
+            )
+          : query(
+              collection(db, "appointments"),
+              where("doctorId", "==", selectedDoctor),
+              where("appointmentDate", "==", appointmentData.date),
+              where("status", "==", "confirmed")
+            )
         
         const snapshot = await getDocs(appointmentsQuery)
         const existingAppointments: Appointment[] = snapshot.docs.map(doc => ({
@@ -176,9 +247,42 @@ export default function BookAppointmentForm({
         }
 
 
-        // Get doctor's visiting hours for the selected date
+        // Get doctor's visiting hours for the selected date (use branch timings if available)
         const selectedDate = new Date(appointmentData.date)
-        const visitingHours = selectedDoctorData.visitingHours || DEFAULT_VISITING_HOURS
+        // Use branch timings if branch is selected, otherwise use doctor's visiting hours
+        let visitingHours = selectedDoctorData.visitingHours || DEFAULT_VISITING_HOURS
+        if (selectedBranch && selectedBranch.timings) {
+          // Convert branch timings to VisitingHours format
+          const branchVisitingHours = {
+            monday: selectedBranch.timings.monday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.monday.start, end: selectedBranch.timings.monday.end }] }
+              : { isAvailable: false, slots: [] },
+            tuesday: selectedBranch.timings.tuesday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.tuesday.start, end: selectedBranch.timings.tuesday.end }] }
+              : { isAvailable: false, slots: [] },
+            wednesday: selectedBranch.timings.wednesday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.wednesday.start, end: selectedBranch.timings.wednesday.end }] }
+              : { isAvailable: false, slots: [] },
+            thursday: selectedBranch.timings.thursday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.thursday.start, end: selectedBranch.timings.thursday.end }] }
+              : { isAvailable: false, slots: [] },
+            friday: selectedBranch.timings.friday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.friday.start, end: selectedBranch.timings.friday.end }] }
+              : { isAvailable: false, slots: [] },
+            saturday: selectedBranch.timings.saturday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.saturday.start, end: selectedBranch.timings.saturday.end }] }
+              : { isAvailable: false, slots: [] },
+            sunday: selectedBranch.timings.sunday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.sunday.start, end: selectedBranch.timings.sunday.end }] }
+              : { isAvailable: false, slots: [] },
+          }
+          // Check if doctor has branch-specific timings for this branch
+          if (selectedDoctorData.branchTimings && selectedBranchId && selectedDoctorData.branchTimings[selectedBranchId]) {
+            visitingHours = selectedDoctorData.branchTimings[selectedBranchId]
+          } else {
+            visitingHours = branchVisitingHours
+          }
+        }
         const dayName = getDayName(selectedDate)
         const daySchedule = visitingHours[dayName]
 
@@ -242,10 +346,16 @@ export default function BookAppointmentForm({
 
     fetchAvailableSlots()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDoctor, appointmentData.date, selectedDoctorData])
+  }, [selectedDoctor, appointmentData.date, selectedDoctorData, selectedBranchId, selectedBranch])
 
   const nextStep = () => {
     if (currentStep < totalSteps && canProceedToNextStep()) {
+      // If moving from step 1, show branch confirmation
+      if (currentStep === 1 && selectedBranchId) {
+        setShowBranchConfirm(true)
+        return
+      }
+      
       setSlideDirection('right') // Slide from right when going forward
       const newStep = currentStep + 1
       setCurrentStep(newStep)
@@ -261,6 +371,13 @@ export default function BookAppointmentForm({
         })
       }
     }
+  }
+
+  const handleConfirmBranch = () => {
+    setShowBranchConfirm(false)
+    setSlideDirection('right')
+    const newStep = currentStep + 1
+    setCurrentStep(newStep)
   }
 
   const prevStep = () => {
@@ -539,7 +656,7 @@ export default function BookAppointmentForm({
 
   const canProceedToNextStep = () => {
     switch (currentStep) {
-      case 1: return true // Patient info is auto-filled
+      case 1: return selectedBranchId !== "" // Require branch selection
       case 2: return (appointmentData.problem?.trim().length ?? 0) > 0 // Require free-text only
       case 3: return selectedDoctor !== ""
       case 4: return appointmentData.date !== "" && appointmentData.time !== "" && !hasDuplicateAppointment
@@ -570,7 +687,10 @@ export default function BookAppointmentForm({
       // Directly submit without payment flow
       await onSubmit({
         selectedDoctor,
-        appointmentData,
+        appointmentData: {
+          ...appointmentData,
+          branchId: selectedBranchId
+        },
         paymentMethod: "cash",
         paymentType: "full",
         paymentData: { cardNumber: "", cardName: "", expiryDate: "", cvv: "", upiId: "" }
@@ -599,7 +719,10 @@ export default function BookAppointmentForm({
     
     await onSubmit({
       selectedDoctor,
-      appointmentData,
+      appointmentData: {
+        ...appointmentData,
+        branchId: selectedBranchId
+      },
       paymentMethod: paymentMethod as "card" | "upi" | "cash",
       paymentType,
       paymentData
@@ -853,6 +976,62 @@ export default function BookAppointmentForm({
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* Branch Selection */}
+                  <div className="mt-6 pt-6 border-t-2 border-slate-300">
+                    <label className="block text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                      <span className="text-xl">🏥</span>
+                      <span>Select Branch <span className="text-red-500">*</span></span>
+                    </label>
+                    {loadingBranches ? (
+                      <div className="text-center py-4">
+                        <svg className="animate-spin h-6 w-6 mx-auto text-slate-600" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="text-xs text-slate-500 mt-2">Loading branches...</p>
+                      </div>
+                    ) : branches.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {branches.map((branch) => {
+                          const isSelected = selectedBranchId === branch.id
+                          const isDefault = userData?.defaultBranchId === branch.id
+                          return (
+                            <button
+                              key={branch.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedBranchId(branch.id)
+                                setSelectedBranch(branch)
+                              }}
+                              className={`p-4 rounded-xl border-2 transition-all text-left ${
+                                isSelected
+                                  ? "border-teal-600 bg-teal-50 shadow-md ring-2 ring-teal-200"
+                                  : "border-slate-300 hover:border-slate-400 bg-white"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <span className="text-lg font-bold text-slate-800">{branch.name}</span>
+                                {isSelected && (
+                                  <span className="text-teal-600 text-xl">✓</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-600 mb-2">{branch.location}</p>
+                              {isDefault && (
+                                <span className="inline-block text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                                  Your Default Branch
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-sm text-slate-600">No branches available</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1217,7 +1396,12 @@ export default function BookAppointmentForm({
                       {(() => {
                         const blockedDates: any[] = Array.isArray((selectedDoctorData as any)?.blockedDates) ? (selectedDoctorData as any).blockedDates : []
                         const isBlocked = isDateBlockedFromRaw(appointmentData.date, blockedDates)
-                        const isNotAvailableOnDay = !isDoctorAvailableOnDate(selectedDoctorData, new Date(appointmentData.date))
+                        const isNotAvailableOnDay = !isDoctorAvailableOnDate(
+                          selectedDoctorData, 
+                          new Date(appointmentData.date),
+                          selectedBranchId,
+                          selectedBranch?.timings || null
+                        )
                         
                         if (isBlocked) {
                           // Find the reason for blocked date
@@ -1283,7 +1467,12 @@ export default function BookAppointmentForm({
                 {appointmentData.date && selectedDoctorData && (() => {
                   const blockedDates: any[] = Array.isArray((selectedDoctorData as any)?.blockedDates) ? (selectedDoctorData as any).blockedDates : []
                   const isBlocked = isDateBlockedFromRaw(appointmentData.date, blockedDates)
-                  const isAvailableOnDay = isDoctorAvailableOnDate(selectedDoctorData, new Date(appointmentData.date))
+                  const isAvailableOnDay = isDoctorAvailableOnDate(
+                    selectedDoctorData, 
+                    new Date(appointmentData.date),
+                    selectedBranchId,
+                    selectedBranch?.timings || null
+                  )
                   return isAvailableOnDay && !isBlocked
                 })() && (
                   <div>
@@ -1587,6 +1776,84 @@ export default function BookAppointmentForm({
           </div>
         </form>
       </div>
+
+      {/* Branch Confirmation Modal */}
+      {showBranchConfirm && selectedBranchId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-fade-in">
+            <div className="bg-gradient-to-r from-teal-600 to-cyan-700 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white text-2xl">
+                  🏥
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Confirm Branch Selection</h3>
+                  <p className="text-sm text-teal-100">Please confirm your branch choice</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBranchConfirm(false)}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                {(() => {
+                  const selectedBranch = branches.find(b => b.id === selectedBranchId)
+                  return selectedBranch ? (
+                    <div className="bg-teal-50 rounded-xl p-4 border-2 border-teal-100">
+                      <div className="flex items-start gap-3">
+                        <div className="text-3xl">🏥</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 mb-1">Selected Branch</h4>
+                          <p className="text-lg font-bold text-teal-700">
+                            {selectedBranch.name}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {selectedBranch.location}
+                          </p>
+                          {userData?.defaultBranchId === selectedBranchId && (
+                            <span className="inline-block mt-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                              Your Default Branch
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <p className="text-xs text-slate-600">
+                    <strong>Note:</strong> You can change the branch by going back to Step 1. The selected branch will be used for this appointment.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
+              <button
+                onClick={() => setShowBranchConfirm(false)}
+                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleConfirmBranch}
+                className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-cyan-700 hover:from-teal-700 hover:to-cyan-800 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>Yes, Continue</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       {showConfirmModal && (

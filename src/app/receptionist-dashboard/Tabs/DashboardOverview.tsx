@@ -32,9 +32,10 @@ interface Notification {
 
 interface DashboardOverviewProps {
   onTabChange?: (tab: "patients" | "doctors" | "appointments" | "book-appointment" | "admit-requests" | "billing" | "whatsapp-bookings") => void
+  receptionistBranchId?: string | null
 }
 
-export default function DashboardOverview({ onTabChange }: DashboardOverviewProps) {
+export default function DashboardOverview({ onTabChange, receptionistBranchId }: DashboardOverviewProps) {
   const { activeHospitalId } = useMultiHospital()
   const [stats, setStats] = useState<DashboardStats>({
     todayAppointments: 0,
@@ -59,7 +60,15 @@ export default function DashboardOverview({ onTabChange }: DashboardOverviewProp
       unsubscribeAppointments = onSnapshot(appointmentsRef, (snapshot) => {
         // Recalculate stats with new data
         const today = new Date().toISOString().split('T')[0]
-        const allAppointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        let allAppointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        
+        // Filter by branch if receptionist has a branchId
+        if (receptionistBranchId) {
+          allAppointments = allAppointments.filter(doc => {
+            const data = doc as any
+            return data.branchId === receptionistBranchId
+          })
+        }
         
         // Today's appointments (excluding WhatsApp pending)
         const todayAppointments = allAppointments.filter(doc => {
@@ -120,8 +129,7 @@ export default function DashboardOverview({ onTabChange }: DashboardOverviewProp
         unsubscribeAppointments()
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeHospitalId])
+  }, [activeHospitalId, receptionistBranchId])
 
   const updateRecentActivity = (allAppointments: any[]) => {
     const activities: RecentActivity[] = []

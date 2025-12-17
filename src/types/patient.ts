@@ -21,6 +21,8 @@ export interface UserData {
   weightKg?: number
   specialization?: string
   consultationFee?: number
+  defaultBranchId?: string
+  defaultBranchName?: string
 }
 
 export interface TimeSlot {
@@ -62,6 +64,8 @@ export interface Doctor {
   experience?: string
   visitingHours?: VisitingHours
   blockedDates?: BlockedDate[]
+  branchIds?: string[] // Array of branch IDs where doctor works
+  branchTimings?: { [branchId: string]: VisitingHours } // Branch-specific visiting hours
 }
 
 export interface Appointment {
@@ -105,6 +109,8 @@ export interface Appointment {
   doctorSpecialization: string
   appointmentDate: string
   appointmentTime: string
+  branchId?: string // Branch where appointment is booked
+  branchName?: string // Branch name for display
   chiefComplaint: string
   medicalHistory: string
   paymentStatus: string
@@ -143,6 +149,7 @@ export interface AppointmentFormData {
   time: string
   problem: string
   medicalHistory: string
+  branchId?: string // Branch where appointment is booked
   // optional structured symptoms and vitals
   symptomOnset?: string
   symptomDuration?: string

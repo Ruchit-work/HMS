@@ -10,6 +10,7 @@ import LoadingSpinner from '@/components/ui/StatusComponents'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/Modals'
 import { Appointment } from '@/types/patient'
+import { Branch } from '@/types/branch'
 import { SuccessToast } from '@/components/ui/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
@@ -17,7 +18,19 @@ import Pagination from '@/components/ui/Pagination'
 import { useNewItems } from '@/hooks/useNewItems'
 import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
 
-export default function AppoinmentManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
+interface AppoinmentManagementProps {
+    disableAdminGuard?: boolean
+    /** When provided (receptionist dashboard), restrict view to this branch */
+    receptionistBranchId?: string | null
+    /** When provided (admin dashboard), filter appointments by this branch */
+    selectedBranchId?: string
+}
+
+export default function AppoinmentManagement({
+    disableAdminGuard = true,
+    receptionistBranchId = null,
+    selectedBranchId = "all"
+}: AppoinmentManagementProps = {}) {
     const [appointments, setAppointments] = useState<Appointment[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -39,11 +52,16 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
     const [timeRange, setTimeRange] = useState<'all' | 'today' | 'last10' | 'month' | 'year'>('all')
     const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'completed' | 'cancelled' | 'not_attended'>('all')
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+    const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
+    // Use prop if provided (from admin dashboard), otherwise use local state (for backward compatibility)
+    const [localSelectedBranchId, setLocalSelectedBranchId] = useState<string>('all')
+    const effectiveSelectedBranchId = selectedBranchId !== undefined ? selectedBranchId : localSelectedBranchId
 
     const resetFilters = () => {
         setSelectedDoctorId('all')
         setTimeRange('all')
         setStatusFilter('all')
+        setLocalSelectedBranchId('all')
         setSearch('')
         setSortField('')
         setSortOrder('asc')
@@ -161,8 +179,15 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
         try {
             setLoading(true)
             setError(null)
-            const appointmentRef = doc(db, 'appointments', deleteAppointment.id)
+
+            if (!activeHospitalId) {
+                throw new Error('Hospital context not available')
+            }
+
+            // Delete from hospital-scoped appointments collection
+            const appointmentRef = doc(getHospitalCollection(activeHospitalId, 'appointments'), deleteAppointment.id)
             await deleteDoc(appointmentRef)
+
             setAppointments(prev => prev.filter(a => a.id !== deleteAppointment.id))
             setFilteredAppointments(prev => prev.filter(a => a.id !== deleteAppointment.id))
             setShowViewModal(false)
@@ -173,7 +198,8 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                 setSuccessMessage(null)
             }, 3000)
         } catch (error) {
-            setError((error as Error).message)
+            console.error('Error deleting appointment:', error)
+            setError((error as Error).message || 'Failed to delete appointment')
         } finally {
             setLoading(false)
         }
@@ -252,11 +278,21 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
             
             const unsubscribe = onSnapshot(appointmentsRef, (snapshot) => {
-                const appointmentsList = snapshot.docs
+                let appointmentsList = snapshot.docs
                     .map((doc) => ({
                         id: doc.id,
                         ...doc.data()
                     })) as Appointment[]
+                
+                // When used from receptionist dashboard, restrict to their branch
+                if (receptionistBranchId) {
+                    appointmentsList = appointmentsList.filter(apt => (apt as any).branchId === receptionistBranchId)
+                }
+
+                // Additional branch filter from admin UI
+                if (!receptionistBranchId && effectiveSelectedBranchId !== 'all') {
+                    appointmentsList = appointmentsList.filter(apt => apt.branchId === effectiveSelectedBranchId)
+                }
                 
                 setAppointments(appointmentsList)
                 setFilteredAppointments(appointmentsList)
@@ -275,7 +311,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             setLoading(false)
             return () => {}
         }
-    }, [activeHospitalId])
+    }, [activeHospitalId, receptionistBranchId, effectiveSelectedBranchId])
     useEffect(() => {
         let unsubscribeAppointments: (() => void) | null = null
 
@@ -295,13 +331,27 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
             }
         })()
 
+        // Fetch branches
+        ;(async () => {
+            if (!activeHospitalId) return
+            try {
+                const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`)
+                const data = await response.json()
+                if (data.success && data.branches) {
+                    setBranches(data.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
+                }
+            } catch (error) {
+                console.error("Error fetching branches:", error)
+            }
+        })()
+
         // Cleanup function
         return () => {
             if (unsubscribeAppointments) {
                 unsubscribeAppointments()
             }
         }
-    }, [activeHospitalId, user, authLoading, setupRealtimeListener])
+    }, [activeHospitalId, user, authLoading, setupRealtimeListener, effectiveSelectedBranchId])
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -388,6 +438,10 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                     case 'createdAt':
                         aValue = a.createdAt || ''
                         bValue = b.createdAt || ''
+                        break
+                    case 'branch':
+                        aValue = (a as any).branchName?.toLowerCase?.() || (a as any).branchId || ''
+                        bValue = (b as any).branchName?.toLowerCase?.() || (b as any).branchId || ''
                         break
                     default:
                         return 0
@@ -506,6 +560,22 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                     <option value="year">This year</option>
                                 </select>
                             </div>
+                            {/* Branch filter only for admin; receptionists are auto-restricted to their branch */}
+                            {branches.length > 0 && !receptionistBranchId && (
+                                <div>
+                                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Branch</label>
+                                    <select value={effectiveSelectedBranchId} onChange={(e) => setLocalSelectedBranchId(e.target.value)} disabled={selectedBranchId !== undefined}
+                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="all">All Branches</option>
+                                        {branches.map((branch) => (
+                                            <option key={branch.id} value={branch.id}>
+                                                {branch.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div className="md:col-span-2 xl:col-span-2">
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Search</label>
                                 <div className="relative">
@@ -578,6 +648,12 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                 Date & time  {sortField === 'appointmentDate' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
                                             </div>
                                         </th>
+                                        <th className="px-3 py-3 text-left hover:bg-slate-50" onClick={() => handleSort('branch')} >
+                                            <div className="inline-flex items-center gap-1">
+                                                Branch
+                                                {sortField === 'branch' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
+                                            </div>
+                                        </th>
                                         <th className="px-3 py-3 text-left hover:bg-slate-50"onClick={() => handleSort('status')} >
                                             <div className="inline-flex items-center gap-1">  Status
                                                 {sortField === 'status' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
@@ -590,7 +666,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                 <tbody className="divide-y divide-slate-100 bg-white text-sm text-slate-700">
                                     {loading ? (
                                         <tr>
-                                            <td colSpan={6} className="px-3 py-12 text-center">
+                                            <td colSpan={7} className="px-3 py-12 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <svg className="mb-2 h-8 w-8 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
                                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -602,7 +678,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                         </tr>
                                     ) : error ? (
                                         <tr>
-                                            <td colSpan={6} className="px-3 py-12 text-center">
+                                            <td colSpan={7} className="px-3 py-12 text-center">
                                                 <svg className="mb-2 h-12 w-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                                                 </svg>
@@ -612,7 +688,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                         </tr>
                                     ) : filteredAppointments.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="px-3 py-12 text-center">
+                                            <td colSpan={7} className="px-3 py-12 text-center">
                                                 <svg className="mb-2 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                 </svg>
@@ -626,7 +702,7 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                         paginatedAppointments.map((appointment) => {
                                             const itemIsNew = isNew(appointment)
                                             return (
-                                            <tr key={appointment.id}
+                                        <tr key={appointment.id}
                                                 className={`hover:bg-slate-50 relative ${
                                                     itemIsNew 
                                                         ? 'bg-yellow-50/50 border-l-4 border-yellow-400 animate-pulse-glow' 
@@ -651,6 +727,11 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                                                 <td className="px-3 py-4">
                                                     <div className="text-sm font-semibold text-slate-900">{formatDate(appointment.appointmentDate)}</div>
                                                     <div className="text-xs text-slate-500">{appointment.appointmentTime || 'N/A'}</div>
+                                                </td>
+                                                <td className="px-3 py-4">
+                                                    <div className="text-sm text-slate-900">
+                                                        {(appointment as any).branchName || 'N/A'}
+                                                    </div>
                                                 </td>
                                                 <td className="px-3 py-4">
                                                     {(() => {
@@ -809,6 +890,14 @@ export default function AppoinmentManagement({ disableAdminGuard = true }: { dis
                             <div className="flex flex-col space-y-1">
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Appointment Time</label>
                                 <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.appointmentTime || 'N/A'}</p>
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Branch</label>
+                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">
+                                    {(selectedAppointment as any)?.branchName
+                                      ? `${(selectedAppointment as any).branchName} (${(selectedAppointment as any).branchId || "no id"})`
+                                      : "Not assigned"}
+                                </p>
                             </div>
                             <div className="flex flex-col space-y-1">
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</label>

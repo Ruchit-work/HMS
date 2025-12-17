@@ -92,15 +92,57 @@ export async function POST(request) {
     });
 
     // Send OTP via Meta WhatsApp
-    const { sendTextMessage } = await import("@/server/metaWhatsApp");
-    const otpMessage = `🔐 *Your HMS Verification Code*\n\nYour verification code is: *${otp}*\n\nThis code will expire in 10 minutes.\n\n⚠️ *Do not share this code with anyone.*\n\nIf you didn't request this code, please ignore this message.`;
+    // Try template message first (works outside 24-hour window), fallback to text message
+    const { sendTemplateMessage, sendTextMessage } = await import("@/server/metaWhatsApp");
     
-    const result = await sendTextMessage(cleanedPhone, otpMessage);
+    // Check if OTP template is configured
+    const otpTemplateName = process.env.META_WHATSAPP_OTP_TEMPLATE_NAME;
+    let result;
+    
+    if (otpTemplateName) {
+      // Use template message (can be sent outside 24-hour window)
+      result = await sendTemplateMessage(
+        cleanedPhone,
+        otpTemplateName,
+        "en_US", // Language code - adjust if needed
+        [
+          { type: "text", text: otp }, // OTP code as first parameter
+          { type: "text", text: "10" }, // Expiry time in minutes (if template requires it)
+        ]
+      );
+    } else {
+      // Fallback to regular text message (only works within 24-hour window)
+      const otpMessage = `🔐 *Your HMS Verification Code*\n\nYour verification code is: *${otp}*\n\nThis code will expire in 10 minutes.\n\n⚠️ *Do not share this code with anyone.*\n\nIf you didn't request this code, please ignore this message.`;
+      result = await sendTextMessage(cleanedPhone, otpMessage);
+    }
 
     if (!result.success) {
+      // Log the error for debugging
+      console.error("[OTP Send Error]", {
+        phoneNumber: cleanedPhone,
+        error: result.error,
+        errorCode: result.errorCode,
+        templateUsed: !!otpTemplateName,
+      });
+
+      // Provide more specific error messages
+      let errorMessage = result.error || "Failed to send OTP. Please try again.";
+      
+      // If error code 131047 or 131048, it means the number is outside 24-hour window
+      if (result.errorCode === 131047 || result.errorCode === 131048) {
+        if (!otpTemplateName) {
+          errorMessage = "This phone number hasn't messaged our WhatsApp Business number in the last 24 hours. Please send a message to our WhatsApp number first, or contact support. An approved OTP template is required to send OTP to new numbers.";
+        } else {
+          errorMessage = "Failed to send OTP. The phone number may not be registered with WhatsApp or the template may not be approved. Please contact support.";
+        }
+      }
 
       return Response.json(
-        { error: result.error || "Failed to send OTP. Please try again." },
+        { 
+          error: errorMessage,
+          errorCode: result.errorCode,
+          requiresTemplate: !otpTemplateName && (result.errorCode === 131047 || result.errorCode === 131048),
+        },
         { status: 500 }
       );
     }

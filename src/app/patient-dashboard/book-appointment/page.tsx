@@ -323,6 +323,7 @@ See you soon! 🏥`
         doctorSpecialization: selectedDoctorData.specialization || "",
         appointmentDate: appointmentData.date,
         appointmentTime: appointmentData.time,
+        branchId: (appointmentData as any).branchId || null, // Include branchId from appointmentData
         chiefComplaint: appointmentData.problem,
         medicalHistory: appointmentData.medicalHistory || "",
         patientAdditionalConcern: appointmentData.additionalConcern || "",

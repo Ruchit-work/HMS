@@ -51,6 +51,10 @@ function SignUpContent() {
   const [loadingHospitals, setLoadingHospitals] = useState(false);
   const [, setShowHospitalSelection] = useState(false);
 
+  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
+  const [loadingBranches, setLoadingBranches] = useState(false);
+
   const { loading: checking } = usePublicRoute();
 
   useEffect(() => {
@@ -93,6 +97,48 @@ function SignUpContent() {
       setLoadingHospitals(false);
     }
   };
+
+  // Load branches whenever a hospital is selected
+  useEffect(() => {
+    const loadBranches = async () => {
+      if (!selectedHospitalId) {
+        setBranches([]);
+        setSelectedBranchId("");
+        return;
+      }
+
+      try {
+        setLoadingBranches(true);
+        const response = await fetch(`/api/branches?hospitalId=${selectedHospitalId}`);
+        const data = await response.json();
+
+        if (data.success && Array.isArray(data.branches)) {
+          const branchItems = (data.branches as any[]).map((b) => ({
+            id: b.id,
+            name: b.name || "Unnamed branch",
+          }));
+          setBranches(branchItems);
+
+          // Auto-select if only one branch
+          if (branchItems.length === 1) {
+            setSelectedBranchId(branchItems[0].id);
+          }
+        } else {
+          setBranches([]);
+          setSelectedBranchId("");
+        }
+      } catch (err) {
+        console.error("Failed to load branches:", err);
+        // Do not block signup entirely; just clear branches
+        setBranches([]);
+        setSelectedBranchId("");
+      } finally {
+        setLoadingBranches(false);
+      }
+    };
+
+    loadBranches();
+  }, [selectedHospitalId]);
 
   const dispatchCountdownNotification = (
     message: string,
@@ -167,6 +213,12 @@ function SignUpContent() {
       setError("Please select a hospital to continue.");
       return;
     }
+
+    // Require branch selection when branches are available
+    if (branches.length > 0 && !selectedBranchId) {
+      setError("Please select a branch to continue.");
+      return;
+    }
     
     if (!values.phone.trim()) {
       setError(
@@ -192,6 +244,7 @@ function SignUpContent() {
 
       const patientId = await getNextPatientId();
       const selectedHospital = selectedHospitalId || null;
+      const selectedBranch = branches.find((b) => b.id === selectedBranchId) || null;
 
       if (!selectedHospital) {
         throw new Error("Hospital selection is required. Please select a hospital.");
@@ -211,6 +264,8 @@ function SignUpContent() {
         address: values.address,
         patientId,
         hospitalId: selectedHospital, // Store hospital association
+        defaultBranchId: selectedBranch ? selectedBranch.id : null,
+        defaultBranchName: selectedBranch ? selectedBranch.name : null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: "self",
@@ -515,7 +570,38 @@ Thank you for choosing Harmony Medical Services! 🏥`;
                       )}
                     </div>
                   )}
-                  
+
+            {/* Branch selection for chosen hospital */}
+            {selectedHospitalId && (
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Select Branch {branches.length > 0 && <span className="text-red-500">*</span>}
+                </label>
+                {loadingBranches ? (
+                  <div className="text-center py-3">
+                    <LoadingSpinner message="Loading branches..." />
+                  </div>
+                ) : branches.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    No branches are configured for this hospital yet. You can still sign up; a branch can be assigned later.
+                  </p>
+                ) : (
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select a branch</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
             {selectedHospitalId && (
               <PatientProfileForm
                 mode="public"

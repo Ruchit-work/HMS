@@ -15,6 +15,7 @@ import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
 import Pagination from "@/components/ui/Pagination"
 import { fetchMedicineSuggestions, MedicineSuggestion,  MedicineSuggestionOption,recordMedicineSuggestions, sanitizeMedicineName,} from "@/utils/medicineSuggestions"
+import type { Branch } from "@/types/branch"
 
 // Helper function to parse and render prescription text
 const parsePrescription = (text: string) => {
@@ -188,6 +189,9 @@ export default function DoctorAppointments() {
     suggestion: string
   } | null>(null)
   const [medicineSuggestionsLoading, setMedicineSuggestionsLoading] = useState(false)
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
+  const [loadingBranches, setLoadingBranches] = useState(false)
 
   const refreshMedicineSuggestions = useCallback(async () => {
     try {
@@ -209,7 +213,41 @@ export default function DoctorAppointments() {
   const { user, loading } = useAuth("doctor")
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
 
-  const setupRealtimeListeners = async () => {
+  // Fetch branches
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!activeHospitalId) return
+
+      try {
+        setLoadingBranches(true)
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          console.error("Error fetching branches: user not authenticated")
+          return
+        }
+        const token = await currentUser.getIdToken()
+
+        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+        const data = await response.json()
+
+        if (data.success && data.branches) {
+          setBranches(data.branches)
+        }
+      } catch (error) {
+        console.error("Error fetching branches:", error)
+      } finally {
+        setLoadingBranches(false)
+      }
+    }
+
+    fetchBranches()
+  }, [activeHospitalId])
+
+  const setupRealtimeListeners = async (branchId: string | null) => {
     if (!user || !activeHospitalId) return () => {}
 
     // Get doctor data (one-time fetch)
@@ -221,7 +259,17 @@ export default function DoctorAppointments() {
 
     // Set up real-time appointments listener - use hospital-scoped collection
     const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-    const q = query(appointmentsRef, where("doctorId", "==", user.uid))
+    // Build query with optional branch filter
+    let q
+    if (branchId) {
+      q = query(
+        appointmentsRef,
+        where("doctorId", "==", user.uid),
+        where("branchId", "==", branchId)
+      )
+    } else {
+      q = query(appointmentsRef, where("doctorId", "==", user.uid))
+    }
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const appointmentsList = snapshot.docs
@@ -249,7 +297,7 @@ export default function DoctorAppointments() {
     let unsubscribe: (() => void) | null = null
 
     const initializeRealtimeData = async () => {
-      unsubscribe = await setupRealtimeListeners()
+      unsubscribe = await setupRealtimeListeners(selectedBranchId)
     }
 
     initializeRealtimeData()
@@ -261,7 +309,7 @@ export default function DoctorAppointments() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeHospitalId, hospitalLoading])
+  }, [user, activeHospitalId, hospitalLoading, selectedBranchId])
 
   // Auto-expand appointment if redirected from dashboard
   useEffect(() => {
@@ -1543,6 +1591,38 @@ export default function DoctorAppointments() {
             </div>
           </div>
         </div>
+
+        {/* Branch Selection */}
+        {branches.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <span className="text-lg">🏥</span>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Select Branch</label>
+                  <p className="text-xs text-slate-500">View appointments for a specific branch</p>
+                </div>
+              </div>
+              <div className="flex-1 max-w-xs">
+                <select
+                  value={selectedBranchId || ""}
+                  onChange={(e) => setSelectedBranchId(e.target.value || null)}
+                  disabled={loadingBranches}
+                  className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Card */}
         <div className="relative bg-white border border-slate-200 rounded-2xl shadow-sm p-6 overflow-hidden">

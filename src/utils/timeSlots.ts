@@ -4,6 +4,7 @@
  */
 
 import { VisitingHours, DaySchedule, Appointment, Doctor } from "@/types/patient"
+import { BranchTimings } from "@/types/branch"
 import { normalizeBlockedDates } from "@/utils/blockedDates"
 
 // Default visiting hours (9 AM - 5 PM with 1-2 PM lunch break)
@@ -158,19 +159,79 @@ export function getBlockedDateInfo(doctor: Doctor, date: Date): { reason: string
   return blocked ? { reason: (blocked.reason || "Doctor not available") as string } : null
 }
 
+/**
+ * Convert branch timings to VisitingHours format
+ */
+export function convertBranchTimingsToVisitingHours(branchTimings: BranchTimings): VisitingHours {
+  const visitingHours: VisitingHours = {
+    monday: branchTimings.monday 
+      ? { isAvailable: true, slots: [{ start: branchTimings.monday.start, end: branchTimings.monday.end }] }
+      : { isAvailable: false, slots: [] },
+    tuesday: branchTimings.tuesday 
+      ? { isAvailable: true, slots: [{ start: branchTimings.tuesday.start, end: branchTimings.tuesday.end }] }
+      : { isAvailable: false, slots: [] },
+    wednesday: branchTimings.wednesday 
+      ? { isAvailable: true, slots: [{ start: branchTimings.wednesday.start, end: branchTimings.wednesday.end }] }
+      : { isAvailable: false, slots: [] },
+    thursday: branchTimings.thursday 
+      ? { isAvailable: true, slots: [{ start: branchTimings.thursday.start, end: branchTimings.thursday.end }] }
+      : { isAvailable: false, slots: [] },
+    friday: branchTimings.friday 
+      ? { isAvailable: true, slots: [{ start: branchTimings.friday.start, end: branchTimings.friday.end }] }
+      : { isAvailable: false, slots: [] },
+    saturday: branchTimings.saturday 
+      ? { isAvailable: true, slots: [{ start: branchTimings.saturday.start, end: branchTimings.saturday.end }] }
+      : { isAvailable: false, slots: [] },
+    sunday: branchTimings.sunday 
+      ? { isAvailable: true, slots: [{ start: branchTimings.sunday.start, end: branchTimings.sunday.end }] }
+      : { isAvailable: false, slots: [] },
+  }
+  return visitingHours
+}
+
+/**
+ * Get visiting hours for a doctor at a specific branch
+ * Priority: 1) Doctor's branch-specific timings, 2) Branch timings, 3) Doctor's general timings, 4) Default
+ */
+export function getVisitingHoursForBranch(
+  doctor: Doctor,
+  branchId: string | null | undefined,
+  branchTimings: BranchTimings | null | undefined
+): VisitingHours {
+  // If doctor has branch-specific timings for this branch, use those
+  if (branchId && doctor.branchTimings && doctor.branchTimings[branchId]) {
+    return doctor.branchTimings[branchId]
+  }
+
+  // If branch timings are provided, convert and use them
+  if (branchTimings) {
+    return convertBranchTimingsToVisitingHours(branchTimings)
+  }
+
+  // Fall back to doctor's general visiting hours
+  if (doctor.visitingHours) {
+    return doctor.visitingHours
+  }
+
+  // Final fallback to default
+  return DEFAULT_VISITING_HOURS
+}
+
 // Get available time slots for a specific doctor on a specific date
 export function getAvailableTimeSlots(
   doctor: Doctor,
   selectedDate: Date,
-  existingAppointments: Appointment[]
+  existingAppointments: Appointment[],
+  branchId?: string | null,
+  branchTimings?: BranchTimings | null
 ): string[] {
   // Check if date is blocked
   if (isDateBlocked(doctor, selectedDate)) {
     return [] // No slots available on blocked dates
   }
   
-  // Get doctor's visiting hours (or use default)
-  const visitingHours = doctor.visitingHours || DEFAULT_VISITING_HOURS
+  // Get visiting hours based on branch (if provided)
+  const visitingHours = getVisitingHoursForBranch(doctor, branchId, branchTimings)
   
   // Get the day name
   const dayName = getDayName(selectedDate)
@@ -179,13 +240,15 @@ export function getAvailableTimeSlots(
   // Generate all possible slots for this day
   const allSlots = generateTimeSlots(daySchedule)
   
-  // Filter appointments for this specific doctor and date
+  // Filter appointments for this specific doctor and date (and branch if specified)
   const dateString = selectedDate.toISOString().split('T')[0]
-  const appointmentsOnDate = existingAppointments.filter(apt => 
-    apt.doctorId === doctor.id && 
-    apt.appointmentDate === dateString &&
-    apt.status === "confirmed" // Only consider confirmed appointments
-  )
+  const appointmentsOnDate = existingAppointments.filter(apt => {
+    const matchesDoctor = apt.doctorId === doctor.id
+    const matchesDate = apt.appointmentDate === dateString
+    const matchesBranch = branchId ? apt.branchId === branchId : true // If branchId provided, filter by branch
+    const isConfirmed = apt.status === "confirmed"
+    return matchesDoctor && matchesDate && matchesBranch && isConfirmed
+  })
   
   // Filter to only available slots
   return allSlots.filter(slot => isTimeSlotAvailable(slot, appointmentsOnDate))
@@ -209,8 +272,13 @@ export function getAvailabilityDays(visitingHours: VisitingHours = DEFAULT_VISIT
 }
 
 // Check if doctor is available on a specific date
-export function isDoctorAvailableOnDate(doctor: Doctor, date: Date): boolean {
-  const visitingHours = doctor.visitingHours || DEFAULT_VISITING_HOURS
+export function isDoctorAvailableOnDate(
+  doctor: Doctor, 
+  date: Date,
+  branchId?: string | null,
+  branchTimings?: BranchTimings | null
+): boolean {
+  const visitingHours = getVisitingHoursForBranch(doctor, branchId, branchTimings)
   const dayName = getDayName(date)
   const daySchedule = visitingHours[dayName]
   

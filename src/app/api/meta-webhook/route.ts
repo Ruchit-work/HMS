@@ -73,6 +73,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true })
       }
 
+      // Handle branch selection buttons
+      if (buttonId.startsWith("branch_")) {
+        await handleBranchButtonClick(from, buttonId)
+        return NextResponse.json({ success: true })
+      }
+
       // Handle date quick buttons (including "date_show_all")
       if (buttonId.startsWith("date_")) {
         await handleDateButtonClick(from, buttonId)
@@ -349,6 +355,118 @@ async function _ensureDefaultDoctor(
   })
 
   return { id: doctorDoc.id, data: doctorDoc.data()! }
+}
+
+async function moveToBranchSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  language: Language,
+  session: BookingSession
+) {
+  // Get patient's default branch if available
+  let defaultBranchId: string | null = null
+  if (session.patientUid) {
+    try {
+      const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+      if (patientDoc.exists) {
+        const patientData = patientDoc.data()
+        defaultBranchId = patientData?.defaultBranchId || null
+      }
+    } catch (error) {
+      console.error("[WhatsApp] Error fetching patient default branch:", error)
+    }
+  }
+
+  // Get hospital ID from patient
+  let hospitalId: string | null = null
+  if (session.patientUid) {
+    try {
+      const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+      if (patientDoc.exists) {
+        const patientData = patientDoc.data()
+        hospitalId = patientData?.hospitalId || null
+      }
+    } catch (error) {
+      console.error("[WhatsApp] Error fetching patient hospital:", error)
+    }
+  }
+
+  // Fallback: get first active hospital
+  if (!hospitalId) {
+    const activeHospitals = await getAllActiveHospitals()
+    if (activeHospitals.length > 0) {
+      hospitalId = activeHospitals[0].id
+    }
+  }
+
+  if (!hospitalId) {
+    const errorMsg = language === "gujarati"
+      ? "❌ હોસ્પિટલ મળી નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો."
+      : "❌ Hospital not found. Please contact reception."
+    await sendTextMessage(phone, errorMsg)
+    return
+  }
+
+  // Fetch branches for the hospital
+  const branchesSnapshot = await db
+    .collection("branches")
+    .where("hospitalId", "==", hospitalId)
+    .where("status", "==", "active")
+    .get()
+
+  const branches = branchesSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }))
+
+  if (branches.length === 0) {
+    const errorMsg = language === "gujarati"
+      ? "❌ કોઈ બ્રાન્ચ મળ્યું નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો."
+      : "❌ No branches found. Please contact reception."
+    await sendTextMessage(phone, errorMsg)
+    return
+  }
+
+  await sessionRef.update({
+    state: "selecting_branch",
+    updatedAt: new Date().toISOString(),
+  })
+
+  const introMsg = language === "gujarati"
+    ? "🏥 કૃપા કરીને તમારી બ્રાન્ચ પસંદ કરો:"
+    : "🏥 Please select your branch:"
+  await sendTextMessage(phone, introMsg)
+
+  // Create branch selection buttons
+  const branchButtons = branches.map((branch: any, index: number) => {
+    const isDefault = branch.id === defaultBranchId
+    const title = isDefault 
+      ? `${branch.name} (Default)`
+      : branch.name
+    return {
+      id: `branch_${branch.id}`,
+      title: title.length > 20 ? title.substring(0, 17) + "..." : title
+    }
+  })
+
+  // Add "Next" button if default branch exists (user can proceed without changing)
+  if (defaultBranchId) {
+    branchButtons.push({
+      id: "branch_next",
+      title: "➡️ Next (Use Default)"
+    })
+  }
+
+  await sendMultiButtonMessage(
+    phone,
+    language === "gujarati"
+      ? "તમારી બ્રાન્ચ પસંદ કરો અથવા 'Next' પર ક્લિક કરો:"
+      : "Select your branch or click 'Next' to use default:",
+    branchButtons,
+    "Harmony Medical Services"
+  )
 }
 
 async function moveToDateSelection(
@@ -655,6 +773,7 @@ async function handleConfirmationButtonClick(phone: string, action: "confirm" | 
 type BookingState =
   | "idle"
   | "selecting_language"
+  | "selecting_branch"
   | "selecting_date"
   | "selecting_time"
   | "confirming"
@@ -665,6 +784,8 @@ interface BookingSession {
   language?: "gujarati" | "english" // Selected language for the booking session
   needsRegistration?: boolean
   patientUid?: string
+  branchId?: string // Selected branch ID
+  branchName?: string // Selected branch name for display
   doctorId?: string
   appointmentDate?: string
   appointmentTime?: string
@@ -1074,6 +1195,8 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
   switch (session.state) {
     case "selecting_language":
       return await handleLanguageSelection(db, phone, normalizedPhone, sessionRef, text, session)
+    case "selecting_branch":
+      return await handleBranchSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "registering_full_name":
       return await handleRegistrationFullName(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_date":
@@ -1127,8 +1250,160 @@ async function handleLanguageSelection(
     return true
   }
 
-  await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
+  await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage, session)
   return true
+}
+
+async function handleBranchSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const language = session.language || "english"
+  
+  // This function handles text input for branch selection (fallback)
+  // But typically branch selection is done via buttons
+  const errorMsg = language === "gujarati"
+    ? "❌ કૃપા કરીને ઉપરની બટનોમાંથી બ્રાન્ચ પસંદ કરો."
+    : "❌ Please select a branch from the buttons above."
+  await sendTextMessage(phone, errorMsg)
+  
+  // Re-send branch selection
+  await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)
+  return true
+}
+
+async function handleBranchButtonClick(phone: string, buttonId: string) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const sessionDoc = await sessionRef.get()
+
+  if (!sessionDoc.exists) {
+    return
+  }
+
+  const session = sessionDoc.data() as BookingSession
+  const language = session.language || "english"
+
+  // If "Next" button clicked, use default branch or first available
+  if (buttonId === "branch_next") {
+    // Get patient's default branch
+    let branchId: string | null = null
+    let branchName: string | null = null
+
+    if (session.patientUid) {
+      try {
+        const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+        if (patientDoc.exists) {
+          const patientData = patientDoc.data()
+          branchId = patientData?.defaultBranchId || null
+          branchName = patientData?.defaultBranchName || null
+        }
+      } catch (error) {
+        console.error("[WhatsApp] Error fetching patient default branch:", error)
+      }
+    }
+
+    // If no default branch, get first available branch
+    if (!branchId) {
+      let hospitalId: string | null = null
+      if (session.patientUid) {
+        try {
+          const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+          if (patientDoc.exists) {
+            const patientData = patientDoc.data()
+            hospitalId = patientData?.hospitalId || null
+          }
+        } catch (error) {
+          console.error("[WhatsApp] Error fetching patient hospital:", error)
+        }
+      }
+
+      if (!hospitalId) {
+        const activeHospitals = await getAllActiveHospitals()
+        if (activeHospitals.length > 0) {
+          hospitalId = activeHospitals[0].id
+        }
+      }
+
+      if (hospitalId) {
+        const branchesSnapshot = await db
+          .collection("branches")
+          .where("hospitalId", "==", hospitalId)
+          .where("status", "==", "active")
+          .limit(1)
+          .get()
+
+        if (!branchesSnapshot.empty) {
+          const branch = branchesSnapshot.docs[0]
+          branchId = branch.id
+          branchName = branch.data().name || null
+        }
+      }
+    }
+
+    if (!branchId) {
+      const errorMsg = language === "gujarati"
+        ? "❌ કોઈ બ્રાન્ચ મળ્યું નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો."
+        : "❌ No branch found. Please contact reception."
+      await sendTextMessage(phone, errorMsg)
+      return
+    }
+
+    await sessionRef.update({
+      branchId,
+      branchName,
+      updatedAt: new Date().toISOString(),
+    })
+
+    const confirmMsg = language === "gujarati"
+      ? `✅ બ્રાન્ચ પસંદ કર્યું: ${branchName || "Default"}\n\n📅 હવે તારીખ પસંદ કરો:`
+      : `✅ Branch selected: ${branchName || "Default"}\n\n📅 Now select your date:`
+    await sendTextMessage(phone, confirmMsg)
+
+    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    return
+  }
+
+  // Extract branch ID from button ID (format: "branch_BRANCH_ID")
+  const branchId = buttonId.replace("branch_", "")
+  
+  if (!branchId) {
+    await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)
+    return
+  }
+
+  // Fetch branch details
+  const branchDoc = await db.collection("branches").doc(branchId).get()
+  if (!branchDoc.exists) {
+    const errorMsg = language === "gujarati"
+      ? "❌ બ્રાન્ચ મળ્યું નથી. કૃપા કરીને ફરીથી પ્રયાસ કરો."
+      : "❌ Branch not found. Please try again."
+    await sendTextMessage(phone, errorMsg)
+    await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)
+    return
+  }
+
+  const branchData = branchDoc.data()
+  const branchName = branchData?.name || "Branch"
+
+  // Update session with selected branch
+  await sessionRef.update({
+    branchId,
+    branchName,
+    updatedAt: new Date().toISOString(),
+  })
+
+  const confirmMsg = language === "gujarati"
+    ? `✅ બ્રાન્ચ પસંદ કર્યું: ${branchName}\n\n📅 હવે તારીખ પસંદ કરો:`
+    : `✅ Branch selected: ${branchName}\n\n📅 Now select your date:`
+  await sendTextMessage(phone, confirmMsg)
+
+  await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
 }
 
 async function handleRegistrationPrompt(phone: string) {
@@ -1630,6 +1905,8 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
       updatedAt: new Date().toISOString(),
     })
 
+    // For recheckup, skip branch selection and go directly to date
+    const session = sessionDoc.data() as BookingSession
     await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
     return
   }
@@ -2357,7 +2634,9 @@ async function handleConfirmation(
         consultationFee,
         paymentAmount: collectedAmount,
         remainingAmount,
-      },
+        branchId: session.branchId || null, // Include branchId from session
+        branchName: session.branchName || null, // Include branchName from session
+      } as any,
       normalizedPhone
     )
 
@@ -2658,6 +2937,8 @@ async function createAppointment(
       doctorSpecialization: doctor ? (doctor.data.specialization || "") : "",
       appointmentDate: payload.appointmentDate,
       appointmentTime,
+      branchId: (payload as any).branchId || null, // Include branchId from payload
+      branchName: (payload as any).branchName || null, // Include branchName from payload
       symptomCategory: payload.symptomCategory,
       chiefComplaint: payload.chiefComplaint,
       medicalHistory: payload.medicalHistory,

@@ -43,3 +43,11 @@ export interface UserWithHospital {
   allHospitals: Hospital[]
 }
 
+/**
+ * Branch reference for users
+ */
+export interface BranchReference {
+  branchId: string | null
+  branchName?: string
+}
+

@@ -152,6 +152,30 @@ export async function POST(request: Request) {
     if (!doctorHospitalId) {
       return Response.json({ error: "Doctor's hospital not found" }, { status: 400 })
     }
+
+    // Get receptionist's branch ID (if user is a receptionist)
+    let branchId: string | null = null
+    let branchName: string | null = null
+    if (auth.user?.role === "receptionist") {
+      const receptionistDoc = await admin.firestore().collection("receptionists").doc(auth.user.uid).get()
+      if (receptionistDoc.exists) {
+        const receptionistData = receptionistDoc.data()
+        branchId = receptionistData?.branchId || null
+        branchName = receptionistData?.branchName || null
+      }
+    }
+
+    // If branchId provided in appointmentData, validate it
+    if (appointmentData.branchId) {
+      const branchDoc = await admin.firestore().collection("branches").doc(appointmentData.branchId).get()
+      if (branchDoc.exists) {
+        const branchData = branchDoc.data()
+        if (branchData?.hospitalId === doctorHospitalId && branchData?.status === "active") {
+          branchId = appointmentData.branchId
+          branchName = branchData?.name || null
+        }
+      }
+    }
     
     const docData: any = {
       patientId: String(appointmentData.patientId),
@@ -179,6 +203,8 @@ export async function POST(request: Request) {
       updatedAt: nowIso,
       createdBy: safeValue(appointmentData.createdBy, "receptionist"),
       hospitalId: doctorHospitalId, // Store hospital association
+      branchId: branchId || null, // Store branch association
+      branchName: branchName || null, // Store branch name for display
     }
     
     // Include optional patient health fields only if they exist and are not undefined

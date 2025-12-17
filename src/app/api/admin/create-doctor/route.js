@@ -119,6 +119,10 @@ export async function POST(request) {
       mfaPhone: normalizedPhone,
       uid: userRecord.uid,
       hospitalId: adminHospitalId, // Store hospital association
+      // Include branchIds and branchTimings if provided
+      branchIds: doctorData.branchIds || [],
+      visitingHours: doctorData.visitingHours || null,
+      branchTimings: doctorData.branchTimings || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       createdBy: "admin"

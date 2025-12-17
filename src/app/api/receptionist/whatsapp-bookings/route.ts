@@ -23,41 +23,128 @@ export async function GET(request: Request) {
 
     const firestore = admin.firestore()
     
+    // Get receptionist's branchId if user is a receptionist
+    let receptionistBranchId: string | null = null
+    if (auth.user && auth.user.role === "receptionist") {
+      try {
+        const receptionistDoc = await firestore.collection("receptionists").doc(auth.user.uid).get()
+        if (receptionistDoc.exists) {
+          const receptionistData = receptionistDoc.data()
+          receptionistBranchId = receptionistData?.branchId || null
+        }
+      } catch (err) {
+        console.warn("[WhatsApp Bookings API] Failed to fetch receptionist branch:", err)
+      }
+    }
+    
+    // Get user's active hospital ID
+    const { getUserActiveHospitalId } = await import("@/utils/serverHospitalQueries")
+    const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
+    
     // Fetch appointments with whatsappPending flag or status whatsapp_pending
     // Note: Can't use orderBy with where in Firestore without composite index, so we fetch and sort in memory
     const appointmentMap = new Map<string, any>()
     
-    try {
-      const appointmentsSnapshot = await firestore
-        .collection("appointments")
-        .where("whatsappPending", "==", true)
-        .limit(100)
-        .get()
-
-      appointmentsSnapshot.docs.forEach((doc) => {
-        appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
-      })
-    } catch (error: any) {
-      console.error("[WhatsApp Bookings API] Error fetching whatsappPending appointments:", error)
-      // Continue with other query even if this one fails
-    }
-
-    // Also fetch appointments with status whatsapp_pending (for backward compatibility)
-    try {
-      const pendingSnapshot = await firestore
-        .collection("appointments")
-        .where("status", "==", "whatsapp_pending")
-        .limit(100)
-        .get()
-
-      pendingSnapshot.docs.forEach((doc) => {
-        if (!appointmentMap.has(doc.id)) {
-          appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+    // Fetch from hospital-scoped collections if hospitalId is available
+    if (hospitalId) {
+      try {
+        const hospAppointmentsRef = firestore.collection(`hospitals/${hospitalId}/appointments`)
+        let whatsappQuery
+        if (receptionistBranchId) {
+          whatsappQuery = hospAppointmentsRef
+            .where("whatsappPending", "==", true)
+            .where("branchId", "==", receptionistBranchId)
+            .limit(100)
+        } else {
+          whatsappQuery = hospAppointmentsRef
+            .where("whatsappPending", "==", true)
+            .limit(100)
         }
-      })
-    } catch (error: any) {
-      console.error("[WhatsApp Bookings API] Error fetching whatsapp_pending appointments:", error)
-      // Continue processing what we have
+        
+        const appointmentsSnapshot = await whatsappQuery.get()
+        appointmentsSnapshot.docs.forEach((doc) => {
+          appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+        })
+      } catch (error: any) {
+        console.error("[WhatsApp Bookings API] Error fetching hospital-scoped whatsappPending appointments:", error)
+      }
+      
+      // Also fetch appointments with status whatsapp_pending (for backward compatibility)
+      try {
+        const hospAppointmentsRef = firestore.collection(`hospitals/${hospitalId}/appointments`)
+        let pendingQuery
+        if (receptionistBranchId) {
+          pendingQuery = hospAppointmentsRef
+            .where("status", "==", "whatsapp_pending")
+            .where("branchId", "==", receptionistBranchId)
+            .limit(100)
+        } else {
+          pendingQuery = hospAppointmentsRef
+            .where("status", "==", "whatsapp_pending")
+            .limit(100)
+        }
+        
+        const pendingSnapshot = await pendingQuery.get()
+        pendingSnapshot.docs.forEach((doc) => {
+          if (!appointmentMap.has(doc.id)) {
+            appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+          }
+        })
+      } catch (error: any) {
+        console.error("[WhatsApp Bookings API] Error fetching hospital-scoped whatsapp_pending appointments:", error)
+      }
+    }
+    
+    // Fallback to root collection if no hospital-scoped data found (for backward compatibility)
+    if (appointmentMap.size === 0) {
+      try {
+        let rootQuery
+        if (receptionistBranchId) {
+          rootQuery = firestore
+            .collection("appointments")
+            .where("whatsappPending", "==", true)
+            .where("branchId", "==", receptionistBranchId)
+            .limit(100)
+        } else {
+          rootQuery = firestore
+            .collection("appointments")
+            .where("whatsappPending", "==", true)
+            .limit(100)
+        }
+        
+        const appointmentsSnapshot = await rootQuery.get()
+        appointmentsSnapshot.docs.forEach((doc) => {
+          appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+        })
+      } catch (error: any) {
+        console.error("[WhatsApp Bookings API] Error fetching whatsappPending appointments:", error)
+      }
+
+      // Also fetch appointments with status whatsapp_pending (for backward compatibility)
+      try {
+        let pendingQuery
+        if (receptionistBranchId) {
+          pendingQuery = firestore
+            .collection("appointments")
+            .where("status", "==", "whatsapp_pending")
+            .where("branchId", "==", receptionistBranchId)
+            .limit(100)
+        } else {
+          pendingQuery = firestore
+            .collection("appointments")
+            .where("status", "==", "whatsapp_pending")
+            .limit(100)
+        }
+        
+        const pendingSnapshot = await pendingQuery.get()
+        pendingSnapshot.docs.forEach((doc) => {
+          if (!appointmentMap.has(doc.id)) {
+            appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+          }
+        })
+      } catch (error: any) {
+        console.error("[WhatsApp Bookings API] Error fetching whatsapp_pending appointments:", error)
+      }
     }
 
     const appointments: Appointment[] = Array.from(appointmentMap.values()).map((data: any) => {

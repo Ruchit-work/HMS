@@ -44,6 +44,7 @@ export default function ReceptionistDashboard() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth("receptionist")
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const [receptionistBranchId, setReceptionistBranchId] = useState<string | null>(null)
 
   // Notification badge hooks - automatically clear when panels are viewed
   const appointmentsBadge = useNotificationBadge({ 
@@ -134,10 +135,19 @@ export default function ReceptionistDashboard() {
     )
 
     const unsubscribeAppointments = onSnapshot(appointmentsQuery, (snapshot) => {
-      const todayAppointments = snapshot.docs.filter(doc => {
+      let todayAppointments = snapshot.docs.filter(doc => {
         const data = doc.data()
         return data.status === "confirmed" || data.status === "whatsapp_pending"
       })
+      
+      // Filter by branch if receptionist has a branchId
+      if (receptionistBranchId) {
+        todayAppointments = todayAppointments.filter(doc => {
+          const data = doc.data()
+          return data.branchId === receptionistBranchId
+        })
+      }
+      
       setNewAppointmentsCount(todayAppointments.length)
     })
 
@@ -155,11 +165,21 @@ export default function ReceptionistDashboard() {
     })
 
     // Listen for pending billing (unpaid appointments)
-    const billingQuery = query(
-      getHospitalCollection(activeHospitalId, "appointments"),
-      where("status", "==", "completed"),
-      where("paymentStatus", "in", ["pending", "unpaid"])
-    )
+    let billingQuery
+    if (receptionistBranchId) {
+      billingQuery = query(
+        getHospitalCollection(activeHospitalId, "appointments"),
+        where("status", "==", "completed"),
+        where("paymentStatus", "in", ["pending", "unpaid"]),
+        where("branchId", "==", receptionistBranchId)
+      )
+    } else {
+      billingQuery = query(
+        getHospitalCollection(activeHospitalId, "appointments"),
+        where("status", "==", "completed"),
+        where("paymentStatus", "in", ["pending", "unpaid"])
+      )
+    }
 
     const unsubscribeBilling = onSnapshot(billingQuery, (snapshot) => {
       setPendingBillingCount(snapshot.size)
@@ -182,7 +202,7 @@ export default function ReceptionistDashboard() {
       unsubscribeBilling()
       unsubscribeAdmitRequests()
     }
-  }, [activeHospitalId])
+  }, [activeHospitalId, receptionistBranchId])
 
   // Setup real-time badge listeners when activeHospitalId is available
   useEffect(() => {
@@ -197,6 +217,27 @@ export default function ReceptionistDashboard() {
       clearInterval(interval)
     }
   }, [activeHospitalId, hospitalLoading, setupRealtimeBadgeListeners, refreshWhatsappPendingCount])
+
+  // Fetch receptionist branchId
+  useEffect(() => {
+    const fetchReceptionistBranch = async () => {
+      if (!user) return
+      
+      try {
+        const receptionistDoc = await getDoc(doc(db, "receptionists", user.uid))
+        if (receptionistDoc.exists()) {
+          const data = receptionistDoc.data()
+          setReceptionistBranchId(data.branchId || null)
+        }
+      } catch (error) {
+        console.error("Error fetching receptionist branch:", error)
+      }
+    }
+
+    if (user) {
+      fetchReceptionistBranch()
+    }
+  }, [user])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -222,7 +263,7 @@ export default function ReceptionistDashboard() {
     }
   }
 
-  if (authLoading || loading || hospitalLoading) {
+  if (authLoading || loading || hospitalLoading || !activeHospitalId) {
     return <LoadingSpinner message="Loading receptionist dashboard..." />
   }
 
@@ -541,7 +582,7 @@ export default function ReceptionistDashboard() {
 
         <main className="p-6 sm:p-8 space-y-6">
           {activeTab === "dashboard" && (
-            <DashboardOverview onTabChange={(tab) => setActiveTab(tab)} />
+            <DashboardOverview onTabChange={(tab) => setActiveTab(tab)} receptionistBranchId={receptionistBranchId} />
           )}
           {activeTab === "patients" && (
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50">
@@ -573,7 +614,14 @@ export default function ReceptionistDashboard() {
 
               {/* Patient Content */}
               <div className="p-8">
-                {patientSubTab === "all" && <PatientManagement canDelete={true} canAdd={true} disableAdminGuard={true} />}
+                {patientSubTab === "all" && (
+                  <PatientManagement
+                    canDelete={true}
+                    canAdd={true}
+                    disableAdminGuard={true}
+                    receptionistBranchId={receptionistBranchId}
+                  />
+                )}
                 {patientSubTab === "analytics" && <PatientAnalytics />}
               </div>
             </div>
@@ -585,7 +633,10 @@ export default function ReceptionistDashboard() {
           )}
           {activeTab === "appointments" && (
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
-              <AppoinmentManagement disableAdminGuard={true} />
+              <AppoinmentManagement
+                disableAdminGuard={true}
+                receptionistBranchId={receptionistBranchId}
+              />
             </div>
           )}
           {activeTab === "admit-requests" && (
@@ -612,6 +663,7 @@ export default function ReceptionistDashboard() {
           {activeTab === "whatsapp-bookings" && (
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
               <WhatsAppBookingsPanel
+                receptionistBranchId={receptionistBranchId}
                 onNotification={(payload) => setNotification(payload)}
                 onPendingCountChange={setWhatsappPendingCount}
               />

@@ -99,6 +99,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!receptionistData?.branchId) {
+      return NextResponse.json(
+        { success: false, error: 'Branch assignment is required' },
+        { status: 400 }
+      )
+    }
+
     if (password.length < 6) {
       return NextResponse.json(
         { success: false, error: 'Password must be at least 6 characters' },
@@ -128,6 +135,30 @@ export async function POST(request: NextRequest) {
     if (hospitalData?.status !== 'active') {
       return NextResponse.json(
         { success: false, error: 'Hospital is not active' },
+        { status: 400 }
+      )
+    }
+
+    // Verify branch exists and belongs to the hospital
+    const branchDoc = await db.collection('branches').doc(receptionistData.branchId).get()
+    if (!branchDoc.exists) {
+      return NextResponse.json(
+        { success: false, error: 'Branch not found' },
+        { status: 404 }
+      )
+    }
+
+    const branchData = branchDoc.data()
+    if (branchData?.hospitalId !== adminHospitalId) {
+      return NextResponse.json(
+        { success: false, error: 'Branch does not belong to this hospital' },
+        { status: 400 }
+      )
+    }
+
+    if (branchData?.status !== 'active') {
+      return NextResponse.json(
+        { success: false, error: 'Branch is not active' },
         { status: 400 }
       )
     }
@@ -166,6 +197,8 @@ export async function POST(request: NextRequest) {
       lastName: receptionistData.lastName,
       phone: receptionistData.phone,
       hospitalId: adminHospitalId,
+      branchId: receptionistData.branchId,
+      branchName: branchData?.name || '',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: auth.user.uid

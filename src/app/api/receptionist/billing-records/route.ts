@@ -50,6 +50,21 @@ export async function GET(request: Request) {
     }
 
     const firestore = admin.firestore()
+    
+    // Get receptionist's branchId if user is a receptionist
+    let receptionistBranchId: string | null = null
+    if (auth.user && auth.user.role === "receptionist") {
+      try {
+        const receptionistDoc = await firestore.collection("receptionists").doc(auth.user.uid).get()
+        if (receptionistDoc.exists) {
+          const receptionistData = receptionistDoc.data()
+          receptionistBranchId = receptionistData?.branchId || null
+        }
+      } catch (err) {
+        console.warn("Failed to fetch receptionist branch:", err)
+      }
+    }
+
     const records: UnifiedBillingRecord[] = []
     const billedAppointmentIds = new Set<string>()
 
@@ -62,6 +77,59 @@ export async function GET(request: Request) {
 
     for (const docSnap of billingSnapshot.docs) {
       const data = docSnap.data() || {}
+      
+      // Filter by branch for receptionists
+      if (receptionistBranchId) {
+        // Check if billing record has branchId directly
+        if (data.branchId && data.branchId !== receptionistBranchId) {
+          continue // Skip this billing record - not for receptionist's branch
+        }
+        
+        // If no direct branchId, check via appointmentId
+        if (!data.branchId && data.appointmentId) {
+          try {
+            // Try to get appointment from hospital-scoped collections first
+            let appointmentData: any = null
+            const hospitalsSnap = await firestore.collection("hospitals").where("status", "==", "active").limit(10).get()
+            for (const hospDoc of hospitalsSnap.docs) {
+              const hospId = hospDoc.id
+              const aptDoc = await firestore.collection(`hospitals/${hospId}/appointments`).doc(String(data.appointmentId)).get()
+              if (aptDoc.exists) {
+                appointmentData = aptDoc.data()
+                break
+              }
+            }
+            
+            // Fallback to root appointments collection
+            if (!appointmentData) {
+              const aptDoc = await firestore.collection("appointments").doc(String(data.appointmentId)).get()
+              if (aptDoc.exists) {
+                appointmentData = aptDoc.data()
+              }
+            }
+            
+            // If appointment found, check its branchId
+            if (appointmentData && appointmentData.branchId && appointmentData.branchId !== receptionistBranchId) {
+              continue // Skip - appointment is for different branch
+            }
+            
+            // If no branchId found in appointment, skip for safety (can't determine branch)
+            if (appointmentData && !appointmentData.branchId) {
+              continue
+            }
+          } catch (err) {
+            console.warn("Failed to check appointment branch for billing record:", err)
+            // Skip if we can't verify branch
+            continue
+          }
+        }
+        
+        // If no appointmentId and no branchId, skip (can't determine branch)
+        if (!data.branchId && !data.appointmentId) {
+          continue
+        }
+      }
+      
       let patientName = data.patientName || null
       let patientUid = data.patientUid || null
       const patientId = data.patientId || null
@@ -219,6 +287,19 @@ export async function GET(request: Request) {
 
         for (const doc of hospAppointmentsSnap.docs) {
           if (seenAppointmentIds.has(doc.id)) continue
+          
+          // Filter by branch for receptionists
+          if (receptionistBranchId) {
+            const aptData = doc.data()
+            if (aptData.branchId && aptData.branchId !== receptionistBranchId) {
+              continue // Skip - not for receptionist's branch
+            }
+            // If no branchId, skip for safety
+            if (!aptData.branchId) {
+              continue
+            }
+          }
+          
           appointmentsDocs.push(doc)
           seenAppointmentIds.add(doc.id)
         }
@@ -229,6 +310,18 @@ export async function GET(request: Request) {
 
     for (const docSnap of appointmentsDocs) {
       const data = docSnap.data() || {}
+      
+      // Filter by branch for receptionists (additional check for root collection appointments)
+      if (receptionistBranchId) {
+        if (data.branchId && data.branchId !== receptionistBranchId) {
+          continue // Skip - not for receptionist's branch
+        }
+        // If no branchId, skip for safety
+        if (!data.branchId) {
+          continue
+        }
+      }
+      
       const paymentAmount = Number(data.paymentAmount || 0)
       const totalConsultationFee = Number(data.totalConsultationFee || 0)
       if (paymentAmount <= 0 && totalConsultationFee <= 0) {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/NotificationBadge"
@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/ui/Modals"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import Notification from "@/components/ui/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
+import { Branch } from "@/types/branch"
 import PatientManagement from "./Tabs/PatientManagement"
 import PatientAnalytics from "./Tabs/PatientAnalytics"
 import DoctorManagement from "./Tabs/DoctorManagement"
@@ -25,6 +26,7 @@ import AdminAssignment from "./Tabs/AdminAssignment"
 import ReceptionistManagement from "./Tabs/ReceptionistManagement"
 import DoctorPerformanceAnalytics from "./Tabs/DoctorPerformanceAnalytics"
 import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnalytics"
+import BranchManagement from "./Tabs/BranchManagement"
 import AdminProtected from "@/components/AdminProtected"
 import PieChart, { DEFAULT_COLORS, DEFAULT_COLORS_ALT } from "./components/PieChart"
 import StatCard from "./components/StatCard"
@@ -73,6 +75,9 @@ interface TrendPoint {
 
 export default function AdminDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
+  // Store raw data (unfiltered) for client-side filtering
+  const [rawPatients, setRawPatients] = useState<any[]>([])
+  const [rawAppointments, setRawAppointments] = useState<AppointmentType[]>([])
   const [stats, setStats] = useState<DashboardStats>({
     totalPatients: 0,
     totalDoctors: 0,
@@ -99,7 +104,7 @@ export default function AdminDashboard() {
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "receptionists">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "receptionists" | "branches">("overview")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
   const [analyticsSubTab, setAnalyticsSubTab] = useState<"overview" | "patients" | "financial" | "doctors" | "receptionists">("overview")
@@ -117,6 +122,8 @@ export default function AdminDashboard() {
   const [trendView, setTrendView] = useState<"weekly" | "monthly" | "yearly">("weekly")
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
+  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
 
   // Notification badge hooks - automatically clear when panels are viewed
   const overviewBadge = useNotificationBadge({ 
@@ -140,19 +147,49 @@ export default function AdminDashboard() {
     activeTab 
   })
 
-  const trendData = stats.appointmentTrends[trendView] || []
-  const trendTotal = stats.appointmentTotals[trendView] || 0
-  const maxTrendCount = trendData.reduce((max, point) => Math.max(max, point.count), 0)
-  const safeTrendCount = Math.max(maxTrendCount, 1)
-  const chartPadding = { left: 70, right: 50, top: 40, bottom: 50 }
-  const chartSize = { width: 600, height: 280 }
-  const innerWidth = chartSize.width - chartPadding.left - chartPadding.right
-  const innerHeight = chartSize.height - chartPadding.top - chartPadding.bottom
-  const xStep = trendData.length > 1 ? innerWidth / (trendData.length - 1) : 0
+  // Trend data will be calculated after displayStats is defined
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
   const { activeHospitalId, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
+
+  // Fetch branches on mount
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!activeHospitalId) return
+      
+      try {
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          console.error("Error fetching branches: user not authenticated")
+          return
+        }
+
+        const token = await currentUser.getIdToken()
+        if (!token) {
+          console.error("Error fetching branches: authentication token not found")
+          return
+        }
+
+        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        const data = await response.json()
+        
+        if (data.success && data.branches) {
+          setBranches(data.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
+        } else {
+          console.error("Failed to fetch branches:", data.error)
+        }
+      } catch (error) {
+        console.error("Error fetching branches:", error)
+      }
+    }
+
+    fetchBranches()
+  }, [activeHospitalId])
 
   const fetchDashboardData = async () => {
     if (!user || !activeHospitalId) return
@@ -169,7 +206,13 @@ export default function AdminDashboard() {
 
       // Get all patients count - use hospital-scoped collection
       const patientsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "patients"))
-      const totalPatients = patientsSnapshot.size
+      const allPatients = patientsSnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      } as any))
+      
+      // Store raw data for client-side filtering
+      setRawPatients(allPatients)
 
       // Get all doctors count - use hospital-scoped collection
       const doctorsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "doctors"))
@@ -181,7 +224,12 @@ export default function AdminDashboard() {
         id: doc.id, 
         ...doc.data() 
       } as AppointmentType))
+      
+      // Store raw data for client-side filtering
+      setRawAppointments(allAppointments)
 
+      // Calculate basic stats for initialization (filtered stats calculated in useMemo)
+      const totalPatients = allPatients.length
       const totalAppointments = allAppointments.length
       const completedAppointments = allAppointments.filter(apt => apt.status === "completed").length
       const pendingAppointments = allAppointments.filter(apt => apt.status === "confirmed" || (apt as any).status === 'resrescheduled').length
@@ -493,6 +541,298 @@ export default function AdminDashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId, hospitalLoading])
+  // Note: selectedBranchId removed - filtering happens client-side via useMemo below
+
+  // Filter data and recalculate stats based on selectedBranchId
+  const filteredStats = useMemo(() => {
+    // Filter patients by branch
+    let filteredPatients = rawPatients
+    if (selectedBranchId !== "all") {
+      filteredPatients = rawPatients.filter((p: any) => p.defaultBranchId === selectedBranchId)
+    }
+
+    // Filter appointments by branch
+    let filteredAppointments = rawAppointments
+    if (selectedBranchId !== "all") {
+      filteredAppointments = rawAppointments.filter((apt: any) => apt.branchId === selectedBranchId)
+    }
+
+    // Recalculate all stats from filtered data
+    const totalPatients = filteredPatients.length
+    const totalAppointments = filteredAppointments.length
+    const completedAppointments = filteredAppointments.filter(apt => apt.status === "completed").length
+    const pendingAppointments = filteredAppointments.filter(apt => apt.status === "confirmed" || (apt as any).status === 'resrescheduled').length
+
+    // Today's appointments
+    const today = new Date().toDateString()
+    const todayAppointments = filteredAppointments.filter(apt => 
+      new Date(apt.appointmentDate).toDateString() === today
+    ).length
+
+    // Calculate revenue
+    const totalRevenue = filteredAppointments
+      .filter(apt => apt.status === "completed")
+      .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
+
+    // Monthly revenue (last 30 days)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const monthlyRevenue = filteredAppointments
+      .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= thirtyDaysAgo)
+      .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
+
+    // Weekly revenue (last 7 days)
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const weeklyRevenue = filteredAppointments
+      .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= sevenDaysAgo)
+      .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
+
+    // Aggregate appointments for trend views
+    const parsedAppointments = filteredAppointments
+      .map((apt) => {
+        if (!apt.appointmentDate) return null
+        const dt = new Date(apt.appointmentDate)
+        if (Number.isNaN(dt.getTime())) return null
+        dt.setHours(0, 0, 0, 0)
+        return dt
+      })
+      .filter((value): value is Date => Boolean(value))
+
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+
+    // Weekly: current week (Mon-Sun)
+    const weeklyTrend: TrendPoint[] = []
+    let weeklyTotal = 0
+    const startOfWeek = new Date(now)
+    const dayOfWeek = startOfWeek.getDay()
+    const distanceToMonday = (dayOfWeek + 6) % 7
+    startOfWeek.setDate(startOfWeek.getDate() - distanceToMonday)
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(endOfWeek.getDate() + 6)
+
+    for (let offset = 0; offset < 7; offset++) {
+      const currentDay = new Date(startOfWeek)
+      currentDay.setDate(startOfWeek.getDate() + offset)
+      const nextDay = new Date(currentDay)
+      nextDay.setDate(currentDay.getDate() + 1)
+      const label = currentDay.toLocaleDateString("en-US", { weekday: "short" })
+      const fullLabel = currentDay.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+      const count = parsedAppointments.filter((dt) => dt >= currentDay && dt < nextDay).length
+      weeklyTotal += count
+      weeklyTrend.push({ label, fullLabel, count })
+    }
+
+    // Monthly: current month segmented into buckets
+    const monthlyTrend: TrendPoint[] = []
+    let monthlyTotal = 0
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+    const bucketRanges: Array<[number, number]> = [
+      [1, 5],
+      [6, 10],
+      [11, 15],
+      [16, 20],
+      [21, 25],
+      [26, daysInMonth]
+    ]
+
+    bucketRanges.forEach(([startDay, endDay]) => {
+      if (startDay > daysInMonth) {
+        return
+      }
+      const adjustedEndDay = Math.min(endDay, daysInMonth)
+      const bucketLabel = `${startDay}-${adjustedEndDay}`
+      const startDate = new Date(currentYear, currentMonth, startDay)
+      const endDate = new Date(currentYear, currentMonth, adjustedEndDay + 1)
+      const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
+      monthlyTotal += count
+      monthlyTrend.push({
+        label: bucketLabel,
+        fullLabel: `${bucketLabel} ${startDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`,
+        count
+      })
+    })
+
+    // Yearly: each month of current year
+    const yearlyTrend: TrendPoint[] = []
+    let yearlyTotal = 0
+    for (let month = 0; month < 12; month++) {
+      const startDate = new Date(currentYear, month, 1)
+      const endDate = new Date(currentYear, month + 1, 1)
+      const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
+      yearlyTotal += count
+      yearlyTrend.push({
+        label: startDate.toLocaleDateString("en-US", { month: "short" }),
+        fullLabel: startDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+        count
+      })
+    }
+
+    // Calculate common conditions from chief complaints
+    const conditionCounts: { [key: string]: number } = {}
+    filteredAppointments.forEach(apt => {
+      const complaint = apt.chiefComplaint?.toLowerCase() || ''
+      
+      const conditions = [
+        'fever', 'cough', 'headache', 'pain', 'cold', 'flu', 'diabetes', 'hypertension',
+        'asthma', 'depression', 'anxiety', 'back pain', 'chest pain', 'stomach pain',
+        'skin problem', 'allergy', 'infection', 'blood pressure', 'heart', 'lung',
+        'kidney', 'liver', 'eye', 'ear', 'nose', 'throat', 'dental', 'mental health'
+      ]
+      
+      conditions.forEach(condition => {
+        if (complaint.includes(condition)) {
+          conditionCounts[condition] = (conditionCounts[condition] || 0) + 1
+        }
+      })
+    })
+
+    const commonConditions = Object.entries(conditionCounts)
+      .map(([condition, count]) => ({ condition, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8)
+
+    // Helper function to extract medicine names from prescription text
+    const extractMedicines = (medicineText: string | undefined): string[] => {
+      if (!medicineText || medicineText.trim() === '') return []
+      
+      const medicines: string[] = []
+      const lines = medicineText.split('\n').filter(line => line.trim())
+      
+      for (const line of lines) {
+        const lowerLine = line.toLowerCase().trim()
+        if (lowerLine.includes('prescription') || 
+            lowerLine.includes('advice') || 
+            lowerLine.includes('diet') ||
+            lowerLine.includes('follow') ||
+            lowerLine.includes('next') ||
+            lowerLine.includes('visit') ||
+            lowerLine.includes('days') && !/[a-zA-Z]/.test(lowerLine.replace(/\d+\s*days?/gi, '')) ||
+            lowerLine.startsWith('•') && (lowerLine.includes('times') || lowerLine.includes('daily'))) {
+          continue
+        }
+        
+        let medicineName = ''
+        const emojiMatch = line.match(/\*[1-9]️⃣\s+(.+?)\*/)
+        if (emojiMatch && emojiMatch[1]) {
+          medicineName = emojiMatch[1]
+        } else {
+          const numberMatch = line.match(/^\d+[.)]\s*(.+?)(?:\s*[-–—]|$)/)
+          if (numberMatch && numberMatch[1]) {
+            medicineName = numberMatch[1]
+          } else if (/^[A-Z][a-z]+/.test(line.trim())) {
+            medicineName = line.trim()
+          }
+        }
+        
+        if (medicineName) {
+          const cleanName = medicineName
+            .replace(/\d+(?:\.\d+)?\s*(?:mg|g|ml|mcg|microgram|gram|milligram|capsule|tablet|tab|cap|drops?|syrup|injection|amp|vial)/gi, '')
+            .replace(/\b(?:daily|once|twice|thrice|three times|four times|\d+\s*times|after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime)\b/gi, '')
+            .replace(/\b(?:for|duration|continue|take)\s+\d+\s*(?:days?|weeks?|months?|hours?)\b/gi, '')
+            .replace(/\b(?:after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime|times|per day|as directed|as needed)\b/gi, '')
+            .replace(/\[.*?\]/g, '')
+            .replace(/\(.*?\)/g, '')
+            .replace(/\s*[-–—]\s*/g, ' ')
+            .replace(/\s*:\s*/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+          
+          const words = cleanName.split(/\s+/).filter(word => {
+            const lowerWord = word.toLowerCase()
+            return !['take', 'give', 'use', 'apply', 'drink', 'eat', 'with', 'after', 'before'].includes(lowerWord) &&
+                   word.length > 1 &&
+                   /[a-zA-Z]/.test(word)
+          })
+          
+          if (words.length > 0) {
+            const name = words.slice(0, 3).join(' ').trim()
+            if (name && name.length > 2 && name.length < 50) {
+              medicines.push(name)
+            }
+          }
+        }
+      }
+      
+      return medicines
+    }
+
+    // Calculate most prescribed medicines
+    const medicineCounts: Record<string, number> = {}
+    let totalPrescriptions = 0
+    
+    filteredAppointments.forEach(apt => {
+      if ((apt as any).medicine && apt.status === 'completed') {
+        const medicines = extractMedicines((apt as any).medicine)
+        medicines.forEach(medicine => {
+          const normalizedName = medicine
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ')
+          medicineCounts[normalizedName] = (medicineCounts[normalizedName] || 0) + 1
+          totalPrescriptions++
+        })
+      }
+    })
+
+    const mostPrescribedMedicines = Object.entries(medicineCounts)
+      .map(([medicineName, prescriptionCount]) => ({
+        medicineName,
+        prescriptionCount,
+        percentage: totalPrescriptions > 0 ? (prescriptionCount / totalPrescriptions) * 100 : 0
+      }))
+      .sort((a, b) => b.prescriptionCount - a.prescriptionCount)
+      .slice(0, 10)
+
+    return {
+      totalPatients,
+      totalDoctors: stats.totalDoctors, // Doctors count doesn't change with branch filter
+      totalAppointments,
+      todayAppointments,
+      completedAppointments,
+      pendingAppointments,
+      totalRevenue,
+      monthlyRevenue,
+      weeklyRevenue,
+      appointmentTrends: {
+        weekly: weeklyTrend,
+        monthly: monthlyTrend,
+        yearly: yearlyTrend
+      },
+      appointmentTotals: {
+        weekly: weeklyTotal,
+        monthly: monthlyTotal,
+        yearly: yearlyTotal
+      },
+      commonConditions,
+      mostPrescribedMedicines
+    }
+  }, [rawPatients, rawAppointments, selectedBranchId, stats.totalDoctors])
+
+  // Use filtered stats for display
+  const displayStats = filteredStats
+
+  // Filter recent appointments by branch
+  const filteredRecentAppointments = useMemo(() => {
+    if (selectedBranchId === "all") {
+      return recentAppointments
+    }
+    return recentAppointments.filter((apt: any) => apt.branchId === selectedBranchId)
+  }, [recentAppointments, selectedBranchId])
+
+  // Calculate trend data from filtered stats (moved here so displayStats is available)
+  const trendData = displayStats.appointmentTrends[trendView] || []
+  const trendTotal = displayStats.appointmentTotals[trendView] || 0
+  const maxTrendCount = trendData.reduce((max, point) => Math.max(max, point.count), 0)
+  const safeTrendCount = Math.max(maxTrendCount, 1)
+  const chartPadding = { left: 70, right: 50, top: 40, bottom: 50 }
+  const chartSize = { width: 600, height: 280 }
+  const innerWidth = chartSize.width - chartPadding.left - chartPadding.right
+  const innerHeight = chartSize.height - chartPadding.top - chartPadding.bottom
+  const xStep = trendData.length > 1 ? innerWidth / (trendData.length - 1) : 0
 
   // Setup real-time listeners for badge counts
   const setupRealtimeBadgeListeners = () => {
@@ -1013,6 +1353,23 @@ export default function AdminDashboard() {
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
                 </div>
                 
+                {/* Branch Management */}
+                <button 
+                  onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }} 
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                    activeTab === "branches" 
+                      ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-md ${activeTab === "branches" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm12 0h4a2 2 0 012 2v10h-6V9a2 2 0 012-2z" />
+                    </svg>
+                  </div>
+                  <span className="font-medium text-sm">Branches</span>
+                </button>
+                
                 {/* Receptionist Management */}
                 <button 
                   onClick={() => { setActiveTab("receptionists"); setSidebarOpen(false) }} 
@@ -1085,6 +1442,7 @@ export default function AdminDashboard() {
                    activeTab === "analytics" ? "Analytics Hub" :
                    activeTab === "hospitals" ? "Hospital Management" :
                    activeTab === "admins" ? "Admin Assignment" :
+                   activeTab === "branches" ? "Branch Management" :
                    activeTab === "receptionists" ? "Receptionist Management" :
                    "Dashboard"}
                 </h1>
@@ -1098,6 +1456,7 @@ export default function AdminDashboard() {
                   activeTab === "analytics" ? "Unified analytics dashboard - patient, financial, and doctor performance insights" :
                    activeTab === "hospitals" ? "Create and manage hospitals in the system" :
                    activeTab === "admins" ? "Create and assign admins to hospitals" :
+                   activeTab === "branches" ? "Create and manage branches for your hospital" :
                    activeTab === "receptionists" ? "Create and manage receptionists for your hospital" :
                    "Administrative dashboard"}
                 </p>
@@ -1125,6 +1484,28 @@ export default function AdminDashboard() {
                     {userHospitals.map((hospital) => (
                       <option key={hospital.id} value={hospital.id}>
                         {hospital.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              {/* Branch Filter - Visible on all tabs */}
+              {branches.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                    <span>🏥</span>
+                    <span>Filter by Branch:</span>
+                  </label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                  >
+                    <option value="all">All Branches</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
                       </option>
                     ))}
                   </select>
@@ -1179,7 +1560,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Total Patients</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{stats.totalPatients}</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{displayStats.totalPatients}</p>
                       <p className="text-xs text-green-600 mt-1">+12% from last month</p>
                     </div>
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -1194,7 +1575,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Total Doctors</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{stats.totalDoctors}</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{displayStats.totalDoctors}</p>
                       <p className="text-xs text-green-600 mt-1">+3 new this month</p>
                     </div>
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -1209,7 +1590,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Today's Appointments</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{stats.todayAppointments}</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{displayStats.todayAppointments}</p>
                       <p className="text-xs text-blue-600 mt-1">Active today</p>
                     </div>
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -1224,7 +1605,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs sm:text-sm font-medium text-gray-600">Total Revenue</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">₹{stats.totalRevenue.toLocaleString()}</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">₹{displayStats.totalRevenue.toLocaleString()}</p>
                       <p className="text-xs text-green-600 mt-1">+8% from last month</p>
                     </div>
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
@@ -1405,7 +1786,7 @@ export default function AdminDashboard() {
                   <div className="space-y-4">
                     <StatCard
                       label="Today's Appointments"
-                      value={stats.todayAppointments}
+                      value={displayStats.todayAppointments}
                       icon={
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1417,7 +1798,7 @@ export default function AdminDashboard() {
                     />
                     <StatCard
                       label="Pending"
-                      value={stats.pendingAppointments}
+                      value={displayStats.pendingAppointments}
                       icon={
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1429,7 +1810,7 @@ export default function AdminDashboard() {
                     />
                     <StatCard
                       label="Completed"
-                      value={stats.completedAppointments}
+                      value={displayStats.completedAppointments}
                       icon={
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1441,7 +1822,7 @@ export default function AdminDashboard() {
                     />
                     <StatCard
                       label="Total Appointments"
-                      value={stats.totalAppointments}
+                      value={displayStats.totalAppointments}
                       icon={
                         <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1459,7 +1840,7 @@ export default function AdminDashboard() {
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Common Patient Conditions</h3>
                   <div className="h-72 sm:h-80">
                     <PieChart
-                      data={stats.commonConditions.map(c => ({ name: c.condition, value: c.count }))}
+                      data={displayStats.commonConditions.map(c => ({ name: c.condition, value: c.count }))}
                       colors={DEFAULT_COLORS}
                       emptyMessage="No condition data available"
                       getLabel={(item) => item.name.replace(/_/g, " ")}
@@ -1469,12 +1850,12 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Most Prescribed Medicines Chart */}
-                {stats.mostPrescribedMedicines.length > 0 && (
+                {displayStats.mostPrescribedMedicines.length > 0 && (
                   <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Most Prescribed Medicines</h3>
                     <div className="h-72 sm:h-80">
                       <PieChart
-                        data={stats.mostPrescribedMedicines.map(m => ({ name: m.medicineName, value: m.prescriptionCount }))}
+                        data={displayStats.mostPrescribedMedicines.map(m => ({ name: m.medicineName, value: m.prescriptionCount }))}
                         colors={DEFAULT_COLORS_ALT}
                         emptyMessage="No medicine data available"
                         getLabel={(item) => item.name}
@@ -1492,15 +1873,15 @@ export default function AdminDashboard() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">This Week</span>
-                      <span className="font-semibold text-gray-900">₹{stats.weeklyRevenue.toLocaleString()}</span>
+                      <span className="font-semibold text-gray-900">₹{displayStats.weeklyRevenue.toLocaleString()}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">This Month</span>
-                      <span className="font-semibold text-gray-900">₹{stats.monthlyRevenue.toLocaleString()}</span>
+                      <span className="font-semibold text-gray-900">₹{displayStats.monthlyRevenue.toLocaleString()}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">All Time</span>
-                      <span className="font-semibold text-gray-900">₹{stats.totalRevenue.toLocaleString()}</span>
+                      <span className="font-semibold text-gray-900">₹{displayStats.totalRevenue.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -1510,15 +1891,15 @@ export default function AdminDashboard() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Completed</span>
-                      <span className="font-semibold text-green-600">{stats.completedAppointments}</span>
+                      <span className="font-semibold text-green-600">{displayStats.completedAppointments}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Pending</span>
-                      <span className="font-semibold text-orange-600">{stats.pendingAppointments}</span>
+                      <span className="font-semibold text-orange-600">{displayStats.pendingAppointments}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Total</span>
-                      <span className="font-semibold text-gray-900">{stats.totalAppointments}</span>
+                      <span className="font-semibold text-gray-900">{displayStats.totalAppointments}</span>
                     </div>
                   </div>
                 </div>
@@ -1706,7 +2087,7 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <h3 className="text-lg sm:text-xl font-bold text-gray-900">Recent Appointments</h3>
-                        <p className="text-xs sm:text-sm text-gray-600 mt-0.5">{recentAppointments.length} appointment{recentAppointments.length !== 1 ? 's' : ''}</p>
+                        <p className="text-xs sm:text-sm text-gray-600 mt-0.5">{filteredRecentAppointments.length} appointment{filteredRecentAppointments.length !== 1 ? 's' : ''}</p>
                       </div>
                     </div>
                     <button
@@ -1728,7 +2109,7 @@ export default function AdminDashboard() {
                 
                 {showRecentAppointments && (
                   <div className="p-4 sm:p-6">
-                    {recentAppointments.length === 0 ? (
+                    {filteredRecentAppointments.length === 0 ? (
                       <div className="text-center py-12">
                         <svg className="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1749,7 +2130,7 @@ export default function AdminDashboard() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {recentAppointments.map((appointment) => (
+                            {filteredRecentAppointments.map((appointment) => (
                               <tr key={appointment.id} className="hover:bg-gray-50 transition-colors duration-150">
                                 <td className="px-4 py-5">
                                   <div className="flex items-center gap-3">
@@ -1814,7 +2195,7 @@ export default function AdminDashboard() {
                         </table>
                       </div>
                     )}
-                    {recentAppointments.length > 0 && (
+                    {filteredRecentAppointments.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-center">
                         <button
                           onClick={() => setActiveTab("appointments")}
@@ -1833,9 +2214,12 @@ export default function AdminDashboard() {
 
               {/* Doctor Performance Analytics */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                <DoctorPerformanceAnalytics />
+                <DoctorPerformanceAnalytics selectedBranchId={selectedBranchId} />
               </div>
             </div>
+          )}
+          {activeTab === "branches" && (
+            <BranchManagement />
           )}
 
           {activeTab === "patients" && (
@@ -1868,15 +2252,15 @@ export default function AdminDashboard() {
 
               {/* Patient Content */}
               <div className="p-6">
-                {patientSubTab === "all" && <PatientManagement />}
-                {patientSubTab === "analytics" && <PatientAnalytics />}
+                {patientSubTab === "all" && <PatientManagement selectedBranchId={selectedBranchId} />}
+                {patientSubTab === "analytics" && <PatientAnalytics selectedBranchId={selectedBranchId} />}
               </div>
             </div>
           )}
 
           {activeTab === "doctors" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
-              <DoctorManagement />
+              <DoctorManagement selectedBranchId={selectedBranchId} />
             </div>
           )}
 
@@ -1888,7 +2272,7 @@ export default function AdminDashboard() {
 
           {activeTab === "appointments" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
-              <AppoinmentManagement />
+              <AppoinmentManagement selectedBranchId={selectedBranchId} />
             </div>
           )}
 
@@ -1922,8 +2306,8 @@ export default function AdminDashboard() {
 
               {/* Billing Content */}
               <div className="p-6">
-                {billingSubTab === "all" && <BillingManagement />}
-                {billingSubTab === "analytics" && <FinancialAnalytics />}
+                {billingSubTab === "all" && <BillingManagement selectedBranchId={selectedBranchId} />}
+                {billingSubTab === "analytics" && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
               </div>
             </div>
           )}
@@ -2113,10 +2497,10 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
-                {analyticsSubTab === "patients" && <PatientAnalytics />}
-                {analyticsSubTab === "financial" && <FinancialAnalytics />}
-                {analyticsSubTab === "doctors" && <DoctorPerformanceAnalytics />}
-                {analyticsSubTab === "receptionists" && <ReceptionistPerformanceAnalytics />}
+                {analyticsSubTab === "patients" && <PatientAnalytics selectedBranchId={selectedBranchId} />}
+                {analyticsSubTab === "financial" && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
+                {analyticsSubTab === "doctors" && <DoctorPerformanceAnalytics selectedBranchId={selectedBranchId} />}
+                {analyticsSubTab === "receptionists" && <ReceptionistPerformanceAnalytics selectedBranchId={selectedBranchId} />}
               </div>
             </div>
           )}
@@ -2135,7 +2519,7 @@ export default function AdminDashboard() {
 
           {activeTab === "receptionists" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
-              <ReceptionistManagement />
+              <ReceptionistManagement selectedBranchId={selectedBranchId} />
             </div>
           )}
 

@@ -69,7 +69,7 @@ interface BookingRatio {
   }
 }
 
-export default function ReceptionistPerformanceAnalytics() {
+export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const [loading, setLoading] = useState(true)
@@ -89,7 +89,7 @@ export default function ReceptionistPerformanceAnalytics() {
     if (!user || !activeHospitalId) return
     fetchReceptionistAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeHospitalId, timeRange])
+  }, [user, activeHospitalId, timeRange, selectedBranchId])
 
   const fetchReceptionistAnalytics = async () => {
     if (!activeHospitalId) return
@@ -104,25 +104,42 @@ export default function ReceptionistPerformanceAnalytics() {
         where('hospitalId', '==', activeHospitalId)
       )
       const receptionistsSnapshot = await getDocs(receptionistsQuery)
-      const receptionistsList: Receptionist[] = receptionistsSnapshot.docs.map(doc => ({
+      let receptionistsList: Receptionist[] = receptionistsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Receptionist))
-      setReceptionists(receptionistsList)
 
       // Fetch all patients
       const patientsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'patients'))
-      const patients: Patient[] = patientsSnapshot.docs.map(doc => ({
+      let patients: Patient[] = patientsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Patient))
 
+      // Filter patients by branch if selected
+      if (selectedBranchId !== "all") {
+        patients = patients.filter((p: any) => p.defaultBranchId === selectedBranchId)
+      }
+
       // Fetch all appointments
       const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'appointments'))
-      const appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
+      let appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Appointment))
+
+      // Filter appointments by branch if selected
+      if (selectedBranchId !== "all") {
+        appointments = appointments.filter((apt: any) => apt.branchId === selectedBranchId)
+      }
+
+      // Filter receptionists by branch if selected
+      if (selectedBranchId !== "all") {
+        receptionistsList = receptionistsList.filter((r: any) => r.branchId === selectedBranchId)
+      }
+
+      // Set receptionists after filtering
+      setReceptionists(receptionistsList)
 
       // Calculate date ranges
       const now = new Date()

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, query, where, onSnapshot, collection } from "firebase/firestore"
+import { doc, getDoc, query, where, onSnapshot, collection, deleteDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -18,6 +18,7 @@ import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
 import NotificationBadge from "@/components/ui/NotificationBadge"
 import Notification from "@/components/ui/Notification"
+import type { Branch } from "@/types/branch"
 
 interface UserData {
   id: string;
@@ -50,18 +51,31 @@ export default function DoctorDashboard() {
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [rejectedRequests, setRejectedRequests] = useState<any[]>([])
   const [dismissedRequestIds, setDismissedRequestIds] = useState<string[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
+  const [loadingBranches, setLoadingBranches] = useState(false)
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
   const { activeHospitalId } = useMultiHospital()
 
   // Function to set up real-time appointments listener
-  const setupAppointmentsListener = (doctorId: string) => {
+  const setupAppointmentsListener = (doctorId: string, branchId: string | null) => {
     if (!activeHospitalId) return () => {}
     
     try {
       const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-      const q = query(appointmentsRef, where("doctorId", "==", doctorId))
+      // Build query with optional branch filter
+      let q
+      if (branchId) {
+        q = query(
+          appointmentsRef, 
+          where("doctorId", "==", doctorId),
+          where("branchId", "==", branchId)
+        )
+      } else {
+        q = query(appointmentsRef, where("doctorId", "==", doctorId))
+      }
       
       // Set up real-time listener
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -87,6 +101,40 @@ export default function DoctorDashboard() {
     }
   }
 
+  // Fetch branches
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!activeHospitalId) return
+
+      try {
+        setLoadingBranches(true)
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          console.error("Error fetching branches: user not authenticated")
+          return
+        }
+        const token = await currentUser.getIdToken()
+
+        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+        const data = await response.json()
+
+        if (data.success && data.branches) {
+          setBranches(data.branches)
+        }
+      } catch (error) {
+        console.error("Error fetching branches:", error)
+      } finally {
+        setLoadingBranches(false)
+      }
+    }
+
+    fetchBranches()
+  }, [activeHospitalId])
+
   useEffect(() => {
     if (!user) return
 
@@ -104,8 +152,8 @@ export default function DoctorDashboard() {
         setVisitingHours(data.visitingHours || DEFAULT_VISITING_HOURS)
         setBlockedDates(data.blockedDates || [])
         
-        // Set up real-time appointments listener
-        unsubscribeAppointments = setupAppointmentsListener(user.uid)
+        // Set up real-time appointments listener with branch filter
+        unsubscribeAppointments = setupAppointmentsListener(user.uid, selectedBranchId)
         
         // Set up real-time listener for schedule requests (pending and rejected)
         const scheduleRequestsQuery = query(
@@ -143,7 +191,7 @@ export default function DoctorDashboard() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+  }, [user, selectedBranchId])
 
   // Manual refresh function
   const handleRefreshAppointments = async () => {
@@ -226,6 +274,26 @@ export default function DoctorDashboard() {
       setNotification({ type: 'error', message: e?.message || 'Failed to submit request' })
     } finally {
       setSavingSchedule(false)
+    }
+  }
+
+  // Delete rejected leave request from database
+  const handleDeleteRejectedRequest = async (requestId: string) => {
+    if (!requestId) return
+
+    try {
+      // Delete from Firestore
+      const requestRef = doc(db, 'doctor_schedule_requests', requestId)
+      await deleteDoc(requestRef)
+      
+      // The real-time listener will automatically update the UI
+      setNotification({ type: 'success', message: 'Rejected request removed successfully.' })
+    } catch (error: unknown) {
+      console.error('Error deleting rejected request:', error)
+      setNotification({ 
+        type: 'error', 
+        message: (error as Error).message || 'Failed to delete request' 
+      })
     }
   }
 
@@ -425,6 +493,38 @@ export default function DoctorDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Branch Selection */}
+        {branches.length > 0 && (
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <span className="text-lg">🏥</span>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Select Branch</label>
+                  <p className="text-xs text-slate-500">View appointments for a specific branch</p>
+                </div>
+              </div>
+              <div className="flex-1 max-w-xs">
+                <select
+                  value={selectedBranchId || ""}
+                  onChange={(e) => setSelectedBranchId(e.target.value || null)}
+                  disabled={loadingBranches}
+                  className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {campaigns.length > 0 && (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
@@ -702,8 +802,7 @@ export default function DoctorDashboard() {
                           </p>
                           <button
                             onClick={() => {
-                              // Add to dismissed list so it won't show again even if real-time listener updates
-                              setDismissedRequestIds(prev => [...prev, req.id])
+                              handleDeleteRejectedRequest(req.id)
                             }}
                             className="ml-3 px-2 py-1 text-xs font-medium text-red-700 hover:text-red-900 hover:bg-red-100 rounded transition-colors"
                           >

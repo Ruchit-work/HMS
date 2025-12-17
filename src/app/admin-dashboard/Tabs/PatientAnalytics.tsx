@@ -109,7 +109,7 @@ interface PatientAnalytics {
   }>
 }
 
-export default function PatientAnalytics() {
+export default function PatientAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId } = useMultiHospital()
   const [loading, setLoading] = useState(true)
@@ -120,7 +120,7 @@ export default function PatientAnalytics() {
     if (!user || !activeHospitalId) return
     fetchAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeHospitalId, timeRange])
+  }, [user, activeHospitalId, timeRange, selectedBranchId])
 
   const fetchAnalytics = async () => {
     if (!activeHospitalId) return
@@ -130,17 +130,27 @@ export default function PatientAnalytics() {
 
       // Fetch all patients - use hospital-scoped collection
       const patientsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'patients'))
-      const patients: Patient[] = patientsSnapshot.docs.map(doc => ({
+      let patients: Patient[] = patientsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Patient))
 
+      // Filter patients by branch if selected
+      if (selectedBranchId !== "all") {
+        patients = patients.filter((p: any) => p.defaultBranchId === selectedBranchId)
+      }
+
       // Fetch all appointments - use hospital-scoped collection
       const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'appointments'))
-      const appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
+      let appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Appointment))
+
+      // Filter appointments by branch if selected
+      if (selectedBranchId !== "all") {
+        appointments = appointments.filter((apt: any) => apt.branchId === selectedBranchId)
+      }
 
       // Calculate date ranges
       const now = new Date()

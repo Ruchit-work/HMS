@@ -130,6 +130,18 @@ export async function POST(request: Request) {
       return Response.json({ error: "User's hospital not found. Please ensure you have an active hospital selected." }, { status: 400 })
     }
 
+    // Get receptionist's branch ID (if user is a receptionist)
+    let defaultBranchId: string | null = null
+    let defaultBranchName: string | null = null
+    if (auth.user!.role === "receptionist") {
+      const receptionistDoc = await admin.firestore().collection("receptionists").doc(auth.user!.uid).get()
+      if (receptionistDoc.exists) {
+        const receptionistData = receptionistDoc.data()
+        defaultBranchId = receptionistData?.branchId || null
+        defaultBranchName = receptionistData?.branchName || null
+      }
+    }
+
     const db = admin.firestore()
     const START_NUMBER = 12906
     const patientId = await db.runTransaction(async (transaction) => {
@@ -174,6 +186,8 @@ export async function POST(request: Request) {
       createdBy: patientData.createdBy || "receptionist",
       patientId,
       hospitalId: userHospitalId, // Store hospital association
+      defaultBranchId: defaultBranchId || null, // Store default branch (where patient was registered)
+      defaultBranchName: defaultBranchName || null,
     }
 
     // Store patient doc in hospital-scoped subcollection

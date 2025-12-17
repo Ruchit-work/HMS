@@ -12,6 +12,7 @@ import { getHospitalCollection } from "@/utils/hospital-queries"
 interface WhatsAppBookingsPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
   onPendingCountChange?: (_count: number) => void
+  receptionistBranchId?: string | null
 }
 
 interface Doctor {
@@ -22,7 +23,7 @@ interface Doctor {
   consultationFee?: number
 }
 
-export default function WhatsAppBookingsPanel({ onNotification, onPendingCountChange }: WhatsAppBookingsPanelProps) {
+export default function WhatsAppBookingsPanel({ onNotification, onPendingCountChange, receptionistBranchId }: WhatsAppBookingsPanelProps) {
   const { activeHospitalId } = useMultiHospital()
   const [bookings, setBookings] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(false)
@@ -97,7 +98,18 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
 
       // Set up real-time listener for WhatsApp pending appointments in the active hospital
       const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-      const whatsappQuery = query(appointmentsRef, where("whatsappPending", "==", true))
+      
+      // Filter by branch if receptionist has a branchId
+      let whatsappQuery
+      if (receptionistBranchId) {
+        whatsappQuery = query(
+          appointmentsRef,
+          where("whatsappPending", "==", true),
+          where("branchId", "==", receptionistBranchId)
+        )
+      } else {
+        whatsappQuery = query(appointmentsRef, where("whatsappPending", "==", true))
+      }
 
       const unsubscribe = onSnapshot(
         whatsappQuery,
@@ -129,7 +141,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
       setLoading(false)
       return () => {}
     }
-  }, [activeHospitalId, onPendingCountChange])
+  }, [activeHospitalId, onPendingCountChange, receptionistBranchId])
 
   const fetchDoctors = useCallback(async () => {
     if (!activeHospitalId) return

@@ -31,9 +31,10 @@ interface UnifiedBillingRecord {
   settlementMode?: string | null
   paymentType?: "full" | "partial"
   remainingAmount?: number
+  branchId?: string | null
 }
 
-export default function BillingManagement() {
+export default function BillingManagement({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
   const [billingRecords, setBillingRecords] = useState<UnifiedBillingRecord[]>([])
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
@@ -68,7 +69,16 @@ export default function BillingManagement() {
         throw new Error(data?.error || "Failed to load billing records")
       }
       const data = await res.json().catch(() => ({}))
-      const records = Array.isArray(data?.records) ? data.records : []
+      let records = Array.isArray(data?.records) ? data.records : []
+      
+      // Filter by branch if selected (client-side filtering)
+      if (selectedBranchId !== "all") {
+        records = records.filter((record: any) => {
+          // Filter by branchId - API now includes branchId in all records
+          return record.branchId === selectedBranchId
+        })
+      }
+      
       setBillingRecords(records as UnifiedBillingRecord[])
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load billing records"
@@ -76,7 +86,7 @@ export default function BillingManagement() {
     } finally {
       setBillingLoading(false)
     }
-  }, [])
+  }, [selectedBranchId])
 
   useEffect(() => {
     fetchBillingRecords()

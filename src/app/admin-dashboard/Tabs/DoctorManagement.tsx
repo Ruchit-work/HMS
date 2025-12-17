@@ -27,7 +27,7 @@ interface Doctor {
     createdAt: string
     updatedAt: string
 }
-export default function DoctorManagement({ canDelete = true, canAdd = true, disableAdminGuard = true }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean } = {}) {
+export default function DoctorManagement({ canDelete = true, canAdd = true, disableAdminGuard = true, selectedBranchId = "all" }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean; selectedBranchId?: string } = {}) {
     const [doctors, setDoctors] = useState<Doctor[]>([])
     const [pendingDoctors, setPendingDoctors] = useState<Doctor[]>([])
     const [loading, setLoading] = useState(false)
@@ -119,7 +119,10 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 qualification: formValues.qualification,
                 experience: formValues.experience,
                 consultationFee: formValues.consultationFee,
-                status: formValues.status
+                status: formValues.status,
+                branchIds: formValues.branchIds,
+                visitingHours: formValues.visitingHours,
+                branchTimings: formValues.branchTimings
             }
 
             // Get Firebase Auth token
@@ -298,10 +301,19 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             // Set up real-time listener for active doctors
             const activeQ = query(doctorsRef, where('status', '==', 'active'))
             const unsubscribeActive = onSnapshot(activeQ, (snapshot) => {
-                const activeList = snapshot.docs.map((doc) => ({
+                let activeList = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data()
             })) as Doctor[]
+            
+            // Filter by branch if selected
+            if (selectedBranchId !== "all") {
+                activeList = activeList.filter((doctor: any) => {
+                    const branchIds = doctor.branchIds || []
+                    return Array.isArray(branchIds) && branchIds.includes(selectedBranchId)
+                })
+            }
+            
             setDoctors(activeList)
             }, (error) => {
                 console.error('Error in active doctors listener:', error)
@@ -310,10 +322,19 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             
             const pendingQ = query(doctorsRef, where('status', '==', 'pending'))
             const unsubscribePending = onSnapshot(pendingQ, (snapshot) => {
-                const pendingList = snapshot.docs.map((doc) => ({
+                let pendingList = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data()
             })) as Doctor[]
+            
+            // Filter by branch if selected
+            if (selectedBranchId !== "all") {
+                pendingList = pendingList.filter((doctor: any) => {
+                    const branchIds = doctor.branchIds || []
+                    return Array.isArray(branchIds) && branchIds.includes(selectedBranchId)
+                })
+            }
+            
             setPendingDoctors(pendingList)
                 setLoading(false)
             }, (error) => {
@@ -332,7 +353,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             setLoading(false)
             return () => {}
         }
-    }, [activeHospitalId])
+    }, [activeHospitalId, selectedBranchId])
     
     const handleApproveDoctor = async (doctorId: string) => {
         // Only admins can approve doctors

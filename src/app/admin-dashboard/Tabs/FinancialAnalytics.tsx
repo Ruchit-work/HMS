@@ -135,7 +135,7 @@ interface FinancialAnalytics {
   }>
 }
 
-export default function FinancialAnalytics() {
+export default function FinancialAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId } = useMultiHospital()
   const [loading, setLoading] = useState(true)
@@ -146,7 +146,7 @@ export default function FinancialAnalytics() {
     if (!user || !activeHospitalId) return
     fetchFinancialAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeHospitalId, timeRange])
+  }, [user, activeHospitalId, timeRange, selectedBranchId])
 
   const fetchFinancialAnalytics = async () => {
     if (!activeHospitalId) return
@@ -178,10 +178,24 @@ export default function FinancialAnalytics() {
 
       // Fetch appointments (they also have payment data) - use hospital-scoped collection
       const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, 'appointments'))
-      const appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
+      let appointments: Appointment[] = appointmentsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Appointment))
+
+      // Filter by branch if selected
+      if (selectedBranchId !== "all") {
+        appointments = appointments.filter((apt: any) => apt.branchId === selectedBranchId)
+        // Also filter billing records by checking associated appointments
+        billingRecords = billingRecords.filter((record: any) => {
+          if (record.branchId && record.branchId === selectedBranchId) return true
+          if (record.appointmentId) {
+            const apt = appointments.find(a => a.id === record.appointmentId)
+            return apt && (apt as any).branchId === selectedBranchId
+          }
+          return false
+        })
+      }
 
       // Calculate date ranges
       const now = new Date()

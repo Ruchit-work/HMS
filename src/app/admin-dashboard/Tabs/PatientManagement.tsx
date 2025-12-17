@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
@@ -45,9 +45,27 @@ interface Patient {
             medicalHistory?: string
         }
     }
+    defaultBranchId?: string
+    defaultBranchName?: string
 }
 
-export default function PatientManagement({ canDelete = true, canAdd = true, disableAdminGuard = true }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean } = {}) {
+interface PatientManagementProps {
+    canDelete?: boolean
+    canAdd?: boolean
+    disableAdminGuard?: boolean
+    /** When provided, receptionist views will be filtered to this branch */
+    receptionistBranchId?: string | null
+    /** When provided (admin dashboard), filter patients by this branch */
+    selectedBranchId?: string
+}
+
+export default function PatientManagement({
+    canDelete = true,
+    canAdd = true,
+    disableAdminGuard = true,
+    receptionistBranchId = null,
+    selectedBranchId = "all"
+}: PatientManagementProps = {}) {
     const [patients, setPatients] = useState<Patient[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -84,12 +102,10 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
             
             // First, delete from Firebase Auth
             try {
-                // Get Firebase Auth token
                 const currentUser = auth.currentUser
                 if (!currentUser) {
                     throw new Error("You must be logged in to delete users")
                 }
-
                 const token = await currentUser.getIdToken()
 
                 const authDeleteResponse = await fetch('/api/admin/delete-user', {
@@ -111,11 +127,23 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                 // Continue with Firestore deletion even if auth deletion fails
             }
             
-            // Then delete from Firestore
-            const patientRef = doc(db, 'patients', deletePatient.id)
-            await deleteDoc(patientRef)
+            // Then delete from Firestore: hospital-scoped patients + legacy root collection
+            if (activeHospitalId) {
+                try {
+                    const scopedRef = doc(getHospitalCollection(activeHospitalId, 'patients'), deletePatient.id)
+                    await deleteDoc(scopedRef)
+                } catch (e) {
+                    console.error('Error deleting patient from hospital-scoped collection:', e)
+                }
+            }
+            try {
+                const legacyRef = doc(db, 'patients', deletePatient.id)
+                await deleteDoc(legacyRef)
+            } catch (e) {
+                console.error('Error deleting patient from legacy patients collection:', e)
+            }
             
-            // Update local state
+            // Update local state (this list comes from hospital-scoped patients)
             setPatients(prev => prev.filter(p => p.id !== deletePatient.id))
             
             // Close modal
@@ -124,14 +152,13 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
             
             // Show success message
             setSuccessMessage('Patient deleted successfully from database and authentication!')
-            
-            // Auto-hide success message after 3 seconds
             setTimeout(() => {
                 setSuccessMessage(null)
             }, 3000)
             
         } catch (error) {
-            setError((error as Error).message)
+            console.error('Error deleting patient:', error)
+            setError((error as Error).message || 'Failed to delete patient')
         } finally {
             setLoading(false)
         }
@@ -145,10 +172,20 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
             const q = query(patientsRef, where('status','in',['active','inactive']))
             
             const unsubscribe = onSnapshot(q, async (snapshot) => {
-                const patientsList = snapshot.docs.map((doc) => ({
+                let patientsList = snapshot.docs.map((doc) => ({
                     id: doc.id,
                     ...doc.data()
                 })) as Patient[]
+
+                // If used from receptionist dashboard, restrict to their branch
+                if (receptionistBranchId) {
+                    patientsList = patientsList.filter(p => p.defaultBranchId === receptionistBranchId)
+                }
+                
+                // If used from admin dashboard with branch filter, filter by selected branch
+                if (!receptionistBranchId && selectedBranchId !== "all") {
+                    patientsList = patientsList.filter(p => p.defaultBranchId === selectedBranchId)
+                }
                 
                 // Fetch appointments for each patient (keep this as one-time fetch for now)
                 const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
@@ -230,7 +267,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
         } finally {
             setLoading(false)
         }
-    }, [activeHospitalId])
+    }, [activeHospitalId, receptionistBranchId, selectedBranchId])
 
     useEffect(() => {   
         if (!user || authLoading || !activeHospitalId) return
@@ -243,7 +280,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                 unsubscribe()
             }
         }
-    }, [setupPatientsListener, user, authLoading, activeHospitalId])
+    }, [setupPatientsListener, user, authLoading, activeHospitalId, selectedBranchId])
 
     const metrics = useMemo(() => {
         const total = patients.length
@@ -537,29 +574,35 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                     and keep clinical teams in sync.    </p>
                 </div>
                 <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-                  {allowAdd ? (
-                    <button     onClick={openAddPatientModal}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                      type="button" >
-                      <svg className="h-4 w-4" fill="none"    stroke="currentColor"   viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 4v16m8-8H4"
-                        />
-                      </svg>
-                      Add patient
-                    </button>
-                  ) : (
-                    <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white/70 px-3 py-2 text-xs font-semibold text-blue-600 shadow-inner">
-                      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
-                      Registrations handled by reception team
+                  <div className="flex items-center gap-3">
+                    {allowAdd ? (
+                      <button
+                        onClick={openAddPatientModal}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                        type="button"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                          />
+                        </svg>
+                        Add patient
+                      </button>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white/70 px-3 py-2 text-xs font-semibold text-blue-600 shadow-inner">
+                        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
+                        Registrations handled by reception team
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-2 text-xs font-semibold text-green-700 shadow-inner">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span>Live Updates Active</span>
                     </div>
-                  )}
-                  <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-2 text-xs font-semibold text-green-700 shadow-inner">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span>Live Updates Active</span>
                   </div>
                 </div>
               </div>
@@ -578,7 +621,7 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
               </div>
             </div>
 
-            <div className="space-y-6 px-6 py-6">
+              <div className="space-y-6 px-6 py-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {summaryCards.map((card) => (
                   <div
@@ -739,8 +782,9 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                             )}
                           </div>
                         </th>
-                        <th className="hidden px-3 py-3 text-left md:table-cell">
-                          Medical info
+                        {/* Removed Medical info column */}
+                        <th className="hidden px-3 py-3 text-left lg:table-cell">
+                          Branch
                         </th>
                         <th
                           className="hidden px-3 py-3 text-left hover:bg-slate-50 lg:table-cell"
@@ -878,15 +922,12 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                                   {patient.phone || "—"}
                                 </div>
                               </td>
-                              <td className="hidden px-3 py-4 md:table-cell">
+                              <td className="hidden px-3 py-4 lg:table-cell">
                                 <div className="text-sm text-slate-900">
-                                  {patient.gender || "—"}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {patient.bloodGroup || "—"}
+                                  {patient.defaultBranchName || "Not assigned"}
                                 </div>
                               </td>
-                              <td className="hidden px-3 py-4 lg:table-cell">
+                              <td className="hidden px-3 py-4 md:table-cell">
                                 <div className="text-sm font-medium text-slate-900">
                                   {formatDate(patient.createdAt)}
                                 </div>
@@ -1096,6 +1137,16 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Default Branch
+                    </label>
+                    <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">
+                      {selectedPatient?.defaultBranchName
+                        ? `${selectedPatient.defaultBranchName} (${selectedPatient.defaultBranchId || "no id"})`
+                        : "Not assigned"}
+                    </p>
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                       Date of Birth
                     </label>
                     {selectedPatient?.dateOfBirth ? (
@@ -1156,6 +1207,14 @@ export default function PatientManagement({ canDelete = true, canAdd = true, dis
                     </label>
                     <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md font-mono">
                       {selectedPatient?.patientId || "Not assigned"}
+                    </p>
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Hospital ID
+                    </label>
+                    <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md font-mono">
+                      {(selectedPatient as any)?.hospitalId || "N/A"}
                     </p>
                   </div>
                   <div className="flex flex-col space-y-1">

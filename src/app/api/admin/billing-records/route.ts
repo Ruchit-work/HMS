@@ -28,6 +28,7 @@ interface UnifiedBillingRecord {
   paymentType?: "full" | "partial"
   remainingAmount?: number
   hospitalId?: string | null
+  branchId?: string | null
 }
 
 export async function GET(request: Request) {
@@ -93,6 +94,35 @@ export async function GET(request: Request) {
         }
       }
 
+      // Get branchId from billing record or associated appointment
+      let branchId: string | null = data.branchId || null
+      
+      // If no branchId in billing record, try to get it from associated appointment
+      if (!branchId && data.appointmentId) {
+        try {
+          // Try hospital-scoped appointments first
+          const hospitalsSnap = await firestore.collection("hospitals").where("status", "==", "active").limit(10).get()
+          for (const hospDoc of hospitalsSnap.docs) {
+            const hospId = hospDoc.id
+            const aptDoc = await firestore.collection(`hospitals/${hospId}/appointments`).doc(String(data.appointmentId)).get()
+            if (aptDoc.exists) {
+              branchId = aptDoc.data()?.branchId || null
+              break
+            }
+          }
+          
+          // Fallback to root appointments collection
+          if (!branchId) {
+            const aptDoc = await firestore.collection("appointments").doc(String(data.appointmentId)).get()
+            if (aptDoc.exists) {
+              branchId = aptDoc.data()?.branchId || null
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to fetch branchId from appointment", err)
+        }
+      }
+
       records.push({
         id: docSnap.id,
         type: "admission",
@@ -116,6 +146,8 @@ export async function GET(request: Request) {
         paidAtFrontDesk: data?.paidAtFrontDesk ?? false,
         handledBy: data?.handledBy || null,
         settlementMode: data?.settlementMode || null,
+        hospitalId: data.hospitalId || null,
+        branchId: branchId,
       })
 
       // Track any explicit appointment billing tied to an appointmentId
@@ -297,6 +329,8 @@ export async function GET(request: Request) {
         paidAt: data.paidAt || null,
         paymentReference: data.transactionId || null,
         transactionId: data.transactionId || null,
+        hospitalId: data.hospitalId || null,
+        branchId: data.branchId || null,
         paidAtFrontDesk: false,
         paymentType: data.paymentType || "full",
         remainingAmount:
@@ -305,7 +339,6 @@ export async function GET(request: Request) {
               ? billedAmount - paymentAmount
               : billedAmount || totalConsultationFee
             : Number(data.remainingAmount || 0),
-        hospitalId: data.hospitalId || null,
       })
     }
 

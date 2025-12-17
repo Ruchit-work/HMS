@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import PasswordRequirements, { isPasswordValid } from '@/components/forms/PasswordComponents'
 import { qualifications, specializationCategories, qualificationSpecializationMap } from '@/constants/signup'
+import { VisitingHours } from '@/types/patient'
+import { DEFAULT_VISITING_HOURS } from '@/utils/timeSlots'
+import VisitingHoursEditor from '@/components/doctor/VisitingHoursEditor'
+import { Branch } from '@/types/branch'
+import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 
 export interface DoctorProfileFormValues {
   firstName: string
@@ -16,6 +21,9 @@ export interface DoctorProfileFormValues {
   consultationFee: number
   status: 'active' | 'inactive' | 'pending'
   password: string
+  branchIds?: string[]
+  visitingHours?: VisitingHours
+  branchTimings?: { [branchId: string]: VisitingHours }
 }
 
 interface DoctorProfileFormProps {
@@ -89,11 +97,41 @@ export default function DoctorProfileForm({
 
   const [showSpecializationDropdown, setShowSpecializationDropdown] = useState(false)
   const [showQualificationDropdown, setShowQualificationDropdown] = useState(false)
+  
+  // Branch and visiting hours state
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(initialValues?.branchIds || [])
+  const [visitingHours, setVisitingHours] = useState<VisitingHours>(
+    initialValues?.visitingHours || DEFAULT_VISITING_HOURS
+  )
+  const [branchTimings, setBranchTimings] = useState<{ [branchId: string]: VisitingHours }>(
+    initialValues?.branchTimings || {}
+  )
+  const [showBranchTimings, setShowBranchTimings] = useState<{ [branchId: string]: boolean }>({})
 
   const _allSpecializations = useMemo(
     () => specializationCategories.flatMap((cat) => cat.specializations),
     []
   )
+
+  const { activeHospitalId } = useMultiHospital()
+
+  // Fetch branches on mount
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!activeHospitalId) return
+      try {
+        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`)
+        const data = await response.json()
+        if (data.success && data.branches) {
+          setBranches(data.branches)
+        }
+      } catch (error) {
+        console.error('Error fetching branches:', error)
+      }
+    }
+    fetchBranches()
+  }, [activeHospitalId])
 
   const specializationQualificationMap = useMemo(() => {
     const map = new Map<string, Set<string>>()
@@ -300,6 +338,9 @@ export default function DoctorProfileForm({
       consultationFee: Math.round(feeNumber),
       status: showStatusField ? status : mode === 'admin' ? 'active' : 'pending',
       password,
+      branchIds: selectedBranchIds.length > 0 ? selectedBranchIds : undefined,
+      visitingHours: visitingHours,
+      branchTimings: Object.keys(branchTimings).length > 0 ? branchTimings : undefined,
     }
 
     try {
@@ -796,6 +837,105 @@ export default function DoctorProfileForm({
           </select>
         </div>
       )}
+
+      {/* Branch Selection */}
+      {branches.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Branches <span className="text-xs text-slate-500">(Select branches where this doctor works)</span>
+          </label>
+          <div className="space-y-2">
+            {branches.map((branch) => {
+              const isSelected = selectedBranchIds.includes(branch.id)
+              return (
+                <label
+                  key={branch.id}
+                  className="flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all hover:bg-slate-50"
+                  style={{
+                    borderColor: isSelected ? '#14b8a6' : '#e2e8f0',
+                    backgroundColor: isSelected ? '#f0fdfa' : 'white',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedBranchIds([...selectedBranchIds, branch.id])
+                        // Initialize branch timings if not exists
+                        if (!branchTimings[branch.id]) {
+                          setBranchTimings({
+                            ...branchTimings,
+                            [branch.id]: DEFAULT_VISITING_HOURS,
+                          })
+                        }
+                      } else {
+                        setSelectedBranchIds(selectedBranchIds.filter((id) => id !== branch.id))
+                        // Remove branch timings when branch is deselected
+                        const updated = { ...branchTimings }
+                        delete updated[branch.id]
+                        setBranchTimings(updated)
+                        setShowBranchTimings({ ...showBranchTimings, [branch.id]: false })
+                      }
+                    }}
+                    className="w-4 h-4 text-teal-600 border-slate-300 rounded focus:ring-teal-500"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium text-slate-800">{branch.name}</div>
+                    <div className="text-xs text-slate-500">{branch.location}</div>
+                  </div>
+                  {isSelected && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setShowBranchTimings({
+                          ...showBranchTimings,
+                          [branch.id]: !showBranchTimings[branch.id],
+                        })
+                      }}
+                      className="text-xs px-3 py-1 bg-teal-100 text-teal-700 rounded hover:bg-teal-200 transition-colors"
+                    >
+                      {showBranchTimings[branch.id] ? 'Hide' : 'Set'} Timings
+                    </button>
+                  )}
+                </label>
+              )
+            })}
+          </div>
+          
+          {/* Branch-specific timings */}
+          {selectedBranchIds.map((branchId) => {
+            const branch = branches.find((b) => b.id === branchId)
+            if (!branch || !showBranchTimings[branchId]) return null
+            
+            return (
+              <div key={branchId} className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                  Visiting Hours for {branch.name}
+                </h4>
+                <VisitingHoursEditor
+                  value={branchTimings[branchId] || DEFAULT_VISITING_HOURS}
+                  onChange={(hours) => {
+                    setBranchTimings({
+                      ...branchTimings,
+                      [branchId]: hours,
+                    })
+                  }}
+                />
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* General Visiting Hours (fallback) */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          General Visiting Hours <span className="text-xs text-slate-500">(Used as fallback if branch timings not set)</span>
+        </label>
+        <VisitingHoursEditor value={visitingHours} onChange={setVisitingHours} />
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-2">

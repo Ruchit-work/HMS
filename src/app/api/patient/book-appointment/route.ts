@@ -81,6 +81,39 @@ export async function POST(request: Request) {
       appointmentData.appointmentTime = normalizedAppointmentTime
       appointmentData.hospitalId = doctorHospitalId
 
+      // Validate and set branch information
+      if (appointmentData.branchId) {
+        // Verify branch exists and belongs to the hospital
+        const branchDoc = await firestore.collection("branches").doc(appointmentData.branchId).get()
+        if (!branchDoc.exists) {
+          return NextResponse.json({ error: "Branch not found" }, { status: 404 })
+        }
+        const branchData = branchDoc.data()
+        if (branchData?.hospitalId !== doctorHospitalId) {
+          return NextResponse.json({ error: "Branch does not belong to this hospital" }, { status: 400 })
+        }
+        if (branchData?.status !== "active") {
+          return NextResponse.json({ error: "Branch is not active" }, { status: 400 })
+        }
+        // Set branch name for display
+        appointmentData.branchName = branchData?.name || ""
+      } else {
+        // If no branchId provided, try to get patient's default branch
+        try {
+          const patientDoc = await firestore.collection("patients").doc(auth.user?.uid || "").get()
+          if (patientDoc.exists) {
+            const patientData = patientDoc.data()
+            if (patientData?.defaultBranchId) {
+              appointmentData.branchId = patientData.defaultBranchId
+              appointmentData.branchName = patientData.defaultBranchName || ""
+            }
+          }
+        } catch (error) {
+          console.error("[patient/book-appointment] Error fetching patient default branch:", error)
+          // Continue without branch if patient lookup fails
+        }
+      }
+
       const slotId = getSlotDocId(appointmentData.doctorId, appointmentData.appointmentDate, normalizedAppointmentTime)
       if (!slotId) {
         return NextResponse.json({ error: "Invalid slot information" }, { status: 400 })
