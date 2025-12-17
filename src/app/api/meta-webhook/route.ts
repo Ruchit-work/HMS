@@ -1905,9 +1905,17 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
       updatedAt: new Date().toISOString(),
     })
 
+    // Get updated session to check if it's a recheckup
+    const updatedSessionDoc = await sessionRef.get()
+    const updatedSession = updatedSessionDoc.data() as BookingSession
+
     // For recheckup, skip branch selection and go directly to date
-    const session = sessionDoc.data() as BookingSession
-    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
+    // For normal bookings, go to branch selection first
+    if (updatedSession.isRecheckup) {
+      await moveToDateSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage)
+    } else {
+      await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage, updatedSession)
+    }
     return
   }
 

@@ -823,7 +823,17 @@ function LoginContent() {
                   <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Bardoli)</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Navsari1@gmail.com"); setPassword("Navsari1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Navsari1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Navsari1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Navsari)</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Surat1@gmail.com"); setPassword("Surat1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Surat1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Surat1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Surat)</td>
                   </tr>
                   <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
