@@ -1,5 +1,5 @@
 import { db } from "@/firebase/config"
-import { doc, updateDoc, getDoc, query, where, getDocs, deleteDoc } from "firebase/firestore"
+import { doc, updateDoc, getDoc, query, where, getDocs, deleteDoc, deleteField } from "firebase/firestore"
 import { getHospitalCollection } from "@/utils/hospital-queries"
 const SLOT_COLLECTION = "appointmentSlots"
 const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {
@@ -78,10 +78,19 @@ export const completeAppointment = async (
   appointmentId: string,
   medicine: string,
   notes: string,
-  hospitalId: string
+  hospitalId: string,
+  finalDiagnosis?: string[],
+  customDiagnosis?: string,
+  updatedBy?: string,
+  updatedByRole: "doctor" | "admin" = "doctor"
 ) => {
   if (!hospitalId) {
     throw new Error("Hospital ID is required")
+  }
+
+  // Validate diagnosis requirement
+  if (!finalDiagnosis || finalDiagnosis.length === 0) {
+    throw new Error("At least one diagnosis is required to complete the consultation")
   }
 
   // Load appointment to validate rules - use hospital-scoped collection
@@ -123,13 +132,43 @@ export const completeAppointment = async (
     throw new Error("Please complete earlier appointments first")
   }
 
-  await updateDoc(aptRef, {
+  // Prepare diagnosis history entry for audit
+  const diagnosisHistoryEntry: any = {
+    diagnoses: finalDiagnosis,
+    updatedBy: updatedBy || doctorId,
+    updatedAt: new Date().toISOString(),
+    updatedByRole: updatedByRole
+  }
+  
+  // Only include customDiagnosis if it has a value
+  if (customDiagnosis && customDiagnosis.trim()) {
+    diagnosisHistoryEntry.customDiagnosis = customDiagnosis.trim()
+  }
+
+  // Get existing diagnosis history or initialize
+  const existingHistory = apt.diagnosisHistory || []
+  const updatedHistory = [...existingHistory, diagnosisHistoryEntry]
+
+  // Build update object - only include customDiagnosis if it has a value
+  const updateData: any = {
     status: "completed",
     medicine: medicine,
     doctorNotes: notes,
+    finalDiagnosis: finalDiagnosis,
+    diagnosisHistory: updatedHistory,
     completedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
-  })
+  }
+
+  // Only include customDiagnosis if it has a value, otherwise remove it if it exists
+  if (customDiagnosis && customDiagnosis.trim()) {
+    updateData.customDiagnosis = customDiagnosis.trim()
+  } else if (apt.customDiagnosis !== undefined) {
+    // Remove the field if it exists but new value is empty
+    updateData.customDiagnosis = deleteField()
+  }
+
+  await updateDoc(aptRef, updateData)
 
   await releaseAppointmentSlot(apt.doctorId, apt.appointmentDate, apt.appointmentTime)
 
@@ -139,7 +178,9 @@ export const completeAppointment = async (
     updates: {
       status: "completed" as const,
       medicine: medicine,
-      doctorNotes: notes
+      doctorNotes: notes,
+      finalDiagnosis: finalDiagnosis,
+      customDiagnosis: customDiagnosis
     }
   }
 }

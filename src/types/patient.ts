@@ -128,6 +128,16 @@ export interface Appointment {
   updatedAt: string
   medicine?: string
   doctorNotes?: string
+  // Final Diagnosis (doctor-confirmed)
+  finalDiagnosis?: string[] // Array of diagnosis codes/names
+  customDiagnosis?: string // Custom diagnosis text if "Other" is selected
+  diagnosisHistory?: Array<{
+    diagnoses: string[]
+    customDiagnosis?: string
+    updatedBy: string // doctorId or adminId
+    updatedAt: string
+    updatedByRole: "doctor" | "admin"
+  }> // Audit trail for diagnosis changes
   cancelledAt?: string
   cancelledBy?: string
   notAttendedAt?: string

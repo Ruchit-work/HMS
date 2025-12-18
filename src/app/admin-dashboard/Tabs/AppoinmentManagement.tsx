@@ -943,6 +943,43 @@ export default function AppoinmentManagement({
                         </div>
                     </div>
 
+                    {/* Final Diagnosis - View-only for receptionist/admin */}
+                    {selectedAppointment && (selectedAppointment as any).finalDiagnosis && (
+                        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4 sm:p-6">
+                            <div className="flex items-center space-x-2 mb-4">
+                                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <h4 className="text-base sm:text-lg font-semibold text-gray-900">Final Diagnosis</h4>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex flex-col space-y-2">
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Diagnoses</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {(selectedAppointment as any).finalDiagnosis.map((diagnosis: string, index: number) => (
+                                            <span
+                                                key={index}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-sm font-medium text-blue-700"
+                                            >
+                                                {diagnosis}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                                {(selectedAppointment as any).customDiagnosis && (
+                                    <div className="flex flex-col space-y-1">
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Diagnosis</label>
+                                        <p className="text-sm font-medium text-gray-900 bg-purple-50 border border-purple-200 px-3 py-2 rounded-md">
+                                            {(selectedAppointment as any).customDiagnosis}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Prescription & Notes - Only for completed appointments */}
                     {selectedAppointment && (
                         <PrescriptionDisplay 

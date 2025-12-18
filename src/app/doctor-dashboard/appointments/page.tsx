@@ -16,6 +16,8 @@ import axios from "axios"
 import Pagination from "@/components/ui/Pagination"
 import { fetchMedicineSuggestions, MedicineSuggestion,  MedicineSuggestionOption,recordMedicineSuggestions, sanitizeMedicineName,} from "@/utils/medicineSuggestions"
 import type { Branch } from "@/types/branch"
+import DiagnosisSelector from "@/components/doctor/DiagnosisSelector"
+import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
 
 // Helper function to parse and render prescription text
 const parsePrescription = (text: string) => {
@@ -115,6 +117,8 @@ type CompletionFormEntry = {
   notes: string
   recheckupRequired: boolean
   recheckupNote?: string
+  finalDiagnosis?: string[]
+  customDiagnosis?: string
 }
 
 const hasValidPrescriptionInput = (entry?: CompletionFormEntry) =>
@@ -445,6 +449,8 @@ export default function DoctorAppointments() {
           medicines: [],
           notes: "",
           recheckupRequired: false,
+          finalDiagnosis: [],
+          customDiagnosis: "",
         },
       }))
       setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: true})
@@ -1079,14 +1085,30 @@ export default function DoctorAppointments() {
       return
     }
 
+    // Validate diagnosis requirement
+    if (!formData.finalDiagnosis || formData.finalDiagnosis.length === 0) {
+      setNotification({
+        type: "error",
+        message: "Please select at least one diagnosis before completing the consultation."
+      })
+      return
+    }
+
     const appointmentSnapshot = appointments.find((apt) => apt.id === appointmentId)
     const medicineText = formatMedicinesAsText(formData.medicines, formData.notes)
+
+    // Filter out custom diagnosis option from the diagnosis array
+    const diagnoses = formData.finalDiagnosis.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION)
 
     const result = await completeAppointment(
       appointmentId,
       medicineText,
       formData.notes,
-      activeHospitalId
+      activeHospitalId,
+      diagnoses,
+      formData.customDiagnosis,
+      user?.uid,
+      "doctor"
     )
 
     setAppointments((prevAppointments) =>
@@ -1253,13 +1275,28 @@ export default function DoctorAppointments() {
       }
     }
     
-    const currentData: CompletionFormEntry = completionData[appointmentId] || { medicines: [], notes: "", recheckupRequired: false }
+    const currentData: CompletionFormEntry = completionData[appointmentId] || { 
+      medicines: [], 
+      notes: "", 
+      recheckupRequired: false,
+      finalDiagnosis: [],
+      customDiagnosis: ""
+    }
     
     // Validate that at least one medicine has a name
     if (!hasValidPrescriptionInput(currentData)) {
       setNotification({ 
         type: "error", 
         message: "Please add at least one medicine with a name" 
+      })
+      return
+    }
+
+    // Validate diagnosis requirement
+    if (!currentData.finalDiagnosis || currentData.finalDiagnosis.length === 0) {
+      setNotification({
+        type: "error",
+        message: "Please select at least one diagnosis before completing the consultation."
       })
       return
     }
@@ -1863,6 +1900,26 @@ export default function DoctorAppointments() {
                             <p>{appointment.doctorNotes}</p>
                           </div>
                         )}
+                        {(appointment as any).finalDiagnosis && (appointment as any).finalDiagnosis.length > 0 && (
+                          <div>
+                            <p className="font-semibold text-slate-800 mb-1">Final Diagnosis</p>
+                            <div className="flex flex-wrap gap-2">
+                              {(appointment as any).finalDiagnosis.map((diagnosis: string, index: number) => (
+                                <span
+                                  key={index}
+                                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs font-medium text-blue-700"
+                                >
+                                  {diagnosis}
+                                </span>
+                              ))}
+                            </div>
+                            {(appointment as any).customDiagnosis && (
+                              <div className="mt-2 bg-purple-50 border border-purple-200 rounded p-2 text-xs text-purple-800">
+                                <span className="font-semibold">Custom:</span> {(appointment as any).customDiagnosis}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1875,45 +1932,39 @@ export default function DoctorAppointments() {
                 <div
                   key={appointment.id}
                   id={`appointment-${appointment.id}`}
-                  className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden transition-all hover:shadow-lg hover:border-slate-300"
+                  className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden transition-all hover:shadow-md hover:border-slate-300"
                 >
                   {/* Accordion Header */}
                   <button
                     type="button"
                     onClick={() => toggleAccordion(appointment.id)}
-                    className="w-full text-left p-5 sm:p-6 bg-gradient-to-r from-slate-50 to-white hover:from-slate-100/80 hover:to-white transition-colors"
+                    className="w-full text-left p-3 sm:p-4 bg-gradient-to-r from-slate-50 to-white hover:from-slate-100/80 hover:to-white transition-colors"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                       {/* Patient Avatar */}
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 rounded-xl bg-gradient-to-br from-indigo-100 via-sky-100 to-cyan-100 text-indigo-700 font-bold text-xl sm:text-2xl flex items-center justify-center shadow-sm">
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gradient-to-br from-indigo-100 via-sky-100 to-cyan-100 text-indigo-700 font-semibold text-lg flex items-center justify-center shadow-sm">
                         {appointment.patientName.charAt(0).toUpperCase()}
                       </div>
 
                       {/* Patient Info */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-semibold text-slate-900 truncate">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <h3 className="text-sm font-semibold text-slate-900 truncate">
                             {appointment.patientName}
                           </h3>
                           {appointment.patientGender && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700 border border-slate-200">
-                              {appointment.patientGender === "Male"
-                                ? "👨"
-                                : appointment.patientGender === "Female"
-                                ? "👩"
-                                : "👤"}{" "}
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
                               {appointment.patientGender}
                             </span>
                           )}
                           {appointment.patientBloodGroup && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-red-50 text-red-700 border border-red-200 font-semibold">
-                              🩸 {appointment.patientBloodGroup}
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-red-50 text-red-700 border border-red-200 font-semibold">
+                              {appointment.patientBloodGroup}
                             </span>
                           )}
                         </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm text-slate-600">
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
                           <span className="inline-flex items-center gap-1">
-                            📅{" "}
                             {new Date(appointment.appointmentDate).toLocaleDateString("en-US", {
                               month: "short",
                               day: "numeric",
@@ -1921,35 +1972,37 @@ export default function DoctorAppointments() {
                             })}
                           </span>
                           <span className="inline-flex items-center gap-1">
-                            🕐 {appointment.appointmentTime}
+                            {appointment.appointmentTime}
                           </span>
                           {appointment.patientPhone && (
                             <span className="inline-flex items-center gap-1">
-                              📱 {appointment.patientPhone}
+                              {appointment.patientPhone}
                             </span>
                           )}
                         </div>
                       </div>
 
                       {/* Status / Chevron */}
-                      <div className="flex items-center gap-3 justify-between sm:justify-end">
+                      <div className="flex items-center gap-2 justify-between sm:justify-end">
                         <span
-                          className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${getStatusColor(
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(
                             appointment.status
                           )}`}
                         >
                           {appointment.status === "confirmed"
-                            ? "✓ Confirmed"
+                            ? "Confirmed"
                             : appointment.status === "completed"
-                            ? "✓ Completed"
+                            ? "Completed"
                             : appointment.status}
                         </span>
                         <div
-                          className={`w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 transition-transform duration-300 ease-in-out ${
+                          className={`w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 transition-transform duration-300 ease-in-out ${
                             expandedAppointment === appointment.id ? "rotate-180" : ""
                           }`}
                         >
-                          <span className="text-sm">▼</span>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
                         </div>
                       </div>
                     </div>
@@ -1966,72 +2019,74 @@ export default function DoctorAppointments() {
                     {expandedAppointment === appointment.id && (
                       <div className="p-6 bg-gradient-to-br from-emerald-50/30 via-cyan-50/20 to-white border-t-2 border-emerald-200/50">
                       {/* Top Section: Patient Info (Left) + Lifestyle & Appointment (Right) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                         {/* LEFT: Patient Information Only */}
                         <div>
-                          <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
-                            <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-400 flex items-center justify-center text-white shadow-md">
-                                <span className="text-xl">👤</span>
+                          <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 border border-emerald-100/50 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-emerald-200">
+                              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-cyan-400 flex items-center justify-center text-white shadow-sm">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
                               </div>
-                              <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                              <h4 className="font-semibold text-slate-800 text-sm">
                                 Patient Information
                               </h4>
                             </div>
-                            <div className="space-y-3 text-sm">
-                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
-                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Patient ID</span>
-                                <p className="font-mono text-slate-800 mt-2 text-sm font-semibold break-all">{appointment.patientId}</p>
+                            <div className="space-y-2 text-xs">
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2.5 border border-emerald-100/50">
+                                <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Patient ID</span>
+                                <p className="font-mono text-slate-800 mt-1 text-xs font-medium break-all">{appointment.patientId}</p>
                               </div>
-                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
-                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Full Name</span>
-                                <p className="text-slate-900 mt-2 text-base font-bold">{appointment.patientName}</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2.5 border border-emerald-100/50">
+                                <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Full Name</span>
+                                <p className="text-slate-900 mt-1 text-sm font-semibold">{appointment.patientName}</p>
                               </div>
-                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
-                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Email</span>
-                                <p className="text-slate-900 mt-2">{appointment.patientEmail}</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2.5 border border-emerald-100/50">
+                                <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Email</span>
+                                <p className="text-slate-900 mt-1 text-xs">{appointment.patientEmail}</p>
                               </div>
                               {appointment.patientPhone && (
-                                <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
-                                  <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Phone</span>
-                                  <p className="text-slate-900 mt-2 font-semibold text-base">{appointment.patientPhone}</p>
+                                <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2.5 border border-emerald-100/50">
+                                  <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Phone</span>
+                                  <p className="text-slate-900 mt-1 font-medium text-xs">{appointment.patientPhone}</p>
                                 </div>
                               )}
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-2 gap-2">
                                 {appointment.patientGender && (
-                                  <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2.5 border border-emerald-100/50 hover:shadow-md transition-all">
-                                    <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wide">Gender</span>
-                                    <p className="text-slate-900 mt-1 font-semibold text-sm">{appointment.patientGender}</p>
+                                  <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2 border border-emerald-100/50">
+                                    <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Gender</span>
+                                    <p className="text-slate-900 mt-1 font-medium text-xs">{appointment.patientGender}</p>
                                   </div>
                                 )}
                                 {appointment.patientBloodGroup && (
-                                  <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-lg p-2.5 border-2 border-red-200 hover:shadow-md transition-all">
-                                    <span className="text-red-600 text-[10px] font-bold uppercase tracking-wide">Blood Group</span>
-                                    <p className="text-red-700 mt-1 font-bold text-base">{appointment.patientBloodGroup}</p>
+                                  <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-lg p-2 border border-red-200">
+                                    <span className="text-red-600 text-[10px] font-semibold uppercase tracking-wide">Blood Group</span>
+                                    <p className="text-red-700 mt-1 font-semibold text-xs">{appointment.patientBloodGroup}</p>
                                   </div>
                                 )}
                             {appointment.patientHeightCm != null && (
-                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
-                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Height</span>
-                                <p className="text-slate-900 mt-2 font-semibold text-base">{appointment.patientHeightCm} cm</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2 border border-emerald-100/50">
+                                <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Height</span>
+                                <p className="text-slate-900 mt-1 font-medium text-xs">{appointment.patientHeightCm} cm</p>
                               </div>
                             )}
                             {appointment.patientWeightKg != null && (
-                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
-                                <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Weight</span>
-                                <p className="text-slate-900 mt-2 font-semibold text-base">{appointment.patientWeightKg} kg</p>
+                              <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2 border border-emerald-100/50">
+                                <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Weight</span>
+                                <p className="text-slate-900 mt-1 font-medium text-xs">{appointment.patientWeightKg} kg</p>
                               </div>
                             )}
                               </div>
                               {appointment.patientDateOfBirth && (
-                                <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 hover:shadow-md transition-all">
-                                  <span className="text-emerald-600 text-xs font-bold uppercase tracking-wide">Date of Birth</span>
-                                  <p className="text-slate-900 mt-2 font-semibold text-base">
+                                <div className="bg-gradient-to-br from-emerald-50/50 to-cyan-50/30 rounded-lg p-2.5 border border-emerald-100/50">
+                                  <span className="text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">Date of Birth</span>
+                                  <p className="text-slate-900 mt-1 text-xs font-medium">
                                     {new Date(appointment.patientDateOfBirth).toLocaleDateString()}
-                                    <span className="text-emerald-600 text-sm ml-2 font-medium">
+                                    <span className="text-emerald-600 text-xs ml-1.5">
                                       {(() => {
                                         const age = calculateAge(appointment.patientDateOfBirth)
-                                        return age !== null ? `(Age: ${age} years)` : '(Age: N/A)'
+                                        return age !== null ? `(Age: ${age})` : '(N/A)'
                                       })()}
                                     </span>
                                   </p>
@@ -2122,47 +2177,49 @@ export default function DoctorAppointments() {
                           </div>
 
                         {/* RIGHT: Lifestyle & Appointment Details */}
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                           {/* Social & Lifestyle Information */}
                           {(appointment.patientDrinkingHabits || appointment.patientSmokingHabits || appointment.patientVegetarian) && (
-                            <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
-                              <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-emerald-400 flex items-center justify-center text-white shadow-md">
-                                  <span className="text-xl">🌱</span>
+                            <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 border border-emerald-100/50 shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-emerald-200">
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-green-400 to-emerald-400 flex items-center justify-center text-white shadow-sm">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                  </svg>
                                 </div>
-                                <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                                <h4 className="font-semibold text-slate-800 text-sm">
                                   Lifestyle
                                 </h4>
                               </div>
-                              <div className="space-y-3 text-sm">
+                              <div className="space-y-2 text-xs">
                                 {appointment.patientDrinkingHabits && (
-                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
-                                    <span className="text-emerald-700 font-semibold">Drinking</span>
-                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold capitalize text-xs shadow-sm">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-lg p-2 border border-emerald-100/50 flex items-center justify-between">
+                                    <span className="text-emerald-700 font-medium text-xs">Drinking</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-2 py-1 rounded-full text-white font-semibold capitalize text-[10px]">
                                       {appointment.patientDrinkingHabits}
                                     </span>
                                   </div>
                                 )}
                                 {appointment.patientSmokingHabits && (
-                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
-                                    <span className="text-emerald-700 font-semibold">Smoking</span>
-                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold capitalize text-xs shadow-sm">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-lg p-2 border border-emerald-100/50 flex items-center justify-between">
+                                    <span className="text-emerald-700 font-medium text-xs">Smoking</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-2 py-1 rounded-full text-white font-semibold capitalize text-[10px]">
                                       {appointment.patientSmokingHabits}
                                     </span>
                                   </div>
                                 )}
                                 {appointment.patientOccupation && (
-                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
-                                    <span className="text-emerald-700 font-semibold">Occupation</span>
-                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold text-xs shadow-sm">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-lg p-2 border border-emerald-100/50 flex items-center justify-between">
+                                    <span className="text-emerald-700 font-medium text-xs">Occupation</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-2 py-1 rounded-full text-white font-semibold text-[10px]">
                                       {appointment.patientOccupation}
                                     </span>
                                   </div>
                                 )}
                                 {appointment.patientVegetarian && (
-                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-xl p-4 border border-emerald-100/50 flex items-center justify-between hover:shadow-md transition-all">
-                                    <span className="text-emerald-700 font-semibold">Diet</span>
-                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-4 py-1.5 rounded-full text-white font-bold capitalize text-xs shadow-sm">
+                                  <div className="bg-gradient-to-r from-emerald-50/50 to-cyan-50/30 rounded-lg p-2 border border-emerald-100/50 flex items-center justify-between">
+                                    <span className="text-emerald-700 font-medium text-xs">Diet</span>
+                                    <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 px-2 py-1 rounded-full text-white font-semibold capitalize text-[10px]">
                                       {appointment.patientVegetarian}
                                     </span>
                                   </div>
@@ -2172,27 +2229,29 @@ export default function DoctorAppointments() {
                           )}
 
                           {/* Appointment Details */}
-                          <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
-                            <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white shadow-md">
-                                <span className="text-xl">📅</span>
+                          <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 border border-emerald-100/50 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-emerald-200">
+                              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white shadow-sm">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
                               </div>
-                              <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                              <h4 className="font-semibold text-slate-800 text-sm">
                                 Appointment Details
                               </h4>
                             </div>
-                            <div className="space-y-3 text-sm">
-                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-xl p-4 border border-blue-100/50 hover:shadow-md transition-all">
-                                <span className="text-blue-600 text-xs font-bold uppercase tracking-wide">Date</span>
-                                <p className="text-slate-900 mt-2 font-bold text-base">{new Date(appointment.appointmentDate).toLocaleDateString('en-US', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</p>
+                            <div className="space-y-2 text-xs">
+                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-lg p-2 border border-blue-100/50">
+                                <span className="text-blue-600 text-[10px] font-semibold uppercase tracking-wide">Date</span>
+                                <p className="text-slate-900 mt-1 font-medium text-xs">{new Date(appointment.appointmentDate).toLocaleDateString('en-US', {weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'})}</p>
                               </div>
-                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-xl p-4 border border-blue-100/50 hover:shadow-md transition-all">
-                                <span className="text-blue-600 text-xs font-bold uppercase tracking-wide">Time</span>
-                                <p className="text-slate-900 mt-2 font-bold text-xl">{appointment.appointmentTime}</p>
+                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-lg p-2 border border-blue-100/50">
+                                <span className="text-blue-600 text-[10px] font-semibold uppercase tracking-wide">Time</span>
+                                <p className="text-slate-900 mt-1 font-semibold text-sm">{appointment.appointmentTime}</p>
                               </div>
-                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-xl p-4 border border-blue-100/50 hover:shadow-md transition-all">
-                                <span className="text-blue-600 text-xs font-bold uppercase tracking-wide mb-2 block">Status</span>
-                                <span className={`px-4 py-2 rounded-lg text-sm font-bold inline-block shadow-sm ${getStatusColor(appointment.status)}`}>
+                              <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/30 rounded-lg p-2 border border-blue-100/50">
+                                <span className="text-blue-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Status</span>
+                                <span className={`px-2 py-1 rounded text-xs font-semibold inline-block ${getStatusColor(appointment.status)}`}>
                                   {appointment.status === "confirmed" ? "✓ Confirmed" : 
                                    appointment.status === "completed" ? "✓ Completed" : 
                                    appointment.status}
@@ -2204,82 +2263,75 @@ export default function DoctorAppointments() {
                         </div>
 
                       {/* Bottom Section: Medical Info + AI Diagnosis (Full Width) */}
-                      <div className="space-y-6">
+                      <div className="space-y-4">
                         {/* Medical Information */}
-                        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 border border-emerald-100/50 shadow-lg hover:shadow-xl transition-shadow">
-                            <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-gradient-to-r from-emerald-200 to-cyan-200">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white shadow-md">
-                                <span className="text-xl">🩺</span>
+                        <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 border border-emerald-100/50 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-emerald-200">
+                              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white shadow-sm">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
                               </div>
-                              <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">
+                              <h4 className="font-semibold text-slate-800 text-sm">
                                 Medical Information
                               </h4>
                             </div>
-                            <div className="space-y-4 text-sm">
-                              <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
-                                <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
-                                  <span className="text-base">📋</span> Chief Complaint
-                                </span>
-                                <p className="text-slate-900 font-semibold text-base leading-relaxed">
+                            <div className="space-y-2 text-xs">
+                              <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
+                                <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Chief Complaint</span>
+                                <p className="text-slate-900 font-medium text-xs leading-relaxed">
                                   {appointment.chiefComplaint || "No chief complaint provided"}
                                 </p>
                               </div>
                               {appointment.patientAdditionalConcern && (
-                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
-                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
-                                    <span className="text-base">➕</span> Additional Details
-                                  </span>
-                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
+                                  <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Additional Details</span>
+                                  <p className="text-slate-900 font-medium text-xs leading-relaxed">
                                     {appointment.patientAdditionalConcern}
                                   </p>
                                 </div>
                               )}
                               {appointment.medicalHistory && (
-                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
-                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
-                                    <span className="text-base">📜</span> Medical History
-                                  </span>
-                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
+                                  <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Medical History</span>
+                                  <p className="text-slate-900 font-medium text-xs leading-relaxed">
                                     {appointment.medicalHistory}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientAllergies && (
-                                <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-5 border-2 border-red-300 shadow-lg hover:shadow-xl transition-all animate-pulse">
-                                  <span className="text-red-700 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
-                                    <span className="text-xl">⚠️</span> ALLERGIES - DO NOT PRESCRIBE
+                                <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-lg p-2.5 border border-red-300">
+                                  <span className="text-red-700 text-[10px] font-semibold uppercase tracking-wide mb-1 block flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    ALLERGIES - DO NOT PRESCRIBE
                                   </span>
-                                  <p className="text-red-900 font-bold text-base leading-relaxed">
+                                  <p className="text-red-900 font-semibold text-xs leading-relaxed">
                                     {appointment.patientAllergies}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientCurrentMedications && (
-                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
-                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
-                                    <span className="text-base">💊</span> Current Medications
-                                  </span>
-                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
+                                  <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Current Medications</span>
+                                  <p className="text-slate-900 font-medium text-xs leading-relaxed">
                                     {appointment.patientCurrentMedications}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientFamilyHistory && (
-                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
-                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
-                                    <span className="text-base">👨‍👩‍👧</span> Family History
-                                  </span>
-                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
+                                  <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Family History</span>
+                                  <p className="text-slate-900 font-medium text-xs leading-relaxed">
                                     {appointment.patientFamilyHistory}
                                   </p>
                                 </div>
                               )}
                               {appointment.patientPregnancyStatus && (
-                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-xl p-5 border border-purple-100/50 hover:shadow-md transition-all">
-                                  <span className="text-purple-600 text-xs font-bold uppercase tracking-wide mb-3 block flex items-center gap-2">
-                                    <span className="text-base">🤰</span> Pregnancy Status
-                                  </span>
-                                  <p className="text-slate-900 font-semibold text-base leading-relaxed">
+                                <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
+                                  <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Pregnancy Status</span>
+                                  <p className="text-slate-900 font-medium text-xs leading-relaxed">
                                     {appointment.patientPregnancyStatus}
                                   </p>
                                 </div>
@@ -2289,42 +2341,46 @@ export default function DoctorAppointments() {
 
                           {/* AI Diagnosis Button - Only show if not already generated */}
                           {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (
-                            <div className="bg-gradient-to-br from-indigo-50/80 to-purple-50/60 rounded-2xl p-6 border-2 border-indigo-200/50 shadow-lg hover:shadow-xl transition-all">
-                              <div className="flex items-center gap-3 mb-4">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
-                                  <span className="text-2xl">🤖</span>
-                                </div>
-                                <div>
-                                  <h4 className="font-bold text-slate-800 text-lg bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                                    AI Diagnostic Assistant
-                                  </h4>
-                                  <p className="text-xs text-slate-600 mt-1">
-                                    Powered by Groq Llama 3.3 70B
-                                  </p>
-                                </div>
-                              </div>
-                              <p className="text-sm text-slate-700 mb-5 leading-relaxed">
-                                Get AI-powered diagnosis suggestions using patient&apos;s symptoms and medical history
-                              </p>
-                              <button
-                                onClick={() => getAIDiagnosisSuggestion(appointment)}
-                                disabled={loadingAiDiagnosis[appointment.id]}
-                                className="w-full px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
-                              >
-                                {loadingAiDiagnosis[appointment.id] ? (
-                                  <>
-                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            <div className="bg-gradient-to-br from-indigo-50/80 to-purple-50/60 rounded-lg p-4 border border-indigo-200 shadow-sm">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-sm flex-shrink-0">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                     </svg>
-                                    Analyzing Patient Data...
-                                  </>
-                                ) : (
-                                  <>
-                                    <span>🔍</span> Get AI Diagnosis Suggestion
-                                  </>
-                                )}
-                              </button>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold text-slate-800 text-sm truncate">
+                                      AI Diagnostic Assistant
+                                    </h4>
+                                    <p className="text-xs text-slate-500 truncate">
+                                      Groq Llama 3.3 70B
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => getAIDiagnosisSuggestion(appointment)}
+                                  disabled={loadingAiDiagnosis[appointment.id]}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed text-xs flex items-center justify-center gap-1.5 shadow-sm flex-shrink-0"
+                                >
+                                  {loadingAiDiagnosis[appointment.id] ? (
+                                    <>
+                                      <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                      Analyzing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+                                      Get Suggestion
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           )}
 
@@ -2450,9 +2506,12 @@ export default function DoctorAppointments() {
                                       disabled={loadingAiDiagnosis[appointment.id]}
                                       className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all font-semibold text-sm border border-slate-300 flex items-center justify-center gap-2"
                                     >
-                                      <span>🔄</span> Regenerate
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                      </svg>
+                                      Regenerate
                                     </button>
-                              {appointment.status === "confirmed" && (() => {
+                              {appointment.status === "confirmed" && !showCompletionForm[appointment.id] && (() => {
                                 const appointmentDate = new Date(appointment.appointmentDate)
                                 const today = new Date()
                                 today.setHours(0, 0, 0, 0)
@@ -2467,11 +2526,14 @@ export default function DoctorAppointments() {
                                     className={`px-3 py-2 rounded-md transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm ${
                                       isFutureAppointment
                                         ? 'bg-gray-400 text-white cursor-not-allowed'
-                                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
                                     }`}
-                                    title={isFutureAppointment ? "Can only complete today's appointments" : ""}
+                                    title={isFutureAppointment ? "Can only complete today's appointments" : "Open consultation form"}
                                   >
-                                    <span>✓</span> Complete Checkup
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Complete Consultation
                                   </button>
                                 )
                               })()}
@@ -2557,6 +2619,26 @@ export default function DoctorAppointments() {
                                                   <p className="text-gray-900 mt-1 whitespace-pre-line">{historyItem.associatedSymptoms}</p>
                                                 </div>
                                               )}
+                                              {((historyItem as any).finalDiagnosis && (historyItem as any).finalDiagnosis.length > 0) && (
+                                                <div>
+                                                  <span className="text-gray-600 font-medium">Final Diagnosis:</span>
+                                                  <div className="flex flex-wrap gap-1.5 mt-1">
+                                                    {(historyItem as any).finalDiagnosis.map((diagnosis: string, index: number) => (
+                                                      <span
+                                                        key={index}
+                                                        className="inline-flex items-center px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-xs font-medium text-blue-700"
+                                                      >
+                                                        {diagnosis}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                  {(historyItem as any).customDiagnosis && (
+                                                    <div className="mt-1.5 bg-purple-50 border border-purple-200 rounded px-2 py-1 text-xs text-purple-800">
+                                                      <span className="font-semibold">Custom:</span> {(historyItem as any).customDiagnosis}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
                                               {historyItem.medicine && (() => {
                                                 const parsed = parsePrescription(historyItem.medicine)
                                                 if (parsed && parsed.medicines.length > 0) {
@@ -2621,8 +2703,8 @@ export default function DoctorAppointments() {
                           )
                         })()}
 
-                          {/* Complete Checkup Button - Show at bottom if AI not shown yet */}
-                          {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && (
+                          {/* Complete Consultation Button - Show at bottom if AI not shown yet */}
+                          {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && !showCompletionForm[appointment.id] && (
                             <div className="mt-4">
                               {(() => {
                                 const isToday = new Date(appointment.appointmentDate).toDateString() === new Date().toDateString()
@@ -2636,15 +2718,18 @@ export default function DoctorAppointments() {
                                       className={`w-full px-4 py-2.5 rounded-md transition-all font-semibold text-sm flex items-center justify-center gap-2 shadow-sm ${
                                         isFutureAppointment 
                                           ? 'bg-gray-400 text-white cursor-not-allowed opacity-60' 
-                                          : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                                          : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
                                       }`}
-                                      title={isFutureAppointment ? "Can only complete today's appointments" : ""}
+                                      title={isFutureAppointment ? "Can only complete today's appointments" : "Open consultation form"}
                                     >
-                                      <span>✓</span> Complete Checkup
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      Complete Consultation
                                     </button>
                                     {isFutureAppointment && (
                                       <p className="text-xs text-gray-500 mt-1 text-center">
-                                        ⏰ Can only complete today's appointments
+                                        Can only complete today's appointments
                                       </p>
                                     )}
                                   </>
@@ -2665,15 +2750,18 @@ export default function DoctorAppointments() {
                             // Only render form for today's appointments
                             return isToday && !isFutureAppointment
                           })() && (
-                            <div className="mt-3 bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="mt-3 bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden animate-slide-up-fade">
                               <div className="bg-slate-50 border-b border-slate-200 px-3 py-2">
                                 <div className="flex items-center justify-between">
                                   <h4 className="text-slate-800 font-semibold text-sm flex items-center gap-1.5">
-                                    <span>✓</span> Complete Checkup
+                                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Consultation Form
                                   </h4>
                                   <button
                                     onClick={() => toggleCompletionForm(appointment.id)}
-                                    className="text-slate-500 hover:text-slate-800 rounded p-0.5 transition-all"
+                                    className="text-slate-500 hover:text-slate-800 rounded p-0.5 transition-all hover:bg-slate-200"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2682,7 +2770,47 @@ export default function DoctorAppointments() {
                                 </div>
                               </div>
 
-                              <form onSubmit={(e) => handleCompleteAppointment(e, appointment.id)} className="p-3 space-y-2.5">
+                              <form onSubmit={(e) => handleCompleteAppointment(e, appointment.id)} className="p-3 space-y-4">
+                                {/* Final Diagnosis Section */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                  <DiagnosisSelector
+                                    selectedDiagnoses={completionData[appointment.id]?.finalDiagnosis || []}
+                                    customDiagnosis={completionData[appointment.id]?.customDiagnosis || ""}
+                                    onDiagnosesChange={(diagnoses) => {
+                                      setCompletionData((prev) => ({
+                                        ...prev,
+                                        [appointment.id]: {
+                                          ...prev[appointment.id],
+                                          finalDiagnosis: diagnoses,
+                                          medicines: prev[appointment.id]?.medicines || [],
+                                          notes: prev[appointment.id]?.notes || "",
+                                          recheckupRequired: prev[appointment.id]?.recheckupRequired || false,
+                                          customDiagnosis: prev[appointment.id]?.customDiagnosis || "",
+                                        },
+                                      }))
+                                    }}
+                                    onCustomDiagnosisChange={(customDiagnosis) => {
+                                      setCompletionData((prev) => ({
+                                        ...prev,
+                                        [appointment.id]: {
+                                          ...prev[appointment.id],
+                                          customDiagnosis: customDiagnosis,
+                                          medicines: prev[appointment.id]?.medicines || [],
+                                          notes: prev[appointment.id]?.notes || "",
+                                          recheckupRequired: prev[appointment.id]?.recheckupRequired || false,
+                                          finalDiagnosis: prev[appointment.id]?.finalDiagnosis || [],
+                                        },
+                                      }))
+                                    }}
+                                    showPatientComplaints={appointment.chiefComplaint || undefined}
+                                    error={
+                                      completionData[appointment.id]?.finalDiagnosis?.length === 0
+                                        ? "At least one diagnosis is required"
+                                        : undefined
+                                    }
+                                  />
+                                </div>
+
                                 {/* Prescription Section */}
                                 <div>
                                   <div className="flex items-center justify-between mb-1.5">

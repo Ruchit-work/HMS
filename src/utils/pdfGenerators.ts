@@ -543,6 +543,37 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
   doc.text(complaintLines, margin, yPos + 13)
   yPos += 13 + complaintLines.length * 5
 
+  // Final Diagnosis
+  if ((appointment as any).finalDiagnosis && Array.isArray((appointment as any).finalDiagnosis) && (appointment as any).finalDiagnosis.length > 0) {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(11)
+    doc.text('Final Diagnosis', margin, yPos + 6)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(71, 85, 105)
+    doc.setFontSize(10)
+    
+    const diagnoses = (appointment as any).finalDiagnosis as string[]
+    diagnoses.forEach((diagnosis, index) => {
+      doc.text(`• ${diagnosis}`, margin + 3, yPos + 13 + index * 5)
+    })
+    yPos += 13 + diagnoses.length * 5
+
+    if ((appointment as any).customDiagnosis) {
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(124, 58, 237)
+      doc.setFontSize(10)
+      doc.text('Custom Diagnosis:', margin + 3, yPos + 5)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(71, 85, 105)
+      const customDiagnosisLines = doc.splitTextToSize((appointment as any).customDiagnosis, pageWidth - 2 * margin - 6)
+      customDiagnosisLines.forEach((line: string, idx: number) => {
+        doc.text(line, margin + 3, yPos + 10 + idx * 5)
+      })
+      yPos += 10 + customDiagnosisLines.length * 5
+    }
+  }
+
   if (appointment.medicalHistory) {
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(30, 41, 59)
