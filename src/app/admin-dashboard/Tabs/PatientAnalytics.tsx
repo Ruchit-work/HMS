@@ -38,6 +38,8 @@ interface Appointment {
   paymentStatus?: string
   createdBy?: string
   medicine?: string
+  finalDiagnosis?: string[]
+  customDiagnosis?: string
 }
 
 interface PatientAnalytics {
@@ -106,6 +108,26 @@ interface PatientAnalytics {
     area: string
     patientCount: number
     percentage: number
+  }>
+  // Diagnosis Analytics (using actual finalDiagnosis)
+  mostCommonDiagnoses: Array<{
+    diagnosis: string
+    count: number
+    percentage: number
+  }>
+  diagnosisTrends: Array<{
+    month: string
+    diagnoses: Record<string, number>
+    totalCases: number
+  }>
+  symptomDiagnosisCorrelation: Array<{
+    symptom: string
+    topDiagnoses: Array<{
+      diagnosis: string
+      count: number
+      percentage: number
+    }>
+    totalCases: number
   }>
 }
 
@@ -695,6 +717,157 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         }))
         .sort((a, b) => b.patientCount - a.patientCount) // Sort by count descending
 
+      // ============================================
+      // DIAGNOSIS ANALYTICS (using actual finalDiagnosis)
+      // ============================================
+      
+      // Filter completed appointments with diagnosis
+      const completedWithDiagnosis = filteredAppointments.filter(apt => 
+        apt.status === 'completed' && 
+        apt.finalDiagnosis && 
+        Array.isArray(apt.finalDiagnosis) && 
+        apt.finalDiagnosis.length > 0
+      )
+
+      // 1. Most Common Diagnoses
+      const diagnosisCounts: Record<string, number> = {}
+      completedWithDiagnosis.forEach(apt => {
+        if (apt.finalDiagnosis) {
+          apt.finalDiagnosis.forEach(diag => {
+            diagnosisCounts[diag] = (diagnosisCounts[diag] || 0) + 1
+          })
+        }
+        if (apt.customDiagnosis) {
+          diagnosisCounts['Custom Diagnosis'] = (diagnosisCounts['Custom Diagnosis'] || 0) + 1
+        }
+      })
+
+      const totalDiagnosisOccurrences = Object.values(diagnosisCounts).reduce((sum, count) => sum + count, 0)
+      const mostCommonDiagnoses = Object.entries(diagnosisCounts)
+        .map(([diagnosis, count]) => ({
+          diagnosis,
+          count,
+          percentage: totalDiagnosisOccurrences > 0 ? (count / totalDiagnosisOccurrences) * 100 : 0
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 15)
+
+      // 2. Diagnosis Trends (Monthly)
+      const monthlyDiagnosisData: Record<string, Record<string, number | string>> = {}
+      completedWithDiagnosis.forEach(apt => {
+        const date = new Date(apt.appointmentDate)
+        if (isNaN(date.getTime())) return
+        
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        const monthLabel = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        
+        if (!monthlyDiagnosisData[monthKey]) {
+          monthlyDiagnosisData[monthKey] = { _label: monthLabel }
+        }
+        
+        if (apt.finalDiagnosis) {
+          apt.finalDiagnosis.forEach(diag => {
+            const currentValue = monthlyDiagnosisData[monthKey][diag]
+            monthlyDiagnosisData[monthKey][diag] = (typeof currentValue === 'number' ? currentValue : 0) + 1
+          })
+        }
+        if (apt.customDiagnosis) {
+          const currentValue = monthlyDiagnosisData[monthKey]['Custom Diagnosis']
+          monthlyDiagnosisData[monthKey]['Custom Diagnosis'] = (typeof currentValue === 'number' ? currentValue : 0) + 1
+        }
+      })
+
+      const diagnosisTrends = Object.entries(monthlyDiagnosisData)
+        .map(([key, data]: [string, any]) => {
+          const { _label, ...diagnoses } = data
+          const totalCases = Object.values(diagnoses).reduce((sum: number, count: any) => sum + count, 0)
+          return {
+            month: _label,
+            diagnoses,
+            totalCases
+          }
+        })
+        .sort((a, b) => {
+          const [aYear, aMonth] = a.month.split(' ')
+          const [bYear, bMonth] = b.month.split(' ')
+          if (aYear !== bYear) return parseInt(aYear) - parseInt(bYear)
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+          return months.indexOf(aMonth) - months.indexOf(bMonth)
+        })
+        .slice(-12) // Last 12 months
+
+      // 3. Symptom → Diagnosis Correlation
+      const symptomData: Record<string, {
+        diagnoses: Record<string, number>
+        totalCases: number
+      }> = {}
+
+      completedWithDiagnosis.forEach(apt => {
+        if (!apt.chiefComplaint) return
+        
+        // Extract key symptoms from chief complaint
+        const complaint = apt.chiefComplaint.toLowerCase()
+        const symptoms: string[] = []
+        
+        // Common symptom keywords
+        if (complaint.includes('pain') || complaint.includes('ache')) symptoms.push('Pain')
+        if (complaint.includes('fever')) symptoms.push('Fever')
+        if (complaint.includes('cough')) symptoms.push('Cough')
+        if (complaint.includes('cold') || complaint.includes('runny nose')) symptoms.push('Cold/Runny Nose')
+        if (complaint.includes('throat') || complaint.includes('sore throat')) symptoms.push('Sore Throat')
+        if (complaint.includes('ear') || complaint.includes('hearing')) symptoms.push('Ear Issues')
+        if (complaint.includes('nose') || complaint.includes('nasal')) symptoms.push('Nasal Issues')
+        if (complaint.includes('breathing') || complaint.includes('breath')) symptoms.push('Breathing Issues')
+        if (complaint.includes('dizziness') || complaint.includes('vertigo')) symptoms.push('Dizziness/Vertigo')
+        if (complaint.includes('headache')) symptoms.push('Headache')
+        
+        // If no specific symptoms found, use the complaint itself (truncated)
+        if (symptoms.length === 0) {
+          symptoms.push(apt.chiefComplaint.substring(0, 50))
+        }
+
+        symptoms.forEach(symptom => {
+          if (!symptomData[symptom]) {
+            symptomData[symptom] = {
+              diagnoses: {},
+              totalCases: 0
+            }
+          }
+          
+          symptomData[symptom].totalCases++
+          
+          if (apt.finalDiagnosis) {
+            apt.finalDiagnosis.forEach(diag => {
+              symptomData[symptom].diagnoses[diag] = (symptomData[symptom].diagnoses[diag] || 0) + 1
+            })
+          }
+          if (apt.customDiagnosis) {
+            symptomData[symptom].diagnoses['Custom Diagnosis'] = (symptomData[symptom].diagnoses['Custom Diagnosis'] || 0) + 1
+          }
+        })
+      })
+
+      const symptomDiagnosisCorrelation = Object.entries(symptomData)
+        .map(([symptom, data]) => {
+          const totalDiagOccurrences = Object.values(data.diagnoses).reduce((sum, count) => sum + count, 0)
+          const topDiagnoses = Object.entries(data.diagnoses)
+            .map(([diagnosis, count]) => ({
+              diagnosis,
+              count,
+              percentage: totalDiagOccurrences > 0 ? (count / totalDiagOccurrences) * 100 : 0
+            }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5)
+
+          return {
+            symptom,
+            topDiagnoses,
+            totalCases: data.totalCases
+          }
+        })
+        .sort((a, b) => b.totalCases - a.totalCases)
+        .slice(0, 10)
+
       setAnalytics({
         totalPatients,
         newPatients,
@@ -724,7 +897,11 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         seasonalDiseaseTrends,
         ageWiseDiseaseBreakdown,
         genderWiseDiseaseBreakdown,
-        areaWiseDistribution
+        areaWiseDistribution,
+        // Diagnosis Analytics
+        mostCommonDiagnoses,
+        diagnosisTrends,
+        symptomDiagnosisCorrelation
       })
     } catch (error) {
       console.error('Error fetching patient analytics:', error)
@@ -837,97 +1014,86 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         </div>
       </div>
 
-      {/* Additional Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Additional Metrics - Single Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* Patient Retention */}
-        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-slate-700">Patient Retention Rate</span>
-            <span className="text-xl">📈</span>
+        <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-700">Patient Retention Rate</span>
+            <span className="text-lg">📈</span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <p className="text-xl font-bold text-slate-900">{analytics.patientRetentionRate}%</p>
-          </div>
-          <div className="mt-3 w-full bg-slate-200 rounded-full h-2">
+          <p className="text-lg font-bold text-slate-900 mb-2">{analytics.patientRetentionRate}%</p>
+          <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1">
             <div 
-              className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all"
+              className="bg-gradient-to-r from-blue-500 to-blue-600 h-1.5 rounded-full transition-all"
               style={{ width: `${Math.min(analytics.patientRetentionRate, 100)}%` }}
             />
           </div>
-          <p className="text-xs text-slate-500 mt-2">Patients with 2+ visits</p>
+          <p className="text-xs text-slate-500">Patients with 2+ visits</p>
         </div>
 
         {/* Active Patients */}
-        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-slate-700">Active Patients</span>
-            <span className="text-xl">✅</span>
+        <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-700">Active Patients</span>
+            <span className="text-lg">✅</span>
           </div>
-          <p className="text-xl font-bold text-green-600">{analytics.activePatients.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-2">Visits in last 3 months</p>
+          <p className="text-lg font-bold text-green-600 mb-1">{analytics.activePatients.toLocaleString()}</p>
+          <p className="text-xs text-slate-500">Visits in last 3 months</p>
         </div>
 
         {/* Inactive Patients */}
-        <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-slate-700">Inactive Patients</span>
-            <span className="text-xl">⏸️</span>
+        <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-700">Inactive Patients</span>
+            <span className="text-lg">⏸️</span>
           </div>
-          <p className="text-xl font-bold text-orange-600">{analytics.inactivePatients.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-2">No visits in last 6 months</p>
+          <p className="text-lg font-bold text-orange-600 mb-1">{analytics.inactivePatients.toLocaleString()}</p>
+          <p className="text-xs text-slate-500">No visits in last 6 months</p>
         </div>
-      </div>
 
-      {/* Peak Visiting Time Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Peak Visiting Hour */}
-        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-indigo-700">Peak Visiting Hour</span>
-            <div className="w-10 h-10 bg-indigo-200 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 border border-indigo-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-indigo-700">Peak Visiting Hour</span>
+            <div className="w-6 h-6 bg-indigo-200 rounded-lg flex items-center justify-center">
+              <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <p className="text-xl font-bold text-indigo-900">{analytics.peakVisitingHour.hour12}</p>
-          </div>
-          <p className="text-sm text-indigo-600 mb-3">
+          <p className="text-base font-bold text-indigo-900 mb-1">{analytics.peakVisitingHour.hour12}</p>
+          <p className="text-xs text-indigo-600 mb-1">
             {analytics.peakVisitingHour.count} {analytics.peakVisitingHour.count === 1 ? 'appointment' : 'appointments'}
           </p>
-          <div className="w-full bg-indigo-200 rounded-full h-2">
+          <div className="w-full bg-indigo-200 rounded-full h-1">
             <div 
-              className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 rounded-full transition-all"
+              className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-1 rounded-full transition-all"
               style={{ width: `${Math.min((analytics.peakVisitingHour.count / Math.max(analytics.totalAppointments, 1)) * 100, 100)}%` }}
             />
           </div>
-          <p className="text-xs text-indigo-500 mt-2">Most popular time slot</p>
         </div>
 
         {/* Peak Visiting Day */}
-        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-4 border border-teal-200 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-teal-700">Peak Visiting Day</span>
-            <div className="w-10 h-10 bg-teal-200 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-3 border border-teal-200 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-teal-700">Peak Visiting Day</span>
+            <div className="w-6 h-6 bg-teal-200 rounded-lg flex items-center justify-center">
+              <svg className="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <p className="text-xl font-bold text-teal-900">{analytics.peakVisitingDay.day}</p>
-          </div>
-          <p className="text-sm text-teal-600 mb-3">
+          <p className="text-base font-bold text-teal-900 mb-1">{analytics.peakVisitingDay.day}</p>
+          <p className="text-xs text-teal-600 mb-1">
             {analytics.peakVisitingDay.count} {analytics.peakVisitingDay.count === 1 ? 'appointment' : 'appointments'}
           </p>
-          <div className="w-full bg-teal-200 rounded-full h-2">
+          <div className="w-full bg-teal-200 rounded-full h-1">
             <div 
-              className="bg-gradient-to-r from-teal-500 to-teal-600 h-2 rounded-full transition-all"
+              className="bg-gradient-to-r from-teal-500 to-teal-600 h-1 rounded-full transition-all"
               style={{ width: `${Math.min((analytics.peakVisitingDay.count / Math.max(analytics.totalAppointments, 1)) * 100, 100)}%` }}
             />
           </div>
-          <p className="text-xs text-teal-500 mt-2">Most popular day of the week</p>
         </div>
       </div>
 
@@ -1198,6 +1364,133 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Diagnoses Section - Consolidated */}
+      {(analytics.mostCommonDiagnoses.length > 0 || analytics.diagnosisTrends.length > 0 || analytics.symptomDiagnosisCorrelation.length > 0) && (
+        <div className="bg-white rounded-lg p-6 border-2 border-blue-200 shadow-lg">
+          {/* Main Section Header */}
+          <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-blue-100">
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center shadow-sm">
+                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Diagnoses</h2>
+                <p className="text-sm text-slate-600 mt-0.5">Comprehensive diagnosis analytics based on doctor-confirmed final diagnoses</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* Most Common Diagnoses */}
+            {analytics.mostCommonDiagnoses.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800">Most Common Diagnoses</h3>
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Top {analytics.mostCommonDiagnoses.length}</span>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                  <div className="space-y-3">
+                    {analytics.mostCommonDiagnoses.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm flex-shrink-0">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-slate-900 truncate">{item.diagnosis}</span>
+                            <span className="text-sm text-slate-600 ml-2 whitespace-nowrap">{item.count} cases ({item.percentage.toFixed(1)}%)</span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all"
+                              style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Diagnosis Trends */}
+            {analytics.diagnosisTrends.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800">Monthly Trends</h3>
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Last 12 months</span>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-full space-y-3">
+                      {analytics.diagnosisTrends.map((month, idx) => (
+                        <div key={idx} className="border-b border-green-200 pb-3 last:border-b-0 last:pb-0">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-slate-800">{month.month}</span>
+                            <span className="text-sm text-slate-600">{month.totalCases} cases</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(month.diagnoses)
+                              .sort(([, a], [, b]) => (b as number) - (a as number))
+                              .slice(0, 5)
+                              .map(([diag, count]) => (
+                                <span
+                                  key={diag}
+                                  className="inline-flex items-center px-2 py-1 bg-green-100 border border-green-200 rounded text-xs text-green-700 font-medium"
+                                >
+                                  {diag} ({count})
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Symptom → Diagnosis Correlation */}
+            {analytics.symptomDiagnosisCorrelation.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800">Symptom → Diagnosis Correlation</h3>
+                  <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Top {analytics.symptomDiagnosisCorrelation.length} symptoms</span>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                  <div className="space-y-4">
+                    {analytics.symptomDiagnosisCorrelation.map((item, idx) => (
+                      <div key={idx} className="border-b border-purple-200 pb-4 last:border-b-0 last:pb-0">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-slate-800">{item.symptom}</h4>
+                          <span className="text-sm text-slate-600">{item.totalCases} cases</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {item.topDiagnoses.map((diag, diagIdx) => (
+                            <div
+                              key={diagIdx}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-100 border border-purple-200 rounded-lg"
+                            >
+                              <span className="text-sm font-medium text-purple-900">{diag.diagnosis}</span>
+                              <span className="text-xs text-purple-700">
+                                {diag.count} ({diag.percentage.toFixed(1)}%)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
