@@ -3163,6 +3163,9 @@ async function sendBookingConfirmation(
   const recheckupHeader = isRecheckup ? "🔄 *Re-checkup Appointment Request Received!*\n\n" : "🎉 *Appointment Request Received!*\n\n"
   const recheckupHeaderConfirmed = isRecheckup ? "🔄 *Re-checkup Appointment Confirmed!*\n\n" : "🎉 *Appointment Confirmed!*\n\n"
   
+  // Get branch name from session
+  const branchName = session.branchName || "Main Branch"
+  
   const confirmationMsg = isPending
     ? `${recheckupHeader}Hi ${patientName},
 
@@ -3170,6 +3173,7 @@ Your ${isRecheckup ? "re-checkup " : ""}appointment request has been received:
 • 📅 Date: ${dateDisplay}
 • 🕒 Time: ${timeDisplay}
 • 📋 Appointment ID: ${appointmentId}
+• 🏥 Branch: ${branchName}
 • 👨‍⚕️ Doctor: Will be assigned by reception${recheckupNote ? `\n• 📝 Note: ${recheckupNote}` : ""}
 
 ✅ Our receptionist will confirm your appointment and assign a doctor shortly. You'll receive a confirmation message once processed.
@@ -3181,7 +3185,8 @@ Your ${isRecheckup ? "re-checkup " : ""}appointment has been booked successfully
 • 👨‍⚕️ Doctor: ${doctorName}
 • 📅 Date: ${dateDisplay}
 • 🕒 Time: ${timeDisplay}
-• 📋 Appointment ID: ${appointmentId}${recheckupNote ? `\n• 📝 Note: ${recheckupNote}` : ""}
+• 📋 Appointment ID: ${appointmentId}
+• 🏥 Branch: ${branchName}${recheckupNote ? `\n• 📝 Note: ${recheckupNote}` : ""}
 • 💳 Payment: ${session.paymentMethod?.toUpperCase() || "CASH"} - ₹${amountCollected}${remainingAmount > 0 ? ` (₹${remainingAmount} due at hospital)` : " (paid)"}
 
 ✅ Your appointment is now visible in our system. Admin and receptionist can see it.
