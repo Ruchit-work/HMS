@@ -96,28 +96,96 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
       setLoading(true)
       setError(null)
 
+      // Debug: Log receptionist branch ID
+      console.log("[WhatsApp Bookings] Setting up listener with receptionistBranchId:", receptionistBranchId)
+
       // Set up real-time listener for WhatsApp pending appointments in the active hospital
       const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
       
-      // Filter by branch if receptionist has a branchId
-      let whatsappQuery
-      if (receptionistBranchId) {
-        whatsappQuery = query(
-          appointmentsRef,
-          where("whatsappPending", "==", true),
-          where("branchId", "==", receptionistBranchId)
-        )
-      } else {
-        whatsappQuery = query(appointmentsRef, where("whatsappPending", "==", true))
-      }
-
+      // Fetch all appointments and filter in memory to catch both whatsappPending field and status field
+      // This ensures we don't miss any WhatsApp bookings
       const unsubscribe = onSnapshot(
-        whatsappQuery,
+        appointmentsRef,
         (snapshot) => {
-          const bookingsList = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Appointment[]
+          let bookingsList = snapshot.docs
+            .map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as Appointment[]
+          
+          console.log(`[WhatsApp Bookings] Total appointments fetched: ${bookingsList.length}`)
+          
+          // Filter for WhatsApp pending appointments (check both whatsappPending field and status)
+          bookingsList = bookingsList.filter((apt) => {
+            const data = apt as any
+            const isWhatsAppPending = data.whatsappPending === true || data.status === "whatsapp_pending"
+            return isWhatsAppPending
+          })
+          
+          console.log(`[WhatsApp Bookings] After WhatsApp filter: ${bookingsList.length} appointments`)
+          console.log(`[WhatsApp Bookings] Receptionist branchId: ${receptionistBranchId}`)
+          
+          // Log each appointment's branchId for debugging
+          bookingsList.forEach((apt, idx) => {
+            const aptBranchId = (apt as any).branchId
+            console.log(`[WhatsApp Bookings] Appointment ${idx + 1} - branchId: "${aptBranchId}" (type: ${typeof aptBranchId}, isNull: ${aptBranchId === null}, isUndefined: ${aptBranchId === undefined})`)
+          })
+          
+          // Filter by branch - STRICT filtering
+          // Only show appointments that match the receptionist's branch OR have no branch assigned
+          if (receptionistBranchId) {
+            const receptionistBranchIdStr = String(receptionistBranchId).trim().toLowerCase()
+            const beforeFilter = bookingsList.length
+            
+            bookingsList = bookingsList.filter((apt) => {
+              const aptBranchId = (apt as any).branchId
+              
+              // If appointment has no branch assigned (null, undefined, or empty string), show to all receptionists
+              // BUT we should NOT show appointments with no branch to receptionists who have a branch assigned
+              // Only show unassigned appointments to receptionists who can assign them
+              const hasNoBranch = !aptBranchId || aptBranchId === null || aptBranchId === undefined || String(aptBranchId).trim() === ""
+              
+              if (hasNoBranch) {
+                console.log(`[WhatsApp Bookings] ⚠️ Appointment has NO branchId - showing to all receptionists (this might be the issue!)`)
+                // Actually, let's NOT show unassigned appointments to branch-specific receptionists
+                // They should only see appointments for their branch
+                return false
+              }
+              
+              // Convert both to strings, trim, and compare case-insensitively
+              const aptBranchIdStr = String(aptBranchId).trim().toLowerCase()
+              
+              // If appointment has a branch, ONLY show to that branch's receptionist
+              // Must match exactly (case-insensitive)
+              const matches = aptBranchIdStr === receptionistBranchIdStr
+              
+              if (!matches) {
+                console.log(`[WhatsApp Bookings] ❌ FILTERED OUT - Appointment branch "${aptBranchId}" does not match receptionist branch "${receptionistBranchId}"`)
+              } else {
+                console.log(`[WhatsApp Bookings] ✅ KEEPING - Appointment branch "${aptBranchId}" matches receptionist branch "${receptionistBranchId}"`)
+              }
+              
+              return matches
+            })
+            
+            console.log(`[WhatsApp Bookings] After branch filter: ${bookingsList.length} appointments (filtered ${beforeFilter - bookingsList.length})`)
+          } else {
+            // If receptionist has no branchId, ONLY show appointments with no branchId
+            // Do NOT show branch-specific appointments
+            const beforeFilter = bookingsList.length
+            bookingsList = bookingsList.filter((apt) => {
+              const aptBranchId = (apt as any).branchId
+              const hasNoBranch = !aptBranchId || aptBranchId === null || aptBranchId === undefined || String(aptBranchId).trim() === ""
+              
+              if (!hasNoBranch) {
+                console.log(`[WhatsApp Bookings] ❌ FILTERED OUT - Receptionist has no branchId, but appointment has branch: "${aptBranchId}"`)
+              }
+              
+              return hasNoBranch
+            })
+            
+            console.log(`[WhatsApp Bookings] Receptionist has no branchId - After filter: ${bookingsList.length} appointments (filtered ${beforeFilter - bookingsList.length})`)
+          }
 
           setBookings(bookingsList)
           onPendingCountChange?.(bookingsList.length)

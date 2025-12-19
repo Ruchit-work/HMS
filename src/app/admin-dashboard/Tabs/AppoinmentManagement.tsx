@@ -285,8 +285,12 @@ export default function AppoinmentManagement({
                     })) as Appointment[]
                 
                 // When used from receptionist dashboard, restrict to their branch
+                // Also show appointments with null branchId (e.g., WhatsApp bookings without branch assignment)
                 if (receptionistBranchId) {
-                    appointmentsList = appointmentsList.filter(apt => (apt as any).branchId === receptionistBranchId)
+                    appointmentsList = appointmentsList.filter(apt => {
+                        const aptBranchId = (apt as any).branchId
+                        return aptBranchId === receptionistBranchId || aptBranchId === null || aptBranchId === undefined
+                    })
                 }
 
                 // Additional branch filter from admin UI
@@ -407,6 +411,10 @@ export default function AppoinmentManagement({
                 const status = (appt as any).status
                 if (statusFilter === 'cancelled') {
                     return status === 'cancelled' || status === 'doctor_cancelled'
+                }
+                // Include whatsapp_pending appointments when filtering by 'confirmed' since they need to be confirmed
+                if (statusFilter === 'confirmed') {
+                    return status === 'confirmed' || status === 'whatsapp_pending'
                 }
                 return status === statusFilter
             })
@@ -729,9 +737,12 @@ export default function AppoinmentManagement({
                                                     <div className="text-xs text-slate-500">{appointment.appointmentTime || 'N/A'}</div>
                                                 </td>
                                                 <td className="px-3 py-4">
-                                                    <div className="text-sm text-slate-900">
-                                                        {(appointment as any).branchName || 'N/A'}
+                                                    <div className="text-sm font-medium text-slate-900">
+                                                        {(appointment as any).branchName || (appointment as any).branchId || 'Not Assigned'}
                                                     </div>
+                                                    {(appointment as any).branchId && !(appointment as any).branchName && (
+                                                        <div className="text-xs text-slate-400">ID: {(appointment as any).branchId}</div>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-4">
                                                     {(() => {

@@ -676,6 +676,62 @@ async function processBookingConfirmation(
   }
 
   try {
+    // Ensure branchId is set - if not in session, try to get from patient's default branch
+    let branchId = session.branchId || null
+    let branchName = session.branchName || null
+    
+    if (!branchId && session.patientUid) {
+      try {
+        const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+        if (patientDoc.exists) {
+          const patientData = patientDoc.data()
+          branchId = patientData?.defaultBranchId || null
+          branchName = patientData?.defaultBranchName || null
+        }
+      } catch (error) {
+        console.error("[Meta WhatsApp] Error fetching patient default branch for appointment:", error)
+      }
+    }
+    
+    // If still no branchId, get first active branch from hospital
+    if (!branchId) {
+      try {
+        let hospitalId: string | null = null
+        if (session.patientUid) {
+          const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+          if (patientDoc.exists) {
+            hospitalId = patientDoc.data()?.hospitalId || null
+          }
+        }
+        
+        if (!hospitalId) {
+          const activeHospitals = await getAllActiveHospitals()
+          if (activeHospitals.length > 0) {
+            hospitalId = activeHospitals[0].id
+          }
+        }
+        
+        if (hospitalId) {
+          const branchesSnapshot = await db
+            .collection("branches")
+            .where("hospitalId", "==", hospitalId)
+            .where("status", "==", "active")
+            .limit(1)
+            .get()
+          
+          if (!branchesSnapshot.empty) {
+            const branch = branchesSnapshot.docs[0]
+            branchId = branch.id
+            branchName = branch.data().name || null
+          }
+        }
+      } catch (error) {
+        console.error("[Meta WhatsApp] Error fetching default branch for appointment:", error)
+      }
+    }
+    
+    console.log(`[Meta WhatsApp] Creating appointment with branchId: ${branchId}, branchName: ${branchName}`)
+    
     const appointmentId = await createAppointment(
       db,
       patient,
@@ -696,7 +752,9 @@ async function processBookingConfirmation(
         isRecheckup: session.isRecheckup || false,
         recheckupNote: session.recheckupNote || "",
         originalAppointmentId: session.originalAppointmentId || "",
-      },
+        branchId: branchId || null, // CRITICAL: Always include branchId
+        branchName: branchName || null, // CRITICAL: Always include branchName
+      } as any,
       normalizedPhone,
       true // Mark as WhatsApp pending
     )
@@ -1037,6 +1095,77 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   const paymentStatus: "pending" | "paid" =
     !isCash && remainingAmount === 0 ? "paid" : "pending"
 
+  // Get branchId - first from Flow data, then from patient's default branch, then first active branch
+  let branchId: string | null = null
+  let branchName: string | null = null
+  
+  // Try to get from Flow data
+  const flowBranchId = flowData.branch_id || flowData.branch || ""
+  if (flowBranchId) {
+    const branchDoc = await db.collection("branches").doc(flowBranchId).get()
+    if (branchDoc.exists) {
+      branchId = branchDoc.id
+      branchName = branchDoc.data()?.name || null
+    }
+  }
+  
+  // If not in Flow, try patient's default branch
+  if (!branchId && patient.id) {
+    try {
+      const patientDoc = await db.collection("patients").doc(patient.id).get()
+      if (patientDoc.exists) {
+        const patientData = patientDoc.data()
+        branchId = patientData?.defaultBranchId || null
+        branchName = patientData?.defaultBranchName || null
+      }
+    } catch (error) {
+      console.error("[Meta WhatsApp] Error fetching patient default branch from Flow:", error)
+    }
+  }
+  
+  // If still no branchId, get first active branch from hospital
+  if (!branchId) {
+    try {
+      let hospitalId: string | null = null
+      if (patient.id) {
+        const patientDoc = await db.collection("patients").doc(patient.id).get()
+        if (patientDoc.exists) {
+          hospitalId = patientDoc.data()?.hospitalId || null
+        }
+      }
+      
+      if (!hospitalId && doctorId) {
+        hospitalId = await getDoctorHospitalId(doctorId)
+      }
+      
+      if (!hospitalId) {
+        const activeHospitals = await getAllActiveHospitals()
+        if (activeHospitals.length > 0) {
+          hospitalId = activeHospitals[0].id
+        }
+      }
+      
+      if (hospitalId) {
+        const branchesSnapshot = await db
+          .collection("branches")
+          .where("hospitalId", "==", hospitalId)
+          .where("status", "==", "active")
+          .limit(1)
+          .get()
+        
+        if (!branchesSnapshot.empty) {
+          const branch = branchesSnapshot.docs[0]
+          branchId = branch.id
+          branchName = branch.data().name || null
+        }
+      }
+    } catch (error) {
+      console.error("[Meta WhatsApp] Error fetching default branch from Flow:", error)
+    }
+  }
+  
+  console.log(`[Meta WhatsApp Flow] Creating appointment with branchId: ${branchId}, branchName: ${branchName}`)
+  
   // Create appointment
   try {
     const appointmentId = await createAppointment(
@@ -1056,7 +1185,9 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         consultationFee,
         paymentAmount: collectedAmount,
         remainingAmount,
-      },
+        branchId: branchId || null, // CRITICAL: Always include branchId
+        branchName: branchName || null, // CRITICAL: Always include branchName
+      } as any,
       from
     )
 
@@ -2945,8 +3076,8 @@ async function createAppointment(
       doctorSpecialization: doctor ? (doctor.data.specialization || "") : "",
       appointmentDate: payload.appointmentDate,
       appointmentTime,
-      branchId: (payload as any).branchId || null, // Include branchId from payload
-      branchName: (payload as any).branchName || null, // Include branchName from payload
+      branchId: (payload as any).branchId || null, // Include branchId from payload (CRITICAL: Should always be set)
+      branchName: (payload as any).branchName || null, // Include branchName from payload (CRITICAL: Should always be set)
       symptomCategory: payload.symptomCategory,
       chiefComplaint: payload.chiefComplaint,
       medicalHistory: payload.medicalHistory,
@@ -2968,6 +3099,13 @@ async function createAppointment(
       hospitalId: hospitalId, // Store hospital association
     }
 
+    // Validate that branchId is set (log warning if not, but still create appointment)
+    if (!appointmentData.branchId) {
+      console.warn(`[Meta WhatsApp] ⚠️ WARNING: Creating appointment ${appointmentId} without branchId! This may cause visibility issues.`)
+    } else {
+      console.log(`[Meta WhatsApp] ✅ Creating appointment ${appointmentId} with branchId: ${appointmentData.branchId}, branchName: ${appointmentData.branchName || 'N/A'}`)
+    }
+    
     transaction.set(appointmentRef, appointmentData)
 
     // Reserve slot (even if no doctor assigned - prevents double booking)
