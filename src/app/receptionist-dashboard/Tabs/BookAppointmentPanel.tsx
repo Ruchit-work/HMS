@@ -84,6 +84,14 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod | null>(null)
   const [paymentData, setPaymentData] = useState<BookingPaymentData>(emptyBookingPayment)
 
+  // Additional fees/services
+  interface AdditionalFee {
+    id: string
+    description: string
+    amount: number
+  }
+  const [additionalFees, setAdditionalFees] = useState<AdditionalFee[]>([])
+
   const [otpModalOpen, setOtpModalOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [successData, setSuccessData] = useState<any>(null)
@@ -91,7 +99,15 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   const [showDoctorConfirmModal, setShowDoctorConfirmModal] = useState(false)
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], [])
-  const paymentAmount = useMemo(() => selectedDoctorFee || 0, [selectedDoctorFee])
+  
+  // Calculate total payment amount: consultation fee + additional fees
+  const totalAdditionalFees = useMemo(() => {
+    return additionalFees.reduce((sum, fee) => sum + (fee.amount || 0), 0)
+  }, [additionalFees])
+  
+  const paymentAmount = useMemo(() => {
+    return (selectedDoctorFee || 0) + totalAdditionalFees
+  }, [selectedDoctorFee, totalAdditionalFees])
 
 
   const selectedDoctor = useMemo(() => {
@@ -346,6 +362,16 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     ? doctors.filter((doc: any) => !recommendedDoctors.some((filtered: any) => filtered.id === doc.id))
     : []
 
+  // Reset additional fees when doctor changes
+  useEffect(() => {
+    if (selectedDoctorId) {
+      // Keep additional fees when doctor changes (optional - you can remove this if you want to reset)
+      // setAdditionalFees([])
+    } else {
+      setAdditionalFees([])
+    }
+  }, [selectedDoctorId])
+
   // Handle doctor selection with confirmation for non-recommended doctors
   const handleDoctorSelect = (doctorId: string) => {
     const isRecommended = recommendedDoctors.some((doc: any) => doc.id === doctorId)
@@ -558,6 +584,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     setSymptomCategory("")
     setCustomSymptom("")
     setPaymentMethod(null)
+    setAdditionalFees([])
     setPaymentData(emptyBookingPayment)
     setAvailableSlots([])
   }, [onPatientModeChange])
@@ -657,6 +684,11 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         paymentAmount: paymentAmount,
         paymentMethod: paymentMethod,
         paymentType: "full",
+        // Include additional fees if any
+        additionalFees: additionalFees.length > 0 ? additionalFees.map(fee => ({
+          description: fee.description,
+          amount: fee.amount,
+        })) : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: "receptionist",
@@ -675,7 +707,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       }
       return appointmentData
     },
-    [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId, symptomCategory, customSymptom]
+    [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId, symptomCategory, customSymptom, additionalFees]
   )
 
   const preventDuplicateAppointment = useCallback(
@@ -1353,19 +1385,112 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                   Select a doctor to preview consultation fee and available payment methods.
                 </div>
               ) : (
-                <PaymentMethodSection
-                  paymentMethod={paymentMethod}
-                  setPaymentMethod={setPaymentMethod}
-                  paymentData={paymentData}
-                  setPaymentData={(data) => setPaymentData(data as BookingPaymentData)}
-                  amountToPay={paymentAmount}
-                  title="Payment Mode"
-                  methods={paymentMethods}
-                />
+                <>
+                  {/* Consultation Fee Display */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-700">Consultation Fee</span>
+                      <span className="text-base font-semibold text-slate-900">
+                        ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Additional Fees Section */}
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900">Additional Fees</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">Add file charges, blood reports, etc.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newFee: AdditionalFee = {
+                            id: `fee-${Date.now()}-${Math.random()}`,
+                            description: "",
+                            amount: 0,
+                          }
+                          setAdditionalFees([...additionalFees, newFee])
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+                      >
+                        + Add Fee
+                      </button>
+                    </div>
+
+                    {additionalFees.length > 0 && (
+                      <div className="space-y-2">
+                        {additionalFees.map((fee, index) => (
+                          <div key={fee.id} className="flex gap-2 items-start p-2 bg-slate-50 rounded-lg border border-slate-200">
+                            <div className="flex-1 space-y-2">
+                              <input
+                                type="text"
+                                placeholder="Description (e.g., File Charges, Blood Report)"
+                                value={fee.description}
+                                onChange={(e) => {
+                                  const updated = [...additionalFees]
+                                  updated[index] = { ...fee, description: e.target.value }
+                                  setAdditionalFees(updated)
+                                }}
+                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                              />
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-600">₹</span>
+                                <input
+                                  type="number"
+                                  placeholder="Amount"
+                                  value={fee.amount || ""}
+                                  onChange={(e) => {
+                                    const value = e.target.value === "" ? 0 : parseFloat(e.target.value)
+                                    const updated = [...additionalFees]
+                                    updated[index] = { ...fee, amount: isNaN(value) ? 0 : value }
+                                    setAdditionalFees(updated)
+                                  }}
+                                  min="0"
+                                  step="0.01"
+                                  className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                />
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdditionalFees(additionalFees.filter((_, i) => i !== index))
+                              }}
+                              className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remove"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        {totalAdditionalFees > 0 && (
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                            <span className="text-sm font-medium text-slate-700">Total Additional Fees</span>
+                            <span className="text-base font-semibold text-slate-900">
+                              ₹{new Intl.NumberFormat("en-IN").format(totalAdditionalFees)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <PaymentMethodSection
+                    paymentMethod={paymentMethod}
+                    setPaymentMethod={setPaymentMethod}
+                    paymentData={paymentData}
+                    setPaymentData={(data) => setPaymentData(data as BookingPaymentData)}
+                    amountToPay={paymentAmount}
+                    title="Payment Mode"
+                    methods={paymentMethods}
+                  />
+                </>
               )}
 
               <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                <span className="font-medium text-slate-700">Amount due</span>
+                <span className="font-medium text-slate-700">Total Amount due</span>
                 <span className="text-lg font-semibold text-slate-900">
                   {paymentAmount ? `₹${new Intl.NumberFormat("en-IN").format(paymentAmount)}` : "Not set"}
                 </span>

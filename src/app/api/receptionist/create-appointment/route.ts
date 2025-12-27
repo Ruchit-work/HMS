@@ -177,6 +177,13 @@ export async function POST(request: Request) {
       }
     }
     
+    // Calculate total including additional fees (before creating docData object)
+    const additionalFeesArray = Array.isArray(appointmentData.additionalFees) ? appointmentData.additionalFees : []
+    const totalAdditionalFees = additionalFeesArray.reduce((sum: number, fee: any) => sum + (Number(fee.amount) || 0), 0)
+    const totalPaymentAmount = typeof appointmentData.paymentAmount === 'number' 
+      ? appointmentData.paymentAmount 
+      : consultationFee + totalAdditionalFees
+
     const docData: any = {
       patientId: String(appointmentData.patientId),
       patientName: String(appointmentData.patientName),
@@ -190,8 +197,13 @@ export async function POST(request: Request) {
       status: safeValue(appointmentData.status, "confirmed"),
       
       // Payment fields - properly set for completed payment
-      paymentAmount: typeof appointmentData.paymentAmount === 'number' ? appointmentData.paymentAmount : consultationFee,
+      paymentAmount: totalPaymentAmount,
       totalConsultationFee: consultationFee,
+      // Store additional fees if provided
+      additionalFees: additionalFeesArray.length > 0 ? additionalFeesArray.map((fee: any) => ({
+        description: safeValue(fee.description, ""),
+        amount: Number(fee.amount) || 0,
+      })) : undefined,
       paymentMethod: safeValue(appointmentData.paymentMethod, "cash"),
       paymentType: safeValue(appointmentData.paymentType, "full"),
       paymentStatus: "paid", // Mark as paid since receptionist completed payment
