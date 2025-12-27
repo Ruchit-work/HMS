@@ -19,6 +19,7 @@ export default function GlobalHeader() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
   const [appointmentCount, setAppointmentCount] = useState(0)
+  const [isScrolled, setIsScrolled] = useState(false)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -34,6 +35,17 @@ export default function GlobalHeader() {
   // Routes that don't need the header
   const noHeaderRoutes = ["/", "/auth/login", "/auth/signup", "/auth/forgot-password"]
   const shouldShowHeader = !noHeaderRoutes.includes(pathname)
+
+  // Scroll effect for header
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY
+      setIsScrolled(scrollPosition > 20)
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   useEffect(() => {
     // Use the existing auth state from Firebase
@@ -203,18 +215,30 @@ export default function GlobalHeader() {
 
   return (
     <>
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-40 backdrop-blur-sm bg-white/95 shadow-md">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3">
+    <header 
+      className={`fixed top-0 left-0 right-0 z-40 w-full rounded-none transition-all duration-300 ease-in-out ${
+        isScrolled 
+          ? 'bg-white/98 backdrop-blur-lg border-b border-slate-200/80 shadow-2xl py-2' 
+          : 'bg-white/80 backdrop-blur-sm border-b border-slate-200/40 shadow-lg py-3'
+      }`}
+    >
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link 
             href={isDoctor ? "/doctor-dashboard" : isPatient ? "/patient-dashboard" : "/"}
-            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-all duration-300 cursor-pointer"
           >
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg flex items-center justify-center text-white shadow-md">
-              <span className="font-bold text-base sm:text-lg">H</span>
+            <div className={`bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg flex items-center justify-center text-white shadow-md transition-all duration-300 ${
+              isScrolled ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-8 h-8 sm:w-10 sm:h-10'
+            }`}>
+              <span className={`font-bold transition-all duration-300 ${
+                isScrolled ? 'text-base' : 'text-base sm:text-lg'
+              }`}>H</span>
             </div>
-            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-800">
+            <h1 className={`font-bold text-slate-800 transition-all duration-300 ${
+              isScrolled ? 'text-base sm:text-lg lg:text-xl' : 'text-lg sm:text-xl lg:text-2xl'
+            }`}>
               HMS
             </h1>
           </Link>
@@ -351,7 +375,7 @@ export default function GlobalHeader() {
       {showMobileMenu && (
         <div
           ref={mobileMenuRef}
-          className="lg:hidden absolute top-full left-0 right-0 bg-white border-b border-slate-200 shadow-md py-4 px-4 z-40"
+          className="lg:hidden absolute top-full left-0 right-0 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-xl py-4 px-4 z-40"
         >
           <div className="flex flex-col gap-2">
             {navLinks.map((link) => (

@@ -18,7 +18,7 @@ export default function PatientPortalTutorial() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pt-20">
       <PageHeader 
         title="Patient Portal Tutorial"
         subtitle="भारतीय रोगियों के लिए पोर्टल गाइड - Learn how to use our patient portal effectively" icon={""}      />

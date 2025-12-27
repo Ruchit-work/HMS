@@ -203,9 +203,9 @@ export default function PatientDashboard() {
   return (
 
     <>
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30 pt-20">
       {/* Hero Carousel - Full Width */}
-      <div className="w-full mb-8 mt-4">
+      <div className="w-full mb-8">
         <HeroCarousel />
       </div>
 

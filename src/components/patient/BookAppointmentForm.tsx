@@ -91,7 +91,7 @@ export default function BookAppointmentForm({
   const [showDoctorConfirmModal, setShowDoctorConfirmModal] = useState(false)
   const [pendingDoctorId, setPendingDoctorId] = useState<string | null>(null)
 
-  const totalSteps = rescheduleMode ? 4 : 5
+  const totalSteps = 4
 
   // Fetch branches on mount
   useEffect(() => {
@@ -359,17 +359,6 @@ export default function BookAppointmentForm({
       setSlideDirection('right') // Slide from right when going forward
       const newStep = currentStep + 1
       setCurrentStep(newStep)
-      // Reset payment method when entering step 5 to require explicit selection
-      if (!rescheduleMode && newStep === 5) {
-        setPaymentMethod(null)
-        setPaymentData({
-          cardNumber: "",
-          cardName: "",
-          expiryDate: "",
-          cvv: "",
-          upiId: ""
-        })
-      }
     }
   }
 
@@ -545,20 +534,6 @@ export default function BookAppointmentForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symptomAnswers, selectedSymptomCategory, appointmentData.additionalConcern, appointmentData.problem])
 
-  // Reset payment method to null whenever step 5 becomes active
-  useEffect(() => {
-    if (!rescheduleMode && currentStep === 5) {
-      setPaymentMethod(null)
-      setPaymentData({
-        cardNumber: "",
-        cardName: "",
-        expiryDate: "",
-        cvv: "",
-        upiId: ""
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, rescheduleMode])
 
   // Filter doctors based on symptom category
   const filteredDoctors = selectedSymptomCategory 
@@ -660,18 +635,6 @@ export default function BookAppointmentForm({
       case 2: return (appointmentData.problem?.trim().length ?? 0) > 0 // Require free-text only
       case 3: return selectedDoctor !== ""
       case 4: return appointmentData.date !== "" && appointmentData.time !== "" && !hasDuplicateAppointment
-      case 5: 
-        // Payment step - require payment method selection
-        if (!paymentMethod) return false
-        // If card payment, require all card fields
-        if (paymentMethod === "card") {
-          return !!(paymentData.cardNumber && paymentData.cardName && paymentData.expiryDate && paymentData.cvv)
-        }
-        // If UPI payment, require UPI ID
-        if (paymentMethod === "upi") {
-          return !!paymentData.upiId
-        }
-        return true
       default: return false
     }
   }
@@ -683,49 +646,24 @@ export default function BookAppointmentForm({
     if (currentStep !== totalSteps) {
       return
     }
-    if (rescheduleMode) {
-      // Directly submit without payment flow
-      await onSubmit({
-        selectedDoctor,
-        appointmentData: {
-          ...appointmentData,
-          branchId: selectedBranchId
-        },
-        paymentMethod: "cash",
-        paymentType: "full",
-        paymentData: { cardNumber: "", cardName: "", expiryDate: "", cvv: "", upiId: "" }
-      })
-      return
-    }
-
-    // Normal flow shows confirmation modal
-    // Validate payment method is selected
-    if (!paymentMethod || paymentMethod === null) {
-      return
-    }
-    if (paymentMethod === "card" && (!paymentData.cardNumber || !paymentData.cardName || !paymentData.expiryDate || !paymentData.cvv)) {
-      return
-    }
-    if (paymentMethod === "upi" && !paymentData.upiId) {
-      return
-    }
+    
+    // Show confirmation modal instead of submitting directly
     setShowConfirmModal(true)
   }
 
   const handleConfirmSubmit = async () => {
-    if (!paymentMethod) return
-    
     setShowConfirmModal(false)
     
+    // Submit with cash payment (to be paid at reception desk)
     await onSubmit({
       selectedDoctor,
       appointmentData: {
         ...appointmentData,
         branchId: selectedBranchId
       },
-      paymentMethod: paymentMethod as "card" | "upi" | "cash",
-      paymentType,
-      paymentData
+      paymentMethod: "cash",
+      paymentType: "full",
+      paymentData: { cardNumber: "", cardName: "", expiryDate: "", cvv: "", upiId: "" }
     })
 
     // Reset form
@@ -746,6 +684,7 @@ export default function BookAppointmentForm({
     })
     setPaymentMethod(null)
   }
+
 
   const handleClear = () => {
     setCurrentStep(1)
@@ -769,8 +708,7 @@ export default function BookAppointmentForm({
     { number: 1, title: "Patient Info", icon: "👤" },
     { number: 2, title: "Symptoms", icon: "🩺" },
     { number: 3, title: "Select Doctor", icon: "👨‍⚕️" },
-    { number: 4, title: "Date & Time", icon: "📅" },
-    { number: 5, title: "Payment", icon: "💳" }
+    { number: 4, title: "Date & Time", icon: "📅" }
   ]
 
   return (
@@ -1629,95 +1567,6 @@ export default function BookAppointmentForm({
             </div>
           )}
 
-          {/* Step 5: Payment */}
-          {!rescheduleMode && currentStep === 5 && (
-            <div className={`space-y-4 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
-              <div className="bg-white border-2 border-green-200 rounded-xl p-6">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                  <span className="text-2xl">💳</span>
-                  <span>Payment</span>
-                </h3>
-
-                {/* Demo Notice */}
-                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 mb-4">
-                  <p className="text-xs text-yellow-800 font-semibold flex items-center gap-2">
-                    <span>⚠️</span>
-                    <span>DEMO MODE - No real payment will be processed</span>
-                  </p>
-                </div>
-
-                {/* Fee Display */}
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 mb-4 border-2 border-green-200">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="text-slate-700 font-medium">Consultation Fee:</span>
-                      {selectedDoctor && selectedDoctorData && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          Dr. {selectedDoctorData.firstName} {selectedDoctorData.lastName}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-3xl font-bold text-green-600">₹{CONSULTATION_FEE}</span>
-                  </div>
-                </div>
-
-                {/* Payment Type Selection */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Payment Type <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentType("full")}
-                      className={`p-4 rounded-xl border-2 transition-all ${
-                        paymentType === "full"
-                          ? "border-green-600 bg-green-50 shadow-md ring-2 ring-green-200"
-                          : "border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
-                      <div className="text-center">
-                        <span className="text-3xl mb-2 block">💰</span>
-                        <p className="text-sm font-semibold mb-1">Full Payment</p>
-                        <p className="text-xl font-bold text-green-600">₹{CONSULTATION_FEE}</p>
-                        <p className="text-xs text-gray-500 mt-1">Pay complete amount now</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentType("partial")}
-                      className={`p-4 rounded-xl border-2 transition-all ${
-                        paymentType === "partial"
-                          ? "border-blue-600 bg-blue-50 shadow-md ring-2 ring-blue-200"
-                          : "border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
-                      <div className="text-center">
-                        <span className="text-3xl mb-2 block">📊</span>
-                        <p className="text-sm font-semibold mb-1">Partial Payment (10%)</p>
-                        <p className="text-xl font-bold text-blue-600">₹{PARTIAL_PAYMENT_AMOUNT}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Pay ₹{REMAINING_AMOUNT} at hospital
-                        </p>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Reusable Payment Section */}
-                <PaymentMethodSection
-                  title="Payment Mode"
-                  paymentMethod={paymentMethod}
-                  setPaymentMethod={(m)=>setPaymentMethod(m)}
-                  paymentData={paymentData as PPaymentData}
-                  setPaymentData={(d)=>setPaymentData(d as any)}
-                  amountToPay={AMOUNT_TO_PAY}
-                  showPartialNote={paymentType === 'partial'}
-                  methods={["card", "upi"]}
-                />
-              </div>
-            </div>
-          )}
 
           {/* Navigation Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 pt-6 mt-6 border-t border-slate-200">
@@ -1758,11 +1607,7 @@ export default function BookAppointmentForm({
                   )
                   : rescheduleMode
                     ? "Confirm Reschedule"
-                    : !paymentMethod
-                    ? "Select Payment Method"
-                  : paymentType === "partial"
-                      ? `Pay ₹${AMOUNT_TO_PAY} & Book`
-                      : `Pay ₹${AMOUNT_TO_PAY} & Book`}
+                    : "Book Appointment"}
               </button>
             )}
 
@@ -1965,29 +1810,22 @@ export default function BookAppointmentForm({
                   <div className="flex items-start gap-3">
                     <div className="text-3xl">💳</div>
                     <div className="flex-1">
-                      <h4 className="font-semibold text-gray-800 mb-1">Payment Details</h4>
+                      <h4 className="font-semibold text-gray-800 mb-1">Payment Information</h4>
                       <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">Payment Method:</span>
-                          <span className="font-semibold text-green-700 capitalize">
-                            {paymentMethod === 'card' ? '💳 Card' : paymentMethod === 'upi' ? '📱 UPI' : '💵 Cash'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">Payment Type:</span>
-                          <span className="font-semibold text-green-700 capitalize">
-                            {paymentType === 'full' ? 'Full Payment' : 'Partial Payment (10%)'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center pt-2 border-t border-green-200">
-                          <span className="text-lg font-semibold text-gray-800">Amount to Pay:</span>
-                          <span className="text-2xl font-bold text-green-700">₹{AMOUNT_TO_PAY}</span>
-                        </div>
-                        {paymentType === 'partial' && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Remaining ₹{REMAINING_AMOUNT} to be paid at hospital
+                        <div className="bg-white/60 rounded-lg p-3 border border-green-200">
+                          <p className="text-sm text-gray-700 mb-2">
+                            <strong>Payment will be collected at the reception desk</strong>
                           </p>
-                        )}
+                          {selectedDoctorData?.consultationFee && (
+                            <div className="flex justify-between items-center pt-2 border-t border-green-200">
+                              <span className="text-lg font-semibold text-gray-800">Amount to Pay:</span>
+                              <span className="text-2xl font-bold text-green-700">₹{selectedDoctorData.consultationFee}</span>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-600 mt-2">
+                            💡 Please arrive at the reception desk before your appointment time to complete the payment.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -144,6 +144,9 @@ interface AppointmentSuccessModalProps {
     paymentAmount: number
     paymentType: string
     remainingAmount?: number
+    paymentMethod?: string
+    paymentStatus?: string
+    totalConsultationFee?: number
     patientName: string
   } | null
 }
@@ -217,13 +220,26 @@ export function AppointmentSuccessModal({
     yPos += 15
     pdf.text(`Transaction ID: ${appointmentData.transactionId}`, 20, yPos)
     yPos += 10
-    pdf.text(`Amount Paid: ₹${appointmentData.paymentAmount}`, 20, yPos)
     
-    if (appointmentData.paymentType === 'partial' && appointmentData.remainingAmount) {
+    if (appointmentData.paymentStatus === "pending" || appointmentData.paymentMethod === "cash") {
+      pdf.text(`Payment Status: Pending`, 20, yPos)
       yPos += 10
-      pdf.setTextColor(255, 100, 0)
-      pdf.text(`Remaining to Pay at Hospital: ₹${appointmentData.remainingAmount}`, 20, yPos)
+      pdf.text(`Amount to Pay: ₹${appointmentData.totalConsultationFee || appointmentData.remainingAmount || 0}`, 20, yPos)
+      yPos += 10
+      pdf.setFontSize(9)
+      pdf.setTextColor(100, 100, 100)
+      pdf.text(`Payment will be collected at the reception desk.`, 20, yPos)
       pdf.setTextColor(0, 0, 0)
+      pdf.setFontSize(11)
+    } else {
+      pdf.text(`Amount Paid: ₹${appointmentData.paymentAmount}`, 20, yPos)
+      yPos += 10
+      
+      if (appointmentData.paymentType === 'partial' && appointmentData.remainingAmount && appointmentData.remainingAmount > 0) {
+        pdf.setTextColor(255, 100, 0)
+        pdf.text(`Remaining to Pay at Hospital: ₹${appointmentData.remainingAmount}`, 20, yPos)
+        pdf.setTextColor(0, 0, 0)
+      }
     }
     
     // Footer
@@ -309,22 +325,42 @@ export function AppointmentSuccessModal({
           <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xl">💳</span>
-              <p className="text-sm font-bold text-slate-800">Payment Successful</p>
+              <p className="text-sm font-bold text-slate-800">
+                {appointmentData.paymentStatus === "pending" || appointmentData.paymentMethod === "cash"
+                  ? "Payment Pending"
+                  : "Payment Successful"}
+              </p>
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-600">Transaction ID:</span>
                 <span className="font-mono text-slate-800 font-semibold text-xs">{appointmentData.transactionId}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-600">Amount Paid:</span>
-                <span className="text-slate-800 font-bold">₹{appointmentData.paymentAmount}</span>
-              </div>
-              {appointmentData.paymentType === 'partial' && appointmentData.remainingAmount && (
-                <div className="flex justify-between pt-2 border-t border-slate-200">
-                  <span className="text-slate-700 font-semibold">Pay at Hospital:</span>
-                  <span className="text-slate-900 font-bold">₹{appointmentData.remainingAmount}</span>
-                </div>
+              {appointmentData.paymentStatus === "pending" || appointmentData.paymentMethod === "cash" ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Amount to Pay:</span>
+                    <span className="text-slate-800 font-bold">₹{appointmentData.totalConsultationFee || appointmentData.remainingAmount || 0}</span>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded p-2 mt-2">
+                    <p className="text-xs text-amber-800">
+                      <span className="font-semibold">💡 Note:</span> Payment will be collected at the reception desk before your appointment.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Amount Paid:</span>
+                    <span className="text-slate-800 font-bold">₹{appointmentData.paymentAmount}</span>
+                  </div>
+                  {appointmentData.paymentType === 'partial' && appointmentData.remainingAmount && appointmentData.remainingAmount > 0 && (
+                    <div className="flex justify-between pt-2 border-t border-slate-200">
+                      <span className="text-slate-700 font-semibold">Pay at Hospital:</span>
+                      <span className="text-slate-900 font-bold">₹{appointmentData.remainingAmount}</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

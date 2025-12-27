@@ -312,8 +312,20 @@ export default function PatientAppointments() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div 
+        className="min-h-screen relative pt-20"
+        style={{
+          backgroundImage: 'url(/images/1.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'repeat',
+          backgroundAttachment: 'fixed',
+        }}
+      >
+        {/* Overlay for better readability */}
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px]"></div>
+        
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 min-h-screen">
 
           {/* Page Header */}
           <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">

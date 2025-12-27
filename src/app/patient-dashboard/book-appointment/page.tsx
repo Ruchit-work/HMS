@@ -340,14 +340,17 @@ See you soon! 🏥`
         vitalHeartRate: appointmentData.vitalHeartRate ?? null,
         vitalRespiratoryRate: appointmentData.vitalRespiratoryRate ?? null,
         vitalSpO2: appointmentData.vitalSpO2 ?? null,
-        paymentStatus: "paid",
+        // Payment status: "pending" for cash (to be paid at reception), "paid" for online payments
+        paymentStatus: paymentMethod === "cash" ? "pending" : "paid",
         paymentMethod: paymentMethod,
         paymentType: paymentType,
         totalConsultationFee: CONSULTATION_FEE,
-        paymentAmount: AMOUNT_TO_PAY,
-        remainingAmount: paymentType === "partial" ? REMAINING_AMOUNT : 0,
+        // Payment amount: 0 for cash (not paid yet), actual amount for online payments
+        paymentAmount: paymentMethod === "cash" ? 0 : AMOUNT_TO_PAY,
+        remainingAmount: paymentMethod === "cash" ? CONSULTATION_FEE : (paymentType === "partial" ? REMAINING_AMOUNT : 0),
         transactionId: transactionId,
-        paidAt: new Date().toISOString(),
+        // paidAt: empty for cash (not paid yet), timestamp for online payments
+        paidAt: paymentMethod === "cash" ? "" : new Date().toISOString(),
         status: "confirmed",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -395,15 +398,22 @@ See you soon! 🏥`
       })
 
       // Show success modal with appointment details
+      // For cash payments: paymentAmount should be 0, remainingAmount should be full fee
+      const modalPaymentAmount = paymentMethod === "cash" ? 0 : AMOUNT_TO_PAY
+      const modalRemainingAmount = paymentMethod === "cash" ? CONSULTATION_FEE : (paymentType === "partial" ? REMAINING_AMOUNT : 0)
+      
       setSuccessAppointmentData({
         doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
         doctorSpecialization: selectedDoctorData.specialization,
         appointmentDate: appointmentData.date,
         appointmentTime: appointmentData.time,
         transactionId: transactionId,
-        paymentAmount: AMOUNT_TO_PAY,
+        paymentAmount: modalPaymentAmount,
         paymentType: paymentType,
-        remainingAmount: paymentType === "partial" ? REMAINING_AMOUNT : 0,
+        remainingAmount: modalRemainingAmount,
+        paymentMethod: paymentMethod,
+        paymentStatus: paymentMethod === "cash" ? "pending" : "paid",
+        totalConsultationFee: CONSULTATION_FEE,
         patientName: `${userData.firstName} ${userData.lastName}`
       })
       setShowSuccessModal(true)
@@ -421,7 +431,7 @@ See you soon! 🏥`
 
   return (
     <>
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30 pt-20">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader
           title="Book an Appointment"
