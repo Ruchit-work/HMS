@@ -84,6 +84,12 @@ export default function PatientManagement({
     const [showOtpModal, setShowOtpModal] = useState(false)
     const [pendingPatientValues, setPendingPatientValues] = useState<PatientProfileFormValues | null>(null)
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+    const [showReportModal, setShowReportModal] = useState(false)
+    const [reportFilter, setReportFilter] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'all'>('all')
+    const [reportFormat, setReportFormat] = useState<'pdf' | 'excel'>('pdf')
+    const [customStartDate, setCustomStartDate] = useState('')
+    const [customEndDate, setCustomEndDate] = useState('')
+    const [generatingReport, setGeneratingReport] = useState(false)
     const handleView = (patient: Patient) => {
         setSelectedPatient(patient)
         setShowViewModal(true)
@@ -531,6 +537,92 @@ export default function PatientManagement({
             setSortOrder('asc')
         }
     }
+
+    const handleGenerateReport = async () => {
+        try {
+            setGeneratingReport(true)
+            setError(null)
+
+            // Validate custom date range if custom filter is selected
+            if (reportFilter === 'custom') {
+                if (!customStartDate || !customEndDate) {
+                    setError('Please select both start and end dates for custom range')
+                    setGeneratingReport(false)
+                    return
+                }
+                if (new Date(customStartDate) > new Date(customEndDate)) {
+                    setError('Start date must be before end date')
+                    setGeneratingReport(false)
+                    return
+                }
+            }
+
+            // Build query parameters
+            const params = new URLSearchParams({
+                filter: reportFilter,
+                format: reportFormat
+            })
+
+            if (reportFilter === 'custom') {
+                params.append('startDate', customStartDate)
+                params.append('endDate', customEndDate)
+            }
+
+            // Get auth token
+            const currentUser = auth.currentUser
+            if (!currentUser) {
+                setError('You must be logged in to generate reports')
+                setGeneratingReport(false)
+                return
+            }
+
+            const token = await currentUser.getIdToken()
+
+            // Fetch report
+            const response = await fetch(`/api/admin/patient-reports?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || 'Failed to generate report')
+            }
+
+            // Download the file
+            const blob = await response.blob()
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            
+            const contentDisposition = response.headers.get('Content-Disposition')
+            let filename = `patient_report_${reportFilter}_${new Date().toISOString().split('T')[0]}.${reportFormat === 'pdf' ? 'pdf' : 'xlsx'}`
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="(.+)"/)
+                if (filenameMatch) {
+                    filename = filenameMatch[1]
+                }
+            }
+            
+            a.download = filename
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            document.body.removeChild(a)
+
+            // Close modal and show success
+            setShowReportModal(false)
+            setSuccessMessage('Report generated and downloaded successfully!')
+            setTimeout(() => setSuccessMessage(null), 3000)
+        } catch (error) {
+            console.error('Error generating report:', error)
+            setError((error as Error).message || 'Failed to generate report')
+        } finally {
+            setGeneratingReport(false)
+        }
+    }
     
     useEffect(() => {
         if (!allowAdd && showAddModal) {
@@ -575,33 +667,48 @@ export default function PatientManagement({
                 </div>
                 <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                   <div className="flex items-center gap-3">
-                    {allowAdd ? (
-                      <button
-                        onClick={openAddPatientModal}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                        type="button"
-                      >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button
+                      onClick={() => setShowReportModal(true)}
+                      className="group relative inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-green-600 to-green-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-green-500/30 transition-all duration-200 hover:from-green-700 hover:to-green-800 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-0.5 active:translate-y-0"
+                      type="button"
+                    >
+                      <div className="flex items-center justify-center">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 4v16m8-8H4"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                           />
                         </svg>
-                        Add patient
-                      </button>
-                    ) : (
-                      <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white/70 px-3 py-2 text-xs font-semibold text-blue-600 shadow-inner">
-                        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
-                        Registrations handled by reception team
                       </div>
+                      <span className="whitespace-nowrap">Generate Report</span>
+                    </button>
+                    {allowAdd && (
+                      <button
+                        onClick={openAddPatientModal}
+                        className="group relative inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/30 transition-all duration-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 active:translate-y-0"
+                        type="button"
+                      >
+                        <div className="flex items-center justify-center">
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M12 4v16m8-8H4"
+                            />
+                          </svg>
+                        </div>
+                        <span className="whitespace-nowrap">Add patient</span>
+                      </button>
                     )}
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/80 px-3 py-2 text-xs font-semibold text-green-700 shadow-inner">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span>Live Updates Active</span>
+                    <div className="flex items-center gap-2.5 rounded-xl border-2 border-green-300/60 bg-gradient-to-r from-green-50 to-emerald-50/80 px-4 py-2.5 text-xs font-bold text-green-700 shadow-inner backdrop-blur-sm">
+                      <div className="relative flex items-center justify-center">
+                        <div className="absolute h-2.5 w-2.5 bg-green-500 rounded-full animate-ping opacity-75"></div>
+                        <div className="relative h-2.5 w-2.5 bg-green-500 rounded-full"></div>
+                      </div>
+                      <span className="whitespace-nowrap">Live Update Active</span>
                     </div>
                   </div>
                 </div>
@@ -1383,6 +1490,128 @@ export default function PatientManagement({
             }}
             loading={loading}
           />
+          {/* Generate Report Modal */}
+          {showReportModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+              <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xl font-bold text-slate-900">Generate Patient Report</h3>
+                    <button
+                      onClick={() => setShowReportModal(false)}
+                      className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div className="px-6 py-6 space-y-6">
+                  {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">Date Range</label>
+                    <select
+                      value={reportFilter}
+                      onChange={(e) => setReportFilter(e.target.value as any)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="daily">Daily (Today)</option>
+                      <option value="weekly">Weekly (Last 7 days)</option>
+                      <option value="monthly">Monthly (Current month)</option>
+                      <option value="yearly">Yearly (Current year)</option>
+                      <option value="custom">Custom Range</option>
+                      <option value="all">All Patients</option>
+                    </select>
+                  </div>
+                  {reportFilter === 'custom' && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-slate-700">Start Date</label>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-slate-700">End Date</label>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">Report Format</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          value="pdf"
+                          checked={reportFormat === 'pdf'}
+                          onChange={(e) => setReportFormat(e.target.value as 'pdf')}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-slate-700">PDF</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          value="excel"
+                          checked={reportFormat === 'excel'}
+                          onChange={(e) => setReportFormat(e.target.value as 'excel')}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500"
+                        />
+                        <span className="text-sm text-slate-700">Excel (.xlsx)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowReportModal(false)}
+                      disabled={generatingReport}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleGenerateReport}
+                      disabled={generatingReport}
+                      className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {generatingReport ? (
+                        <>
+                          <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Generate Report
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         {/* Add Patient Modal */}
         {allowAdd && showAddModal && (

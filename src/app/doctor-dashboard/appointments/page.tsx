@@ -176,6 +176,12 @@ export default function DoctorAppointments() {
   const [showHistory, setShowHistory] = useState<{[key: string]: boolean}>({})
   const [refreshing, setRefreshing] = useState(false)
   const [admitting, setAdmitting] = useState<{ [key: string]: boolean }>({})
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportFilter, setReportFilter] = useState<'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'all'>('all')
+  const [reportFormat, setReportFormat] = useState<'pdf' | 'excel'>('pdf')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [generatingReport, setGeneratingReport] = useState(false)
   const [admitDialog, setAdmitDialog] = useState<{
     open: boolean
     appointment: AppointmentType | null
@@ -345,6 +351,91 @@ export default function DoctorAppointments() {
       setNotification({ type: "error", message: "Failed to refresh appointments" })
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleGenerateReport = async () => {
+    try {
+      setGeneratingReport(true)
+      setNotification(null)
+
+      // Validate custom date range if custom filter is selected
+      if (reportFilter === 'custom') {
+        if (!customStartDate || !customEndDate) {
+          setNotification({ type: "error", message: 'Please select both start and end dates for custom range' })
+          setGeneratingReport(false)
+          return
+        }
+        if (new Date(customStartDate) > new Date(customEndDate)) {
+          setNotification({ type: "error", message: 'Start date must be before end date' })
+          setGeneratingReport(false)
+          return
+        }
+      }
+
+      // Build query parameters
+      const params = new URLSearchParams({
+        filter: reportFilter,
+        format: reportFormat
+      })
+
+      if (reportFilter === 'custom') {
+        params.append('startDate', customStartDate)
+        params.append('endDate', customEndDate)
+      }
+
+      // Get auth token
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        setNotification({ type: "error", message: 'You must be logged in to generate reports' })
+        setGeneratingReport(false)
+        return
+      }
+
+      const token = await currentUser.getIdToken()
+
+      // Fetch report
+      const response = await fetch(`/api/admin/patient-reports?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to generate report')
+      }
+
+      // Download the file
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      
+      const contentDisposition = response.headers.get('Content-Disposition')
+      let filename = `patient_report_${reportFilter}_${new Date().toISOString().split('T')[0]}.${reportFormat === 'pdf' ? 'pdf' : 'xlsx'}`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      // Close modal and show success
+      setShowReportModal(false)
+      setNotification({ type: "success", message: 'Report generated and downloaded successfully!' })
+    } catch (error) {
+      console.error('Error generating report:', error)
+      setNotification({ type: "error", message: (error as Error).message || 'Failed to generate report' })
+    } finally {
+      setGeneratingReport(false)
     }
   }
 
@@ -1694,11 +1785,21 @@ export default function DoctorAppointments() {
                   </span>
                 </span>
               </div>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg border-2 border-blue-300 text-blue-700 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm hover:shadow-md"
-            >
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowReportModal(true)}
+                  className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition text-sm font-medium shadow-sm hover:shadow-md"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Generate Report
+                </button>
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg border-2 border-blue-300 text-blue-700 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm hover:shadow-md"
+                >
               {refreshing ? (
                 <>
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
@@ -1716,6 +1817,7 @@ export default function DoctorAppointments() {
                 </>
               )}
             </button>
+              </div>
             </div>
 
             {/* Tabs */}
@@ -3452,10 +3554,132 @@ export default function DoctorAppointments() {
               >
                 {admitting[admitDialog.appointment.id] ? "Sending..." : "Yes, Admit Patient"}
               </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      {/* Generate Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">Generate Patient Report</h3>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="px-6 py-6 space-y-6">
+              {notification && notification.type === "error" && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {notification.message}
+                </div>
+              )}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Date Range</label>
+                <select
+                  value={reportFilter}
+                  onChange={(e) => setReportFilter(e.target.value as any)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="daily">Daily (Today)</option>
+                  <option value="weekly">Weekly (Last 7 days)</option>
+                  <option value="monthly">Monthly (Current month)</option>
+                  <option value="yearly">Yearly (Current year)</option>
+                  <option value="custom">Custom Range</option>
+                  <option value="all">All Patients</option>
+                </select>
+              </div>
+              {reportFilter === 'custom' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">Start Date</label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">End Date</label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Report Format</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="pdf"
+                      checked={reportFormat === 'pdf'}
+                      onChange={(e) => setReportFormat(e.target.value as 'pdf')}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500"
+                    />
+                    <span className="text-sm text-slate-700">PDF</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="excel"
+                      checked={reportFormat === 'excel'}
+                      onChange={(e) => setReportFormat(e.target.value as 'excel')}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500"
+                    />
+                    <span className="text-sm text-slate-700">Excel (.xlsx)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  disabled={generatingReport}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleGenerateReport}
+                  disabled={generatingReport}
+                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+                >
+                  {generatingReport ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Generate Report
+                    </>
+                  )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   )
 }

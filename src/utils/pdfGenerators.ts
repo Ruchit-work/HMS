@@ -794,3 +794,293 @@ export function previewPrescriptionPDF(appointment: Appointment) {
   window.open(url, '_blank')
 }
 
+// ============================================================================
+// Patient Reports PDF
+// ============================================================================
+
+interface AppointmentData {
+  id: string
+  appointmentDate: string
+  appointmentTime: string
+  doctorName: string
+  doctorSpecialization: string
+  status: string
+  chiefComplaint?: string
+  totalConsultationFee?: number
+  paymentStatus?: string
+  paymentAmount?: number
+}
+
+interface PatientReportData {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  gender: string
+  bloodGroup: string
+  address: string
+  dateOfBirth: string
+  createdAt: string
+  status: string
+  defaultBranchName?: string
+  appointments?: AppointmentData[]
+  totalAppointments?: number
+}
+
+interface PatientReportOptions {
+  title: string
+  dateRange: string
+  totalPatients: number
+}
+
+export function generatePatientReportPDF(
+  patients: PatientReportData[],
+  options: PatientReportOptions
+): string {
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const pageWidth = pdf.internal.pageSize.getWidth()
+  const pageHeight = pdf.internal.pageSize.getHeight()
+  const margin = 15
+  let yPos = margin
+
+  // Header
+  pdf.setFillColor(45, 55, 72)
+  pdf.rect(0, 0, pageWidth, 50, 'F')
+  pdf.setTextColor(255, 255, 255)
+  pdf.setFontSize(24)
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('Patient Report', pageWidth / 2, 20, { align: 'center' })
+
+  pdf.setFontSize(12)
+  pdf.setFont('helvetica', 'normal')
+  pdf.text(options.title, pageWidth / 2, 32, { align: 'center' })
+  pdf.text(`Date Range: ${options.dateRange}`, pageWidth / 2, 38, { align: 'center' })
+  pdf.text(`Total Patients: ${options.totalPatients}`, pageWidth / 2, 44, { align: 'center' })
+
+  yPos = 60
+
+  // Table headers
+  const colWidths = [25, 40, 50, 35, 30, 25, 35, 45, 30]
+  const headers = ['S.No', 'Name', 'Email', 'Phone', 'Gender', 'DOB', 'Blood Group', 'Address', 'Status']
+  const startX = margin
+
+  pdf.setFillColor(241, 245, 249)
+  pdf.rect(startX, yPos, pageWidth - 2 * margin, 12, 'F')
+  pdf.setDrawColor(203, 213, 225)
+  pdf.rect(startX, yPos, pageWidth - 2 * margin, 12)
+
+  pdf.setTextColor(30, 41, 59)
+  pdf.setFontSize(9)
+  pdf.setFont('helvetica', 'bold')
+
+  let currentX = startX + 2
+  headers.forEach((header, index) => {
+    pdf.text(header, currentX, yPos + 8)
+    currentX += colWidths[index]
+  })
+
+  yPos += 15
+
+  // Table rows
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(71, 85, 105)
+
+  patients.forEach((patient, index) => {
+    // Check if we need a new page
+    if (yPos > pageHeight - 30) {
+      pdf.addPage()
+      yPos = margin
+
+      // Redraw headers on new page
+      pdf.setFillColor(241, 245, 249)
+      pdf.rect(startX, yPos, pageWidth - 2 * margin, 12, 'F')
+      pdf.setDrawColor(203, 213, 225)
+      pdf.rect(startX, yPos, pageWidth - 2 * margin, 12)
+
+      pdf.setTextColor(30, 41, 59)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'bold')
+      currentX = startX + 2
+      headers.forEach((header) => {
+        pdf.text(header, currentX, yPos + 8)
+        currentX += colWidths[headers.indexOf(header)]
+      })
+      yPos += 15
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8)
+      pdf.setTextColor(71, 85, 105)
+    }
+
+    const rowData = [
+      String(index + 1),
+      `${patient.firstName} ${patient.lastName}`.substring(0, 18),
+      patient.email?.substring(0, 22) || 'N/A',
+      patient.phone?.substring(0, 12) || 'N/A',
+      patient.gender || 'N/A',
+      patient.dateOfBirth ? formatDate(patient.dateOfBirth, { year: 'numeric', month: '2-digit', day: '2-digit' }) : 'N/A',
+      patient.bloodGroup || 'N/A',
+      patient.address?.substring(0, 25) || 'N/A',
+      String(patient.totalAppointments || patient.appointments?.length || 0),
+      patient.status || 'active'
+    ]
+
+    // Draw row background (alternate colors)
+    if (index % 2 === 0) {
+      pdf.setFillColor(255, 255, 255)
+    } else {
+      pdf.setFillColor(249, 250, 251)
+    }
+    pdf.rect(startX, yPos - 5, pageWidth - 2 * margin, 10, 'F')
+    pdf.setDrawColor(226, 232, 240)
+    pdf.rect(startX, yPos - 5, pageWidth - 2 * margin, 10)
+
+    currentX = startX + 2
+    rowData.forEach((cell, cellIndex) => {
+      const lines = pdf.splitTextToSize(cell, colWidths[cellIndex] - 2)
+      pdf.text(lines[0] || '', currentX, yPos)
+      currentX += colWidths[cellIndex]
+    })
+
+    yPos += 10
+  })
+
+  // Add appointment details section if any patient has appointments
+  const patientsWithAppointments = patients.filter(p => p.appointments && p.appointments.length > 0)
+  if (patientsWithAppointments.length > 0) {
+    // Check if we need a new page
+    if (yPos > pageHeight - 100) {
+      pdf.addPage()
+      yPos = margin
+    }
+
+    yPos += 15
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(14)
+    pdf.setTextColor(30, 41, 59)
+    pdf.text('Appointment Details', startX, yPos)
+    yPos += 10
+
+    patientsWithAppointments.forEach((patient, patientIndex) => {
+      if (!patient.appointments || patient.appointments.length === 0) return
+
+      // Check if we need a new page
+      if (yPos > pageHeight - 60) {
+        pdf.addPage()
+        yPos = margin
+      }
+
+      // Patient name header
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(11)
+      pdf.setTextColor(30, 41, 59)
+      pdf.text(`${patient.firstName} ${patient.lastName} (${patient.totalAppointments || patient.appointments.length} appointment${(patient.totalAppointments || patient.appointments.length) > 1 ? 's' : ''})`, startX, yPos)
+      yPos += 8
+
+      // Appointment table headers
+      const aptColWidths = [30, 25, 45, 40, 25, 30, 35]
+      const aptHeaders = ['Date', 'Time', 'Doctor', 'Specialization', 'Status', 'Fee', 'Payment']
+      
+      pdf.setFillColor(241, 245, 249)
+      pdf.rect(startX, yPos, pageWidth - 2 * margin, 10, 'F')
+      pdf.setDrawColor(203, 213, 225)
+      pdf.rect(startX, yPos, pageWidth - 2 * margin, 10)
+
+      pdf.setTextColor(30, 41, 59)
+      pdf.setFontSize(8)
+      pdf.setFont('helvetica', 'bold')
+
+      let currentX = startX + 2
+      aptHeaders.forEach((header, idx) => {
+        pdf.text(header, currentX, yPos + 7)
+        currentX += aptColWidths[idx]
+      })
+
+      yPos += 12
+
+      // Appointment rows (show first 5, or all if fewer)
+      const appointmentsToShow = patient.appointments.slice(0, 5)
+      appointmentsToShow.forEach((apt, aptIndex) => {
+        if (yPos > pageHeight - 30) {
+          pdf.addPage()
+          yPos = margin + 10
+          
+          // Redraw headers
+          pdf.setFillColor(241, 245, 249)
+          pdf.rect(startX, yPos, pageWidth - 2 * margin, 10, 'F')
+          pdf.setDrawColor(203, 213, 225)
+          pdf.rect(startX, yPos, pageWidth - 2 * margin, 10)
+          
+          currentX = startX + 2
+          aptHeaders.forEach((header) => {
+            pdf.text(header, currentX, yPos + 7)
+            currentX += aptColWidths[aptHeaders.indexOf(header)]
+          })
+          yPos += 12
+        }
+
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(71, 85, 105)
+
+        // Row background
+        if (aptIndex % 2 === 0) {
+          pdf.setFillColor(255, 255, 255)
+        } else {
+          pdf.setFillColor(249, 250, 251)
+        }
+        pdf.rect(startX, yPos - 4, pageWidth - 2 * margin, 8, 'F')
+        pdf.setDrawColor(226, 232, 240)
+        pdf.rect(startX, yPos - 4, pageWidth - 2 * margin, 8)
+
+        const aptRowData = [
+          formatDate(apt.appointmentDate, { year: 'numeric', month: '2-digit', day: '2-digit' }),
+          apt.appointmentTime?.substring(0, 5) || 'N/A',
+          apt.doctorName?.substring(0, 20) || 'N/A',
+          apt.doctorSpecialization?.substring(0, 18) || 'N/A',
+          apt.status || 'pending',
+          apt.totalConsultationFee ? `₹${apt.totalConsultationFee}` : 'N/A',
+          apt.paymentStatus || 'pending'
+        ]
+
+        currentX = startX + 2
+        aptRowData.forEach((cell, cellIndex) => {
+          const lines = pdf.splitTextToSize(cell, aptColWidths[cellIndex] - 2)
+          pdf.text(lines[0] || '', currentX, yPos)
+          currentX += aptColWidths[cellIndex]
+        })
+
+        yPos += 9
+      })
+
+      if (patient.appointments.length > 5) {
+        pdf.setFont('helvetica', 'italic')
+        pdf.setFontSize(7)
+        pdf.setTextColor(148, 163, 184)
+        pdf.text(`... and ${patient.appointments.length - 5} more appointment(s)`, startX + 2, yPos)
+        yPos += 6
+      }
+
+      yPos += 5
+    })
+  }
+
+  // Footer
+  const footerY = pageHeight - 15
+  pdf.setDrawColor(203, 213, 225)
+  pdf.line(margin, footerY, pageWidth - margin, footerY)
+
+  pdf.setFontSize(8)
+  pdf.setTextColor(148, 163, 184)
+  pdf.setFont('helvetica', 'italic')
+  pdf.text(
+    `Generated on: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`,
+    pageWidth / 2,
+    footerY + 8,
+    { align: 'center' }
+  )
+
+  return pdf.output('datauristring')
+}
+
