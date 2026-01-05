@@ -55,7 +55,6 @@ export async function GET(
       },
     })
   } catch (error: any) {
-    console.error("[Appointment PDF] Error:", error)
     return new NextResponse("Error generating PDF", { status: 500 })
   }
 }

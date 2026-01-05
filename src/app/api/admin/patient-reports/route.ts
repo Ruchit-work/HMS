@@ -178,7 +178,6 @@ export async function GET(request: Request) {
           receptionistBranchId = receptionistData?.branchId || null
         }
       } catch (err) {
-        console.warn("[patient-reports] Failed to fetch receptionist branch:", err)
       }
     } else if (userRole === "doctor") {
       // For doctors, use their own ID
@@ -199,7 +198,6 @@ export async function GET(request: Request) {
         .get()
     } catch (error: any) {
       // If orderBy fails (no index), fetch without ordering and sort client-side
-      console.warn('[patient-reports] orderBy failed, fetching without order:', error.message)
       patientsSnapshot = await patientsRef
         .where('status', 'in', ['active', 'inactive'])
         .get()
@@ -355,7 +353,6 @@ export async function GET(request: Request) {
       })
     }
   } catch (error) {
-    console.error("[admin/patient-reports] Error:", error)
     return NextResponse.json(
       { error: (error as Error).message || "Failed to generate patient report" },
       { status: 500 }

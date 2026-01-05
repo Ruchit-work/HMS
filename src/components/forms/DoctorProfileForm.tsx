@@ -127,7 +127,6 @@ export default function DoctorProfileForm({
           setBranches(data.branches)
         }
       } catch (error) {
-        console.error('Error fetching branches:', error)
       }
     }
     fetchBranches()
@@ -999,7 +998,7 @@ export default function DoctorProfileForm({
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white rounded-lg font-semibold shadow-sm hover:shadow-md text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="btn-modern btn-modern-success inline-flex items-center justify-center gap-2"
         >
           {loading ? (
             <>

@@ -62,7 +62,6 @@ export async function GET(request: Request) {
         }
       })
     } catch (error) {
-      console.error("Error fetching cron logs:", error)
       // Continue without logs if query fails (e.g., missing index)
     }
 
@@ -92,7 +91,6 @@ export async function GET(request: Request) {
         }
       })
     } catch (error) {
-      console.error("Error fetching recent campaigns:", error)
       // Continue without recent campaigns if query fails (e.g., missing index)
     }
 
@@ -176,7 +174,6 @@ export async function GET(request: Request) {
         : "unknown",
     })
   } catch (error: any) {
-    console.error("Error checking cron status:", error)
     return NextResponse.json(
       {
         success: false,

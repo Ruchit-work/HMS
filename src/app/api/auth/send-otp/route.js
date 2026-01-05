@@ -118,13 +118,6 @@ export async function POST(request) {
 
     if (!result.success) {
       // Log the error for debugging
-      console.error("[OTP Send Error]", {
-        phoneNumber: cleanedPhone,
-        error: result.error,
-        errorCode: result.errorCode,
-        templateUsed: !!otpTemplateName,
-      });
-
       // Provide more specific error messages
       let errorMessage = result.error || "Failed to send OTP. Please try again.";
       
@@ -156,9 +149,6 @@ export async function POST(request) {
       // In production, don't return messageId or any OTP-related info
     });
   } catch (error) {
-    console.error("Error sending OTP:", error);
-
-
     // Handle Meta WhatsApp-specific errors
     if (error.code === 100 || error.message?.includes("Invalid phone number")) {
       return Response.json(

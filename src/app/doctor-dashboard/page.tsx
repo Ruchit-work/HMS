@@ -91,12 +91,10 @@ export default function DoctorDashboard() {
         
         setAppointments(appointmentsList)
       }, (error) => {
-        console.error("Error in appointments listener:", error)
       })
       
       return unsubscribe
     } catch (error) {
-      console.error("Error setting up appointments listener:", error)
       return () => {} // Return empty function if setup fails
     }
   }
@@ -104,13 +102,15 @@ export default function DoctorDashboard() {
   // Fetch branches
   useEffect(() => {
     const fetchBranches = async () => {
+      // Wait for authentication to complete
+      if (loading || !user) return
       if (!activeHospitalId) return
 
       try {
         setLoadingBranches(true)
         const currentUser = auth.currentUser
         if (!currentUser) {
-          console.error("Error fetching branches: user not authenticated")
+          // User not authenticated yet, wait for auth to complete
           return
         }
         const token = await currentUser.getIdToken()
@@ -126,14 +126,13 @@ export default function DoctorDashboard() {
           setBranches(data.branches)
         }
       } catch (error) {
-        console.error("Error fetching branches:", error)
       } finally {
         setLoadingBranches(false)
       }
     }
 
     fetchBranches()
-  }, [activeHospitalId])
+  }, [activeHospitalId, user, loading])
 
   useEffect(() => {
     if (!user) return
@@ -174,7 +173,6 @@ export default function DoctorDashboard() {
           setPendingRequests(pending)
           setRejectedRequests(rejected)
         }, (error) => {
-          console.error('Error listening to schedule requests:', error)
         })
       }
     }
@@ -233,7 +231,6 @@ export default function DoctorDashboard() {
       setNotification({ type: 'success', message: 'Sent to admin for approval. Changes will apply after approval.' })
       setBlockedDrafts([])
     } catch (error: unknown) {
-      console.error('Error submitting schedule request:', error)
       setNotification({ type: 'error', message: (error as Error).message || 'Failed to submit request' })
     } finally {
       setSavingSchedule(false)
@@ -289,7 +286,6 @@ export default function DoctorDashboard() {
       // The real-time listener will automatically update the UI
       setNotification({ type: 'success', message: 'Rejected request removed successfully.' })
     } catch (error: unknown) {
-      console.error('Error deleting rejected request:', error)
       setNotification({ 
         type: 'error', 
         message: (error as Error).message || 'Failed to delete request' 
@@ -375,14 +371,6 @@ export default function DoctorDashboard() {
           const currentUser = auth.currentUser
           if (currentUser) {
             const token = await currentUser.getIdToken()
-
-            console.log("[Completion WhatsApp] Sending completion message:", {
-              appointmentId: selectedAppointmentId,
-              patientId: completedAppointment.patientId,
-              patientPhone: completedAppointment.patientPhone,
-              patientName: completedAppointment.patientName,
-            })
-
             const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
               method: "POST",
               headers: {
@@ -401,23 +389,14 @@ export default function DoctorDashboard() {
             const responseData = await completionResponse.json().catch(() => ({}))
             
             if (!completionResponse.ok) {
-              console.error("[Completion WhatsApp] Failed to send:", {
-                status: completionResponse.status,
-                statusText: completionResponse.statusText,
-                error: responseData.error || "Unknown error",
-              })
             } else {
-              console.log("[Completion WhatsApp] Success:", responseData)
             }
           } else {
-            console.warn("[Completion WhatsApp] User not logged in, skipping completion WhatsApp message")
           }
         } catch (error) {
-          console.error("[Completion WhatsApp] Error sending completion WhatsApp:", error)
           // Don't fail the completion if WhatsApp fails
         }
       } else {
-        console.warn("[Completion WhatsApp] Completed appointment not found, skipping WhatsApp message")
       }
 
       setNotification({ 
@@ -430,7 +409,6 @@ export default function DoctorDashboard() {
       setShowCompletionModal(false)
       setSelectedAppointmentId(null)
     } catch (error: unknown) {
-      console.error("Error completing appointment:", error)
       setNotification({ 
         type: "error", 
         message: (error as Error).message || "Failed to complete appointment" 
@@ -455,7 +433,7 @@ export default function DoctorDashboard() {
   const completedAppointments = appointments.filter((appointment: Appointment) => appointment.status === "completed").length
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 pt-20">
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Welcome Section */}
@@ -538,7 +516,10 @@ export default function DoctorDashboard() {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+          <div 
+            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
+            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600">Total Patients</p>
@@ -551,7 +532,10 @@ export default function DoctorDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+          <div 
+            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
+            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600">Today's Schedule</p>
@@ -566,7 +550,10 @@ export default function DoctorDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+          <div 
+            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
+            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600">This Week</p>
@@ -586,7 +573,10 @@ export default function DoctorDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+          <div 
+            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
+            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-slate-600">Completed</p>
@@ -686,7 +676,7 @@ export default function DoctorDashboard() {
                           {!isPast && (
                             <button 
                               onClick={() => viewAppointmentDetails(apt)}
-                              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                              className="btn-modern btn-modern-sm"
                             >
                               View Details
                             </button>
@@ -729,6 +719,19 @@ export default function DoctorDashboard() {
                   <div className="flex-1">
                     <p className="font-medium text-slate-800">My Profile</p>
                     <p className="text-sm text-slate-600">Update information</p>
+                  </div>
+                </Link>
+
+                <Link
+                  href="/doctor-dashboard/analytics"
+                  className="flex items-center gap-3 p-3 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors group"
+                >
+                  <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
+                    📊
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-800">Analytics</p>
+                    <p className="text-sm text-slate-600">View performance insights</p>
                   </div>
                 </Link>
               </div>
@@ -850,7 +853,7 @@ export default function DoctorDashboard() {
                 <button
                   onClick={handleSaveSchedule}
                   disabled={savingSchedule}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-indigo-600"
+                  className="btn-modern btn-modern-purple inline-flex items-center justify-center gap-2"
                 >
                   {savingSchedule ? (
                     <>
@@ -932,7 +935,7 @@ export default function DoctorDashboard() {
             <div className="relative">
               <Link 
                 href="/doctor-dashboard/appointments"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                className="btn-modern btn-modern-sm flex items-center gap-2"
               >
                 <span>View All</span>
               </Link>

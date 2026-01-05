@@ -54,7 +54,6 @@ export default function HospitalManagement() {
       } as Hospital))
       setHospitals(hospitalsList)
     } catch (err: any) {
-      console.error('Error loading hospitals:', err)
       setError('Failed to load hospitals. Please try again.')
     } finally {
       setLoading(false)
@@ -207,7 +206,7 @@ export default function HospitalManagement() {
             setFormData({ name: '', code: '', address: '', phone: '', email: '' })
             setShowAddModal(true)
           }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          className="btn-modern btn-modern-sm"
         >
           + Add Hospital
         </button>
@@ -379,7 +378,7 @@ export default function HospitalManagement() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={saving}
                   >
                     {saving ? 'Saving...' : editingHospital ? 'Update Hospital' : 'Create Hospital'}

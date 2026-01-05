@@ -61,7 +61,6 @@ export async function GET(request: Request) {
           receptionistBranchId = receptionistData?.branchId || null
         }
       } catch (err) {
-        console.warn("Failed to fetch receptionist branch:", err)
       }
     }
 
@@ -118,7 +117,6 @@ export async function GET(request: Request) {
               continue
             }
           } catch (err) {
-            console.warn("Failed to check appointment branch for billing record:", err)
             // Skip if we can't verify branch
             continue
           }
@@ -163,7 +161,6 @@ export async function GET(request: Request) {
             }
           }
         } catch (err) {
-          console.warn("Failed to enrich billing record patient name", err)
         }
       }
 
@@ -270,7 +267,6 @@ export async function GET(request: Request) {
           seenAppointmentIds.add(doc.id)
         }
       } catch (fallbackError: any) {
-        console.error("Failed to fetch appointments:", fallbackError?.message)
       }
     }
 
@@ -305,7 +301,6 @@ export async function GET(request: Request) {
         }
       }
     } catch (groupError: any) {
-      console.error("Failed to fetch hospital-scoped appointments:", groupError?.message)
     }
 
     for (const docSnap of appointmentsDocs) {
@@ -362,7 +357,6 @@ export async function GET(request: Request) {
             }
           }
         } catch (err) {
-          console.warn("Failed to enrich appointment patient name", err)
         }
       }
 
@@ -417,7 +411,6 @@ export async function GET(request: Request) {
 
     return Response.json({ records })
   } catch (error: any) {
-    console.error("receptionist billing records GET error", error)
     return Response.json(
       { error: error?.message || "Failed to load billing records" },
       { status: 500 }

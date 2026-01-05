@@ -21,12 +21,13 @@ import BillingHistoryPanel from "@/app/receptionist-dashboard/Tabs/BillingHistor
 import BookAppointmentPanel from "@/app/receptionist-dashboard/Tabs/BookAppointmentPanel"
 import WhatsAppBookingsPanel from "@/app/receptionist-dashboard/Tabs/WhatsAppBookingsPanel"
 import DashboardOverview from "@/app/receptionist-dashboard/Tabs/DashboardOverview"
+import DocumentsTab from "@/components/documents/DocumentsTab"
 import { ConfirmDialog } from "@/components/ui/Modals"
 
 export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"dashboard" | "patients" | "doctors" | "appointments" | "book-appointment" | "admit-requests" | "billing" | "whatsapp-bookings">("dashboard")
+  const [activeTab, setActiveTab] = useState<"dashboard" | "patients" | "doctors" | "appointments" | "book-appointment" | "admit-requests" | "billing" | "whatsapp-bookings" | "documents">("dashboard")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userName, setUserName] = useState<string>("")
@@ -80,7 +81,7 @@ export default function ReceptionistDashboard() {
           setUserName("Receptionist")
         }
       } catch (error) {
-        console.error("Failed to load receptionist profile", error)
+
         setUserName("Receptionist")
       } finally {
         setLoading(false)
@@ -105,7 +106,7 @@ export default function ReceptionistDashboard() {
       })
       if (!res.ok) {
         const text = await res.text().catch(() => "")
-        console.warn("[ReceptionistDashboard] WhatsApp bookings fetch failed", res.status, text)
+
         setWhatsappPendingCount(0)
         return
       }
@@ -113,7 +114,7 @@ export default function ReceptionistDashboard() {
       const appointments = Array.isArray(data?.appointments) ? data.appointments : []
       setWhatsappPendingCount(appointments.length)
     } catch (error) {
-      console.error("[ReceptionistDashboard] Failed to refresh WhatsApp badge:", error)
+
       setWhatsappPendingCount(0)
     }
   }, [])
@@ -230,7 +231,7 @@ export default function ReceptionistDashboard() {
           setReceptionistBranchId(data.branchId || null)
         }
       } catch (error) {
-        console.error("Error fetching receptionist branch:", error)
+
       }
     }
 
@@ -256,7 +257,7 @@ export default function ReceptionistDashboard() {
       // Force redirect after sign out
       window.location.href = "/auth/login?role=receptionist"
     } catch (error) {
-      console.error("Logout error:", error)
+
       setNotification({ type: "error", message: "Failed to logout. Please try again." })
       setLogoutLoading(false)
       setLogoutConfirmOpen(false)
@@ -470,6 +471,23 @@ export default function ReceptionistDashboard() {
               <span className="font-medium text-sm">WhatsApp Bookings</span>
             </button>
 
+            {/* Documents & Reports */}
+            <button 
+              onClick={() => { setActiveTab("documents"); setSidebarOpen(false) }} 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                activeTab === "documents" 
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <div className={`p-1.5 rounded-md ${activeTab === "documents" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <span className="font-medium text-sm">Documents & Reports</span>
+            </button>
+
             {/* Section Divider */}
             <div className="my-3">
               <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent mx-2"></div>
@@ -666,6 +684,16 @@ export default function ReceptionistDashboard() {
                 receptionistBranchId={receptionistBranchId}
                 onNotification={(payload) => setNotification(payload)}
                 onPendingCountChange={setWhatsappPendingCount}
+              />
+            </div>
+          )}
+          {activeTab === "documents" && (
+            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+              <DocumentsTab
+                canUpload={true}
+                canEdit={true}
+                canDelete={true}
+                showPatientSelector={true}
               />
             </div>
           )}

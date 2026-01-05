@@ -157,7 +157,6 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
         sessionStorage.setItem('activeHospitalId', currentActiveHospitalId)
       }
     } catch (err: any) {
-      console.error('[MultiHospitalContext] Error loading hospitals:', err)
       setError(err.message || 'Failed to load hospitals')
     } finally {
       setLoading(false)
@@ -198,7 +197,6 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
         sessionStorage.setItem('activeHospitalId', hospitalId)
       }
     } catch (err: any) {
-      console.error('[MultiHospitalContext] Error setting active hospital:', err)
       throw err
     }
   }, [user, userHospitals, isSuperAdmin])

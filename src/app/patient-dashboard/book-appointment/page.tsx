@@ -50,10 +50,8 @@ function BookAppointmentContent() {
     try {
       const response = await sendWhatsAppMessage({ to, message })
       if (!response.success) {
-        console.warn("Patient booking WhatsApp failed", response.error)
       }
     } catch (error) {
-      console.warn("Patient booking WhatsApp error", error)
     }
   }, [])
 
@@ -419,7 +417,6 @@ See you soon! 🏥`
       setShowSuccessModal(true)
       
     } catch (error: unknown) {
-      console.error("Error processing payment:", error)
       setNotification({ 
         type: "error", 
         message: (error as Error).message || "Payment failed. Please try again." 

@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   
   // Server-side external packages to handle ES module compatibility
-  serverExternalPackages: ['jsdom', 'parse5', 'isomorphic-dompurify'],
+  serverExternalPackages: ['jsdom', 'parse5', 'isomorphic-dompurify', 'pdf-parse', 'canvas', 'pdfjs-dist'],
   
   // Webpack configuration to handle jsdom/parse5 ES module compatibility
   webpack: (config, { isServer }) => {
@@ -43,7 +43,11 @@ const nextConfig: NextConfig = {
         ...(Array.isArray(originalExternals) ? originalExternals : [originalExternals]),
         // Externalize packages that have ES module compatibility issues
         ({ request }: { request?: string }, callback: (err?: Error | null, result?: string) => void) => {
-          if (request === 'jsdom' || request === 'parse5' || request?.includes('jsdom') || request?.includes('parse5')) {
+          if (request === 'jsdom' || request === 'parse5' || request === 'pdf-parse' || 
+              request === 'canvas' || request === 'pdfjs-dist' ||
+              request?.includes('jsdom') || request?.includes('parse5') || 
+              request?.includes('pdf-parse') || request?.includes('canvas') || 
+              request?.includes('pdfjs-dist')) {
             return callback(null, `commonjs ${request}`)
           }
           callback()

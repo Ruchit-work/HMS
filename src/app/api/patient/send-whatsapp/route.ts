@@ -10,7 +10,6 @@ export async function POST(request: Request) {
     // Check if Meta WhatsApp is configured
     const metaAccessToken = process.env.META_WHATSAPP_ACCESS_TOKEN
     if (!metaAccessToken) {
-      console.error("[Patient WhatsApp] Missing META_WHATSAPP_ACCESS_TOKEN configuration")
       return NextResponse.json(
         { 
           success: false,
@@ -61,11 +60,6 @@ export async function POST(request: Request) {
     const result = await sendTextMessage(normalizedTo, message)
 
     if (!result.success) {
-      console.error("[Patient WhatsApp] Failed to send message:", {
-        phone: normalizedTo,
-        error: result.error,
-        errorCode: result.errorCode,
-      })
       return NextResponse.json(
         {
           success: false,
@@ -83,7 +77,6 @@ export async function POST(request: Request) {
       to: normalizedTo,
     })
   } catch (error) {
-    console.error("[Patient WhatsApp] Exception sending message:", error)
     return NextResponse.json(
       {
         success: false,

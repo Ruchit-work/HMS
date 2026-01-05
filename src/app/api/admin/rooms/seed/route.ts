@@ -58,7 +58,6 @@ export async function POST(request: Request) {
 
     return Response.json({ success: true, seeded: true })
   } catch (error: any) {
-    console.error("rooms seed error", error)
     return Response.json(
       { error: error?.message || "Failed to seed rooms" },
       { status: 500 }

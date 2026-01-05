@@ -757,3 +757,126 @@
 .animation-delay-4000 {
   animation-delay: 4s;
 }
+
+/* Modern Button Style - Button 29 with Website Colors */
+.btn-modern {
+  align-items: center;
+  appearance: none;
+  background-image: radial-gradient(100% 100% at 100% 0, #06b6d4 0, #3b82f6 100%);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, rgba(37, 99, 235, 0.5) 0 -3px 0 inset;
+  box-sizing: border-box;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  height: 48px;
+  justify-content: center;
+  line-height: 1;
+  list-style: none;
+  overflow: hidden;
+  padding-left: 16px;
+  padding-right: 16px;
+  position: relative;
+  text-align: center;
+  text-decoration: none;
+  transition: box-shadow 0.15s, transform 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  white-space: nowrap;
+  will-change: box-shadow, transform;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.btn-modern:focus {
+  box-shadow: #2563eb 0 0 0 1.5px inset, rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #2563eb 0 -3px 0 inset;
+  outline: none;
+}
+
+.btn-modern:hover {
+  box-shadow: rgba(45, 35, 66, 0.4) 0 4px 8px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #2563eb 0 -3px 0 inset;
+  transform: translateY(-2px);
+}
+
+.btn-modern:active {
+  box-shadow: #2563eb 0 3px 7px inset;
+  transform: translateY(2px);
+}
+
+.btn-modern:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Variant: Teal/Green (Success/Accent) */
+.btn-modern-success {
+  background-image: radial-gradient(100% 100% at 100% 0, #06b6d4 0, #10b981 100%);
+  box-shadow: rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, rgba(5, 150, 105, 0.5) 0 -3px 0 inset;
+}
+
+.btn-modern-success:focus {
+  box-shadow: #059669 0 0 0 1.5px inset, rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #059669 0 -3px 0 inset;
+}
+
+.btn-modern-success:hover {
+  box-shadow: rgba(45, 35, 66, 0.4) 0 4px 8px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #059669 0 -3px 0 inset;
+}
+
+.btn-modern-success:active {
+  box-shadow: #059669 0 3px 7px inset;
+}
+
+/* Variant: Purple/Indigo */
+.btn-modern-purple {
+  background-image: radial-gradient(100% 100% at 100% 0, #8b5cf6 0, #6366f1 100%);
+  box-shadow: rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, rgba(99, 102, 241, 0.5) 0 -3px 0 inset;
+}
+
+.btn-modern-purple:focus {
+  box-shadow: #6366f1 0 0 0 1.5px inset, rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #6366f1 0 -3px 0 inset;
+}
+
+.btn-modern-purple:hover {
+  box-shadow: rgba(45, 35, 66, 0.4) 0 4px 8px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #6366f1 0 -3px 0 inset;
+}
+
+.btn-modern-purple:active {
+  box-shadow: #6366f1 0 3px 7px inset;
+}
+
+/* Size variants */
+.btn-modern-sm {
+  height: 36px;
+  padding-left: 12px;
+  padding-right: 12px;
+  font-size: 14px;
+}
+
+.btn-modern-lg {
+  height: 56px;
+  padding-left: 24px;
+  padding-right: 24px;
+  font-size: 18px;
+}
+
+/* Variant: Red (Danger/Logout) */
+.btn-modern-danger {
+  background-image: radial-gradient(100% 100% at 100% 0, #ef4444 0, #dc2626 100%);
+  box-shadow: rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, rgba(220, 38, 38, 0.5) 0 -3px 0 inset;
+}
+
+.btn-modern-danger:focus {
+  box-shadow: #dc2626 0 0 0 1.5px inset, rgba(45, 35, 66, 0.4) 0 2px 4px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #dc2626 0 -3px 0 inset;
+}
+
+.btn-modern-danger:hover {
+  box-shadow: rgba(45, 35, 66, 0.4) 0 4px 8px, rgba(45, 35, 66, 0.3) 0 7px 13px -3px, #dc2626 0 -3px 0 inset;
+}
+
+.btn-modern-danger:active {
+  box-shadow: #dc2626 0 3px 7px inset;
+}

@@ -78,7 +78,6 @@ export async function GET(request: Request) {
       })),
     })
   } catch (error: any) {
-    console.error("auto-campaigns test error:", error)
     return NextResponse.json(
       {
         success: false,

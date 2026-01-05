@@ -103,7 +103,6 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
           errorData = { error: { message: errorText } }
         }
         const errorMessage = errorData?.error?.message || response.statusText || errorText
-        console.error(`[groq] API error (${response.status}) for model ${model}:`, errorMessage)
         
         // For 401 errors (Invalid API Key), throw immediately - no point trying other models
         if (response.status === 401) {
@@ -125,7 +124,6 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
             errorMessage?.includes("decommissioned") ||
             errorMessage?.includes("model_not_found") ||
             errorMessage?.includes("model_decommissioned")) {
-          console.warn(`[groq] Model ${model} not available (${response.status}): ${errorMessage}`)
           if (model === modelsToTry[modelsToTry.length - 1]) {
             // Last model, don't try again
             lastError = new Error(`Model ${model} not available: ${errorMessage}`)
@@ -137,7 +135,6 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
         
         // For 403 errors, try next model (access denied - key valid but no access to model)
         if (response.status === 403) {
-          console.warn(`[groq] Model ${model} access denied (403), trying next model...`)
           lastError = new Error(`Model ${model} access denied (403): ${errorMessage}`)
           continue // Try next model
         }
@@ -153,7 +150,6 @@ Make it engaging, informative, and actionable. Remember, this is for Indian pati
       const content = data?.choices?.[0]?.message?.content
 
       if (!content) {
-        console.error("[groq] No content in response:", JSON.stringify(data, null, 2))
         throw new Error("No content received from Groq API")
       }
 
@@ -267,7 +263,6 @@ export async function generateAdvertisements(
       results.set(day.name, advertisement)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error"
-      console.error(`Failed to generate advertisement for ${day.name}:`, errorMessage)
       errors.push({ day: day.name, error: errorMessage })
       // Continue with other days even if one fails
     }
@@ -283,7 +278,6 @@ export async function generateAdvertisements(
 
   // If some failed but not all, log a warning
   if (errors.length > 0 && results.size > 0) {
-    console.warn(`Generated ${results.size} advertisements, but ${errors.length} failed:`, errors)
   }
 
   return results

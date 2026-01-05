@@ -125,7 +125,6 @@ export async function PUT(
       }
     })
   } catch (error: any) {
-    console.error('[PUT /api/hospitals/[id]] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to update hospital' },
       { status: 500 }
@@ -200,7 +199,6 @@ export async function DELETE(
       message: 'Hospital deactivated successfully'
     })
   } catch (error: any) {
-    console.error('[DELETE /api/hospitals/[id]] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to delete hospital' },
       { status: 500 }

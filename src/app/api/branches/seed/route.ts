@@ -124,7 +124,6 @@ export async function POST(request: NextRequest) {
     // Create branches that don't exist
     for (const branch of branches) {
       if (existingBranchNames.has(branch.name)) {
-        console.log(`Branch "${branch.name}" already exists, skipping...`)
         continue
       }
 
@@ -153,7 +152,6 @@ export async function POST(request: NextRequest) {
       totalBranches: existingBranchesSnapshot.size + createdBranches.length
     })
   } catch (error: any) {
-    console.error('[POST /api/branches/seed] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to seed branches' },
       { status: 500 }

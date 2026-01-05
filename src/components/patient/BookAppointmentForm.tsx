@@ -103,14 +103,12 @@ export default function BookAppointmentForm({
 
         const currentUser = auth.currentUser
         if (!currentUser) {
-          console.error("Error fetching branches: user not authenticated")
           setBranches([])
           return
         }
 
         const token = await currentUser.getIdToken()
         if (!token) {
-          console.error("Error fetching branches: authentication token not found")
           setBranches([])
           return
         }
@@ -139,7 +137,6 @@ export default function BookAppointmentForm({
           }
         }
       } catch (error) {
-        console.error("Error fetching branches:", error)
       } finally {
         setLoadingBranches(false)
       }
@@ -332,7 +329,6 @@ export default function BookAppointmentForm({
            setDuplicateAppointmentTime("")
         }
       } catch (error) {
-        console.error("Error fetching time slots:", error)
         setAvailableTimeSlots([])
         setBookedTimeSlots([])
         setAllTimeSlots([])
@@ -396,7 +392,6 @@ export default function BookAppointmentForm({
       if (field === 'allergies') setAllergies(String(profileDraft[field] || ''))
       if (field === 'currentMedications') setCurrentMedications(String(profileDraft[field] || ''))
     } catch (e) {
-      console.error("Inline profile update error:", e)
     } finally {
       setEditingField(null)
       setProfileDraft({})
@@ -825,7 +820,7 @@ export default function BookAppointmentForm({
                       {editingField === 'phoneNumber' ? (
                         <div className="flex gap-2">
                           <input type="tel" defaultValue={String(userData?.phoneNumber || "")} onChange={(e)=>setProfileDraft({ phoneNumber: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" />
-                          <button type="button" onClick={()=>saveField('phoneNumber')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={()=>saveField('phoneNumber')} className="btn-modern btn-modern-purple btn-modern-sm">Save</button>
                           <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
                         </div>
                       ) : (
@@ -849,7 +844,7 @@ export default function BookAppointmentForm({
                       {editingField === 'allergies' ? (
                         <div className="flex gap-2">
                           <input type="text" defaultValue={String(userData?.allergies || "")} onChange={(e)=>setProfileDraft({ allergies: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" />
-                          <button type="button" onClick={()=>saveField('allergies')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={()=>saveField('allergies')} className="btn-modern btn-modern-purple btn-modern-sm">Save</button>
                           <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
                         </div>
                       ) : (
@@ -864,7 +859,7 @@ export default function BookAppointmentForm({
                       {editingField === 'currentMedications' ? (
                         <div className="flex gap-2">
                           <input type="text" defaultValue={String(userData?.currentMedications || "")} onChange={(e)=>setProfileDraft({ currentMedications: e.target.value })} className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" />
-                          <button type="button" onClick={()=>saveField('currentMedications')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={()=>saveField('currentMedications')} className="btn-modern btn-modern-purple btn-modern-sm">Save</button>
                           <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
                         </div>
                       ) : (
@@ -884,7 +879,7 @@ export default function BookAppointmentForm({
                             <option value="Occasionally">Occasionally</option>
                             <option value="Regularly">Regularly</option>
                           </select>
-                          <button type="button" onClick={()=>saveField('smokingHabits')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={()=>saveField('smokingHabits')} className="btn-modern btn-modern-purple btn-modern-sm">Save</button>
                           <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
                         </div>
                       ) : (
@@ -904,7 +899,7 @@ export default function BookAppointmentForm({
                             <option value="Occasionally">Occasionally</option>
                             <option value="Regularly">Regularly</option>
                           </select>
-                          <button type="button" onClick={()=>saveField('drinkingHabits')} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs">Save</button>
+                          <button type="button" onClick={()=>saveField('drinkingHabits')} className="btn-modern btn-modern-purple btn-modern-sm">Save</button>
                           <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">Cancel</button>
                         </div>
                       ) : (
@@ -1585,7 +1580,7 @@ export default function BookAppointmentForm({
                 type="button"
                 onClick={nextStep}
                 disabled={!canProceedToNextStep()}
-                className="flex-1 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white py-3 sm:py-3.5 px-4 sm:px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
+                className="btn-modern flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next Step →
               </button>
@@ -1593,7 +1588,7 @@ export default function BookAppointmentForm({
               <button
                 type="submit"
                 disabled={submitting || !canProceedToNextStep()}
-                className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-3 sm:py-3.5 px-4 sm:px-6 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base"
+                className="btn-modern btn-modern-success flex-1 flex items-center justify-center"
               >
                 {submitting 
                   ? (
@@ -1690,7 +1685,7 @@ export default function BookAppointmentForm({
               </button>
               <button
                 onClick={handleConfirmBranch}
-                className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-cyan-700 hover:from-teal-700 hover:to-cyan-800 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+                className="btn-modern btn-modern-success flex items-center gap-2"
               >
                 <span>✓</span>
                 <span>Yes, Continue</span>
@@ -1845,7 +1840,7 @@ export default function BookAppointmentForm({
               <button
                 onClick={handleConfirmSubmit}
                 disabled={submitting}
-                className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center gap-2"
+                className="btn-modern btn-modern-success flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>

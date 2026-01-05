@@ -128,7 +128,6 @@ export async function POST(request) {
       phoneNumber: otpData.phoneNumber || cleanedPhone,
     });
   } catch (error) {
-    console.error("Error verifying OTP:", error);
     return Response.json(
       { error: error.message || "Failed to verify OTP. Please try again." },
       { status: 500 }

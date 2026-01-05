@@ -5,13 +5,6 @@ export async function POST(req) {
     // Authenticate request - requires doctor role
     const auth = await authenticateRequest(req, "doctor")
     if (!auth.success) {
-      console.error("[diagnosis API] Authentication failed:", {
-        error: auth.error,
-        statusCode: auth.statusCode,
-        user: auth.user?.uid || "unknown",
-        requiredRole: "doctor",
-        timestamp: new Date().toISOString()
-      })
       // Return more detailed error response with the actual error message
       return Response.json(
         { 
@@ -89,14 +82,12 @@ export async function POST(req) {
       headers: { "Content-Type": "application/json" },
     });
     } catch (e) {
-      console.error("[diagnosis API] Unexpected error:", e)
       return new Response(JSON.stringify({ error: e?.message || "Unexpected server error" }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
       });
     }
   } catch (outerError) {
-    console.error("[diagnosis API] Outer error (authentication setup):", outerError)
     return Response.json(
       { 
         error: "Authentication setup failed. Please check server configuration.",

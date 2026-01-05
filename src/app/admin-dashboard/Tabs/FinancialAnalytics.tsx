@@ -668,7 +668,6 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
         revenueAnomalies
       })
     } catch (error) {
-      console.error('Error fetching financial analytics:', error)
     } finally {
       setLoading(false)
     }

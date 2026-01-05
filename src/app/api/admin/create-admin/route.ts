@@ -165,7 +165,6 @@ export async function POST(request: NextRequest) {
       adminId: adminUid
     })
   } catch (error: any) {
-    console.error('[POST /api/admin/create-admin] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to create admin' },
       { status: 500 }

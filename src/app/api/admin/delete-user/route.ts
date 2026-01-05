@@ -90,7 +90,6 @@ export async function POST(request: Request) {
         }
       }
     } catch (error) {
-      console.error("Error determining user type:", error)
     }
 
     // Delete user from Firebase Auth
@@ -114,7 +113,6 @@ export async function POST(request: Request) {
       throw error
     }
   } catch (error: any) {
-    console.error("delete-user error:", error)
     return Response.json({ 
       error: error?.message || "Failed to delete user from authentication" 
     }, { status: 500 })

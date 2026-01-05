@@ -91,7 +91,6 @@ function SignUpContent() {
         }
       }
     } catch (err) {
-      console.error("Failed to load hospitals:", err);
       setError("Failed to load hospitals. Please refresh the page.");
     } finally {
       setLoadingHospitals(false);
@@ -128,7 +127,6 @@ function SignUpContent() {
           setSelectedBranchId("");
         }
       } catch (err) {
-        console.error("Failed to load branches:", err);
         // Do not block signup entirely; just clear branches
         setBranches([]);
         setSelectedBranchId("");
@@ -363,22 +361,13 @@ Thank you for choosing Harmony Medical Services! 🏥`;
             const data = await response.json().catch(() => ({}))
 
             if (!data?.success) {
-              console.error("[Signup WhatsApp] ❌ Failed to send account creation message:", {
-                phone: phoneToSend,
-                error: data?.error || "Unknown error",
-                errorCode: data?.errorCode,
-                status: response.status,
-              })
+              // Handle error silently
             }
           } catch (err) {
-            console.error("[Signup WhatsApp] ❌ Exception sending account creation message:", {
-              phone: combinedPhone,
-              error: err instanceof Error ? err.message : String(err),
-            })
+            // Handle error silently
           }
         })()
       } else {
-        console.warn("[Signup WhatsApp] ⚠️ No phone number provided, WhatsApp message not sent. Patient:", fullName);
       }
 
       const redirectMessage = `Patient account created successfully! Your Patient ID is ${patientId}. Redirecting to login...`;
@@ -735,7 +724,6 @@ Thank you for choosing Harmony Medical Services! 🏥`;
               } catch (error: any) {
                 // Error is already handled in createAccountAfterOTP, but we need to rethrow
                 // so the modal can handle it properly
-                console.error("Account creation failed:", error);
                 throw error; // Re-throw so modal can catch and show error
               }
             }

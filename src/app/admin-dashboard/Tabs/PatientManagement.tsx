@@ -16,6 +16,7 @@ import { calculateAge, formatDate, formatDateTime } from '@/utils/date'
 import { SuccessToast } from '@/components/ui/StatusComponents'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import Pagination from '@/components/ui/Pagination'
+import DocumentListCompact from '@/components/documents/DocumentListCompact'
 // import toast from 'react-hot-toast'
 
 interface Patient {
@@ -125,11 +126,9 @@ export default function PatientManagement({
                 
                 if (!authDeleteResponse.ok) {
                     const authError = await authDeleteResponse.json().catch(() => ({}))
-                    console.warn('Failed to delete from auth:', authError)
                     // Continue with Firestore deletion even if auth deletion fails
                 }
             } catch (authError) {
-                console.error('Error deleting from auth:', authError)
                 // Continue with Firestore deletion even if auth deletion fails
             }
             
@@ -139,14 +138,12 @@ export default function PatientManagement({
                     const scopedRef = doc(getHospitalCollection(activeHospitalId, 'patients'), deletePatient.id)
                     await deleteDoc(scopedRef)
                 } catch (e) {
-                    console.error('Error deleting patient from hospital-scoped collection:', e)
                 }
             }
             try {
                 const legacyRef = doc(db, 'patients', deletePatient.id)
                 await deleteDoc(legacyRef)
             } catch (e) {
-                console.error('Error deleting patient from legacy patients collection:', e)
             }
             
             // Update local state (this list comes from hospital-scoped patients)
@@ -163,7 +160,6 @@ export default function PatientManagement({
             }, 3000)
             
         } catch (error) {
-            console.error('Error deleting patient:', error)
             setError((error as Error).message || 'Failed to delete patient')
         } finally {
             setLoading(false)
@@ -262,7 +258,6 @@ export default function PatientManagement({
                 setPatients(patientsWithAppointments)
                 setLoading(false)
             }, (error) => {
-                console.error("Error in patients listener:", error)
                 setError(error.message)
                 setLoading(false)
             })
@@ -617,7 +612,6 @@ export default function PatientManagement({
             setSuccessMessage('Report generated and downloaded successfully!')
             setTimeout(() => setSuccessMessage(null), 3000)
         } catch (error) {
-            console.error('Error generating report:', error)
             setError((error as Error).message || 'Failed to generate report')
         } finally {
             setGeneratingReport(false)
@@ -1203,6 +1197,16 @@ export default function PatientManagement({
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Documents Section */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                <DocumentListCompact
+                  patientId={selectedPatient?.id || selectedPatient?.patientId}
+                  patientUid={selectedPatient?.id} // Use id as uid since patient document id is the uid
+                  title="Patient Documents"
+                  maxItems={10}
+                />
               </div>
 
               {/* Additional Information */}

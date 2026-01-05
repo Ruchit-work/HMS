@@ -63,7 +63,7 @@ export async function GET(req: Request) {
               }
             }
           } catch (err) {
-            console.warn("Failed to load appointment details for admission", admissionId, err)
+
           }
         }
 
@@ -77,7 +77,7 @@ export async function GET(req: Request) {
 
     return Response.json({ admissions })
   } catch (error: any) {
-    console.error("admissions GET error", error)
+
     return Response.json(
       { error: error?.message || "Failed to load admissions" },
       { status: 500 }

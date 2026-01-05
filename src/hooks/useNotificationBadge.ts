@@ -87,7 +87,6 @@ export function useNotificationBadge({
         }
       }
     } catch (error) {
-      console.error('Error loading badge view state:', error)
     }
   }, [storageKey])
 
@@ -99,7 +98,6 @@ export function useNotificationBadge({
     try {
       localStorage.setItem(storageKey, now.toString())
     } catch (error) {
-      console.error('Error saving badge view state:', error)
     }
     
     // Immediately clear the badge

@@ -17,6 +17,7 @@ import { useTablePagination } from '@/hooks/useTablePagination'
 import Pagination from '@/components/ui/Pagination'
 import { useNewItems } from '@/hooks/useNewItems'
 import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
+import DocumentListCompact from '@/components/documents/DocumentListCompact'
 
 interface AppoinmentManagementProps {
     disableAdminGuard?: boolean
@@ -198,7 +199,7 @@ export default function AppoinmentManagement({
                 setSuccessMessage(null)
             }, 3000)
         } catch (error) {
-            console.error('Error deleting appointment:', error)
+
             setError((error as Error).message || 'Failed to delete appointment')
         } finally {
             setLoading(false)
@@ -303,14 +304,14 @@ export default function AppoinmentManagement({
                 setLastUpdated(new Date())
                 setLoading(false)
             }, (error) => {
-                console.error('Error in appointments listener:', error)
+
                 setError(error.message)
                 setLoading(false)
             })
             
             return unsubscribe
         } catch (error) {
-            console.error('Error setting up appointments listener:', error)
+
             setError((error as Error).message)
             setLoading(false)
             return () => {}
@@ -345,7 +346,7 @@ export default function AppoinmentManagement({
                     setBranches(data.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
                 }
             } catch (error) {
-                console.error("Error fetching branches:", error)
+
             }
         })()
 
@@ -926,6 +927,17 @@ export default function AppoinmentManagement({
                                 <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">₹{selectedAppointment?.paymentAmount || 0}</p>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Documents Section */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                        <DocumentListCompact
+                            patientId={selectedAppointment?.patientId}
+                            patientUid={selectedAppointment?.patientUid}
+                            appointmentId={selectedAppointment?.id}
+                            title="Appointment Documents"
+                            maxItems={5}
+                        />
                     </div>
 
                     {/* Medical Information */}

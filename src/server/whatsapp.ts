@@ -3,8 +3,6 @@ import { formatWhatsAppRecipient } from "@/utils/whatsapp"
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function getMessageStatus(_messageId: string): Promise<{ status?: string; errorCode?: number; errorMessage?: string; dateSent?: Date; dateUpdated?: Date } | null> {
- 
-  console.warn("[WhatsApp] Message status fetching not available with Meta WhatsApp. Status is tracked via webhooks.")
   return null
 }
 
@@ -24,6 +22,12 @@ export async function sendWhatsAppNotification(options: {
   contentSid?: string // Content SID for approved WhatsApp template (Meta uses template names instead)
   contentVariables?: Record<string, string> // Variables for template
 }): Promise<{ success: boolean; sid?: string; status?: string; error?: string; errorCode?: number; rateLimitReached?: boolean }> {
+  // Check if WhatsApp credentials are configured
+  if (!process.env.META_WHATSAPP_ACCESS_TOKEN || !process.env.META_WHATSAPP_PHONE_NUMBER_ID) {
+    const error = "WhatsApp credentials not configured. Please set META_WHATSAPP_ACCESS_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID environment variables."
+    return { success: false, error }
+  }
+
   // Find valid recipient from primary or fallback recipients
   const recipients = [options.to, ...(options.fallbackRecipients ?? [])]
   let recipientPhone: string | null = null
@@ -42,10 +46,8 @@ export async function sendWhatsAppNotification(options: {
 
   if (!recipientPhone) {
     const error = "No valid recipient for WhatsApp notification"
-    console.error("[Meta WhatsApp]", error)
     return { success: false, error }
   }
-
   try {
     // Format message body with buttons if provided
     let messageBody = options.message
@@ -84,12 +86,6 @@ export async function sendWhatsAppNotification(options: {
       const isRateLimit = result.errorCode === 4 || result.error?.includes("rate limit") || result.error?.includes("429")
       
       // Log detailed error information
-      console.error(`[Meta WhatsApp] ❌ Failed to send message to ${recipientPhone}:`, {
-        error: result.error,
-        errorCode: result.errorCode,
-        isRateLimit,
-      })
-      
       return {
         success: false,
         error: result.error || "Failed to send WhatsApp message",
@@ -99,8 +95,6 @@ export async function sendWhatsAppNotification(options: {
     }
   } catch (error: any) {
     const err = error instanceof Error ? error.message : "Unknown Meta WhatsApp error"
-    console.error("[Meta WhatsApp] Failed to send WhatsApp message:", err)
-    
     return { success: false, error: err, errorCode: error.code }
   }
 }

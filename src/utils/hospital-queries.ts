@@ -86,7 +86,6 @@ export async function checkHospitalAccess(
 
     return false
   } catch (error) {
-    console.error('[checkHospitalAccess] Error:', error)
     return false
   }
 }

@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
     const ref = await admin.firestore().collection('doctor_schedule_requests').add(payload)
     return Response.json({ success: true, id: ref.id })
   } catch (e: any) {
-    console.error('schedule-request error', e)
     return Response.json({ error: e?.message || 'Failed to create request' }, { status: 500 })
   }
 }

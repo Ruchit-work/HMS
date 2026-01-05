@@ -15,15 +15,9 @@ export async function GET(request: Request) {
     }
   }
 
-  console.log("[appointment-reminders] Starting reminder check...", {
-    trigger: isCronTrigger ? "cron" : "manual",
-    timestamp: new Date().toISOString(),
-  })
-
   try {
     const initResult = initFirebaseAdmin("appointment-reminders API")
     if (!initResult.ok) {
-      console.error("[appointment-reminders] Firebase Admin initialization failed")
       return NextResponse.json({ error: "Server not configured" }, { status: 500 })
     }
 
@@ -34,17 +28,9 @@ export async function GET(request: Request) {
     // Hobby cron can be up to ~1h late; with hourly runs, use a wider ±90m window to avoid misses.
     const windowStart = new Date(now.getTime() - 90 * 60 * 1000) // 90 minutes ago
     const windowEnd = new Date(now.getTime() + 90 * 60 * 1000) // 90 minutes from now
-    
-    console.log("[appointment-reminders] Reminder window (±90m around now):", {
-      windowStart: windowStart.toISOString(),
-      windowEnd: windowEnd.toISOString(),
-      now: now.toISOString(),
-    })
 
     // Get all active hospitals
     const hospitals = await getAllActiveHospitals()
-    console.log("[appointment-reminders] Processing", hospitals.length, "hospitals")
-
     let totalRemindersSent = 0
     let totalRemindersSkipped = 0
     let totalErrors = 0
@@ -66,9 +52,6 @@ export async function GET(request: Request) {
         const confirmedAppointments = await appointmentsRef
           .where("status", "==", "confirmed")
           .get()
-
-        console.log(`[appointment-reminders] Hospital ${hospital.name}: Found ${confirmedAppointments.size} confirmed appointments`)
-
         for (const aptDoc of confirmedAppointments.docs) {
           try {
             const apt = aptDoc.data()
@@ -108,7 +91,6 @@ export async function GET(request: Request) {
               .get()
 
             if (!reminderCheck.empty) {
-              console.log(`[appointment-reminders] Reminder already sent for appointment ${appointmentId}`)
               totalRemindersSkipped++
               continue
             }
@@ -120,7 +102,6 @@ export async function GET(request: Request) {
             const patientId = apt.patientId || apt.patientUid || ""
 
             if (!patientPhone || patientPhone.trim() === "") {
-              console.warn(`[appointment-reminders] No phone number for appointment ${appointmentId}`)
               continue
             }
 
@@ -168,8 +149,6 @@ export async function GET(request: Request) {
               `We look forward to seeing you!\n\n` +
               `Thank you for choosing Harmony Medical Services! 🏥`
 
-            console.log(`[appointment-reminders] Sending reminder for appointment ${appointmentId} to ${patientPhone.substring(0, 3)}***`)
-
             // Send WhatsApp reminder
             const whatsappResult = await sendWhatsAppNotification({
               to: patientPhone,
@@ -196,12 +175,9 @@ export async function GET(request: Request) {
 
               hospitalRemindersSent++
               totalRemindersSent++
-              console.log(`[appointment-reminders] ✅ Reminder sent successfully for appointment ${appointmentId}`)
             } else {
               hospitalErrors++
               totalErrors++
-              console.error(`[appointment-reminders] ❌ Failed to send reminder for appointment ${appointmentId}:`, whatsappResult.error)
-              
               // Still record the attempt (with failed status)
               await db.collection("appointment_reminders").add({
                 appointmentId,
@@ -222,7 +198,6 @@ export async function GET(request: Request) {
           } catch (error: any) {
             hospitalErrors++
             totalErrors++
-            console.error(`[appointment-reminders] Error processing appointment ${aptDoc.id}:`, error)
           }
         }
 
@@ -233,7 +208,6 @@ export async function GET(request: Request) {
           errors: hospitalErrors,
         })
       } catch (error: any) {
-        console.error(`[appointment-reminders] Error processing hospital ${hospital.name}:`, error)
         results.push({
           hospitalId: hospital.id,
           hospitalName: hospital.name,
@@ -242,14 +216,6 @@ export async function GET(request: Request) {
         })
       }
     }
-
-    console.log("[appointment-reminders] ✅ Reminder check completed:", {
-      totalRemindersSent,
-      totalRemindersSkipped,
-      totalErrors,
-      hospitalsProcessed: hospitals.length,
-    })
-
     return NextResponse.json({
       success: true,
       message: "Appointment reminder check completed",
@@ -263,7 +229,6 @@ export async function GET(request: Request) {
       timestamp: now.toISOString(),
     })
   } catch (error: any) {
-    console.error("[appointment-reminders] ❌ Error:", error)
     return NextResponse.json(
       {
         success: false,

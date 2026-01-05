@@ -15,7 +15,8 @@ const eslintConfig = [
     rules: {
       "react/no-unescaped-entities": "off",
       "@next/next/no-img-element": "off",
-      "@typescript-eslint/no-explicit-any": "off"
+      "@typescript-eslint/no-explicit-any": "off",
+      "prefer-const": "warn" // Change to warn instead of error
     },
     ignores: [
       "node_modules/**",

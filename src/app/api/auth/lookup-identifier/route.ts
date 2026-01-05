@@ -117,7 +117,6 @@ export async function POST(request: Request) {
       { status: 404 }
     )
   } catch (error) {
-    console.error("[lookup-identifier] error", error)
     return NextResponse.json(
       { error: "Failed to look up account. Please try again later." },
       { status: 500 }

@@ -100,7 +100,7 @@ export default function PatientDashboard() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-slate-600 mb-4">No hospital selected. Please select a hospital to continue.</p>
-          <Link href="/hospital-selection" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-block">
+          <Link href="/hospital-selection" className="btn-modern btn-modern-sm inline-block">
             Select Hospital
           </Link>
         </div>
@@ -140,7 +140,6 @@ export default function PatientDashboard() {
       setShowCancelModal(false)
       setAppointmentToCancel(null)
     } catch (error: unknown) {
-      console.error("Error cancelling appointment:", error)
       setNotification({ 
         type: "error", 
         message: (error as Error).message || "Failed to cancel appointment" 
@@ -195,7 +194,6 @@ export default function PatientDashboard() {
       setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: 'refund_requested' as any, refundRequested: true } : a))
       setNotification({ type: 'success', message: 'Refund request submitted. We will process it shortly.' })
     } catch (e) {
-      console.error('Refund request failed', e)
       setNotification({ type: 'error', message: 'Failed to submit refund request. Please try again.' })
     }
   }

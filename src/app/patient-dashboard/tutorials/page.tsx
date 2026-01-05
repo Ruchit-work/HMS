@@ -91,7 +91,7 @@ export default function PatientPortalTutorial() {
               <div className="text-center">
                 <Link 
                   href="/patient-dashboard"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                  className="btn-modern inline-flex items-center gap-2"
                 >
                   <span>←</span>
                   Back to Dashboard

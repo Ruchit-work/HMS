@@ -68,23 +68,16 @@ See you soon! 🏥`
   ].filter(Boolean)
 
   if (phoneCandidates.length === 0) {
-    console.warn("[Appointment WhatsApp] No phone number found for patient:", appointmentData.patientName)
     return
   }
-
   const result = await sendWhatsAppNotification({
     to: phoneCandidates[0] || null,
     fallbackRecipients: phoneCandidates.slice(1),
     message,
   })
 
-  if (!result.success) {
-    console.error("[Appointment WhatsApp] Failed to send appointment confirmation:", {
-      patientName,
-      phone: phoneCandidates[0],
-      error: result.error,
-      errorCode: result.errorCode,
-    })
+  if (result.success) {
+  } else {
   }
 }
 
@@ -291,7 +284,6 @@ export async function POST(request: Request) {
           patientPhone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || patientData?.mobile || ""
         }
       } catch (error) {
-        console.error("[create-appointment] Error fetching patient phone:", error)
       }
     }
 
@@ -311,16 +303,12 @@ export async function POST(request: Request) {
           appointmentTime: docData.appointmentTime,
         })
       } catch (error) {
-        console.error("[create-appointment] ❌ WhatsApp notification failed:", error)
       }
     } else {
-      console.warn("[create-appointment] ⚠️ No phone number found, WhatsApp message not sent. Patient:", docData.patientName)
     }
 
     return Response.json({ success: true, id: appointmentId })
   } catch (error: any) {
-    console.error("create-appointment error:", error)
-    
     if (error?.message === "SLOT_ALREADY_BOOKED") {
       return Response.json({ error: "This time slot has already been booked. Please select another slot." }, { status: 409 })
     }

@@ -141,7 +141,6 @@ export async function POST(req: NextRequest) {
 
     return Response.json({ success: true, conflicts: conflicts.length, awaitingCount, cancelledCount })
   } catch (e: any) {
-    console.error('approve-schedule-request error', e)
     return Response.json({ error: e?.message || 'Failed to approve request' }, { status: 500 })
   }
 }

@@ -41,7 +41,6 @@ async function cleanupExpiredAutoCampaigns(db: Firestore) {
       }
     }
   } catch (error) {
-    console.error("[auto-campaigns-generate] Failed to clean up expired auto-campaigns:", error)
   }
 
   return deleted
@@ -69,7 +68,6 @@ export async function GET(request: Request) {
   try {
     const initResult = initFirebaseAdmin("auto-campaigns-generate API")
     if (!initResult.ok) {
-      console.error("[auto-campaigns-generate] Firebase Admin initialization failed:", initResult.error)
       return NextResponse.json(
         { error: "Server not configured for admin" },
         { status: 500 }
@@ -149,7 +147,6 @@ export async function GET(request: Request) {
         const db = admin.firestore()
         autoExpired = await cleanupExpiredAutoCampaigns(db)
       } catch (cleanupError) {
-        console.error("[auto-campaigns-generate] Error cleaning up expired campaigns:", cleanupError)
       }
       
       return NextResponse.json({
@@ -200,7 +197,6 @@ export async function GET(request: Request) {
           name: hospitalDoc.data()?.name || 'Unknown Hospital'
         }]
       } else {
-        console.error(`[auto-campaigns-generate] Admin's hospital ${adminHospitalId} not found`)
         return NextResponse.json({
           success: false,
           error: "Admin's hospital not found",
@@ -208,7 +204,6 @@ export async function GET(request: Request) {
         }, { status: 400 })
       }
     } else {
-      console.error(`[auto-campaigns-generate] No hospital found for admin`)
       return NextResponse.json({
         success: false,
         error: "No hospital associated with admin account",
@@ -221,7 +216,6 @@ export async function GET(request: Request) {
       const advertisement = advertisements.get(healthDay.name)
 
       if (!advertisement) {
-        console.error(`Failed to generate advertisement for ${healthDay.name}`)
         continue
       }
 
@@ -255,7 +249,6 @@ export async function GET(request: Request) {
             }
           })
         } catch (queryError) {
-          console.error(`[auto-campaigns-generate] Error checking for existing campaigns:`, queryError)
           alreadyExists = false
         }
 
@@ -305,7 +298,6 @@ export async function GET(request: Request) {
                 }
               }
             } catch (error) {
-              console.error(`[auto-campaigns-generate] Error getting existing campaign data:`, error)
             }
           } else {
             continue
@@ -357,10 +349,7 @@ export async function GET(request: Request) {
 
 
         // Only send notifications if the campaign is for today (not tomorrow)
-        console.log(`[auto-campaigns-generate] WhatsApp send check: sendWhatsAppParam=${sendWhatsAppParam}, hasShortMessage=${!!whatsAppAdvertisement.shortMessage}, checkParam=${checkParam}`)
-        
         if (sendWhatsAppParam && whatsAppAdvertisement.shortMessage && checkParam === "today") {
-          console.log(`[auto-campaigns-generate] Sending WhatsApp notifications for campaign: ${whatsAppCampaignTitle}`)
           try {
             // Get base URL for building full links
             // Try VERCEL_URL first (for Vercel deployments), then NEXT_PUBLIC_BASE_URL, then request origin
@@ -405,9 +394,6 @@ To book an appointment or learn more, please use the options below:`
             const messageWithLink = `${whatsAppMessage}\n\nBook Appointment: ${appointmentUrl}`
 
             const whatsAppPromises: Promise<{ success: boolean; phone: string; error?: string }>[] = []
-            
-            console.log(`[auto-campaigns-generate] Starting WhatsApp send for campaign: ${whatsAppCampaignTitle}`)
-            
             try {
               // Try to get active patients first, but also check for patients without status field
               let patientsSnapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>
@@ -416,10 +402,8 @@ To book an appointment or learn more, please use the options below:`
                   .collection(getHospitalCollectionPath(hospital.id, "patients"))
                   .where("status", "in", ["active"])
                   .get()
-                console.log(`[auto-campaigns-generate] Found ${patientsSnapshot.size} active patients (with status='active') for hospital ${hospital.id}`)
               } catch (indexError: any) {
                 // If index doesn't exist, try getting all patients and filter
-                console.warn(`[auto-campaigns-generate] Status index query failed, fetching all patients:`, indexError.message)
                 const allPatients = await db
                   .collection(getHospitalCollectionPath(hospital.id, "patients"))
                   .get()
@@ -443,7 +427,6 @@ To book an appointment or learn more, please use the options below:`
                   docChanges: () => [],
                   isEqual: allPatients.isEqual.bind(allPatients),
                 } as FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>
-                console.log(`[auto-campaigns-generate] Found ${patientsSnapshot.size} active patients (including those without status field) for hospital ${hospital.id}`)
               }
 
               patientsSnapshot.forEach((doc) => {
@@ -466,8 +449,6 @@ To book an appointment or learn more, please use the options below:`
                     "6": bookingUrl,
                   }
                   
-                  console.log(`[auto-campaigns-generate] Queuing WhatsApp for patient ${patientName} (${phone.substring(0, 3)}***)`)
-                  
                   whatsAppPromises.push(
                     sendWhatsAppNotification({
                       to: phone,
@@ -477,53 +458,42 @@ To book an appointment or learn more, please use the options below:`
                     })
                       .then((result) => {
                         if (!result.success) {
-                          console.error(`[auto-campaigns-generate] Failed to send WhatsApp to ${phone.substring(0, 3)}***:`, result.error)
+                          // WhatsApp send failed
                         } else {
-                          console.log(`[auto-campaigns-generate] Successfully sent WhatsApp to ${phone.substring(0, 3)}***`)
+                          // WhatsApp sent successfully
                         }
                         return { success: result.success, phone: phone.substring(0, 3) + "***", error: result.error }
                       })
                       .catch((error) => {
-                        console.error(`[auto-campaigns-generate] Error sending WhatsApp to ${phone.substring(0, 3)}***:`, error)
+                        // Error sending WhatsApp
                         return { success: false, phone: phone.substring(0, 3) + "***", error: error instanceof Error ? error.message : String(error) }
                       })
                   )
                 } else {
-                  console.warn(`[auto-campaigns-generate] Patient ${patientName} (ID: ${patientId}) has no phone number, skipping`)
+                  // Patient has no phone number, skipping
                 }
               })
             } catch (error) {
-              console.error(`[auto-campaigns-generate] Error querying patients for hospital ${hospital.id}:`, error)
             }
 
             // Await all WhatsApp promises and log results
             if (whatsAppPromises.length > 0) {
-              console.log(`[auto-campaigns-generate] Sending ${whatsAppPromises.length} WhatsApp messages...`)
               try {
                 const results = await Promise.all(whatsAppPromises)
                 const successCount = results.filter(r => r.success).length
                 const failureCount = results.filter(r => !r.success).length
-                console.log(`[auto-campaigns-generate] WhatsApp send complete: ${successCount} succeeded, ${failureCount} failed`)
-                
                 if (failureCount > 0) {
                   const failures = results.filter(r => !r.success)
-                  console.error(`[auto-campaigns-generate] Failed WhatsApp sends:`, failures.map(f => ({ phone: f.phone, error: f.error })))
+                  // Some WhatsApp messages failed to send
                 }
               } catch (error) {
-                console.error("[auto-campaigns-generate] Error awaiting WhatsApp notifications:", error)
               }
             } else {
-              console.warn(`[auto-campaigns-generate] No WhatsApp messages to send for campaign: ${whatsAppCampaignTitle}`)
             }
           } catch (error) {
-            console.error("Error sending WhatsApp notifications:", error)
           }
         }
       } catch (error) {
-        console.error(
-          `Error creating campaign for ${healthDay.name}:`,
-          error
-        )
         // Continue with other campaigns even if one fails
       }
     } // End of health day loop
@@ -548,7 +518,6 @@ To book an appointment or learn more, please use the options below:`
     try {
       await db.collection("cron_logs").add(executionLog)
     } catch (logError) {
-      console.error("Error logging cron execution:", logError)
     }
 
     return NextResponse.json({
@@ -562,9 +531,6 @@ To book an appointment or learn more, please use the options below:`
       autoCampaignsDeleted: autoExpired,
     })
   } catch (error: any) {
-    console.error("[auto-campaigns-generate] Error:", error)
-    console.error("[auto-campaigns-generate] Error stack:", error?.stack)
-    
     // Log failed execution to Firestore
     try {
       const initResult = initFirebaseAdmin("auto-campaigns-generate API (error logging)")
@@ -587,7 +553,6 @@ To book an appointment or learn more, please use the options below:`
         
       }
     } catch (logError) {
-      console.error("[auto-campaigns-generate] Error logging failed cron execution:", logError)
       // Don't fail the request if logging fails
     }
 
@@ -621,7 +586,6 @@ export async function POST(request: Request) {
     // Call GET handler with modified URL
     return GET(new Request(url.toString()))
   } catch (error: any) {
-    console.error("auto-campaigns generate POST error:", error)
     return NextResponse.json(
       {
         success: false,

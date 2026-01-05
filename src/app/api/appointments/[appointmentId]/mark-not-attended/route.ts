@@ -163,12 +163,6 @@ export async function POST(
           `Please reply to this message or call us to book a new appointment. We're here to help you reschedule at your convenience.\n\n` +
           `Thank you for choosing Harmony Medical Services! 🏥`
 
-        console.log("[mark-not-attended] Sending WhatsApp message to patient:", {
-          appointmentId,
-          patientPhone: patientPhone.substring(0, 3) + "***",
-          patientName,
-        })
-
         // Send WhatsApp message (fire-and-forget, don't fail if it fails)
         const whatsappResult = await sendWhatsAppNotification({
           to: patientPhone,
@@ -176,8 +170,6 @@ export async function POST(
         })
 
         if (whatsappResult.success) {
-          console.log("[mark-not-attended] ✅ WhatsApp message sent successfully:", whatsappResult.sid)
-          
           // Store notification record in Firestore
           try {
             await firestore.collection("not_attended_messages").add({
@@ -195,18 +187,14 @@ export async function POST(
               hospitalId,
             })
           } catch (error) {
-            console.error("[mark-not-attended] Error storing notification record:", error)
             // Don't fail if storing fails
           }
         } else {
-          console.error("[mark-not-attended] ❌ Failed to send WhatsApp message:", whatsappResult.error)
           // Don't fail the request if WhatsApp fails
         }
       } else {
-        console.warn("[mark-not-attended] ⚠️ Patient phone number not found, skipping WhatsApp message")
       }
     } catch (error) {
-      console.error("[mark-not-attended] Error sending WhatsApp message:", error)
       // Don't fail the request if WhatsApp fails - appointment is already marked as not attended
     }
 
@@ -217,7 +205,6 @@ export async function POST(
       status: "not_attended",
     })
   } catch (error: any) {
-    console.error("[mark-not-attended] Error:", error)
     return NextResponse.json(
       { error: error?.message || "Failed to mark appointment as not attended" },
       { status: 500 }

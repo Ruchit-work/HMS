@@ -37,7 +37,6 @@ export async function PUT(
     try {
       body = await request.json()
     } catch (parseError) {
-      console.error("[WhatsApp Bookings API] Failed to parse request body:", parseError)
       return Response.json(
         { error: "Invalid request body", details: "Failed to parse JSON" },
         { status: 400 }
@@ -279,7 +278,6 @@ export async function PUT(
           }
         }
       } catch (patientUpdateError) {
-        console.error("[Receptionist Update] Error updating patient record:", patientUpdateError)
         // Don't fail the appointment update if patient update fails
       }
     }
@@ -354,17 +352,10 @@ See you soon! 🏥`
           })
 
           if (!result.success) {
-            console.error("[WhatsApp Bookings API] ❌ Failed to send confirmation message:", {
-              phone: patientPhone,
-              error: result.error,
-              errorCode: result.errorCode,
-            })
           }
         } else {
-          console.warn("[WhatsApp Bookings API] ⚠️ No phone number found, WhatsApp notification not sent. Patient:", patientName)
         }
       } catch (whatsappError: any) {
-        console.error("[WhatsApp Bookings API] ❌ Error sending WhatsApp notification:", whatsappError)
         // Don't fail the update if WhatsApp fails
       }
     }
@@ -377,7 +368,6 @@ See you soon! 🏥`
       },
     })
   } catch (error: any) {
-    console.error("[WhatsApp Bookings API] Error updating booking:", error)
     if (error.message === "SLOT_ALREADY_BOOKED") {
       return Response.json(
         { error: "Time slot is already booked" },
@@ -506,7 +496,6 @@ export async function DELETE(
       message: "WhatsApp booking deleted successfully"
     })
   } catch (error: any) {
-    console.error("[WhatsApp Bookings API] Error deleting booking:", error)
     const errorMessage = error?.message || error?.toString() || "Unknown error occurred"
     return Response.json(
       { 

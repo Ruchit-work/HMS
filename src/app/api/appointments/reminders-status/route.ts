@@ -47,7 +47,6 @@ export async function GET(request: Request) {
         }
       })
     } catch (error) {
-      console.error("Error fetching reminder logs:", error)
       // Continue without logs if query fails (e.g., missing index)
     }
 
@@ -128,11 +127,9 @@ export async function GET(request: Request) {
             }
           }
         } catch (error) {
-          console.error(`Error checking appointments for hospital ${hospital.id}:`, error)
         }
       }
     } catch (error) {
-      console.error("Error calculating statistics:", error)
     }
 
     // Get recent reminders (last 7 days)
@@ -158,7 +155,6 @@ export async function GET(request: Request) {
         }
       })
     } catch (error) {
-      console.error("Error fetching recent reminders:", error)
     }
 
     // Check if cron is configured
@@ -201,7 +197,6 @@ export async function GET(request: Request) {
         : "unknown",
     })
   } catch (error: any) {
-    console.error("Error checking reminder status:", error)
     return NextResponse.json(
       {
         success: false,

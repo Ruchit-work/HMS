@@ -118,7 +118,6 @@ export async function GET(request: Request) {
       },
     })
   } catch (error: any) {
-    console.error("check endpoint error:", error)
     return NextResponse.json(
       {
         success: false,

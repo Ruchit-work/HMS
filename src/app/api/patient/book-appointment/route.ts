@@ -109,7 +109,6 @@ export async function POST(request: Request) {
             }
           }
         } catch (error) {
-          console.error("[patient/book-appointment] Error fetching patient default branch:", error)
           // Continue without branch if patient lookup fails
         }
       }
@@ -161,7 +160,6 @@ export async function POST(request: Request) {
               patientPhone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || patientData?.mobile || ""
             }
           } catch (error) {
-            console.error("[patient/book-appointment] Error fetching patient phone:", error)
           }
         }
 
@@ -216,24 +214,17 @@ ${appointmentData.chiefComplaint ? `• 📝 Reason: ${appointmentData.chiefComp
 If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
 
 See you soon! 🏥`
-
           const result = await sendWhatsAppNotification({
             to: patientPhone,
             message,
           })
 
-          if (!result.success) {
-            console.error("[patient/book-appointment] ❌ Failed to send WhatsApp message:", {
-              phone: patientPhone,
-              error: result.error,
-              errorCode: result.errorCode,
-            })
+          if (result.success) {
+          } else {
           }
         } else {
-          console.warn("[patient/book-appointment] ⚠️ No phone number found, WhatsApp message not sent. Patient:", appointmentData.patientName)
         }
       } catch (whatsappError) {
-        console.error("[patient/book-appointment] ❌ Error sending WhatsApp notification:", whatsappError)
         // Don't fail the appointment booking if WhatsApp fails
       }
 
@@ -334,7 +325,6 @@ See you soon! 🏥`
 
     return NextResponse.json({ error: "Invalid mode" }, { status: 400 })
   } catch (error) {
-    console.error("[patient/book-appointment]", error)
     const message = (error as Error).message
     
     if (message === "SLOT_ALREADY_BOOKED") {

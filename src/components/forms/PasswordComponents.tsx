@@ -195,7 +195,7 @@ export function ChangePasswordSection({
           <button
             type="submit"
             disabled={changing}
-            className={`px-6 py-2 bg-${primary}-600 text-white font-semibold rounded-lg hover:bg-${primary}-700 transition-colors disabled:opacity-50`}
+            className={`btn-modern ${accent === "purple" ? "btn-modern-purple" : "btn-modern-success"} disabled:opacity-50`}
           >
             {changing ? "Updating..." : "Change Password"}
           </button>

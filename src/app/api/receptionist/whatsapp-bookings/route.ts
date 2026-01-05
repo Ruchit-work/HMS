@@ -33,7 +33,6 @@ export async function GET(request: Request) {
           receptionistBranchId = receptionistData?.branchId || null
         }
       } catch (err) {
-        console.warn("[WhatsApp Bookings API] Failed to fetch receptionist branch:", err)
       }
     }
     
@@ -66,7 +65,6 @@ export async function GET(request: Request) {
           appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
         })
       } catch (error: any) {
-        console.error("[WhatsApp Bookings API] Error fetching hospital-scoped whatsappPending appointments:", error)
       }
       
       // Also fetch appointments with status whatsapp_pending (for backward compatibility)
@@ -91,7 +89,6 @@ export async function GET(request: Request) {
           }
         })
       } catch (error: any) {
-        console.error("[WhatsApp Bookings API] Error fetching hospital-scoped whatsapp_pending appointments:", error)
       }
     }
     
@@ -117,7 +114,6 @@ export async function GET(request: Request) {
           appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
         })
       } catch (error: any) {
-        console.error("[WhatsApp Bookings API] Error fetching whatsappPending appointments:", error)
       }
 
       // Also fetch appointments with status whatsapp_pending (for backward compatibility)
@@ -143,7 +139,6 @@ export async function GET(request: Request) {
           }
         })
       } catch (error: any) {
-        console.error("[WhatsApp Bookings API] Error fetching whatsapp_pending appointments:", error)
       }
     }
 
@@ -197,7 +192,6 @@ export async function GET(request: Request) {
 
     return Response.json({ appointments })
   } catch (error: any) {
-    console.error("[WhatsApp Bookings API] Error fetching bookings:", error)
     return Response.json(
       { error: "Failed to fetch WhatsApp bookings", details: error.message },
       { status: 500 }

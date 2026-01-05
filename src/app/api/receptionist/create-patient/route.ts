@@ -76,7 +76,6 @@ export async function POST(request: Request) {
       )
     }
   } catch (err) {
-    console.error('[create-patient] Error checking super admin status:', err)
     // Continue if check fails
   }
 
@@ -242,11 +241,6 @@ export async function POST(request: Request) {
           message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
         })
         if (!result.success) {
-          console.error("[create-patient] ❌ WhatsApp notification failed:", {
-            phone: phoneCandidates[0],
-            error: result.error,
-            errorCode: result.errorCode,
-          })
           // Try fallback recipients if primary failed
           if (phoneCandidates.length > 1 && result.errorCode !== 4) { // Don't retry on rate limit
             for (let i = 1; i < phoneCandidates.length; i++) {
@@ -261,20 +255,12 @@ export async function POST(request: Request) {
           }
         }
       } catch (error) {
-        console.error("[create-patient] ❌ Error sending WhatsApp notification:", error)
       }
     } else {
-      console.warn("[create-patient] ⚠️ No phone number found, WhatsApp message not sent. Patient:", docData.firstName, docData.lastName, "Phone fields checked:", {
-        phone: patientData.phone,
-        phoneNumber: patientData.phoneNumber,
-        phoneCountryCode: patientData.phoneCountryCode,
-        docDataPhone: docData.phone,
-      })
     }
 
     return Response.json({ success: true, id: authUid, authUid, patientId })
   } catch (error: any) {
-    console.error("receptionist create-patient error:", error)
     return Response.json({ error: error?.message || "Failed to create patient" }, { status: 500 })
   }
 }

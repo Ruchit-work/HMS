@@ -40,7 +40,6 @@ export async function POST(request: Request) {
           phone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || ""
         }
       } catch (error) {
-        console.error("[send-recheckup-whatsapp] Error fetching patient:", error)
       }
     }
 
@@ -60,7 +59,6 @@ export async function POST(request: Request) {
                      "Patient"
       }
     } catch (error) {
-      console.error("[send-recheckup-whatsapp] Error fetching patient name:", error)
     }
 
     // Format appointment date for display
@@ -125,7 +123,6 @@ export async function POST(request: Request) {
       })
       
       if (!result.success) {
-        console.error("[send-recheckup-whatsapp] Failed to send WhatsApp:", result.error)
         return NextResponse.json(
           { error: result.error || "Failed to send WhatsApp message" },
           { status: 500 }
@@ -147,7 +144,6 @@ export async function POST(request: Request) {
         status: "pending",
       })
     } catch (error) {
-      console.error("[send-recheckup-whatsapp] Error storing re-checkup request:", error)
       // Don't fail the request if storing fails
     }
 
@@ -158,7 +154,6 @@ export async function POST(request: Request) {
     })
 
   } catch (error: any) {
-    console.error("[send-recheckup-whatsapp] Error:", error)
     return NextResponse.json(
       { error: error?.message || "Failed to send re-checkup WhatsApp message" },
       { status: 500 }

@@ -45,7 +45,6 @@ export async function GET(request: Request) {
       dateUpdated: status.dateUpdated,
     })
   } catch (error) {
-    console.error("Failed to check message status:", error)
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Unknown error",

@@ -295,7 +295,7 @@ export default function FacilitiesPage() {
             <button className="px-6 py-3 bg-white text-purple-600 font-semibold rounded-lg hover:bg-purple-50 transition-all duration-300 hover:scale-105">
               🎥 Virtual Tour
             </button>
-            <button className="px-6 py-3 bg-purple-700 text-white font-semibold rounded-lg hover:bg-purple-800 transition-all duration-300 hover:scale-105">
+            <button className="btn-modern btn-modern-purple">
               📅 Schedule Visit
             </button>
           </div>

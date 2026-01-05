@@ -15,6 +15,17 @@ export function initFirebaseAdmin(context?: string): InitAdminResult {
   const projectId = process.env.FIREBASE_PROJECT_ID
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
   let privateKey = process.env.FIREBASE_PRIVATE_KEY
+  let storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+  
+  // Remove gs:// prefix if present
+  if (storageBucket?.startsWith("gs://")) {
+    storageBucket = storageBucket.replace("gs://", "")
+  }
+  
+  // If no bucket specified, use the default bucket name
+  if (!storageBucket) {
+    storageBucket = "hospital-management-sys-eabb2.appspot.com"
+  }
 
   // Normalize private key (remove surrounding quotes and replace escaped newlines)
   if (privateKey) {
@@ -41,13 +52,20 @@ export function initFirebaseAdmin(context?: string): InitAdminResult {
 
   // Initialize Firebase Admin
   try {
-    admin.initializeApp({
+    const appOptions: admin.AppOptions = {
       credential: admin.credential.cert({
         projectId,
         clientEmail,
         privateKey,
       }),
-    })
+    }
+    
+    // Add storage bucket if available
+    if (storageBucket) {
+      appOptions.storageBucket = storageBucket
+    }
+    
+    admin.initializeApp(appOptions)
     return { ok: true }
   } catch (error: any) {
     const errorMsg = error?.message || "Failed to initialize Firebase Admin"

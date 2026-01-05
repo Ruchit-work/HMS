@@ -78,7 +78,7 @@ export async function POST(
           patientNameResolved = composedName || patient?.fullName || patientNameResolved
         }
       } catch (err) {
-        console.warn("Failed to enrich patient name for billing record", err)
+
       }
     }
 
@@ -138,7 +138,7 @@ export async function POST(
       stayDays: diffDays
     })
   } catch (error: any) {
-    console.error("discharge error", error)
+
     return Response.json(
       { error: error?.message || "Failed to discharge patient" },
       { status: 500 }

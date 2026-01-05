@@ -62,7 +62,6 @@ export async function POST(request) {
       }
     }
   } catch (err) {
-    console.error('[create-doctor] Error checking super admin status:', err)
     // Continue if check fails
   }
 
@@ -157,8 +156,6 @@ export async function POST(request) {
     })
     
   } catch (error) {
-    console.error('Error creating doctor:', error)
-    
     // Handle specific Firebase Auth errors
     if (error.code === 'auth/email-already-exists') {
       return Response.json({ error: 'A doctor with this email already exists' }, { status: 400 })

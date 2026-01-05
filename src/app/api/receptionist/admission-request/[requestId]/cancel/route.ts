@@ -77,7 +77,6 @@ export async function POST(
 
     return Response.json({ success: true })
   } catch (error: any) {
-    console.error("admission-request cancel error", error)
     return Response.json(
       { error: error?.message || "Failed to cancel admission request" },
       { status: 500 }

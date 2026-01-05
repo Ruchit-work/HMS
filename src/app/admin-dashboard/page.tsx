@@ -161,13 +161,13 @@ export default function AdminDashboard() {
       try {
         const currentUser = auth.currentUser
         if (!currentUser) {
-          console.error("Error fetching branches: user not authenticated")
+
           return
         }
 
         const token = await currentUser.getIdToken()
         if (!token) {
-          console.error("Error fetching branches: authentication token not found")
+
           return
         }
 
@@ -181,10 +181,10 @@ export default function AdminDashboard() {
         if (data.success && data.branches) {
           setBranches(data.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
         } else {
-          console.error("Failed to fetch branches:", data.error)
+
         }
       } catch (error) {
-        console.error("Error fetching branches:", error)
+
       }
     }
 
@@ -521,7 +521,7 @@ export default function AdminDashboard() {
 
 
     } catch (error) {
-      console.error("Error fetching dashboard data:", error)
+
       setNotification({ 
         type: "error", 
         message: "Failed to load dashboard data" 
@@ -916,7 +916,7 @@ export default function AdminDashboard() {
       
       setPendingRequests(reqs)
     }, (error) => {
-      console.error("Error listening to doctor schedule requests:", error)
+
     })
 
     // Cleanup function
@@ -961,7 +961,7 @@ export default function AdminDashboard() {
       
       setPendingRefunds(refundsEnriched)
     }, (error) => {
-      console.error("Error listening to refund requests:", error)
+
     })
 
     // Cleanup function
@@ -1077,7 +1077,7 @@ export default function AdminDashboard() {
       // Force redirect after sign out
       window.location.href = "/auth/login?role=admin"
     } catch (error) {
-      console.error("Logout error:", error)
+
       setNotification({ 
         type: "error", 
         message: "Failed to logout. Please try again." 
@@ -1410,14 +1410,12 @@ export default function AdminDashboard() {
               {/* Logout Button */}
               <button 
                 onClick={() => setLogoutConfirmOpen(true)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-200 text-red-600 hover:bg-red-50 border border-red-200/50 hover:border-red-300"
+                className="btn-modern btn-modern-danger btn-modern-sm w-full flex items-center gap-2"
               >
-                <div className="p-1 bg-red-100 rounded-md">
-                  <svg className="w-3 h-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                </div>
-                <span className="font-medium text-xs">Logout</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Logout</span>
               </button>
             </div>
           </div>
@@ -1998,7 +1996,7 @@ export default function AdminDashboard() {
                                 <button
                                   onClick={() => approveRequest(req)}
                                   disabled={processingRequestId === req.id}
-                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                  className="btn-modern btn-modern-success btn-modern-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   Approve
                                 </button>
@@ -2061,7 +2059,7 @@ export default function AdminDashboard() {
                                 <button
                                   onClick={() => approveRefund(r)}
                                   disabled={processingRefundId === r.id}
-                                  className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                  className="btn-modern btn-modern-success btn-modern-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   Approve
                                 </button>

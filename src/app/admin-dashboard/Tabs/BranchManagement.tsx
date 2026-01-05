@@ -53,7 +53,6 @@ export default function BranchManagement() {
 
       setBranches(data.branches as Branch[])
     } catch (err: any) {
-      console.error('Error loading branches:', err)
       setError(err.message || 'Failed to load branches')
     } finally {
       setLoading(false)
@@ -110,7 +109,6 @@ export default function BranchManagement() {
       setLocation('')
       await loadBranches()
     } catch (err: any) {
-      console.error('Error creating branch:', err)
       setError(err.message || 'Failed to create branch')
     } finally {
       setSaving(false)
@@ -185,7 +183,7 @@ export default function BranchManagement() {
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? 'Creating...' : 'Create Branch'}
             </button>

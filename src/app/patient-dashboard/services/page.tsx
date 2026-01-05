@@ -257,7 +257,7 @@ export default function ServicesPage() {
                 </div>
               </div>
 
-              <button className="w-full mt-4 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all duration-300 hover:shadow-lg">
+              <button className="btn-modern w-full mt-4">
                 Book Now →
               </button>
             </div>
@@ -280,7 +280,7 @@ export default function ServicesPage() {
               </a>
               <Link
                 href="/patient-dashboard/book-appointment"
-                className="px-6 py-3 bg-blue-700 text-white font-semibold rounded-lg hover:bg-blue-800 transition-all duration-300 hover:scale-105"
+                className="btn-modern"
               >
                 📅 Book Appointment
               </Link>

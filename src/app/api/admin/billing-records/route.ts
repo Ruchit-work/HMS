@@ -90,7 +90,6 @@ export async function GET(request: Request) {
             }
           }
         } catch (err) {
-          console.warn("Failed to enrich billing record patient name", err)
         }
       }
 
@@ -119,7 +118,6 @@ export async function GET(request: Request) {
             }
           }
         } catch (err) {
-          console.warn("Failed to fetch branchId from appointment", err)
         }
       }
 
@@ -228,7 +226,6 @@ export async function GET(request: Request) {
           seenAppointmentIds.add(doc.id)
         }
       } catch (fallbackError: any) {
-        console.error("Failed to fetch appointments:", fallbackError?.message)
       }
     }
 
@@ -250,7 +247,7 @@ export async function GET(request: Request) {
         }
       }
     } catch (groupError: any) {
-      console.error("Failed to fetch hospital-scoped appointments (admin):", groupError?.message)
+      // Error grouping appointments by branch
     }
 
     for (const docSnap of appointmentsDocs) {
@@ -295,7 +292,6 @@ export async function GET(request: Request) {
             }
           }
         } catch (err) {
-          console.warn("Failed to enrich appointment patient name", err)
         }
       }
 
@@ -351,7 +347,6 @@ export async function GET(request: Request) {
 
     return Response.json({ records })
   } catch (error: any) {
-    console.error("admin billing records GET error", error)
     return Response.json(
       { error: error?.message || "Failed to load billing records" },
       { status: 500 }

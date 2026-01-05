@@ -94,7 +94,6 @@ export default function OTPVerificationModal({
           // If onVerified fails, reset the verification state and show error
           setOtpVerified(false)
           setError(error?.message || "Failed to complete verification. Please try again.")
-          console.error("Error in onVerified callback:", error)
         }
       } else {
         const msg = res.error || "Invalid OTP"

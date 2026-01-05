@@ -62,7 +62,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, hospitals })
   } catch (error: any) {
-    console.error('[GET /api/hospitals] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch hospitals' },
       { status: 500 }
@@ -160,7 +159,6 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (error: any) {
-    console.error('[POST /api/hospitals] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to create hospital' },
       { status: 500 }

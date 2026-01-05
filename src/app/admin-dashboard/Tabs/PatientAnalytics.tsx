@@ -904,7 +904,6 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         symptomDiagnosisCorrelation
       })
     } catch (error) {
-      console.error('Error fetching patient analytics:', error)
     } finally {
       setLoading(false)
     }

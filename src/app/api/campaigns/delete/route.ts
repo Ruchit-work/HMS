@@ -54,7 +54,6 @@ export async function POST(request: Request) {
       message: "Campaign deleted successfully",
     })
   } catch (error: any) {
-    console.error("campaigns/delete error:", error)
     return NextResponse.json(
       {
         success: false,

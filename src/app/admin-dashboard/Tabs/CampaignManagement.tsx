@@ -58,7 +58,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       setCampaigns(campaignsData)
       return campaignsData
     } catch (error) {
-      console.error("[reloadCampaigns] Error loading campaigns:", error)
       try {
         const q = query(collection(db, 'campaigns'))
         const snap = await getDocs(q)
@@ -74,7 +73,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         setCampaigns(campaignsData)
         return campaignsData
       } catch (fallbackError) {
-        console.error("[reloadCampaigns] Error loading campaigns (fallback):", fallbackError)
         return campaigns
       }
     }
@@ -111,7 +109,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         setCronStatus(data)
       }
     } catch (error) {
-      console.error("Error checking cron status:", error)
     } finally {
       setLoadingCronStatus(false)
     }
@@ -146,14 +143,12 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         setReminderStatusError(errorMsg)
         setSuccessMessage(`❌ Error: ${errorMsg}`)
         setTimeout(() => setSuccessMessage(null), 5000)
-        console.error("Error checking reminder status:", data.error)
       }
     } catch (error: any) {
       const errorMsg = error?.message || "Failed to check reminder status"
       setReminderStatusError(errorMsg)
       setSuccessMessage(`❌ Error: ${errorMsg}`)
       setTimeout(() => setSuccessMessage(null), 5000)
-      console.error("Error checking reminder status:", error)
     } finally {
       setLoadingReminderStatus(false)
     }
@@ -202,7 +197,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         setSuccessMessage(`❌ Error: ${data.error || "Failed to test reminders"}`)
       }
     } catch (error: any) {
-      console.error("Error testing reminders:", error)
       setSuccessMessage(`❌ Error: ${error?.message || "Failed to test reminders"}`)
     } finally {
       setTestingReminders(false)
@@ -325,7 +319,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       setEditingId(null)
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error) {
-      console.error("Error creating campaign:", error)
     } finally {
       setSaving(false)
     }
@@ -342,7 +335,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       setSuccessMessage(`✅ Campaign ${next === 'published' ? 'published' : 'unpublished'} successfully!`)
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error) {
-      console.error("Error updating campaign:", error)
       setSuccessMessage(`❌ Failed to ${next === 'published' ? 'publish' : 'unpublish'} campaign. Please try again.`)
       setTimeout(() => setSuccessMessage(null), 4000)
     } finally {
@@ -401,7 +393,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       setSuccessMessage("✅ Campaign deleted successfully!")
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (error: any) {
-      console.error("Error deleting campaign:", error)
       const errorMsg = error?.message || "Failed to delete campaign"
       setSuccessMessage(`❌ ${errorMsg}. Please try again.`)
       setTimeout(() => setSuccessMessage(null), 4000)
@@ -906,7 +897,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                           setSuccessMessage(`❌ Error: ${data.error || "Failed to generate campaigns"}`)
                         }
                       } catch (error: any) {
-                        console.error("Error generating campaigns:", error)
                         setSuccessMessage(`❌ Error: ${error?.message || "Failed to generate campaigns"}`)
                       } finally {
                         setGeneratingToday(false)
@@ -979,7 +969,6 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                       setSuccessMessage(`❌ Error: ${data.error || "Failed to generate random campaign"}`)
                     }
                   } catch (error: any) {
-                    console.error("Error generating random campaign:", error)
                     setSuccessMessage(`❌ Error: ${error?.message || "Failed to generate random campaign"}`)
                   } finally {
                     setGeneratingRandom(false)

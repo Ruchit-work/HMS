@@ -185,7 +185,6 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
       }
       setRooms(roomsList)
     } catch (error) {
-      console.error("Failed to load rooms", error)
     } finally {
       setRoomsLoading(false)
     }
@@ -234,7 +233,6 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
       }))
       setAdmitRequests(formatted.filter((req) => req.status === "pending"))
     } catch (error: any) {
-      console.error("Failed to load admission requests", error)
       setAdmitRequestsError(error?.message || "Failed to load admission requests")
     } finally {
       setAdmitRequestsLoading(false)
@@ -290,7 +288,6 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
       }))
       setAdmissions(formatted.filter((admission) => admission.status === "admitted"))
     } catch (error: any) {
-      console.error("Failed to load admissions", error)
       setAdmissionsError(error?.message || "Failed to load admissions")
     } finally {
       setAdmissionsLoading(false)
@@ -365,7 +362,6 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
       setAssignModalOpen(false)
       setSelectedAdmitRequest(null)
     } catch (error: any) {
-      console.error("Assign room error", error)
       notify({ type: "error", message: error?.message || "Failed to assign room" })
     } finally {
       setAssignLoading(false)
@@ -403,7 +399,6 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
       setAdmitRequests((prev) => prev.filter((req) => req.id !== request.id))
       notify({ type: "success", message: "Admission request cancelled." })
     } catch (error: any) {
-      console.error("Cancel admission request error", error)
       notify({ type: "error", message: error?.message || "Failed to cancel admission request" })
     } finally {
       setCancelLoadingId(null)
@@ -459,7 +454,6 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
       setDischargeModalOpen(false)
       setSelectedAdmission(null)
     } catch (error: any) {
-      console.error("Discharge error", error)
       notify({ type: "error", message: error?.message || "Failed to discharge patient" })
     } finally {
       setDischargeLoading(false)

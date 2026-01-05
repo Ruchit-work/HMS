@@ -114,7 +114,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
 
       setReceptionists(receptionistsList)
     } catch (err: any) {
-      console.error('Error loading receptionists:', err)
+
       setError('Failed to load receptionists. Please try again.')
     } finally {
       setLoading(false)
@@ -130,13 +130,13 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
       try {
         const currentUser = auth.currentUser
         if (!currentUser) {
-          console.error('Error loading branches: user not authenticated')
+
           return
         }
 
         const token = await currentUser.getIdToken()
         if (!token) {
-          console.error('Error loading branches: authentication token not found')
+
           return
         }
 
@@ -150,10 +150,10 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
         if (data.success && Array.isArray(data.branches)) {
           setBranches(data.branches as Branch[])
         } else {
-          console.error('Failed to load branches:', data.error)
+
         }
       } catch (err) {
-        console.error('Error loading branches:', err)
+
       } finally {
         setBranchesLoading(false)
       }
@@ -299,17 +299,17 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
 
         if (!authDeleteResponse.ok) {
           const authError = await authDeleteResponse.json().catch(() => ({}))
-          console.warn('Failed to delete receptionist from auth:', authError)
+
         }
       } catch (authErr) {
-        console.error('Error calling delete-user API for receptionist:', authErr)
+
       }
 
       // Delete Firestore receptionist doc
       try {
         await deleteDoc(doc(db, 'receptionists', receptionist.id))
       } catch (fsErr) {
-        console.error('Error deleting receptionist Firestore doc:', fsErr)
+
         throw fsErr
       }
 
@@ -317,7 +317,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
       setSuccess('Receptionist deleted successfully.')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err: any) {
-      console.error('Error deleting receptionist:', err)
+
       setError(err?.message || 'Failed to delete receptionist. Please try again.')
     } finally {
       setDeletingId(null)
@@ -362,7 +362,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
       setEditingReceptionist(null)
       await loadData()
     } catch (err: any) {
-      console.error('Error updating receptionist:', err)
+
       setError(err.message || 'Failed to update receptionist. Please try again.')
     } finally {
       setSaving(false)
@@ -426,7 +426,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
             })
             setShowAddModal(true)
           }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          className="btn-modern btn-modern-sm"
         >
           + Create Receptionist
         </button>

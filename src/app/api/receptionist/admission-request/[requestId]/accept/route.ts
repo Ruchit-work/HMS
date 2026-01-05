@@ -121,7 +121,7 @@ export async function POST(
 
     return Response.json({ success: true, admissionId: admissionRef.id })
   } catch (error: any) {
-    console.error("admission-request accept error", error)
+
     return Response.json(
       { error: error?.message || "Failed to accept admission request" },
       { status: 500 }

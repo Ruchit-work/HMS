@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useRef } from "react"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { signInWithEmailAndPassword, type User } from "firebase/auth"
@@ -32,6 +32,7 @@ function LoginContent() {
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
   const [pendingPhone, setPendingPhone] = useState<string>("")
   const router = useRouter()
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   
   // Protect route - redirect if already authenticated
   const { loading: checking } = usePublicRoute()
@@ -64,6 +65,15 @@ function LoginContent() {
     }, 1000)
     return () => clearInterval(interval)
   }, [otpCountdown])
+
+  // Cleanup countdown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+      }
+    }
+  }, [])
 
   const maskPhoneNumber = (phone: string) => {
     if (!phone) return ""
@@ -177,6 +187,9 @@ function LoginContent() {
   }
 
   const checkAndRedirectWithHospital = async (roleInfo: any, user: User) => {
+    // Determine redirect path first
+    let redirectPath = roleInfo.redirect
+    
     // Sync user document in users collection (for multi-hospital support)
     // This ensures super admin status and hospital associations are properly synced
     try {
@@ -212,7 +225,6 @@ function LoginContent() {
         }, { merge: true })
       }
     } catch (err) {
-      console.error("Failed to sync user document:", err)
       // Don't block login if sync fails
     }
     
@@ -221,7 +233,12 @@ function LoginContent() {
       const hospitals = roleInfo.hospitals || []
       
       if (hospitals.length === 0) {
-        // No hospitals - redirect to hospital selection
+        // No hospitals - redirect to hospital selection (no countdown needed)
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current)
+          countdownIntervalRef.current = null
+        }
+        setSuccess("")
         router.replace("/hospital-selection?redirect=" + roleInfo.redirect)
         return
       } else if (hospitals.length === 1) {
@@ -241,20 +258,22 @@ function LoginContent() {
             })
             sessionStorage.setItem("activeHospitalId", hospitalId)
           } catch (err) {
-            console.error("Failed to set active hospital:", err)
           }
         }
-        dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
-        return
+        redirectPath = roleInfo.redirect
       } else {
         // Multiple hospitals - check if activeHospital is set and valid
         const activeHospital = roleInfo.activeHospital
         if (activeHospital && hospitals.includes(activeHospital)) {
-          // Valid active hospital - continue
-          dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
-          return
+          // Valid active hospital - continue with countdown
+          redirectPath = roleInfo.redirect
         } else {
-          // No valid active hospital - redirect to selection
+          // No valid active hospital - redirect to selection (no countdown)
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current)
+            countdownIntervalRef.current = null
+          }
+          setSuccess("")
           router.replace("/hospital-selection?redirect=" + roleInfo.redirect)
           return
         }
@@ -279,16 +298,14 @@ function LoginContent() {
             })
             sessionStorage.setItem("activeHospitalId", hospitalId)
           } catch (err) {
-            console.error("Failed to set active hospital:", err)
           }
         }
       }
-      dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
-      return
+      redirectPath = roleInfo.redirect
     }
 
-    // Default redirect
-    dispatchCountdownMessage("Login successful!", () => router.replace(roleInfo.redirect))
+    // Start countdown with the determined redirect path immediately
+    dispatchCountdownMessage("Login successful!", () => router.replace(redirectPath), 3)
   }
 
   const sendOtpCode = async (phoneOverride?: string) => {
@@ -387,7 +404,6 @@ function LoginContent() {
         throw new Error(markData?.error || "Failed to finalize verification. Please try again.")
       }
 
-      setSuccess("Verification successful! Redirecting...")
       setMfaRequired(false)
       setOtpCode("")
       setOtpCountdown(0)
@@ -397,9 +413,13 @@ function LoginContent() {
       if (roleInfo) {
         await checkAndRedirectWithHospital(roleInfo, pendingUser)
       } else {
+        // Clear any existing countdown
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current)
+        }
         dispatchCountdownMessage("Login successful!", () =>
           router.replace(pendingRedirect || "/")
-        )
+        , 3)
       }
     } catch (err: any) {
       const message = err?.message || "Failed to verify OTP. Please try again."
@@ -475,9 +495,17 @@ function LoginContent() {
         return
       }
 
+      // Show loading complete
       setLoading(false)
-      // Check hospitals and redirect accordingly
-      await checkAndRedirectWithHospital(roleInfo, user)
+      
+      // Show success message immediately - this ensures it appears right away
+      setSuccess("Login successful! Redirecting in 3...")
+      
+      // Check hospitals and redirect accordingly (this will update the countdown)
+      // Use setTimeout to ensure the success message is rendered first
+      setTimeout(async () => {
+        await checkAndRedirectWithHospital(roleInfo, user)
+      }, 100)
       return
     } catch (err) {
       const firebaseError = err as { code?: string; message?: string }
@@ -515,7 +543,15 @@ function LoginContent() {
   }
 
   const dispatchCountdownMessage = (message: string, onComplete: () => void, seconds = 3) => {
+    // Clear any existing countdown interval
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current)
+      countdownIntervalRef.current = null
+    }
+    
+    // Show message immediately
     setSuccess(`${message} Redirecting in ${seconds}...`)
+    
     let remaining = seconds
     const interval = setInterval(() => {
       remaining -= 1
@@ -523,9 +559,17 @@ function LoginContent() {
         setSuccess(`${message} Redirecting in ${remaining}...`)
       } else {
         clearInterval(interval)
-        onComplete()
+        countdownIntervalRef.current = null
+        // Clear success message before redirecting
+        setSuccess("")
+        // Small delay to ensure UI updates
+        setTimeout(() => {
+          onComplete()
+        }, 100)
       }
     }, 1000)
+    
+    countdownIntervalRef.current = interval
   }
 
   if (checking || isCheckingAuth) {
@@ -684,7 +728,7 @@ function LoginContent() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                  className="btn-modern btn-modern-success w-full"
                 >
                   {loading ? "Signing in..." : "Sign In"}
                 </button>
@@ -742,7 +786,7 @@ function LoginContent() {
                 <button
                   type="submit"
                   disabled={otpVerifying || otpCode.length !== 6}
-                  className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                  className="btn-modern btn-modern-success w-full"
                 >
                   {otpVerifying ? "Verifying..." : "Verify & Continue"}
                 </button>

@@ -58,7 +58,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ available: true })
   } catch (error: any) {
-    console.error("[check-slot] Error:", error)
     return NextResponse.json(
       { error: error?.message || "Failed to check slot availability" },
       { status: 500 }

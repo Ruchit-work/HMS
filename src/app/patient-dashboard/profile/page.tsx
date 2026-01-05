@@ -37,7 +37,6 @@ export default function PatientProfilePage() {
           setUserData(data)
         }
       } catch (error) {
-        console.error("Error fetching data:", error)
       } finally {
         setLoading(false)
       }
@@ -91,7 +90,6 @@ export default function PatientProfilePage() {
         message: "Profile updated successfully!" 
       })
     } catch (error: unknown) {
-      console.error("Error updating profile:", error)
       setNotification({ 
         type: "error", 
         message: (error as Error).message || "Failed to update profile" 
@@ -107,7 +105,6 @@ export default function PatientProfilePage() {
       await signOut(auth)
       router.replace("/auth/login?role=patient")
     } catch (error) {
-      console.error("Logout error:", error)
       setNotification({ 
         type: "error", 
         message: "Failed to logout. Please try again." 
@@ -158,7 +155,7 @@ export default function PatientProfilePage() {
               <div className="flex gap-3 ml-auto">
                   <button
                     onClick={() => setLogoutConfirmOpen(true)}
-                  className="px-5 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                  className="btn-modern btn-modern-danger flex items-center gap-2"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -175,7 +172,7 @@ export default function PatientProfilePage() {
                 <h3 className="text-lg font-bold text-slate-800">Personal Information</h3>
                 <button
                   onClick={() => setIsEditing(!isEditing)}
-                  className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                  className="btn-modern btn-modern-purple btn-modern-sm"
                 >
                   {isEditing ? "Cancel" : "Edit Profile"}
                 </button>
@@ -660,7 +657,7 @@ function ProfileEditForm({
         <button
           type="submit"
           disabled={updating}
-          className="px-6 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+          className="btn-modern btn-modern-purple disabled:opacity-50"
         >
           {updating ? "Updating..." : "Save Changes"}
         </button>

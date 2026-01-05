@@ -115,7 +115,6 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
         
         setLoading(false)
       }, (error) => {
-        console.error("Error in appointments listener:", error)
         setLoading(false)
       })
     }
@@ -192,7 +191,6 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
         fetchNotifications()
       ])
     } catch (error) {
-      console.error("Error fetching dashboard data:", error)
     } finally {
       setLoading(false)
     }
@@ -302,7 +300,6 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
         }
       })
     } catch (error) {
-      console.error("Error fetching recent activities:", error)
     }
 
     // Sort by timestamp (newest first) and take top 8
@@ -531,50 +528,50 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <button 
             onClick={() => onTabChange?.("book-appointment")}
-            className="flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+            className="group flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-blue-50 rounded-lg transition-all duration-300 border border-gray-200 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-200/50 hover:-translate-y-1"
           >
-            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center group-hover:bg-blue-700 group-hover:scale-110 transition-all duration-300 shadow-md group-hover:shadow-lg">
+              <svg className="w-6 h-6 text-white group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
-            <span className="text-sm font-medium text-gray-700 text-center">Book Appointment</span>
+            <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700 text-center transition-colors duration-300">Book Appointment</span>
           </button>
 
           <button 
             onClick={() => onTabChange?.("patients")}
-            className="flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+            className="group flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-green-50 rounded-lg transition-all duration-300 border border-gray-200 hover:border-green-300 hover:shadow-lg hover:shadow-green-200/50 hover:-translate-y-1"
           >
-            <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center group-hover:bg-green-700 group-hover:scale-110 transition-all duration-300 shadow-md group-hover:shadow-lg">
+              <svg className="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </div>
-            <span className="text-sm font-medium text-gray-700 text-center">Add Patient</span>
+            <span className="text-sm font-medium text-gray-700 group-hover:text-green-700 text-center transition-colors duration-300">Add Patient</span>
           </button>
 
           <button 
             onClick={() => onTabChange?.("whatsapp-bookings")}
-            className="flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+            className="group flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-orange-50 rounded-lg transition-all duration-300 border border-gray-200 hover:border-orange-300 hover:shadow-lg hover:shadow-orange-200/50 hover:-translate-y-1"
           >
-            <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center group-hover:bg-orange-700 group-hover:scale-110 transition-all duration-300 shadow-md group-hover:shadow-lg">
+              <svg className="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             </div>
-            <span className="text-sm font-medium text-gray-700 text-center">WhatsApp Bookings</span>
+            <span className="text-sm font-medium text-gray-700 group-hover:text-orange-700 text-center transition-colors duration-300">WhatsApp Bookings</span>
           </button>
 
           <button 
             onClick={() => onTabChange?.("billing")}
-            className="flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+            className="group flex flex-col items-center gap-3 p-4 bg-gray-50 hover:bg-purple-50 rounded-lg transition-all duration-300 border border-gray-200 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-200/50 hover:-translate-y-1"
           >
-            <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center group-hover:bg-purple-700 group-hover:scale-110 transition-all duration-300 shadow-md group-hover:shadow-lg">
+              <svg className="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
-            <span className="text-sm font-medium text-gray-700 text-center">Billing</span>
+            <span className="text-sm font-medium text-gray-700 group-hover:text-purple-700 text-center transition-colors duration-300">Billing</span>
           </button>
         </div>
       </div>

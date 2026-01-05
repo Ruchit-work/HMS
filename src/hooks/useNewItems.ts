@@ -46,7 +46,6 @@ export function useNewItems(badgeKey: BadgeKey) {
       }
       setLastViewedAt(null)
     } catch (error) {
-      console.error('Error loading last viewed timestamp:', error)
       setLastViewedAt(null)
     }
   }, [storageKey])

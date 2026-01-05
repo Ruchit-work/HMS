@@ -226,7 +226,6 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
 
       setDoctorAnalytics(analytics)
     } catch (error) {
-      console.error('Error fetching doctor analytics:', error)
     } finally {
       setLoading(false)
     }

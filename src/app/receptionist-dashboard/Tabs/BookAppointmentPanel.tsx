@@ -422,7 +422,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         const patientSnap = await getDocs(patientsQuery)
         setPatients(patientSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
       } catch (error) {
-        console.error("Failed to preload patients", error)
+
       }
     })()
 
@@ -536,7 +536,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         
         setAvailableSlots(filtered)
       } catch (error) {
-        console.error("Failed to compute time slots", error)
+
         setAvailableSlots([])
       }
     }

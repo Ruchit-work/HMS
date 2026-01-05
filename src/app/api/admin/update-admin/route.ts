@@ -181,7 +181,6 @@ export async function PUT(request: NextRequest) {
       message: 'Admin updated successfully'
     })
   } catch (error: any) {
-    console.error('[PUT /api/admin/update-admin] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to update admin' },
       { status: 500 }

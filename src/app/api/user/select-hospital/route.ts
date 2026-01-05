@@ -134,7 +134,6 @@ export async function POST(request: NextRequest) {
       hospitalId
     })
   } catch (error: any) {
-    console.error('[POST /api/user/select-hospital] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to select hospital' },
       { status: 500 }

@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
@@ -18,6 +19,9 @@ import { fetchMedicineSuggestions, MedicineSuggestion,  MedicineSuggestionOption
 import type { Branch } from "@/types/branch"
 import DiagnosisSelector from "@/components/doctor/DiagnosisSelector"
 import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
+import InlineAnatomyViewer, { type AnatomyViewerData } from "@/components/doctor/InlineAnatomyViewer"
+import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
+import { getAvailableAnatomyModels, type AnatomyModel } from "@/utils/anatomyModelMapping"
 
 // Helper function to parse and render prescription text
 const parsePrescription = (text: string) => {
@@ -150,11 +154,13 @@ interface UserData {
   firstName?: string;
   email: string;
   role: string;
+  specialization?: string;
 }
 
 // Use the canonical type from src/types/patient
 
-export default function DoctorAppointments() {
+function DoctorAppointmentsContent() {
+  const searchParams = useSearchParams()
   const [userData, setUserData] = useState<UserData | null>(null)
   const [appointments, setAppointments] = useState<AppointmentType[]>([])
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
@@ -162,6 +168,11 @@ export default function DoctorAppointments() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [updating, setUpdating] = useState<{[key: string]: boolean}>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{[key: string]: boolean}>({})
+  const [consultationMode, setConsultationMode] = useState<{[key: string]: 'normal' | 'anatomy' | null}>({})
+  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{[key: string]: ('ear' | 'throat' | 'dental')[]}>({})
+  const [anatomyViewerData, setAnatomyViewerData] = useState<{[key: string]: {[anatomyType: string]: AnatomyViewerData | null}}>({})
+  const [showCombinedCompletionModal, setShowCombinedCompletionModal] = useState<{[key: string]: boolean}>({})
+  const appointmentCardRefs = useRef<{[key: string]: HTMLDivElement | null}>({})
   const [completionData, setCompletionData] = useState<Record<string, CompletionFormEntry>>({})
   const [aiPrescription, setAiPrescription] = useState<{[key: string]: {medicine: string, notes: string}}>({})
   const [loadingAiPrescription, setLoadingAiPrescription] = useState<{[key: string]: boolean}>({})
@@ -198,6 +209,13 @@ export default function DoctorAppointments() {
     index: number
     suggestion: string
   } | null>(null)
+  const [showConsultationModeModal, setShowConsultationModeModal] = useState<{
+    open: boolean
+    appointmentId: string | null
+  }>({
+    open: false,
+    appointmentId: null
+  })
   const [medicineSuggestionsLoading, setMedicineSuggestionsLoading] = useState(false)
   const [branches, setBranches] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
@@ -209,7 +227,7 @@ export default function DoctorAppointments() {
       const suggestions = await fetchMedicineSuggestions(100)
       setMedicineSuggestions(suggestions)
     } catch (error) {
-      console.error("Failed to load medicine suggestions", error)
+
     } finally {
       setMedicineSuggestionsLoading(false)
     }
@@ -218,6 +236,29 @@ export default function DoctorAppointments() {
   useEffect(() => {
     refreshMedicineSuggestions()
   }, [refreshMedicineSuggestions])
+
+  // Auto-scroll to modal when combined completion modal opens
+  useEffect(() => {
+    // Find which appointment has the modal open
+    const openAppointmentId = Object.keys(showCombinedCompletionModal).find(
+      id => showCombinedCompletionModal[id]
+    )
+    
+    if (openAppointmentId && appointmentCardRefs.current[openAppointmentId]) {
+      // Small delay to ensure modal is rendered
+      setTimeout(() => {
+        const cardElement = appointmentCardRefs.current[openAppointmentId]
+        if (cardElement) {
+          // Scroll the appointment card into view so user can see the modal context
+          cardElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center',
+            inline: 'nearest'
+          })
+        }
+      }, 150)
+    }
+  }, [showCombinedCompletionModal])
 
   // Protect route - only allow doctors
   const { user, loading } = useAuth("doctor")
@@ -232,7 +273,7 @@ export default function DoctorAppointments() {
         setLoadingBranches(true)
         const currentUser = auth.currentUser
         if (!currentUser) {
-          console.error("Error fetching branches: user not authenticated")
+
           return
         }
         const token = await currentUser.getIdToken()
@@ -248,7 +289,7 @@ export default function DoctorAppointments() {
           setBranches(data.branches)
         }
       } catch (error) {
-        console.error("Error fetching branches:", error)
+
       } finally {
         setLoadingBranches(false)
       }
@@ -295,7 +336,7 @@ export default function DoctorAppointments() {
       
       setAppointments(appointmentsList)
     }, (error) => {
-      console.error("Error in appointments listener:", error)
+
     })
 
     return unsubscribe
@@ -341,13 +382,43 @@ export default function DoctorAppointments() {
     }
   }, [appointments])
 
+  // Auto-open completion form if returning from anatomy page
+  useEffect(() => {
+    const appointmentIdFromQuery = searchParams.get('appointmentId')
+    if (appointmentIdFromQuery && appointments.length > 0) {
+      // Check if there's anatomy checkup data
+      const anatomyDataKey = `anatomyCheckup_${appointmentIdFromQuery}`
+      const storedAnatomyData = sessionStorage.getItem(anatomyDataKey)
+      
+      if (storedAnatomyData) {
+        // Find the appointment
+        const appointment = appointments.find(apt => apt.id === appointmentIdFromQuery)
+        if (appointment && appointment.status === 'confirmed') {
+          // Set active tab to "today" to show the appointment
+          setActiveTab("today")
+          
+          // Auto-open the completion form after a short delay
+          setTimeout(() => {
+            toggleCompletionForm(appointmentIdFromQuery)
+            // Scroll to the appointment
+            const element = document.getElementById(`appointment-${appointmentIdFromQuery}`)
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+          }, 500)
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, appointments])
+
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
       // Real-time listeners will automatically update, so just show success message
       setNotification({ type: "success", message: "Appointments are automatically updated in real-time!" })
     } catch (error) {
-      console.error("Error refreshing appointments:", error)
+
       setNotification({ type: "error", message: "Failed to refresh appointments" })
     } finally {
       setRefreshing(false)
@@ -432,7 +503,7 @@ export default function DoctorAppointments() {
       setShowReportModal(false)
       setNotification({ type: "success", message: 'Report generated and downloaded successfully!' })
     } catch (error) {
-      console.error('Error generating report:', error)
+
       setNotification({ type: "error", message: (error as Error).message || 'Failed to generate report' })
     } finally {
       setGeneratingReport(false)
@@ -466,7 +537,7 @@ export default function DoctorAppointments() {
             [appointmentId]: { text: "", date: "" }
           }))
         } catch (error) {
-          console.error("Error fetching patient history:", error)
+
         }
       }
     }
@@ -509,44 +580,122 @@ export default function DoctorAppointments() {
     return null
   }
 
+  const handleCompleteConsultationClick = (appointmentId: string) => {
+    // Get available anatomy models for this doctor's specialization
+    const availableModels = getAvailableAnatomyModels(userData?.specialization)
+    
+    // If only one model is available, auto-select it
+    if (availableModels.length === 1) {
+      handleConsultationModeSelect('anatomy', availableModels[0].type)
+      return
+    }
+    
+    // Show modal to choose consultation mode
+    setShowConsultationModeModal({
+      open: true,
+      appointmentId: appointmentId
+    })
+  }
+
+  const handleConsultationModeSelect = (mode: 'normal' | 'anatomy', anatomyType?: 'ear' | 'throat' | 'dental') => {
+    const appointmentId = showConsultationModeModal.appointmentId
+    if (!appointmentId) return
+
+    // Close modal
+    setShowConsultationModeModal({ open: false, appointmentId: null })
+
+    // Set the consultation mode for this appointment
+    setConsultationMode(prev => ({
+      ...prev,
+      [appointmentId]: mode
+    }))
+
+    // If anatomy mode, add the selected anatomy type
+    if (mode === 'anatomy' && anatomyType) {
+      setSelectedAnatomyTypes(prev => {
+        const current = prev[appointmentId] || []
+        if (!current.includes(anatomyType)) {
+          return {
+            ...prev,
+            [appointmentId]: [...current, anatomyType]
+          }
+        }
+        return prev
+      })
+    }
+
+    // Also set showCompletionForm to true so the container shows
+    setShowCompletionForm(prev => ({
+      ...prev,
+      [appointmentId]: true
+    }))
+  }
+
+
+  const handleAddAnotherAnatomy = (appointmentId: string) => {
+    setShowConsultationModeModal({ open: true, appointmentId })
+  }
+
   const toggleCompletionForm = (appointmentId: string) => {
     const appointment = appointments.find(apt => apt.id === appointmentId)
     if (!appointment) return
-    
-    // Prevent opening form for future appointments
-    const appointmentDate = new Date(appointment.appointmentDate)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    appointmentDate.setHours(0, 0, 0, 0)
-    const isToday = appointmentDate.getTime() === today.getTime()
-    const isFutureAppointment = appointmentDate > today
-    
-    if (isFutureAppointment && !isToday) {
-      setNotification({
-        type: "error",
-        message: "You can only complete appointments scheduled for today. Future appointments cannot be completed."
-      })
-      return
-    }
     
     const isOpen = showCompletionForm[appointmentId] || false
     setShowCompletionForm({...showCompletionForm, [appointmentId]: !isOpen})
     
     if (!isOpen) {
+      // Check if there's anatomy checkup data from the 3D model page
+      const anatomyDataKey = `anatomyCheckup_${appointmentId}`
+      const storedAnatomyData = sessionStorage.getItem(anatomyDataKey)
+      
+      let initialMedicines: Array<{ name: string; dosage: string; frequency: string; duration: string }> = []
+      let initialNotes = ""
+      
+      if (storedAnatomyData) {
+        try {
+          const anatomyData = JSON.parse(storedAnatomyData)
+          initialMedicines = anatomyData.medicines || []
+          
+          // Build notes from anatomy data
+          let notesParts = []
+          if (anatomyData.selectedPartInfo) {
+            notesParts.push(`Selected Anatomy Part: ${anatomyData.selectedPartInfo.name}`)
+          }
+          if (anatomyData.selectedDisease) {
+            notesParts.push(`Diagnosis: ${anatomyData.selectedDisease.name}`)
+            if (anatomyData.selectedDisease.description) {
+              notesParts.push(`Description: ${anatomyData.selectedDisease.description}`)
+            }
+          }
+          if (anatomyData.prescriptions && anatomyData.prescriptions.length > 0) {
+            notesParts.push(`Prescriptions: ${anatomyData.prescriptions.join(', ')}`)
+          }
+          if (anatomyData.notes) {
+            notesParts.push(`Examination Notes: ${anatomyData.notes}`)
+          }
+          initialNotes = notesParts.join('\n')
+          
+          // Clear the stored data after using it
+          sessionStorage.removeItem(anatomyDataKey)
+        } catch (error) {
+
+        }
+      }
+      
       // Initialize completion data for this appointment
       setCompletionData((prev) => ({
         ...prev,
         [appointmentId]: {
-          medicines: [],
-          notes: "",
+          medicines: initialMedicines.length > 0 ? initialMedicines : [],
+          notes: initialNotes,
           recheckupRequired: false,
           finalDiagnosis: [],
           customDiagnosis: "",
         },
       }))
-      setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: true})
-      // Auto-generate AI prescription when form opens
-      if (appointment) {
+      setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: initialMedicines.length === 0})
+      // Auto-generate AI prescription when form opens (only if no medicines from anatomy)
+      if (appointment && initialMedicines.length === 0) {
         handleGenerateAiPrescription(appointmentId)
       }
     } else {
@@ -896,7 +1045,7 @@ export default function DoctorAppointments() {
       
       setNotification({ type: "success", message: "AI diagnosis suggestion generated!" })
     } catch (error: unknown) {
-      console.error("AI Diagnosis error:", error)
+
       const errorResponse = (error as { response?: { data?: unknown; status?: number } }).response
       
       // Extract error message from response
@@ -988,7 +1137,7 @@ export default function DoctorAppointments() {
       })
       setNotification({ type: "success", message: "AI prescription generated!" })
     } catch (error: unknown) {
-      console.error("AI Prescription error:", error)
+
       const errorMessage = (error as { response?: { data?: { error?: string } } }).response?.data?.error || (error as Error).message || "Failed to generate AI prescription"
       setNotification({ 
         type: "error", 
@@ -1163,6 +1312,129 @@ export default function DoctorAppointments() {
     }
   }
 
+  // Merge all anatomy viewer data into a single completion entry
+  const mergeAnatomyData = (appointmentId: string): CompletionFormEntry | null => {
+    const allData = anatomyViewerData[appointmentId]
+    if (!allData) return null
+
+    const dataEntries = Object.values(allData).filter((d): d is AnatomyViewerData => d !== null)
+    if (dataEntries.length === 0) return null
+
+    // Merge all medicines (deduplicate by name)
+    const allMedicines: Array<{ name: string; dosage: string; frequency: string; duration: string }> = []
+    const medicineNames = new Set<string>()
+    
+    dataEntries.forEach(data => {
+      data.medicines.forEach(med => {
+        const medName = med.name.trim().toLowerCase()
+        if (medName && !medicineNames.has(medName)) {
+          medicineNames.add(medName)
+          allMedicines.push(med)
+        }
+      })
+    })
+
+    // Merge all notes
+    const allNotes: string[] = []
+    dataEntries.forEach((data, index) => {
+      if (data.notes && data.notes.trim()) {
+        allNotes.push(`[${data.anatomyType.toUpperCase()}]: ${data.notes}`)
+      }
+      if (data.selectedPartInfo) {
+        allNotes.push(`[${data.anatomyType.toUpperCase()}] Selected Part: ${data.selectedPartInfo.name}`)
+      }
+      if (data.selectedDisease) {
+        allNotes.push(`[${data.anatomyType.toUpperCase()}] Diagnosis: ${data.selectedDisease.name}`)
+        if (data.selectedDisease.description) {
+          allNotes.push(`[${data.anatomyType.toUpperCase()}] Description: ${data.selectedDisease.description}`)
+        }
+        if (data.selectedDisease.prescriptions && data.selectedDisease.prescriptions.length > 0) {
+          allNotes.push(`[${data.anatomyType.toUpperCase()}] Prescriptions: ${data.selectedDisease.prescriptions.join('; ')}`)
+        }
+      }
+    })
+
+    // Merge all diagnoses (deduplicate)
+    const allDiagnoses = new Set<string>()
+    const customDiagnoses: string[] = []
+    
+    dataEntries.forEach(data => {
+      data.diagnoses.forEach(diag => {
+        if (diag && diag.trim()) {
+          allDiagnoses.add(diag.trim())
+        }
+      })
+      if (data.customDiagnosis && data.customDiagnosis.trim()) {
+        customDiagnoses.push(`[${data.anatomyType.toUpperCase()}]: ${data.customDiagnosis.trim()}`)
+      }
+    })
+
+    const finalDiagnoses = Array.from(allDiagnoses)
+    if (customDiagnoses.length > 0) {
+      finalDiagnoses.push(CUSTOM_DIAGNOSIS_OPTION)
+    }
+
+    return {
+      medicines: allMedicines,
+      notes: allNotes.join('\n\n'),
+      recheckupRequired: false,
+      finalDiagnosis: finalDiagnoses,
+      customDiagnosis: customDiagnoses.length > 0 ? customDiagnoses.join('; ') : undefined
+    }
+  }
+
+  // Handle combined anatomy completion
+  const handleCombinedAnatomyCompletion = async (appointmentId: string) => {
+    const mergedData = mergeAnatomyData(appointmentId)
+    if (!mergedData) {
+      setNotification({
+        type: "error",
+        message: "No anatomy data found. Please complete at least one anatomy checkup."
+      })
+      return
+    }
+
+    if (mergedData.medicines.length === 0) {
+      setNotification({
+        type: "error",
+        message: "Please add at least one medicine before completing the checkup."
+      })
+      return
+    }
+
+    if (!mergedData.finalDiagnosis || mergedData.finalDiagnosis.length === 0) {
+      setNotification({
+        type: "error",
+        message: "Please select at least one diagnosis before completing the consultation."
+      })
+      return
+    }
+
+    setShowCombinedCompletionModal(prev => ({
+      ...prev,
+      [appointmentId]: false
+    }))
+
+    await runCompletionFlow(appointmentId, mergedData, { showToast: true })
+    
+    // Clear anatomy data after completion
+    setAnatomyViewerData(prev => {
+      const updated = { ...prev }
+      delete updated[appointmentId]
+      return updated
+    })
+    setSelectedAnatomyTypes(prev => {
+      const updated = { ...prev }
+      delete updated[appointmentId]
+      return updated
+    })
+    setConsultationMode(prev => {
+      const updated = { ...prev }
+      updated[appointmentId] = null
+      return updated
+    })
+  }
+
   const runCompletionFlow = async (
     appointmentId: string,
     formData: CompletionFormEntry,
@@ -1213,20 +1485,12 @@ export default function DoctorAppointments() {
       try {
         const currentUser = auth.currentUser
         if (!currentUser) {
-          console.warn("[Completion WhatsApp] User not logged in, skipping completion WhatsApp message")
+
         } else {
           const token = await currentUser.getIdToken()
 
-          console.log("[Completion WhatsApp] Sending completion message:", {
-            appointmentId,
-            patientId: appointmentSnapshot.patientId,
-            patientPhone: appointmentSnapshot.patientPhone,
-            patientName: appointmentSnapshot.patientName,
-            hospitalId: activeHospitalId,
-          })
-
           if (!activeHospitalId) {
-            console.error("[Completion WhatsApp] ERROR: activeHospitalId is missing!")
+
           }
 
           const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
@@ -1247,14 +1511,9 @@ export default function DoctorAppointments() {
           const responseData = await completionResponse.json().catch(() => ({}))
           
           if (!completionResponse.ok) {
-            console.error("[Completion WhatsApp] ❌ FAILED to send:", {
-              status: completionResponse.status,
-              statusText: completionResponse.statusText,
-              error: responseData.error || "Unknown error",
-              responseData,
-            })
+
           } else {
-            console.log("[Completion WhatsApp] ✅ SUCCESS:", responseData)
+
             if (options?.showToast !== false) {
               setNotification({
                 type: "success",
@@ -1264,11 +1523,11 @@ export default function DoctorAppointments() {
           }
         }
       } catch (error) {
-        console.error("[Completion WhatsApp] ❌ ERROR sending completion WhatsApp:", error)
+
         // Don't fail the completion if WhatsApp fails
       }
     } else {
-      console.warn("[Completion WhatsApp] ⚠️ Appointment snapshot not found, skipping WhatsApp message")
+
     }
 
     if (formData.recheckupRequired && appointmentSnapshot) {
@@ -1296,10 +1555,10 @@ export default function DoctorAppointments() {
         })
 
         if (!response.ok) {
-          console.error("Failed to send re-checkup WhatsApp message")
+
         }
       } catch (error) {
-        console.error("Error sending re-checkup WhatsApp:", error)
+
       }
     }
 
@@ -1318,7 +1577,7 @@ export default function DoctorAppointments() {
       await recordMedicineSuggestions(formData.medicines)
       await refreshMedicineSuggestions()
     } catch (suggestionError) {
-      console.error("Failed to record medicine suggestions", suggestionError)
+
     }
 
     setCompletionData((prev) => {
@@ -1348,23 +1607,24 @@ export default function DoctorAppointments() {
     if (!appointmentId) return
     
     // Find the appointment and validate date
+    // COMMENTED OUT FOR TESTING - Allow completing appointments from any date
     const appointment = appointments.find(apt => apt.id === appointmentId)
-    if (appointment) {
-      const appointmentDate = new Date(appointment.appointmentDate)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      appointmentDate.setHours(0, 0, 0, 0)
-      const isToday = appointmentDate.getTime() === today.getTime()
-      const isFutureAppointment = appointmentDate > today
-      
-      if (isFutureAppointment && !isToday) {
-        setNotification({
-          type: "error",
-          message: "Cannot complete future appointments. You can only complete appointments scheduled for today."
-        })
-        return
-      }
-    }
+    // if (appointment) {
+    //   const appointmentDate = new Date(appointment.appointmentDate)
+    //   const today = new Date()
+    //   today.setHours(0, 0, 0, 0)
+    //   appointmentDate.setHours(0, 0, 0, 0)
+    //   const isToday = appointmentDate.getTime() === today.getTime()
+    //   const isFutureAppointment = appointmentDate > today
+    //   
+    //   if (isFutureAppointment && !isToday) {
+    //     setNotification({
+    //       type: "error",
+    //       message: "Cannot complete future appointments. You can only complete appointments scheduled for today."
+    //     })
+    //     return
+    //   }
+    // }
     
     const currentData: CompletionFormEntry = completionData[appointmentId] || { 
       medicines: [], 
@@ -1396,7 +1656,7 @@ export default function DoctorAppointments() {
     try {
       await runCompletionFlow(appointmentId, currentData)
     } catch (error: unknown) {
-      console.error("Error completing appointment:", error)
+
       setNotification({ 
         type: "error", 
         message: error instanceof Error ? error.message : "Failed to complete appointment" 
@@ -1452,7 +1712,7 @@ export default function DoctorAppointments() {
         message: "Admission request sent to receptionist."
       })
     } catch (error: any) {
-      console.error("Admit patient error", error)
+
       setNotification({
         type: "error",
         message: error?.message || "Failed to submit admission request"
@@ -1525,7 +1785,7 @@ export default function DoctorAppointments() {
           await runCompletionFlow(appointmentId, formData, { showToast: false })
           hasMedicine = true
         } catch (error) {
-          console.error("Auto-complete before admission failed:", error)
+
           setNotification({
             type: "error",
             message: error instanceof Error
@@ -1554,7 +1814,7 @@ export default function DoctorAppointments() {
       await handleAdmitPatient(admitDialog.appointment)
       closeAdmitDialog()
     } catch (error) {
-      console.error("Admit patient error:", error)
+
       setNotification({
         type: "error",
         message: error instanceof Error ? error.message : "Failed to admit patient. Please try again."
@@ -1698,7 +1958,7 @@ export default function DoctorAppointments() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-white pt-20">
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero */}
         <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm mb-6">
@@ -1900,7 +2160,15 @@ export default function DoctorAppointments() {
               {displayedAppointments.map((appointment) => {
                 const isExpanded = expandedAppointment === appointment.id
                 return (
-                  <div key={appointment.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm">
+                  <div 
+                    key={appointment.id} 
+                    ref={(el) => {
+                      if (el) {
+                        appointmentCardRefs.current[appointment.id] = el
+                      }
+                    }}
+                    className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
                       <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                         <span>{appointment.patientName}</span>
@@ -2034,6 +2302,11 @@ export default function DoctorAppointments() {
                 <div
                   key={appointment.id}
                   id={`appointment-${appointment.id}`}
+                  ref={(el) => {
+                    if (el) {
+                      appointmentCardRefs.current[appointment.id] = el
+                    }
+                  }}
                   className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden transition-all hover:shadow-md hover:border-slate-300"
                 >
                   {/* Accordion Header */}
@@ -2613,32 +2886,19 @@ export default function DoctorAppointments() {
                                       </svg>
                                       Regenerate
                                     </button>
-                              {appointment.status === "confirmed" && !showCompletionForm[appointment.id] && (() => {
-                                const appointmentDate = new Date(appointment.appointmentDate)
-                                const today = new Date()
-                                today.setHours(0, 0, 0, 0)
-                                appointmentDate.setHours(0, 0, 0, 0)
-                                const isToday = appointmentDate.getTime() === today.getTime()
-                                const isFutureAppointment = appointmentDate > today
-                                
-                                return (
-                                  <button
-                                    onClick={() => toggleCompletionForm(appointment.id)}
-                                    disabled={updating[appointment.id] || isFutureAppointment}
-                                    className={`px-3 py-2 rounded-md transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2 shadow-sm ${
-                                      isFutureAppointment
-                                        ? 'bg-gray-400 text-white cursor-not-allowed'
-                                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                    }`}
-                                    title={isFutureAppointment ? "Can only complete today's appointments" : "Open consultation form"}
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    Complete Consultation
-                                  </button>
-                                )
-                              })()}
+                              {appointment.status === "confirmed" && !showCompletionForm[appointment.id] && (
+                                <button
+                                  onClick={() => handleCompleteConsultationClick(appointment.id)}
+                                  disabled={updating[appointment.id]}
+                                  className="btn-modern btn-modern-sm flex items-center justify-center gap-2"
+                                  title="Complete consultation"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  Complete Consultation
+                                </button>
+                              )}
                                   </div>
                                 </div>
                               </div>
@@ -2803,66 +3063,69 @@ export default function DoctorAppointments() {
                               </div>
                             </div>
                           )
-                        })()}
+                        })(                          )}
+
+                          {/* Documents & Reports Section */}
+                          <div className="mt-4">
+                            <AppointmentDocuments
+                              appointmentId={appointment.id}
+                              patientId={appointment.patientId}
+                              patientUid={appointment.patientUid || ""}
+                              appointmentSpecialty={appointment.doctorSpecialization}
+                              appointmentStatus={appointment.status}
+                              canUpload={true}
+                              canEdit={true}
+                              canDelete={true}
+                            />
+                          </div>
 
                           {/* Complete Consultation Button - Show at bottom if AI not shown yet */}
                           {!aiDiagnosis[appointment.id] && appointment.status === "confirmed" && !showCompletionForm[appointment.id] && (
                             <div className="mt-4">
-                              {(() => {
-                                const isToday = new Date(appointment.appointmentDate).toDateString() === new Date().toDateString()
-                                const isFutureAppointment = !isToday && new Date(appointment.appointmentDate) > new Date()
-                                
-                                return (
-                                  <>
-                                    <button
-                                      onClick={() => toggleCompletionForm(appointment.id)}
-                                      disabled={updating[appointment.id] || isFutureAppointment}
-                                      className={`w-full px-4 py-2.5 rounded-md transition-all font-semibold text-sm flex items-center justify-center gap-2 shadow-sm ${
-                                        isFutureAppointment 
-                                          ? 'bg-gray-400 text-white cursor-not-allowed opacity-60' 
-                                          : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                                      }`}
-                                      title={isFutureAppointment ? "Can only complete today's appointments" : "Open consultation form"}
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                      </svg>
-                                      Complete Consultation
-                                    </button>
-                                    {isFutureAppointment && (
-                                      <p className="text-xs text-gray-500 mt-1 text-center">
-                                        Can only complete today's appointments
-                                      </p>
-                                    )}
-                                  </>
-                                )
-                              })()}
+                              <button
+                                onClick={() => handleCompleteConsultationClick(appointment.id)}
+                                disabled={updating[appointment.id]}
+                                className="btn-modern btn-modern-sm w-full flex items-center justify-center gap-2"
+                                title="Complete consultation"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Complete Consultation
+                              </button>
                             </div>
                           )}
 
                           {/* Complete Checkup Form Accordion */}
-                          {showCompletionForm[appointment.id] && appointment.status === "confirmed" && (() => {
-                            const appointmentDate = new Date(appointment.appointmentDate)
-                            const today = new Date()
-                            today.setHours(0, 0, 0, 0)
-                            appointmentDate.setHours(0, 0, 0, 0)
-                            const isToday = appointmentDate.getTime() === today.getTime()
-                            const isFutureAppointment = appointmentDate > today
-                            
-                            // Only render form for today's appointments
-                            return isToday && !isFutureAppointment
-                          })() && (
+                          {showCompletionForm[appointment.id] && appointment.status === "confirmed" && (
                             <div className="mt-3 bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden animate-slide-up-fade">
                               <div className="bg-slate-50 border-b border-slate-200 px-3 py-2">
                                 <div className="flex items-center justify-between">
                                   <h4 className="text-slate-800 font-semibold text-sm flex items-center gap-1.5">
-                                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    Consultation Form
+                                    {consultationMode[appointment.id] === 'anatomy' ? (
+                                      <>
+                                        <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                        </svg>
+                                        3D Anatomy Viewer
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Consultation Form
+                                      </>
+                                    )}
                                   </h4>
                                   <button
-                                    onClick={() => toggleCompletionForm(appointment.id)}
+                                    onClick={() => {
+                                      toggleCompletionForm(appointment.id)
+                                      setConsultationMode(prev => ({
+                                        ...prev,
+                                        [appointment.id]: null
+                                      }))
+                                    }}
                                     className="text-slate-500 hover:text-slate-800 rounded p-0.5 transition-all hover:bg-slate-200"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2872,7 +3135,196 @@ export default function DoctorAppointments() {
                                 </div>
                               </div>
 
-                              <form onSubmit={(e) => handleCompleteAppointment(e, appointment.id)} className="p-3 space-y-4">
+                              {consultationMode[appointment.id] === 'anatomy' ? (
+                                <div className="space-y-6">
+                                  {selectedAnatomyTypes[appointment.id]?.map((anatomyType, index) => (
+                                    <div key={`${anatomyType}-${index}`} className="border-2 border-purple-200 rounded-xl p-4 bg-gradient-to-br from-purple-50 to-pink-50">
+                                      <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-bold text-purple-900 capitalize">{anatomyType} Anatomy</h3>
+                                        {selectedAnatomyTypes[appointment.id] && selectedAnatomyTypes[appointment.id].length > 1 && (
+                                          <button
+                                            onClick={() => {
+                                              setSelectedAnatomyTypes(prev => {
+                                                const current = prev[appointment.id] || []
+                                                return {
+                                                  ...prev,
+                                                  [appointment.id]: current.filter((_, i) => i !== index)
+                                                }
+                                              })
+                                            }}
+                                            className="text-red-600 hover:text-red-800 text-sm"
+                                          >
+                                            Remove
+                                          </button>
+                                        )}
+                                      </div>
+                                      <InlineAnatomyViewer
+                                        appointmentId={appointment.id}
+                                        patientName={appointment.patientName || 'Patient'}
+                                        anatomyType={anatomyType}
+                                        onDataChange={(data) => {
+                                          setAnatomyViewerData(prev => {
+                                            const currentData = prev[appointment.id]?.[anatomyType]
+                                            // Only update if data actually changed (deep comparison)
+                                            if (JSON.stringify(currentData) === JSON.stringify(data)) {
+                                              return prev
+                                            }
+                                            return {
+                                              ...prev,
+                                              [appointment.id]: {
+                                                ...(prev[appointment.id] || {}),
+                                                [anatomyType]: data
+                                              }
+                                            }
+                                          })
+                                        }}
+                                        onComplete={() => {
+                                          setShowCombinedCompletionModal(prev => ({
+                                            ...prev,
+                                            [appointment.id]: true
+                                          }))
+                                        }}
+                                      />
+                                    </div>
+                                  ))}
+                                  
+                                  {/* Add Another Anatomy Button */}
+                                  <button
+                                    onClick={() => handleAddAnotherAnatomy(appointment.id)}
+                                    className="w-full p-4 border-2 border-dashed border-purple-300 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-center text-purple-700 font-medium"
+                                  >
+                                    + Add Another Anatomy
+                                  </button>
+
+                                  {/* Combined Completion Modal */}
+                                  {showCombinedCompletionModal[appointment.id] && (() => {
+                                    const allData = anatomyViewerData[appointment.id]
+                                    const dataEntries = allData ? Object.values(allData).filter((d): d is AnatomyViewerData => d !== null) : []
+                                    const mergedData = mergeAnatomyData(appointment.id)
+
+                                    return (
+                                      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                                        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                                          <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+                                            <h3 className="text-2xl font-bold text-slate-800">Confirm Completion - All Anatomy Types</h3>
+                                            <button
+                                              onClick={() => setShowCombinedCompletionModal(prev => ({
+                                                ...prev,
+                                                [appointment.id]: false
+                                              }))}
+                                              className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-full hover:bg-slate-100"
+                                            >
+                                              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          </div>
+
+                                          <div className="p-6 space-y-6">
+                                            {/* Patient Info */}
+                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                              <h4 className="font-semibold text-blue-900 mb-2">Patient Information</h4>
+                                              <p className="text-slate-700">{appointment.patientName || 'Patient'}</p>
+                                            </div>
+
+                                            {/* All Anatomy Types */}
+                                            {dataEntries.map((data, idx) => (
+                                              <div key={idx} className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-4">
+                                                <h4 className="font-bold text-purple-900 mb-3 text-lg capitalize">{data.anatomyType} Anatomy</h4>
+                                                
+                                                {data.selectedPartInfo && (
+                                                  <div className="mb-3">
+                                                    <p className="text-sm font-semibold text-purple-800 mb-1">Selected Part:</p>
+                                                    <p className="text-slate-700">{data.selectedPartInfo.name}</p>
+                                                  </div>
+                                                )}
+
+                                                {data.selectedDisease && (
+                                                  <div className="mb-3">
+                                                    <p className="text-sm font-semibold text-purple-800 mb-1">Diagnosis:</p>
+                                                    <p className="text-slate-700">{data.selectedDisease.name}</p>
+                                                  </div>
+                                                )}
+
+                                                {data.medicines.length > 0 && (
+                                                  <div className="mb-3">
+                                                    <p className="text-sm font-semibold text-purple-800 mb-2">Medicines ({data.medicines.filter(m => m.name && m.name.trim()).length}):</p>
+                                                    <div className="space-y-2">
+                                                      {data.medicines.filter(m => m.name && m.name.trim()).map((med, medIdx) => (
+                                                        <div key={medIdx} className="bg-white rounded p-2 border border-purple-300">
+                                                          <p className="font-medium text-slate-800">{med.name}</p>
+                                                          {med.dosage && <p className="text-xs text-slate-600">Dosage: {med.dosage}</p>}
+                                                          {med.frequency && <p className="text-xs text-slate-600">Frequency: {med.frequency}</p>}
+                                                          {med.duration && <p className="text-xs text-slate-600">Duration: {med.duration}</p>}
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {data.notes && (
+                                                  <div>
+                                                    <p className="text-sm font-semibold text-purple-800 mb-1">Notes:</p>
+                                                    <p className="text-slate-700 whitespace-pre-wrap text-sm">{data.notes}</p>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+
+                                            {/* Combined Summary */}
+                                            {mergedData && (
+                                              <>
+                                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                                  <h4 className="font-semibold text-green-900 mb-2">Combined Diagnosis</h4>
+                                                  <div className="space-y-1">
+                                                    {mergedData.finalDiagnosis?.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION).map((diag, idx) => (
+                                                      <p key={idx} className="text-slate-700">• {diag}</p>
+                                                    ))}
+                                                    {mergedData.customDiagnosis && <p className="text-slate-700">• {mergedData.customDiagnosis}</p>}
+                                                  </div>
+                                                </div>
+
+                                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                                  <h4 className="font-semibold text-amber-900 mb-2">All Medicines ({mergedData.medicines.length})</h4>
+                                                  <div className="space-y-2">
+                                                    {mergedData.medicines.map((med, idx) => (
+                                                      <div key={idx} className="bg-white rounded p-2 border border-amber-300">
+                                                        <p className="font-medium text-slate-800">{med.name}</p>
+                                                        {med.dosage && <p className="text-xs text-slate-600">Dosage: {med.dosage}</p>}
+                                                        {med.frequency && <p className="text-xs text-slate-600">Frequency: {med.frequency}</p>}
+                                                        {med.duration && <p className="text-xs text-slate-600">Duration: {med.duration}</p>}
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+
+                                          <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex gap-3">
+                                            <button
+                                              onClick={() => setShowCombinedCompletionModal(prev => ({
+                                                ...prev,
+                                                [appointment.id]: false
+                                              }))}
+                                              className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors font-medium"
+                                            >
+                                              Cancel
+                                            </button>
+                                            <button
+                                              onClick={() => handleCombinedAnatomyCompletion(appointment.id)}
+                                              className="btn-modern btn-modern-success flex-1 flex items-center justify-center gap-2"
+                                            >
+                                              Confirm & Complete All
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
+                                </div>
+                              ) : (
+                                <form onSubmit={(e) => handleCompleteAppointment(e, appointment.id)} className="p-3 space-y-4">
                                 {/* Final Diagnosis Section */}
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                                   <DiagnosisSelector
@@ -3276,6 +3728,28 @@ export default function DoctorAppointments() {
                                   </div>
                                 </div>
 
+                                {/* ENT Anatomy Viewer Section */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-xs font-medium text-gray-700">
+                                      3D ENT Anatomy Viewer <span className="text-gray-400 text-xs">(Optional)</span>
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const url = `/doctor-dashboard/anatomy?appointmentId=${appointment.id}&patientName=${encodeURIComponent(appointment.patientName || 'Patient')}`
+                                        window.location.href = url
+                                      }}
+                                      className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded transition-all flex items-center gap-1"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      Open 3D Model
+                                    </button>
+                                  </div>
+                                </div>
+
                                 {/* Notes Section */}
                                 <div>
                                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -3353,33 +3827,16 @@ export default function DoctorAppointments() {
                                 </div>
 
                                 <div className="flex gap-2 pt-2">
-                                  {(() => {
-                                    const appointmentDate = new Date(appointment.appointmentDate)
-                                    const today = new Date()
-                                    today.setHours(0, 0, 0, 0)
-                                    appointmentDate.setHours(0, 0, 0, 0)
-                                    const _isToday = appointmentDate.getTime() === today.getTime()
-                                    const isFutureAppointment = appointmentDate > today
-                                    
-                                    return (
-                                      <button
-                                        type="submit"
-                                        disabled={
-                                          updating[appointment.id] ||
-                                          !hasValidPrescriptionInput(completionData[appointment.id]) ||
-                                          isFutureAppointment
-                                        }
-                                        className={`flex-1 py-2 rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                                          isFutureAppointment
-                                            ? 'bg-gray-400 text-white cursor-not-allowed'
-                                            : 'bg-green-600 hover:bg-green-700 text-white'
-                                        }`}
-                                        title={isFutureAppointment ? "Can only complete today's appointments" : ""}
-                                      >
-                                        {updating[appointment.id] ? "Completing..." : "Complete Checkup"}
-                                      </button>
-                                    )
-                                  })()}
+                                  <button
+                                    type="submit"
+                                    disabled={
+                                      updating[appointment.id] ||
+                                      !hasValidPrescriptionInput(completionData[appointment.id])
+                                    }
+                                    className="btn-modern btn-modern-success btn-modern-sm flex-1"
+                                  >
+                                    {updating[appointment.id] ? "Completing..." : "Complete Checkup"}
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => openAdmitDialog(appointment)}
@@ -3407,6 +3864,7 @@ export default function DoctorAppointments() {
                                   </button>
                                 </div>
                               </form>
+                              )}
                             </div>
                           )}
 
@@ -3680,7 +4138,122 @@ export default function DoctorAppointments() {
             </div>
           </div>
         )}
+
+      {/* Consultation Mode Selection Modal */}
+      {showConsultationModeModal.open && (() => {
+        const appointmentId = showConsultationModeModal.appointmentId
+        const alreadySelected = appointmentId ? (selectedAnatomyTypes[appointmentId] || []) : []
+        const allAvailableModels = getAvailableAnatomyModels(userData?.specialization)
+        // Filter out already selected anatomy types when adding another
+        const availableModels = allAvailableModels.filter(model => !alreadySelected.includes(model.type))
+        const modelColors: Record<string, { from: string; to: string; border: string; hoverBorder: string; bg: string }> = {
+          ear: { from: 'from-purple-50', to: 'to-pink-50', border: 'border-purple-200', hoverBorder: 'border-purple-400', bg: 'bg-purple-600' },
+          throat: { from: 'from-red-50', to: 'to-rose-50', border: 'border-red-200', hoverBorder: 'border-red-400', bg: 'bg-red-600' },
+          dental: { from: 'from-teal-50', to: 'to-cyan-50', border: 'border-teal-200', hoverBorder: 'border-teal-400', bg: 'bg-teal-600' }
+        }
+        const modelIcons: Record<string, React.ReactElement> = {
+          ear: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+          ),
+          throat: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          ),
+          dental: (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+            </svg>
+          )
+        }
+        
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-slate-800">Select Consultation Mode</h3>
+                <button
+                  onClick={() => setShowConsultationModeModal({ open: false, appointmentId: null })}
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-full hover:bg-slate-100"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <p className="text-slate-600 mb-6">Choose how you would like to complete the consultation:</p>
+
+              <div className={`grid gap-3 ${availableModels.length === 0 ? 'grid-cols-1' : availableModels.length === 1 ? 'grid-cols-2' : availableModels.length === 2 ? 'grid-cols-3' : 'grid-cols-3'}`}>
+                {/* Normal Mode - Always available */}
+                <button
+                  onClick={() => handleConsultationModeSelect('normal')}
+                  className="p-4 bg-gradient-to-b from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg hover:border-blue-400 hover:shadow-md transition-all text-center group flex flex-col items-center justify-center"
+                >
+                  <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform mb-3">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h4 className="font-bold text-sm text-slate-800 mb-1">Normal</h4>
+                  <p className="text-xs text-slate-600">Standard form</p>
+                </button>
+
+                {/* Show only available anatomy models based on specialization */}
+                {availableModels.map((model) => {
+                  const colors = modelColors[model.type]
+                  return (
+                    <button
+                      key={model.type}
+                      onClick={() => handleConsultationModeSelect('anatomy', model.type)}
+                      className={`p-4 bg-gradient-to-b ${colors.from} ${colors.to} border-2 ${colors.border} rounded-lg hover:${colors.hoverBorder} hover:shadow-md transition-all text-center group flex flex-col items-center justify-center`}
+                    >
+                      <div className={`w-12 h-12 ${colors.bg} rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform mb-3`}>
+                        {modelIcons[model.type]}
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-800 mb-1">{model.label}</h4>
+                      <p className="text-xs text-slate-600">3D/2D Model</p>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Show message if no anatomy models available */}
+              {availableModels.length === 0 && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    {alreadySelected.length > 0 ? (
+                      <>
+                        <strong>Note:</strong> All available anatomy models for your specialization have already been added. Please use the Normal mode or remove an existing anatomy model to add a different one.
+                      </>
+                    ) : (
+                      <>
+                        <strong>Note:</strong> No anatomy models are available for your specialization ({userData?.specialization || 'Unknown'}). Please use the Normal mode.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
     </div>
+  )
+}
+
+export default function DoctorAppointments() {
+  return (
+    <Suspense fallback={
+      <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    }>
+      <DoctorAppointmentsContent />
+    </Suspense>
   )
 }
 

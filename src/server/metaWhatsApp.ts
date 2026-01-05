@@ -121,7 +121,7 @@ export async function sendFlowMessage(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error("[Meta WhatsApp] Error sending flow:", data)
+
       return {
         success: false,
         error: data.error?.message || "Failed to send flow message",
@@ -134,7 +134,7 @@ export async function sendFlowMessage(
       messageId: data.messages?.[0]?.id,
     }
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Exception:", error)
+
     return {
       success: false,
       error: error.message || "Unknown error",
@@ -212,7 +212,7 @@ export async function sendMultiButtonMessage(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error("[Meta WhatsApp] Error sending multi-button:", data)
+
       return {
         success: false,
         error: data.error?.message || "Failed to send button message",
@@ -225,7 +225,7 @@ export async function sendMultiButtonMessage(
       messageId: data.messages?.[0]?.id,
     }
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Exception:", error)
+
     return {
       success: false,
       error: error.message || "Unknown error",
@@ -302,7 +302,7 @@ export async function sendButtonMessage(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error("[Meta WhatsApp] Error sending button:", data)
+
       return {
         success: false,
         error: data.error?.message || "Failed to send button message",
@@ -315,7 +315,7 @@ export async function sendButtonMessage(
       messageId: data.messages?.[0]?.id,
     }
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Exception:", error)
+
     return {
       success: false,
       error: error.message || "Unknown error",
@@ -392,7 +392,7 @@ export async function sendListMessage(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error("[Meta WhatsApp] Error sending list:", data)
+
       return {
         success: false,
         error: data.error?.message || "Failed to send list message",
@@ -405,7 +405,7 @@ export async function sendListMessage(
       messageId: data.messages?.[0]?.id,
     }
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Exception:", error)
+
     return {
       success: false,
       error: error.message || "Unknown error",
@@ -465,7 +465,7 @@ export async function sendDocumentMessage(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error("[Meta WhatsApp] Error sending document:", data)
+
       return {
         success: false,
         error: data.error?.message || "Failed to send document",
@@ -478,7 +478,7 @@ export async function sendDocumentMessage(
       messageId: data.messages?.[0]?.id,
     }
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Exception:", error)
+
     return {
       success: false,
       error: error.message || "Unknown error",
@@ -553,8 +553,7 @@ export async function sendTemplateMessage(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error("[Meta WhatsApp] Error sending template:", data)
-      
+
       let errorMessage = data.error?.message || "Failed to send template message"
       const errorCode = data.error?.code
       
@@ -582,7 +581,7 @@ export async function sendTemplateMessage(
       messageId: data.messages?.[0]?.id,
     }
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Exception:", error)
+
     return {
       success: false,
       error: error.message || "Unknown error",
@@ -638,8 +637,7 @@ export async function sendTextMessage(
     const data = await response.json()
 
     if (!response.ok) {
-      console.error("[Meta WhatsApp] Error sending message:", data)
-      
+
       // Provide more helpful error messages
       let errorMessage = data.error?.message || "Failed to send message"
       const errorCode = data.error?.code
@@ -667,7 +665,7 @@ export async function sendTextMessage(
       messageId: data.messages?.[0]?.id,
     }
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Exception:", error)
+
     return {
       success: false,
       error: error.message || "Unknown error",

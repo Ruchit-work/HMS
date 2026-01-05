@@ -88,9 +88,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, amountRefunded: amount })
   } catch (e: any) {
-    console.error('approve-refund error', e)
-    
-
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
   }
 }

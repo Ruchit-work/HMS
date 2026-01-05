@@ -44,7 +44,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error("[mark-mfa] Failed to persist MFA session:", error)
     return NextResponse.json(
       { error: error?.message || "Failed to complete multi-factor verification." },
       { status: 500 }

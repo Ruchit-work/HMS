@@ -223,7 +223,6 @@ export async function POST(request: NextRequest) {
       receptionistId: receptionistUid
     })
   } catch (error: any) {
-    console.error('[POST /api/admin/create-receptionist] Error:', error)
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to create receptionist' },
       { status: 500 }

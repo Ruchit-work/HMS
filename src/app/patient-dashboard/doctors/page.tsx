@@ -51,7 +51,6 @@ export default function DoctorsPage() {
         setDoctors(doctorsList)
         setFilteredDoctors(doctorsList)
       } catch (error) {
-        console.error("Error fetching doctors:", error)
       } finally {
         setLoading(false)
       }
@@ -226,7 +225,7 @@ export default function DoctorsPage() {
                   <div className="pt-4 border-t border-slate-100">
                     <Link
                       href="/patient-dashboard/book-appointment"
-                      className="block w-full px-4 py-2 bg-gradient-to-r from-green-600 to-teal-600 text-white font-semibold rounded-lg text-center hover:from-green-700 hover:to-teal-700 transition-all duration-300 hover:shadow-lg"
+                      className="btn-modern btn-modern-success block w-full text-center"
                     >
                       Book Appointment
                     </Link>
@@ -252,7 +251,7 @@ export default function DoctorsPage() {
             </a>
             <Link
               href="/patient-dashboard/book-appointment"
-              className="px-6 py-3 bg-green-700 text-white font-semibold rounded-lg hover:bg-green-800 transition-all duration-300 hover:scale-105"
+              className="btn-modern btn-modern-success"
             >
               📅 Book Now
             </Link>

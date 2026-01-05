@@ -101,7 +101,6 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
 
     return null
   } catch (error) {
-    console.error("Error getting user role:", error)
     return null
   }
 }
@@ -187,7 +186,6 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
         })
         setLoading(false)
       } catch (error) {
-        console.error("Auth error:", error)
         setLoading(false)
       }
     })

@@ -3,6 +3,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore, initializeFirestore, persistentLocalCache, type Firestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Check if environment variables are loaded
 // const requiredEnvVars = [
@@ -40,4 +41,5 @@ if (getApps().length === 0) {
 }
 
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 export { db };

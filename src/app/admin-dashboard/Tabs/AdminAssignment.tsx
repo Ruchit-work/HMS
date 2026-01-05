@@ -109,7 +109,6 @@ export default function AdminAssignment() {
 
       setAdmins(adminsList)
     } catch (err: any) {
-      console.error('Error loading data:', err)
       setError('Failed to load data. Please try again.')
     } finally {
       setLoading(false)
@@ -154,7 +153,6 @@ export default function AdminAssignment() {
       const result = await response.json()
 
       if (!response.ok) {
-        console.error('[Create Admin] API Error:', result)
         throw new Error(result.error || 'Failed to create admin')
       }
 
@@ -170,7 +168,6 @@ export default function AdminAssignment() {
       })
       await loadData()
     } catch (err: any) {
-      console.error('[Create Admin] Error:', err)
       setError(err.message || 'Failed to create admin. Please try again.')
     } finally {
       setSaving(false)
@@ -243,7 +240,6 @@ export default function AdminAssignment() {
 
       if (!authDeleteResponse.ok) {
         const authError = await authDeleteResponse.json().catch(() => ({}))
-        console.warn('Failed to delete from auth:', authError)
         // Continue with Firestore deletion even if auth deletion fails
       }
 
@@ -262,7 +258,6 @@ export default function AdminAssignment() {
       setDeletingAdmin(null)
       await loadData()
     } catch (err: any) {
-      console.error('[Delete Admin] Error:', err)
       setError(err.message || 'Failed to delete admin. Please try again.')
     } finally {
       setDeleting(false)
@@ -383,7 +378,7 @@ export default function AdminAssignment() {
             setSuccess(null)
             setShowAddModal(true)
           }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          className="btn-modern btn-modern-sm"
         >
           + Create Admin
         </button>
@@ -597,7 +592,7 @@ export default function AdminAssignment() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={saving}
                   >
                     {saving ? (editingAdmin ? 'Updating...' : 'Creating...') : (editingAdmin ? 'Update Admin' : 'Create Admin')}

@@ -16,6 +16,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void
   onCancel: () => void
   confirmLoading?: boolean
+  loadingText?: string // Optional custom loading text
 }
 
 export function ConfirmDialog({
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   confirmLoading = false,
+  loadingText,
 }: ConfirmDialogProps) {
   if (!isOpen) return null
 
@@ -56,10 +58,16 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="btn-modern btn-modern-danger btn-modern-sm disabled:cursor-not-allowed disabled:opacity-70"
             disabled={confirmLoading}
           >
-            {confirmLoading ? "Signing out..." : confirmText}
+            {confirmLoading 
+              ? (loadingText || 
+                 (confirmText === "Delete" ? "Deleting..." : 
+                  confirmText === "Remove" ? "Removing..." :
+                  confirmText === "Logout" ? "Signing out..." :
+                  `${confirmText}ing...` || "Processing..."))
+              : confirmText}
           </button>
         </div>
       </div>

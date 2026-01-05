@@ -49,7 +49,6 @@ export async function verifyAuthToken(token: string): Promise<VerifiedTokenData 
       authTime: decodedToken.auth_time ? String(decodedToken.auth_time) : null,
     }
   } catch (error) {
-    console.error("[api-auth] Token verification failed:", error)
     return null
   }
 }
@@ -117,7 +116,6 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
 
     return null
   } catch (error) {
-    console.error("[api-auth] Error getting user role:", error)
     return null
   }
 }

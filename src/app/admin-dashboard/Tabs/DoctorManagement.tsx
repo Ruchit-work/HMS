@@ -166,7 +166,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             setSuccessMessage('Doctor added successfully! They can now log in with their email and password.')
             setTimeout(() => setSuccessMessage(null), 5000)
         } catch (error) {
-            console.error('Error adding doctor:', error)
+
             if (error instanceof Error) {
                 setError(error.message)
             } else {
@@ -266,11 +266,11 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 
                 if (!authDeleteResponse.ok) {
                     const authError = await authDeleteResponse.json().catch(() => ({}))
-                    console.warn('Failed to delete from auth:', authError)
+
                     // Continue with Firestore deletion even if auth deletion fails
                 }
             } catch (authError) {
-                console.error('Error deleting from auth:', authError)
+
                 // Continue with Firestore deletion even if auth deletion fails
             }
             
@@ -316,7 +316,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             
             setDoctors(activeList)
             }, (error) => {
-                console.error('Error in active doctors listener:', error)
+
                 setError(error.message)
             })
             
@@ -338,7 +338,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             setPendingDoctors(pendingList)
                 setLoading(false)
             }, (error) => {
-                console.error('Error in pending doctors listener:', error)
+
                 setError(error.message)
                 setLoading(false)
             })
@@ -348,7 +348,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 unsubscribePending()
             }
         } catch (error) {
-            console.error("Error setting up doctors listeners:", error)
+
             setError((error as Error).message)  
             setLoading(false)
             return () => {}
@@ -424,10 +424,10 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 
                 if (!authDeleteResponse.ok) {
                     const authError = await authDeleteResponse.json().catch(() => ({}))
-                    console.warn('Failed to delete from auth:', authError)
+
                 }
             } catch (authError) {
-                console.error('Error deleting from auth:', authError)
+
             }
             
             // Delete from Firestore

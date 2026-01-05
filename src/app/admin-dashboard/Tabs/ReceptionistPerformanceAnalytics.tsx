@@ -282,7 +282,6 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
 
       setReceptionistAnalytics(receptionistStats)
     } catch (error) {
-      console.error('Error fetching receptionist analytics:', error)
     } finally {
       setLoading(false)
     }

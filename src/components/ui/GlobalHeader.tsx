@@ -91,7 +91,6 @@ export default function GlobalHeader() {
       })
       setAppointmentCount(confirmedAppointments.length)
     }, (error) => {
-      console.error("Error fetching appointments:", error)
       setAppointmentCount(0)
     })
 
@@ -208,6 +207,8 @@ export default function GlobalHeader() {
   const doctorLinks: NavLink[] = [
     { href: "/doctor-dashboard", label: "Home" },
     { href: "/doctor-dashboard/appointments", label: "Appointments", showBadge: true },
+    { href: "/doctor-dashboard/documents", label: "Documents & Reports" },
+    { href: "/doctor-dashboard/analytics", label: "Analytics" },
     { href: "/doctor-dashboard/about", label: "About" }
   ]
 
@@ -222,12 +223,12 @@ export default function GlobalHeader() {
           : 'bg-white/80 backdrop-blur-sm border-b border-slate-200/40 shadow-lg py-3'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-4">
+          {/* Logo - Fixed width to prevent overlap */}
           <Link 
             href={isDoctor ? "/doctor-dashboard" : isPatient ? "/patient-dashboard" : "/"}
-            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-all duration-300 cursor-pointer"
+            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-all duration-300 cursor-pointer flex-shrink-0"
           >
             <div className={`bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg flex items-center justify-center text-white shadow-md transition-all duration-300 ${
               isScrolled ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-8 h-8 sm:w-10 sm:h-10'
@@ -236,20 +237,20 @@ export default function GlobalHeader() {
                 isScrolled ? 'text-base' : 'text-base sm:text-lg'
               }`}>H</span>
             </div>
-            <h1 className={`font-bold text-slate-800 transition-all duration-300 ${
+            <h1 className={`font-bold text-slate-800 transition-all duration-300 whitespace-nowrap ${
               isScrolled ? 'text-base sm:text-lg lg:text-xl' : 'text-lg sm:text-xl lg:text-2xl'
             }`}>
               HMS
             </h1>
           </Link>
           
-          {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-4 xl:gap-6">
+          {/* Desktop Navigation - Centered with proper spacing */}
+          <nav className="hidden lg:flex items-center gap-4 xl:gap-6 flex-1 justify-center mx-4">
             {navLinks.map((link) => (
               <div key={link.href} className="relative">
                 <Link
                   href={link.href}
-                  className={`text-sm font-medium transition-colors whitespace-nowrap relative pb-1 ${
+                  className={`text-sm xl:text-base font-medium transition-colors whitespace-nowrap relative pb-1 px-2 ${
                     pathname === link.href
                       ? "text-slate-800"
                       : "text-slate-600 hover:text-slate-800"
@@ -276,8 +277,8 @@ export default function GlobalHeader() {
             ))}
           </nav>
 
-          {/* Right Side: Mobile Menu Button + Profile & Logout */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right Side: Mobile Menu Button + Profile & Logout - Fixed width */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             {/* Mobile Menu Button */}
             <button
               onClick={() => setShowMobileMenu(!showMobileMenu)}
@@ -312,22 +313,21 @@ export default function GlobalHeader() {
               </div>
             </button>
 
-            {/* Profile Button with Hover Dropdown */}
+            {/* Profile Button with Click Dropdown */}
             <div 
               ref={userMenuRef}
               className="relative"
-              onMouseEnter={() => setShowUserDropdown(true)}
             >
               <button
                 type="button"
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg border border-slate-200 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg border border-slate-200 hover:bg-slate-200 hover:text-slate-900 transition-colors whitespace-nowrap"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                <span className="hidden sm:block font-medium">Profile</span>
-                <svg className={`w-4 h-4 text-slate-500 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="hidden sm:block font-medium text-sm sm:text-base">Profile</span>
+                <svg className={`w-4 h-4 text-slate-500 transition-transform flex-shrink-0 ${showUserDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>

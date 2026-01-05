@@ -147,7 +147,6 @@ export default function PatientAppointments() {
 
         setAppointments(appointmentList)
       } catch (error) {
-        console.error("Error loading patient appointments:", error)
         setNotification({
           type: "error",
           message: "Failed to load appointments. Please try again."
@@ -167,7 +166,7 @@ export default function PatientAppointments() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-slate-600 mb-4">No hospital selected. Please select a hospital to continue.</p>
-          <Link href="/hospital-selection" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-block">
+          <Link href="/hospital-selection" className="btn-modern btn-modern-sm inline-block">
             Select Hospital
           </Link>
         </div>
@@ -263,7 +262,6 @@ export default function PatientAppointments() {
       })
       handleCloseBillingPayment()
     } catch (error: any) {
-      console.error("Bill payment error", error)
       setNotification({
         type: "error",
         message: error?.message || "Failed to pay bill. Please try again."
@@ -300,7 +298,6 @@ export default function PatientAppointments() {
       setShowCancelModal(false)
       setAppointmentToCancel(null)
     } catch (error: unknown) {
-      console.error("Error cancelling appointment:", error)
       setNotification({
         type: "error",
         message: (error as Error).message || "Failed to cancel appointment"
@@ -341,7 +338,7 @@ export default function PatientAppointments() {
               </div>
               <div className="w-full sm:w-auto">
                 <Link href="/patient-dashboard/book-appointment" className="block">
-                  <button className="w-full group inline-flex items-center justify-center gap-3 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 active:scale-95">
+                  <button className="btn-modern w-full group inline-flex items-center justify-center gap-3">
                     <svg className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>

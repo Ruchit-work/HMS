@@ -70,7 +70,6 @@ export async function POST(request: Request) {
 
     // Note: Media URL support will be added in future update
     if (mediaUrl) {
-      console.warn("[Meta WhatsApp] Media URL support not yet implemented for manual sending")
     }
 
     return NextResponse.json({
@@ -80,7 +79,6 @@ export async function POST(request: Request) {
       to: normalizedTo || to,
     })
   } catch (error) {
-    console.error("Failed to send WhatsApp message", error)
     return NextResponse.json(
       {
         error:

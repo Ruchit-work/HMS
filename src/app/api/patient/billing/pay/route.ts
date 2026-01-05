@@ -187,9 +187,6 @@ export async function POST(req: Request) {
       transactionId,
     })
   } catch (error: any) {
-    console.error("billing pay error", error)
-    
-
     return Response.json(
       { error: error?.message || "Failed to pay bill" },
       { status: 500 }

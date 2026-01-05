@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
     const initResult = initFirebaseAdmin("meta-whatsapp-webhook")
     if (!initResult.ok) {
-      console.error("[Meta WhatsApp] Firebase Admin not initialised")
+
       return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
     }
 
@@ -181,7 +181,7 @@ export async function POST(req: Request) {
     )
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error("[Meta WhatsApp] Webhook error:", err)
+
     return NextResponse.json(
       { error: "Webhook processing failed", details: err instanceof Error ? err.message : String(err) },
       { status: 500 }
@@ -210,7 +210,7 @@ async function handleGreeting(phone: string) {
     )
 
     if (!buttonResponse.success) {
-      console.error("[Meta WhatsApp] Failed to send registration prompt:", buttonResponse.error)
+
       // Fallback to text message
       await sendTextMessage(
         phone,
@@ -228,7 +228,7 @@ async function handleGreeting(phone: string) {
     )
 
     if (!buttonResponse.success) {
-      console.error("[Meta WhatsApp] Failed to send greeting button:", buttonResponse.error)
+
       // Fallback to text message
       await sendTextMessage(
         phone,
@@ -258,7 +258,7 @@ async function handleIncomingText(phone: string, _text: string) {
   )
 
   if (!buttonResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send button:", buttonResponse.error)
+
     await sendTextMessage(
       phone,
       "Hi! 👋 Welcome to Harmony Medical Services.\n\nTo book an appointment, please contact our reception at +91-XXXXXXXXXX."
@@ -375,7 +375,7 @@ async function moveToBranchSelection(
         defaultBranchId = patientData?.defaultBranchId || null
       }
     } catch (error) {
-      console.error("[WhatsApp] Error fetching patient default branch:", error)
+
     }
   }
 
@@ -389,7 +389,7 @@ async function moveToBranchSelection(
         hospitalId = patientData?.hospitalId || null
       }
     } catch (error) {
-      console.error("[WhatsApp] Error fetching patient hospital:", error)
+
     }
   }
 
@@ -552,7 +552,7 @@ async function sendConfirmationButtons(
   const buttonResponse = await sendMultiButtonMessage(phone, message, buttons, "Harmony Medical Services")
 
   if (!buttonResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send confirmation buttons:", buttonResponse.error)
+
     const fallback =
       language === "gujarati"
         ? `${message}\n\nકૃપા કરીને "confirm" અથવા "cancel" લખી જવાબ આપો.`
@@ -626,7 +626,7 @@ async function processBookingConfirmation(
         }
       }
     } catch (error) {
-      console.error("[Meta WhatsApp] Failed to read original appointment for re-checkup:", error)
+
     }
   }
 
@@ -640,7 +640,7 @@ async function processBookingConfirmation(
         }
       }
     } catch (error) {
-      console.error("[Meta WhatsApp] Failed to load doctor for re-checkup booking:", error)
+
     }
 
     if (!doctorDataForAppointment && originalAppointmentData) {
@@ -689,7 +689,7 @@ async function processBookingConfirmation(
           branchName = patientData?.defaultBranchName || null
         }
       } catch (error) {
-        console.error("[Meta WhatsApp] Error fetching patient default branch for appointment:", error)
+
       }
     }
     
@@ -726,12 +726,10 @@ async function processBookingConfirmation(
           }
         }
       } catch (error) {
-        console.error("[Meta WhatsApp] Error fetching default branch for appointment:", error)
+
       }
     }
-    
-    console.log(`[Meta WhatsApp] Creating appointment with branchId: ${branchId}, branchName: ${branchName}`)
-    
+
     const appointmentId = await createAppointment(
       db,
       patient,
@@ -778,7 +776,7 @@ async function processBookingConfirmation(
 
     await sessionRef.delete()
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Error creating appointment:", error)
+
     if (error.message === "SLOT_ALREADY_BOOKED") {
       const msg =
         language === "gujarati"
@@ -901,7 +899,7 @@ async function startBookingWithFlow(phone: string) {
     if (flowResponse.success) {
       return
     } else {
-      console.error("[Meta WhatsApp] Failed to send Flow, falling back to text-based booking:", flowResponse.error)
+
       // Fallback to text-based booking if Flow fails
       await startBookingConversation(phone)
       return
@@ -951,7 +949,7 @@ async function handleFlowCompletion(value: any): Promise<Response> {
           appointmentDate = `${year}-${month}-${day}`
         }
       } catch (e) {
-        console.error("[Meta WhatsApp] Error parsing date from Flow:", appointmentDate, e)
+
       }
     }
   }
@@ -1119,7 +1117,7 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         branchName = patientData?.defaultBranchName || null
       }
     } catch (error) {
-      console.error("[Meta WhatsApp] Error fetching patient default branch from Flow:", error)
+
     }
   }
   
@@ -1160,12 +1158,10 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         }
       }
     } catch (error) {
-      console.error("[Meta WhatsApp] Error fetching default branch from Flow:", error)
+
     }
   }
-  
-  console.log(`[Meta WhatsApp Flow] Creating appointment with branchId: ${branchId}, branchName: ${branchName}`)
-  
+
   // Create appointment
   try {
     const appointmentId = await createAppointment(
@@ -1215,7 +1211,7 @@ async function handleFlowCompletion(value: any): Promise<Response> {
 
     return NextResponse.json({ success: true, appointmentId })
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Error creating appointment from Flow:", error)
+
     if (error.message === "SLOT_ALREADY_BOOKED") {
       await sendTextMessage(
         from,
@@ -1435,7 +1431,7 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
           branchName = patientData?.defaultBranchName || null
         }
       } catch (error) {
-        console.error("[WhatsApp] Error fetching patient default branch:", error)
+
       }
     }
 
@@ -1450,7 +1446,7 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
             hospitalId = patientData?.hospitalId || null
           }
         } catch (error) {
-          console.error("[WhatsApp] Error fetching patient hospital:", error)
+
         }
       }
 
@@ -1584,7 +1580,7 @@ async function handleRegistrationPrompt(phone: string) {
     // Send language picker
     await sendLanguagePicker(phone)
   } catch (error) {
-    console.error("[Meta WhatsApp] Failed to auto-register patient:", error)
+
     await sendTextMessage(
       phone,
       "❌ We couldn't register you right now. Please try again or contact reception."
@@ -1665,7 +1661,7 @@ async function handleRegistrationFullName(
     
     return true
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Error creating patient:", error)
+
     const errorMsg = language === "gujarati"
       ? "❌ રજિસ્ટ્રેશન દરમિયાન ભૂલ આવી. કૃપા કરીને ફરીથી પ્રયાસ કરો અથવા રિસેપ્શનને કૉલ કરો."
       : "❌ Error during registration. Please try again or contact reception."
@@ -1891,13 +1887,7 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
   )
 
   if (!listResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send date picker list:", {
-      error: listResponse.error,
-      errorCode: listResponse.errorCode,
-      phone: phone,
-      dateCount: datesToShow.length,
-    })
-    
+
     const simplifiedDates = datesToShow.map(date => ({
       id: date.id,
       title: date.title.length > 24 ? date.title.substring(0, 21) + "..." : date.title,
@@ -1918,10 +1908,7 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
     )
 
     if (!retryResponse.success) {
-      console.error("[Meta WhatsApp] Both attempts failed to send date picker list:", {
-        originalError: listResponse.error,
-        retryError: retryResponse.error,
-      })
+
       // Send error message instead of text fallback
       const errorMsg = language === "gujarati"
         ? "❌ ક્ષમા કરો, અમે તારીખ પસંદ કરવા માટે સૂચિ બતાવી શક્યા નથી. કૃપા કરીને પાછળથી પ્રયાસ કરો અથવા રિસેપ્શનનો સંપર્ક કરો."
@@ -1991,10 +1978,6 @@ async function sendTimeSlotListForPeriod(
     )
 
     if (!listResponse.success) {
-      console.error("[Meta WhatsApp] Failed to send time slot list chunk:", {
-        error: listResponse.error,
-        chunkIndex,
-      })
 
       let fallback = language === "gujarati"
         ? `🕐 *સમય સ્લોટ્સ (${listTitle})*\n`
@@ -2125,7 +2108,7 @@ async function handleListSelection(phone: string, selectedId: string, _selectedT
     const hour = parseInt(hourStr)
     
     if (isNaN(hour)) {
-      console.error("[Meta WhatsApp] Invalid hourly slot ID:", selectedId)
+
       return
     }
     
@@ -2318,7 +2301,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   const sessionDoc = await sessionRef.get()
 
   if (!sessionDoc.exists) {
-    console.error("[Meta WhatsApp] Session not found for time button click:", normalizedPhone)
+
     return
   }
 
@@ -2327,9 +2310,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
 
   // Validate required session data (doctorId no longer required)
   if (!session.appointmentDate) {
-    console.error("[Meta WhatsApp] Missing appointmentDate in session:", {
-      appointmentDate: session.appointmentDate,
-    })
+
     const errorMsg = language === "gujarati"
       ? "❌ સત્ર મળ્યું નથી. કૃપા કરીને ફરીથી પ્રયાસ કરો."
       : "❌ Session not found. Please try again."
@@ -2358,13 +2339,13 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
       return hour >= 14 && hour <= 17
     })
   } else {
-    console.error("[Meta WhatsApp] Unknown button ID:", buttonId)
+
     await sendTimePicker(phone, undefined, session.appointmentDate, language)
     return
   }
 
   if (selectedSlots.length === 0) {
-    console.error("[Meta WhatsApp] No slots found for time period:", buttonId)
+
     const errorMsg = language === "gujarati"
       ? "❌ આ સમય અવધિ માટે કોઈ સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજો સમય પસંદ કરો."
       : "❌ No slots available for this time period. Please select another time."
@@ -2386,7 +2367,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   for (const slot of sortedSlots) {
     const normalizedTime = normalizeTime(slot)
     if (!normalizedTime) {
-      console.warn("[Meta WhatsApp] Failed to normalize time slot:", slot)
+
       continue
     }
 
@@ -2397,7 +2378,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
 
   if (availableSlotsForPeriod.length === 0) {
     // No slots available in this time period
-    console.error("[Meta WhatsApp] ❌ All slots booked for period:", buttonId, "on", session.appointmentDate)
+
     const errorMsg = language === "gujarati"
       ? "❌ આ સમય અવધિ માટે બધા સ્લોટ બુક થયેલા છે. કૃપા કરીને બીજો સમય પસંદ કરો."
       : "❌ All slots for this time period are booked. Please select another time."
@@ -2524,11 +2505,7 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   )
 
   if (!listResponse.success) {
-    console.error("[Meta WhatsApp] Failed to send hourly time slots:", {
-      error: listResponse.error,
-      errorCode: listResponse.errorCode,
-    })
-    
+
     // Fallback to text message
     let fallbackMsg = language === "gujarati"
       ? "🕰️ *ઉપલબ્ધ સમય સ્લોટ્સ*\n\n"
@@ -2718,7 +2695,7 @@ async function handleConfirmation(
           })
         }
       } catch (recreateError) {
-        console.error("[Meta WhatsApp] Failed to recreate patient record:", recreateError)
+
       }
     }
 
@@ -2793,7 +2770,7 @@ async function handleConfirmation(
 
     return true
   } catch (error: any) {
-    console.error("[Meta WhatsApp] Error creating appointment:", error)
+
     if (error.message === "SLOT_ALREADY_BOOKED") {
       await sendTextMessage(phone, "❌ That slot was just booked. Please try again.")
     } else if (error.message?.startsWith("DATE_BLOCKED:")) {
@@ -3101,9 +3078,9 @@ async function createAppointment(
 
     // Validate that branchId is set (log warning if not, but still create appointment)
     if (!appointmentData.branchId) {
-      console.warn(`[Meta WhatsApp] ⚠️ WARNING: Creating appointment ${appointmentId} without branchId! This may cause visibility issues.`)
+
     } else {
-      console.log(`[Meta WhatsApp] ✅ Creating appointment ${appointmentId} with branchId: ${appointmentData.branchId}, branchName: ${appointmentData.branchName || 'N/A'}`)
+
     }
     
     transaction.set(appointmentRef, appointmentData)
@@ -3256,7 +3233,7 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
         throw new Error(`PDF URL not accessible: ${testResponse.status}`)
       }
     } catch (urlError: any) {
-      console.error("[Meta WhatsApp] PDF URL verification failed:", urlError)
+
       // Still try to send, but log the issue
     }
     
@@ -3268,12 +3245,7 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
     )
 
     if (!docResult.success) {
-      console.error("[Meta WhatsApp] Failed to send PDF:", {
-        error: docResult.error,
-        errorCode: docResult.errorCode,
-        pdfUrl,
-        appointmentId,
-      })
+
       // Fallback: send message with link to download
       await sendTextMessage(
         phone,
@@ -3287,7 +3259,7 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
       )
     }
     } catch (error: any) {
-      console.error("[Meta WhatsApp] Error generating/sending PDF:", error)
+
       // Don't fail the booking if PDF fails
       await sendTextMessage(
         phone,

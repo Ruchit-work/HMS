@@ -50,7 +50,6 @@ function HospitalSelectionContent() {
         setError(data.error || 'Failed to load hospitals')
       }
     } catch (err: any) {
-      console.error('[HospitalSelection] Error loading hospitals:', err)
       setError(err.message || 'Failed to load hospitals')
     } finally {
       setLoading(false)
@@ -103,7 +102,6 @@ function HospitalSelectionContent() {
         setError(data.error || 'Failed to select hospital')
       }
     } catch (err: any) {
-      console.error('[HospitalSelection] Error selecting hospital:', err)
       setError(err.message || 'Failed to select hospital')
     } finally {
       setSelecting(false)

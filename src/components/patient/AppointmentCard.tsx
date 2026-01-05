@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Appointment } from "@/types/patient"
 import { generateAppointmentConfirmationPDF } from "@/utils/pdfGenerators"
 import PrescriptionDisplay from "@/components/prescription/PrescriptionDisplay"
+import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
 
 interface AppointmentCardProps {
   appointment: Appointment
@@ -154,6 +155,20 @@ export default function AppointmentCard({
                 if (e) e.stopPropagation()
               }}
             />
+
+            {/* Documents & Reports Section */}
+            <div className="md:col-span-2 mt-4">
+              <AppointmentDocuments
+                appointmentId={appointment.id}
+                patientId={appointment.patientId}
+                patientUid={appointment.patientUid || ""}
+                appointmentSpecialty={appointment.doctorSpecialization}
+                appointmentStatus={appointment.status}
+                canUpload={true}
+                canEdit={false}
+                canDelete={false}
+              />
+            </div>
 
             {/* Action Buttons (Only for confirmed appointments) */}
             {appointment.status === "confirmed" && (

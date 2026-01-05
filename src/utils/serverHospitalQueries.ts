@@ -45,7 +45,6 @@ export async function getUserActiveHospitalId(userId: string): Promise<string | 
     
     return null
   } catch (error) {
-    console.error('[getUserActiveHospitalId] Error:', error)
     return null
   }
 }
@@ -88,7 +87,6 @@ export async function getDoctorHospitalId(doctorId: string): Promise<string | nu
     
     return null
   } catch (error) {
-    console.error('[getDoctorHospitalId] Error:', error)
     return null
   }
 }
@@ -120,7 +118,6 @@ export async function getAppointmentHospitalId(appointmentId: string): Promise<s
     
     return null
   } catch (error) {
-    console.error('[getAppointmentHospitalId] Error:', error)
     return null
   }
 }
@@ -141,7 +138,6 @@ export async function getAllActiveHospitals(): Promise<Array<{ id: string; name:
       ...doc.data()
     }))
   } catch (error) {
-    console.error('[getAllActiveHospitals] Error:', error)
     return []
   }
 }

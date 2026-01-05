@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (err) {
-        console.warn("Unable to resolve patient sequential id", err)
+
       }
     }
 
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
 
     return Response.json({ success: true, requestId: requestRef.id })
   } catch (error: any) {
-    console.error("admission-request error", error)
+
     return Response.json(
       { error: error?.message || "Failed to create admission request" },
       { status: 500 }
