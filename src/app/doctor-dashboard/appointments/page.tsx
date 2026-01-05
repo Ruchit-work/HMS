@@ -4170,55 +4170,55 @@ function DoctorAppointmentsContent() {
         }
         
         return (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-slate-800">Select Consultation Mode</h3>
-                <button
-                  onClick={() => setShowConsultationModeModal({ open: false, appointmentId: null })}
-                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-full hover:bg-slate-100"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-slate-800">Select Consultation Mode</h3>
+              <button
+                onClick={() => setShowConsultationModeModal({ open: false, appointmentId: null })}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-full hover:bg-slate-100"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-              <p className="text-slate-600 mb-6">Choose how you would like to complete the consultation:</p>
+            <p className="text-slate-600 mb-6">Choose how you would like to complete the consultation:</p>
 
               <div className={`grid gap-3 ${availableModels.length === 0 ? 'grid-cols-1' : availableModels.length === 1 ? 'grid-cols-2' : availableModels.length === 2 ? 'grid-cols-3' : 'grid-cols-3'}`}>
                 {/* Normal Mode - Always available */}
-                <button
-                  onClick={() => handleConsultationModeSelect('normal')}
-                  className="p-4 bg-gradient-to-b from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg hover:border-blue-400 hover:shadow-md transition-all text-center group flex flex-col items-center justify-center"
-                >
-                  <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform mb-3">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-800 mb-1">Normal</h4>
-                  <p className="text-xs text-slate-600">Standard form</p>
-                </button>
+              <button
+                onClick={() => handleConsultationModeSelect('normal')}
+                className="p-4 bg-gradient-to-b from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg hover:border-blue-400 hover:shadow-md transition-all text-center group flex flex-col items-center justify-center"
+              >
+                <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform mb-3">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <h4 className="font-bold text-sm text-slate-800 mb-1">Normal</h4>
+                <p className="text-xs text-slate-600">Standard form</p>
+              </button>
 
                 {/* Show only available anatomy models based on specialization */}
                 {availableModels.map((model) => {
                   const colors = modelColors[model.type]
                   return (
-                    <button
+              <button
                       key={model.type}
                       onClick={() => handleConsultationModeSelect('anatomy', model.type)}
                       className={`p-4 bg-gradient-to-b ${colors.from} ${colors.to} border-2 ${colors.border} rounded-lg hover:${colors.hoverBorder} hover:shadow-md transition-all text-center group flex flex-col items-center justify-center`}
-                    >
+              >
                       <div className={`w-12 h-12 ${colors.bg} rounded-lg flex items-center justify-center text-white group-hover:scale-110 transition-transform mb-3`}>
                         {modelIcons[model.type]}
-                      </div>
+                </div>
                       <h4 className="font-bold text-sm text-slate-800 mb-1">{model.label}</h4>
-                      <p className="text-xs text-slate-600">3D/2D Model</p>
-                    </button>
+                <p className="text-xs text-slate-600">3D/2D Model</p>
+              </button>
                   )
                 })}
-              </div>
+                </div>
 
               {/* Show message if no anatomy models available */}
               {availableModels.length === 0 && (
@@ -4241,7 +4241,7 @@ function DoctorAppointmentsContent() {
         )
       })()}
 
-    </div>
+        </div>
   )
 }
 
@@ -4250,7 +4250,7 @@ export default function DoctorAppointments() {
     <Suspense fallback={
       <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
         <div className="text-slate-600">Loading...</div>
-      </div>
+    </div>
     }>
       <DoctorAppointmentsContent />
     </Suspense>

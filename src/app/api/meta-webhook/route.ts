@@ -6,6 +6,9 @@ import { isDateBlocked as isDateBlockedFromRaw, normalizeBlockedDates } from "@/
 import { generateAppointmentConfirmationPDFBase64 } from "@/utils/pdfGenerators"
 import { Appointment } from "@/types/patient"
 import { getDoctorHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/serverHospitalQueries"
+import { detectDocumentType, detectDocumentTypeFromText, detectDocumentTypeEnhanced, detectSpecialty } from "@/utils/documentDetection"
+import { getStorage } from "firebase-admin/storage"
+import { DocumentMetadata } from "@/types/document"
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -45,6 +48,9 @@ export async function POST(req: Request) {
 
     const from = message.from
     const messageType = message.type
+
+    // Debug: Log message type for troubleshooting (remove in production if needed)
+    // Note: In production, you might want to remove this or use a proper logging service
 
     // Handle Flow completion (when user completes the Flow form)
     if (messageType === "flow") {
@@ -170,6 +176,34 @@ export async function POST(req: Request) {
         
         // Not in booking, send welcome button
         await handleIncomingText(from, text)
+      }
+      return NextResponse.json({ success: true })
+    }
+
+    // Handle image messages - check both type and message.image property
+    if (messageType === "image" || message.image) {
+      try {
+        await handleImageMessage(from, message, value)
+      } catch (error: any) {
+        // If handler fails, send error message
+        await sendTextMessage(
+          from,
+          "❌ Failed to process image. Please try again or contact reception."
+        )
+      }
+      return NextResponse.json({ success: true })
+    }
+
+    // Handle document messages - check both type and message.document property
+    if (messageType === "document" || message.document) {
+      try {
+        await handleDocumentMessage(from, message, value)
+      } catch (error: any) {
+        // If handler fails, send error message
+        await sendTextMessage(
+          from,
+          "❌ Failed to process document. Please try again or contact reception."
+        )
       }
       return NextResponse.json({ success: true })
     }
@@ -3266,6 +3300,409 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
         "📄 Your appointment confirmation is available in your patient dashboard."
       )
     }
+  }
+}
+
+/**
+ * Download media from WhatsApp API
+ */
+async function downloadWhatsAppMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string; fileName: string } | null> {
+  const META_ACCESS_TOKEN = process.env.META_WHATSAPP_ACCESS_TOKEN
+  const META_API_VERSION = process.env.META_WHATSAPP_API_VERSION || "v22.0"
+  const META_API_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`
+
+  if (!META_ACCESS_TOKEN) {
+    return null
+  }
+
+  try {
+    // Get media URL
+    const mediaUrl = `${META_API_BASE_URL}/${mediaId}`
+    const mediaResponse = await fetch(mediaUrl, {
+      headers: {
+        Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+      },
+    })
+
+    if (!mediaResponse.ok) {
+      return null
+    }
+
+    const mediaData = await mediaResponse.json()
+    const downloadUrl = mediaData.url
+
+    if (!downloadUrl) {
+      return null
+    }
+
+    // Download the actual media file
+    const fileResponse = await fetch(downloadUrl, {
+      headers: {
+        Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+      },
+    })
+
+    if (!fileResponse.ok) {
+      return null
+    }
+
+    const buffer = Buffer.from(await fileResponse.arrayBuffer())
+    const mimeType = mediaData.mime_type || fileResponse.headers.get("content-type") || "application/octet-stream"
+    const fileName = mediaData.filename || mediaData.name || `whatsapp_${mediaId}.${mimeType.includes('pdf') ? 'pdf' : mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'jpg' : 'png'}`
+
+    return { buffer, mimeType, fileName }
+  } catch (error) {
+    return null
+  }
+}
+
+/**
+ * Handle image messages from WhatsApp
+ */
+async function handleImageMessage(phone: string, message: any, value: any) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+
+  // Find patient by phone
+  const patient = await findPatientByPhone(db, normalizedPhone)
+  if (!patient) {
+    await sendTextMessage(
+      phone,
+      "❌ We couldn't find your patient profile.\n\n📝 Please register first to upload documents via WhatsApp."
+    )
+    return
+  }
+
+  const image = message.image
+  if (!image || !image.id) {
+    // If no image found, check if it's in a different structure
+    // Sometimes WhatsApp sends media in value.media or other locations
+    await sendTextMessage(phone, "❌ Failed to process image. Please try again or contact reception.")
+    return
+  }
+
+  // Get caption if available
+  const caption = image.caption || message.text?.body || ""
+
+  // Download image
+  const mediaData = await downloadWhatsAppMedia(image.id)
+  if (!mediaData) {
+    await sendTextMessage(phone, "❌ Failed to download image. Please try again.")
+    return
+  }
+
+  // Validate file size (50KB to 20MB for images)
+  const fileSize = mediaData.buffer.length
+  const minSize = 50 * 1024 // 50KB
+  const maxSize = 20 * 1024 * 1024 // 20MB
+  
+  if (fileSize < minSize) {
+    await sendTextMessage(
+      phone,
+      `❌ Image is too small. Minimum size is 50KB. Your image is ${(fileSize / 1024).toFixed(2)}KB.`
+    )
+    return
+  }
+  
+  if (fileSize > maxSize) {
+    await sendTextMessage(
+      phone,
+      `❌ Image is too large. Maximum size is 20MB. Your image is ${(fileSize / (1024 * 1024)).toFixed(2)}MB.`
+    )
+    return
+  }
+
+  // Auto-detect document type: filename → message text → "other"
+  let detectedType = detectDocumentType(mediaData.fileName)
+  if (detectedType === "other" && caption) {
+    const textType = detectDocumentTypeFromText(caption)
+    if (textType !== "other") {
+      detectedType = textType
+    }
+  }
+
+  // Get hospital ID
+  const hospitalId = patient.data.hospitalId
+  if (!hospitalId) {
+    await sendTextMessage(phone, "❌ Hospital ID not found. Please contact reception.")
+    return
+  }
+
+  // Upload to Firebase Storage
+  try {
+    const projectId = process.env.FIREBASE_PROJECT_ID || "hospital-management-sys-eabb2"
+    let storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    if (storageBucket?.startsWith("gs://")) {
+      storageBucket = storageBucket.replace("gs://", "")
+    }
+    if (!storageBucket) {
+      storageBucket = `${projectId}.appspot.com`
+    }
+
+    const bucket = getStorage().bucket(storageBucket)
+    const patientId = patient.data.patientId || patient.id
+    const timestamp = Date.now()
+    const randomString = Math.random().toString(36).substring(2, 9)
+    const lastDot = mediaData.fileName.lastIndexOf('.')
+    const nameWithoutExt = lastDot > 0 ? mediaData.fileName.substring(0, lastDot) : mediaData.fileName
+    const extension = lastDot > 0 ? mediaData.fileName.substring(lastDot) : '.jpg'
+    const sanitized = nameWithoutExt.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\s+/g, '_').substring(0, 100)
+    const finalFileName = `${timestamp}_${patientId}_${sanitized}_${randomString}${extension}`
+    const storagePath = `hospitals/${hospitalId}/patients/${patientId}/${finalFileName}`
+
+    const fileRef = bucket.file(storagePath)
+    await fileRef.save(mediaData.buffer, {
+      metadata: {
+        contentType: mediaData.mimeType,
+        metadata: {
+          originalFileName: mediaData.fileName,
+          uploadedBy: "whatsapp",
+          uploadedByRole: "patient",
+          patientId: patientId,
+          hospitalId: hospitalId,
+          source: "whatsapp",
+        },
+      },
+    })
+
+    await fileRef.makePublic()
+    const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
+
+    // Save metadata to Firestore
+    const detectedSpecialty = detectSpecialty(mediaData.fileName) || detectSpecialty(caption)
+    const now = new Date().toISOString()
+    const documentData: any = {
+      patientId: patientId,
+      patientUid: patient.id,
+      hospitalId: hospitalId,
+      fileName: finalFileName,
+      originalFileName: mediaData.fileName,
+      fileType: detectedType,
+      mimeType: mediaData.mimeType,
+      fileSize: mediaData.buffer.length,
+      storagePath: storagePath,
+      downloadUrl: downloadUrl,
+      uploadedBy: {
+        uid: patient.id,
+        role: "patient",
+        name: `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim() || "Patient",
+      },
+      uploadedAt: now,
+      status: "active",
+      isLinkedToAppointment: false,
+      source: "whatsapp",
+    }
+
+    if (detectedSpecialty) {
+      documentData.specialty = detectedSpecialty
+    }
+    if (caption && caption.trim()) {
+      documentData.description = caption.trim()
+    }
+
+    const documentsRef = db.collection(getHospitalCollectionPath(hospitalId, "documents"))
+    await documentsRef.add(documentData)
+
+    await sendTextMessage(
+      phone,
+      `✅ Image uploaded successfully!\n\n📄 Type: ${detectedType}\n📝 Saved to your medical records.`
+    )
+  } catch (error: any) {
+    await sendTextMessage(phone, "❌ Failed to save image. Please try again or contact reception.")
+  }
+}
+
+/**
+ * Handle document messages from WhatsApp
+ */
+async function handleDocumentMessage(phone: string, message: any, value: any) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+
+  // Find patient by phone
+  const patient = await findPatientByPhone(db, normalizedPhone)
+  if (!patient) {
+    await sendTextMessage(
+      phone,
+      "❌ We couldn't find your patient profile.\n\n📝 Please register first to upload documents via WhatsApp."
+    )
+    return
+  }
+
+  const document = message.document
+  if (!document || !document.id) {
+    await sendTextMessage(phone, "❌ Failed to process document. Please try again.")
+    return
+  }
+
+  // Get caption if available
+  const caption = document.caption || message.text?.body || ""
+  const fileName = document.filename || `document_${document.id}.pdf`
+
+  // Download document
+  const mediaData = await downloadWhatsAppMedia(document.id)
+  if (!mediaData) {
+    await sendTextMessage(phone, "❌ Failed to download document. Please try again.")
+    return
+  }
+
+  // Validate file size
+  const fileSize = mediaData.buffer.length
+  const isPDF = mediaData.mimeType === "application/pdf" || fileName.toLowerCase().endsWith('.pdf')
+  
+  if (isPDF) {
+    // PDFs: 1KB to 20MB
+    const minSize = 1 * 1024 // 1KB
+    const maxSize = 20 * 1024 * 1024 // 20MB
+    
+    if (fileSize < minSize) {
+      await sendTextMessage(phone, "❌ PDF is too small. Minimum size is 1KB.")
+      return
+    }
+    
+    if (fileSize > maxSize) {
+      await sendTextMessage(
+        phone,
+        `❌ PDF is too large. Maximum size is 20MB. Your PDF is ${(fileSize / (1024 * 1024)).toFixed(2)}MB.`
+      )
+      return
+    }
+  } else {
+    // Other documents: 2MB to 10MB
+    const minSize = 2 * 1024 * 1024 // 2MB
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    
+    if (fileSize < minSize) {
+      await sendTextMessage(phone, "❌ Document is too small. Minimum size is 2MB.")
+      return
+    }
+    
+    if (fileSize > maxSize) {
+      await sendTextMessage(
+        phone,
+        `❌ Document is too large. Maximum size is 10MB. Your document is ${(fileSize / (1024 * 1024)).toFixed(2)}MB.`
+      )
+      return
+    }
+  }
+
+  // Auto-detect document type: filename → PDF content → message text → "other"
+  let detectedType = detectDocumentType(fileName)
+  let detectedSpecialty: string | undefined = detectSpecialty(fileName)
+
+  // For PDFs, try content analysis
+  if (mediaData.mimeType === "application/pdf" || fileName.toLowerCase().endsWith('.pdf')) {
+    try {
+      const enhancedResult = await detectDocumentTypeEnhanced(fileName, mediaData.buffer, mediaData.mimeType)
+      if (enhancedResult.type !== "other") {
+        detectedType = enhancedResult.type
+      }
+      if (enhancedResult.specialty) {
+        detectedSpecialty = enhancedResult.specialty
+      }
+    } catch (error) {
+      // Fallback to filename detection if content analysis fails
+    }
+  }
+
+  // If still "other", try message text
+  if (detectedType === "other" && caption) {
+    const textType = detectDocumentTypeFromText(caption)
+    if (textType !== "other") {
+      detectedType = textType
+    }
+    if (!detectedSpecialty) {
+      detectedSpecialty = detectSpecialty(caption)
+    }
+  }
+
+  // Get hospital ID
+  const hospitalId = patient.data.hospitalId
+  if (!hospitalId) {
+    await sendTextMessage(phone, "❌ Hospital ID not found. Please contact reception.")
+    return
+  }
+
+  // Upload to Firebase Storage
+  try {
+    const projectId = process.env.FIREBASE_PROJECT_ID || "hospital-management-sys-eabb2"
+    let storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    if (storageBucket?.startsWith("gs://")) {
+      storageBucket = storageBucket.replace("gs://", "")
+    }
+    if (!storageBucket) {
+      storageBucket = `${projectId}.appspot.com`
+    }
+
+    const bucket = getStorage().bucket(storageBucket)
+    const patientId = patient.data.patientId || patient.id
+    const timestamp = Date.now()
+    const randomString = Math.random().toString(36).substring(2, 9)
+    const lastDot = fileName.lastIndexOf('.')
+    const nameWithoutExt = lastDot > 0 ? fileName.substring(0, lastDot) : fileName
+    const extension = lastDot > 0 ? fileName.substring(lastDot) : '.pdf'
+    const sanitized = nameWithoutExt.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\s+/g, '_').substring(0, 100)
+    const finalFileName = `${timestamp}_${patientId}_${sanitized}_${randomString}${extension}`
+    const storagePath = `hospitals/${hospitalId}/patients/${patientId}/${finalFileName}`
+
+    const fileRef = bucket.file(storagePath)
+    await fileRef.save(mediaData.buffer, {
+      metadata: {
+        contentType: mediaData.mimeType,
+        metadata: {
+          originalFileName: fileName,
+          uploadedBy: "whatsapp",
+          uploadedByRole: "patient",
+          patientId: patientId,
+          hospitalId: hospitalId,
+          source: "whatsapp",
+        },
+      },
+    })
+
+    await fileRef.makePublic()
+    const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
+
+    // Save metadata to Firestore
+    const now = new Date().toISOString()
+    const documentData: any = {
+      patientId: patientId,
+      patientUid: patient.id,
+      hospitalId: hospitalId,
+      fileName: finalFileName,
+      originalFileName: fileName,
+      fileType: detectedType,
+      mimeType: mediaData.mimeType,
+      fileSize: mediaData.buffer.length,
+      storagePath: storagePath,
+      downloadUrl: downloadUrl,
+      uploadedBy: {
+        uid: patient.id,
+        role: "patient",
+        name: `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim() || "Patient",
+      },
+      uploadedAt: now,
+      status: "active",
+      isLinkedToAppointment: false,
+      source: "whatsapp",
+    }
+
+    if (detectedSpecialty) {
+      documentData.specialty = detectedSpecialty
+    }
+    if (caption && caption.trim()) {
+      documentData.description = caption.trim()
+    }
+
+    const documentsRef = db.collection(getHospitalCollectionPath(hospitalId, "documents"))
+    await documentsRef.add(documentData)
+
+    await sendTextMessage(
+      phone,
+      `✅ Document uploaded successfully!\n\n📄 Type: ${detectedType}\n📝 Saved to your medical records.`
+    )
+  } catch (error: any) {
+    await sendTextMessage(phone, "❌ Failed to save document. Please try again or contact reception.")
   }
 }
 

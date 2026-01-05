@@ -131,6 +131,73 @@ export function detectSpecialty(fileName: string): string | undefined {
 }
 
 /**
+ * Detect document type from message text (for WhatsApp images/documents)
+ * Uses keyword matching similar to filename detection
+ */
+export function detectDocumentTypeFromText(text: string): DocumentType {
+  const lowerText = text.toLowerCase()
+  
+  // Prescription patterns
+  if (lowerText.includes('prescription') || lowerText.includes('presc') || 
+      lowerText.includes('rx') || lowerText.includes('medication') ||
+      lowerText.includes('medicine') || lowerText.includes('drug')) {
+    return "prescription"
+  }
+  
+  // X-ray patterns
+  if (lowerText.includes('xray') || lowerText.includes('x-ray') || 
+      lowerText.includes('x_ray') || lowerText.includes('radiograph') ||
+      lowerText.includes('radiography')) {
+    return "x-ray"
+  }
+  
+  // Lab report patterns
+  if (lowerText.includes('lab') || lowerText.includes('laboratory') || 
+      lowerText.includes('test') || lowerText.includes('blood test') ||
+      lowerText.includes('urine test') || lowerText.includes('pathology') ||
+      lowerText.includes('lab report') || lowerText.includes('test report')) {
+    return "lab-report"
+  }
+  
+  // MRI patterns (check before generic scan)
+  if (lowerText.includes('mri') || lowerText.includes('magnetic resonance')) {
+    return "mri"
+  }
+  
+  // CT scan patterns (check before generic scan)
+  if (lowerText.includes('ct scan') || lowerText.includes('ct-scan') || 
+      lowerText.includes('cat scan') || lowerText.includes('computed tomography')) {
+    return "ct-scan"
+  }
+  
+  // Ultrasound patterns
+  if (lowerText.includes('ultrasound') || lowerText.includes('sonography') ||
+      lowerText.includes('sonogram')) {
+    return "ultrasound"
+  }
+  
+  // ECG patterns
+  if (lowerText.includes('ecg') || lowerText.includes('ekg') || 
+      lowerText.includes('electrocardiogram')) {
+    return "ecg"
+  }
+  
+  // Generic scan patterns (check last)
+  if (lowerText.includes('scan')) {
+    return "scan"
+  }
+  
+  // Report patterns (generic)
+  if (lowerText.includes('report') || lowerText.includes('result') || 
+      lowerText.includes('findings') || lowerText.includes('medical report')) {
+    return "report"
+  }
+  
+  // Default to "other" if no pattern matches
+  return "other"
+}
+
+/**
  * Validate file type (MIME type and extension)
  */
 export function validateFileType(file: File): { valid: boolean; error?: string } {
@@ -160,10 +227,13 @@ export function validateFileType(file: File): { valid: boolean; error?: string }
 /**
  * Validate file size
  * PDFs: 1KB to 20MB
+ * Images: 50KB to 20MB
  * Other files: 2MB to 10MB
  */
 export function validateFileSize(file: File): { valid: boolean; error?: string } {
   const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+  const isImage = file.type?.startsWith('image/') || 
+                  ['.jpg', '.jpeg', '.png'].some(ext => file.name.toLowerCase().endsWith(ext))
   
   let minSize: number
   let maxSize: number
@@ -174,6 +244,11 @@ export function validateFileSize(file: File): { valid: boolean; error?: string }
     minSize = 1 * 1024 // 1KB
     maxSize = 20 * 1024 * 1024 // 20MB
     minSizeLabel = "1KB"
+    maxSizeLabel = "20MB"
+  } else if (isImage) {
+    minSize = 50 * 1024 // 50KB
+    maxSize = 20 * 1024 * 1024 // 20MB
+    minSizeLabel = "50KB"
     maxSizeLabel = "20MB"
   } else {
     minSize = 2 * 1024 * 1024 // 2MB
