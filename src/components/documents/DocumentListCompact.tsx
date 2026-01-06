@@ -93,15 +93,10 @@ export default function DocumentListCompact({
 
   const getFileTypeIcon = (fileType: string): string => {
     const icons: Record<string, string> = {
-      report: "📄",
+      "laboratory-report": "🧪",
+      "radiology-report": "🩻",
+      "cardiology-report": "❤️",
       prescription: "💊",
-      "x-ray": "🩻",
-      "lab-report": "🧪",
-      scan: "🔬",
-      ultrasound: "📡",
-      mri: "🧲",
-      "ct-scan": "⚡",
-      ecg: "📈",
       other: "📎",
     }
     return icons[fileType] || "📎"

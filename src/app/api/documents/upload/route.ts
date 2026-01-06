@@ -392,8 +392,36 @@ export async function POST(request: NextRequest) {
     if (tags && tags.trim()) {
       documentData.tags = tags.split(",").map((t: string) => t.trim()).filter((t: string) => t.length > 0)
     }
+    // If linked to appointment, fetch appointment data to get doctor/appointment/patient metadata
+    let doctorId: string | undefined
+    let doctorName: string | undefined
+    let appointmentDate: string | undefined
     if (appointmentId) {
       documentData.appointmentId = appointmentId
+      try {
+        const appointmentRef = db.collection(getHospitalCollectionPath(hospitalId, "appointments")).doc(appointmentId)
+        const appointmentDoc = await appointmentRef.get()
+        if (appointmentDoc.exists) {
+          const appointmentData = appointmentDoc.data()
+          doctorId = appointmentData?.doctorId
+          doctorName = appointmentData?.doctorName
+          appointmentDate = appointmentData?.appointmentDate
+          if (doctorId) {
+            documentData.doctorId = doctorId
+          }
+          if (doctorName) {
+            documentData.doctorName = doctorName
+          }
+          if (appointmentDate) {
+            documentData.appointmentDate = appointmentDate
+          }
+          if (appointmentData?.patientName) {
+            documentData.patientName = appointmentData.patientName
+          }
+        }
+      } catch (err) {
+        console.warn("[document-upload] Failed to fetch appointment data:", err)
+      }
     }
 
     // Save metadata to Firestore

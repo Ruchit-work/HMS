@@ -6,7 +6,7 @@ import DocumentUpload from "./DocumentUpload"
 import DocumentViewer from "./DocumentViewer"
 import { ConfirmDialog } from "@/components/ui/Modals"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, query, where, getDocs, orderBy, limit } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
 import PatientSelector from "./PatientSelector"
@@ -77,7 +77,17 @@ export default function DocumentsTab({
   }, [selectedPatient, initialPatientId, initialPatientUid, showPatientSelector])
 
   useEffect(() => {
-    // Always fetch documents - if no patient selected, fetch recent documents
+    // For doctor Documents & Reports page (with patient selector),
+    // don't fetch any documents until a patient is selected.
+    // For other contexts (no selector), keep existing behaviour.
+    if (showPatientSelector && !patientUid && !initialPatientUid) {
+      setDocuments([])
+      setAllDocuments([])
+      setHasMore(false)
+      setLastDocId(null)
+      return
+    }
+
     // Note: searchQuery and date filters are applied client-side, so we don't include them in dependencies
     fetchDocuments()
   }, [patientUid, initialPatientUid, appointmentId, fileTypeFilter, specialtyFilter, showAllSpecialties, showPatientSelector])
@@ -101,7 +111,8 @@ export default function DocumentsTab({
       const finalPatientUid = patientUid || initialPatientUid
       const finalPatientId = patientId || initialPatientId
       
-      // If patient is selected, filter by patient with pagination. Otherwise, fetch recent documents (no patient filter)
+      // If patient is selected, filter by patient with pagination.
+      // If patient selector is visible and no patient selected, we should have returned earlier.
       if (finalPatientUid) {
         params.append("patientUid", finalPatientUid)
         // Default limit of 50 for patient documents (pagination)
@@ -110,9 +121,6 @@ export default function DocumentsTab({
         params.append("patientId", finalPatientId)
         // Default limit of 50 for patient documents (pagination)
         params.append("limit", "50")
-      } else {
-        // No patient selected - fetch recent documents (limit to last 20)
-        params.append("limit", "20")
       }
       
       // Add pagination cursor if loading more
@@ -273,12 +281,139 @@ export default function DocumentsTab({
     setPatientNames(namesMap)
   }
 
-  const handleUploadSuccess = (document: DocumentMetadata) => {
+  const handleUploadSuccess = async (document: DocumentMetadata) => {
+    // If document was uploaded from Documents & Reports page (no appointmentId) and patient is selected,
+    // automatically link it to the latest appointment
+    if (!document.appointmentId && (patientUid || initialPatientUid || selectedPatient) && activeHospitalId) {
+      try {
+          const finalPatientUid = patientUid || initialPatientUid || selectedPatient?.uid
+          const finalPatientId = patientId || initialPatientId || selectedPatient?.patientId
+          
+          if (finalPatientUid || finalPatientId) {
+            try {
+              // Fetch latest appointment for this patient
+              const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
+              let latestAppointmentQuery
+              
+              if (finalPatientUid) {
+                latestAppointmentQuery = query(
+                  appointmentsRef,
+                  where("patientUid", "==", finalPatientUid),
+                  orderBy("appointmentDate", "desc"),
+                  limit(1)
+                )
+              } else if (finalPatientId) {
+                latestAppointmentQuery = query(
+                  appointmentsRef,
+                  where("patientId", "==", finalPatientId),
+                  orderBy("appointmentDate", "desc"),
+                  limit(1)
+                )
+              }
+              
+              if (latestAppointmentQuery) {
+                const snapshot = await getDocs(latestAppointmentQuery)
+                if (!snapshot.empty) {
+                  const latestAppointment = snapshot.docs[0]
+                  const latestAppointmentId = latestAppointment.id
+                  const latestAppointmentData = latestAppointment.data()
+                  
+                  // Update document to link to latest appointment
+                  const currentUser = auth.currentUser
+                  if (currentUser) {
+                    const token = await currentUser.getIdToken()
+                    await fetch(`/api/documents/${document.id}`, {
+                      method: "PUT",
+                      headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        appointmentId: latestAppointmentId,
+                        doctorId: latestAppointmentData?.doctorId,
+                        appointmentDate: latestAppointmentData?.appointmentDate,
+                      }),
+                    })
+                    
+                    // Update local document state
+                    document.appointmentId = latestAppointmentId
+                    document.doctorId = latestAppointmentData?.doctorId
+                    document.appointmentDate = latestAppointmentData?.appointmentDate
+                  }
+                }
+              }
+            } catch (error) {
+              // If query fails (e.g., missing index), try without orderBy
+              try {
+                const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
+                let allAppointmentsQuery
+                
+                if (finalPatientUid) {
+                  allAppointmentsQuery = query(
+                    appointmentsRef,
+                    where("patientUid", "==", finalPatientUid)
+                  )
+                } else if (finalPatientId) {
+                  allAppointmentsQuery = query(
+                    appointmentsRef,
+                    where("patientId", "==", finalPatientId)
+                  )
+                }
+                
+                if (allAppointmentsQuery) {
+                  const snapshot = await getDocs(allAppointmentsQuery)
+                  if (!snapshot.empty) {
+                    // Sort client-side and get the latest
+                    const appointments: any[] = snapshot.docs
+                      .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+                      .sort((a: any, b: any) => {
+                        const dateA = new Date(a.appointmentDate || 0).getTime()
+                        const dateB = new Date(b.appointmentDate || 0).getTime()
+                        return dateB - dateA
+                      })
+                    
+                    if (appointments.length > 0) {
+                      const latestAppointment: any = appointments[0]
+                      
+                      const currentUser = auth.currentUser
+                      if (currentUser) {
+                        const token = await currentUser.getIdToken()
+                        await fetch(`/api/documents/${document.id}`, {
+                          method: "PUT",
+                          headers: {
+                            "Authorization": `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            appointmentId: latestAppointment.id,
+                            doctorId: latestAppointment.doctorId,
+                            appointmentDate: latestAppointment.appointmentDate,
+                          }),
+                        })
+                        
+                        document.appointmentId = latestAppointment.id
+                        document.doctorId = latestAppointment.doctorId
+                        document.appointmentDate = latestAppointment.appointmentDate
+                      }
+                    }
+                  }
+                }
+              } catch (fallbackError) {
+                console.error("Error linking document to latest appointment:", fallbackError)
+              }
+            }
+          }
+      } catch (error) {
+        console.error("Error linking document to latest appointment:", error)
+        // Continue even if linking fails
+      }
+    }
+    
     setDocuments((prev) => [document, ...prev])
     setShowUpload(false)
     setNotification({
       type: "success",
-      message: `Document "${document.originalFileName}" uploaded successfully!`
+      message: `Document "${document.originalFileName}" uploaded successfully!${document.appointmentId ? " Linked to latest appointment." : ""}`
     })
     fetchDocuments() // Refresh list
     // Clear notification after 3 seconds
@@ -362,15 +497,10 @@ export default function DocumentsTab({
 
   const getFileTypeIcon = (fileType: DocumentType): string => {
     const icons: Record<DocumentType, string> = {
-      report: "📄",
+      "laboratory-report": "🧪",
+      "radiology-report": "🩻",
+      "cardiology-report": "❤️",
       prescription: "💊",
-      "x-ray": "🩻",
-      "lab-report": "🧪",
-      scan: "🔬",
-      ultrasound: "📡",
-      mri: "🧲",
-      "ct-scan": "⚡",
-      ecg: "📈",
       other: "📎",
     }
     return icons[fileType] || "📎"
@@ -478,16 +608,11 @@ export default function DocumentsTab({
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="">All Types</option>
-              <option value="report">Report</option>
+              <option value="laboratory-report">Laboratory reports</option>
+              <option value="radiology-report">Radiology Report</option>
+              <option value="cardiology-report">Cardiology Report</option>
               <option value="prescription">Prescription</option>
-              <option value="x-ray">X-Ray</option>
-              <option value="lab-report">Lab Report</option>
-              <option value="scan">Scan</option>
-              <option value="ultrasound">Ultrasound</option>
-              <option value="mri">MRI</option>
-              <option value="ct-scan">CT Scan</option>
-              <option value="ecg">ECG</option>
-              <option value="other">Other</option>
+              <option value="other">Other documents</option>
             </select>
           </div>
 
@@ -574,7 +699,7 @@ export default function DocumentsTab({
           </svg>
           <p className="mt-4 text-gray-600">
             {showPatientSelector && !patientUid && !initialPatientUid
-              ? "Select a patient to view their documents, or recent documents will appear here"
+              ? "Select a patient to view their documents."
               : "No documents found"}
           </p>
         </div>

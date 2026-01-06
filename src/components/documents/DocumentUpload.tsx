@@ -304,16 +304,11 @@ export default function DocumentUpload({
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             >
               <option value="">Auto-detect</option>
-              <option value="report">Report</option>
+              <option value="laboratory-report">Laboratory reports</option>
+              <option value="radiology-report">Radiology Report</option>
+              <option value="cardiology-report">Cardiology Report</option>
               <option value="prescription">Prescription</option>
-              <option value="x-ray">X-Ray</option>
-              <option value="lab-report">Lab Report</option>
-              <option value="scan">Scan</option>
-              <option value="ultrasound">Ultrasound</option>
-              <option value="mri">MRI</option>
-              <option value="ct-scan">CT Scan</option>
-              <option value="ecg">ECG</option>
-              <option value="other">Other</option>
+              <option value="other">Other documents</option>
             </select>
           </div>
           <div>

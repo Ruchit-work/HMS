@@ -164,9 +164,10 @@ export default function AppointmentCard({
                 patientUid={appointment.patientUid || ""}
                 appointmentSpecialty={appointment.doctorSpecialization}
                 appointmentStatus={appointment.status}
-                canUpload={true}
+                canUpload={false}
                 canEdit={false}
                 canDelete={false}
+                onlyCurrentAppointment={true}
               />
             </div>
 

@@ -101,7 +101,7 @@ export default function DocumentViewer({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-white rounded-2xl shadow-2xl">
       {/* Header */}
       <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
         <div className="flex-1 min-w-0">
@@ -138,8 +138,8 @@ export default function DocumentViewer({
       </div>
 
       {/* Document Info */}
-      <div className="px-6 py-4 border-b border-gray-200">
-        <div className="grid grid-cols-2 gap-4 text-sm">
+      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
           <div>
             <span className="text-gray-500">File Size:</span>
             <span className="ml-2 font-medium">{formatFileSize(document.fileSize)}</span>
@@ -152,6 +152,26 @@ export default function DocumentViewer({
             <span className="text-gray-500">Uploaded By:</span>
             <span className="ml-2 font-medium">{document.uploadedBy.name}</span>
           </div>
+          {document.patientName && (
+            <div>
+              <span className="text-gray-500">Patient:</span>
+              <span className="ml-2 font-medium">{document.patientName}</span>
+            </div>
+          )}
+          {document.doctorName && (
+            <div>
+              <span className="text-gray-500">Doctor:</span>
+              <span className="ml-2 font-medium">{document.doctorName}</span>
+            </div>
+          )}
+          {document.appointmentDate && (
+            <div>
+              <span className="text-gray-500">Appointment Date:</span>
+              <span className="ml-2 font-medium">
+                {new Date(document.appointmentDate).toLocaleDateString()}
+              </span>
+            </div>
+          )}
           {document.specialty && (
             <div>
               <span className="text-gray-500">Specialty:</span>
@@ -168,7 +188,7 @@ export default function DocumentViewer({
       </div>
 
       {/* Document Preview */}
-      <div className="px-6 py-4 bg-gray-50 min-h-[400px] flex items-center justify-center">
+      <div className="flex-1 px-6 py-4 bg-gray-50 flex items-center justify-center">
         {loading ? (
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -204,7 +224,7 @@ export default function DocumentViewer({
                 <img
                   src={downloadUrl}
                   alt={document.originalFileName}
-                  className="max-w-full max-h-[70vh] object-contain mx-auto rounded-lg shadow-lg"
+                  className="max-w-full max-h-[82vh] object-contain mx-auto rounded-lg shadow-lg"
                   onError={(e) => {
                     setError("Failed to load image. The file may be corrupted or inaccessible.")
                   }}
@@ -215,7 +235,7 @@ export default function DocumentViewer({
             ) : isPDF ? (
               <iframe
                 src={downloadUrl}
-                className="w-full h-[600px] border border-gray-300 rounded-lg"
+                className="w-full h-full max-h-[82vh] border border-gray-300 rounded-lg bg-white shadow-inner"
                 title={document.originalFileName}
               />
             ) : (
@@ -257,8 +277,16 @@ export default function DocumentViewer({
       </div>
 
       {/* Actions */}
-      {(canEdit || canDelete) && (
+      {(canEdit || canDelete || onClose) && (
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-200 text-slate-800 rounded-md hover:bg-slate-300 text-sm font-medium"
+            >
+              Close
+            </button>
+          )}
           {canDelete && onDelete && (
             <button
               onClick={() => onDelete(document.id)}

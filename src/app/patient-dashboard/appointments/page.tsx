@@ -9,6 +9,7 @@ import { getHospitalCollection } from "@/utils/hospital-queries"
 import LoadingSpinner from "@/components/ui/StatusComponents"
 import Notification from "@/components/ui/Notification"
 import { AppointmentsList } from "@/components/patient/AppointmentCard"
+import DocumentsTab from "@/components/documents/DocumentsTab"
 import { CancelAppointmentModal } from "@/components/patient/AppointmentModals"
 import PaymentMethodSection, {
   PaymentData as PaymentMethodData,
@@ -38,6 +39,9 @@ export default function PatientAppointments() {
     upiId: "",
   })
   const [payingBill, setPayingBill] = useState(false)
+  const [viewMode, setViewMode] = useState<"appointments" | "documents">("appointments")
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 5
 
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
@@ -157,6 +161,11 @@ export default function PatientAppointments() {
     fetchData()
   }, [user, activeHospitalId])
 
+  // Reset pagination when tab or view changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeTab, viewMode])
+
   if (loading || hospitalLoading) {
     return <LoadingSpinner message="Loading appointments..." />
   }
@@ -223,6 +232,18 @@ export default function PatientAppointments() {
       upiId: "",
     })
   }
+
+  const sortedAppointmentsForActiveTab = filterAppointmentsByTab(activeTab).sort((a, b) => {
+    const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
+    const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
+    return dateB - dateA // Latest appointments first
+  })
+
+  const totalAppointmentsForTab = sortedAppointmentsForActiveTab.length
+  const totalPages = totalAppointmentsForTab > 0 ? Math.ceil(totalAppointmentsForTab / PAGE_SIZE) : 1
+  const startIndex = totalAppointmentsForTab === 0 ? 0 : (currentPage - 1) * PAGE_SIZE
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalAppointmentsForTab)
+  const pagedAppointments = sortedAppointmentsForActiveTab.slice(startIndex, endIndex)
 
   const handleConfirmBillingPayment = async () => {
     if (!selectedBilling) return
@@ -394,54 +415,119 @@ export default function PatientAppointments() {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row border-b border-slate-200">
+          {/* View mode toggle */}
+          <div className="flex justify-between items-center mb-4">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-xs sm:text-sm">
               <button
-                onClick={() => setActiveTab("confirmed")}
-                className={`w-full sm:flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
-                  activeTab === "confirmed"
-                    ? "bg-blue-50 text-blue-600 border-b-2 border-blue-600"
-                    : "text-slate-600 hover:bg-slate-50"
+                onClick={() => setViewMode("appointments")}
+                className={`px-4 py-1.5 rounded-full font-medium transition-all ${
+                  viewMode === "appointments"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
                 }`}
               >
-                📅 Confirmed ({confirmedAppointments.length})
+                Appointments
               </button>
               <button
-                onClick={() => setActiveTab("completed")}
-                className={`w-full sm:flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
-                  activeTab === "completed"
-                    ? "bg-green-50 text-green-600 border-b-2 border-green-600"
-                    : "text-slate-600 hover:bg-slate-50"
+                onClick={() => setViewMode("documents")}
+                className={`px-4 py-1.5 rounded-full font-medium transition-all ${
+                  viewMode === "documents"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
                 }`}
               >
-                ✅ Completed ({completedAppointments.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("cancelled")}
-                className={`w-full sm:flex-1 px-4 sm:px-6 py-4 font-semibold transition-all text-sm sm:text-base ${
-                  activeTab === "cancelled"
-                    ? "bg-red-50 text-red-600 border-b-2 border-red-600"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                ❌ Cancelled ({cancelledAppointments.length})
+                Documents &amp; Reports
               </button>
             </div>
           </div>
 
-          {/* Appointments List */}
-          <AppointmentsList
-            appointments={filterAppointmentsByTab(activeTab)
-              .sort((a, b) => {
-                const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
-                const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
-                return dateA - dateB // Earlier appointments first
-              })
-            }
-            onCancelAppointment={openCancelModal}
-            onPayBill={handleOpenBillingPayment}
-          />
+          {viewMode === "appointments" ? (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-4 lg:p-5">
+              {/* Tabs */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden mb-4 sm:mb-6">
+                <div className="flex flex-col sm:flex-row border-b border-slate-200">
+                  <button
+                    onClick={() => setActiveTab("confirmed")}
+                    className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 font-semibold transition-all text-sm sm:text-base ${
+                      activeTab === "confirmed"
+                        ? "bg-blue-50 text-blue-600 border-b-2 border-blue-600"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    📅 Confirmed ({confirmedAppointments.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("completed")}
+                    className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 font-semibold transition-all text-sm sm:text-base ${
+                      activeTab === "completed"
+                        ? "bg-green-50 text-green-600 border-b-2 border-green-600"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    ✅ Completed ({completedAppointments.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("cancelled")}
+                    className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 font-semibold transition-all text-sm sm:text-base ${
+                      activeTab === "cancelled"
+                        ? "bg-red-50 text-red-600 border-b-2 border-red-600"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    ❌ Cancelled ({cancelledAppointments.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Appointments List with pagination */}
+              <AppointmentsList
+                appointments={pagedAppointments}
+                onCancelAppointment={openCancelModal}
+                onPayBill={handleOpenBillingPayment}
+              />
+
+              {totalAppointmentsForTab > 0 && (
+                <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-slate-600">
+                  <span>
+                    Showing {startIndex + 1}-{endIndex} of {totalAppointmentsForTab} appointments
+                  </span>
+                  <div className="inline-flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-2 text-slate-700">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+                <DocumentsTab
+                  patientId={userData.patientId}
+                  patientUid={user.uid}
+                  canUpload={false}
+                  canEdit={false}
+                  canDelete={false}
+                  showPatientSelector={false}
+                  className="space-y-4"
+                />
+              </div>
+            </div>
+          )}
         </main>
 
         {/* Cancellation Confirmation Modal */}

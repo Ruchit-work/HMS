@@ -10,51 +10,58 @@ export function detectDocumentType(fileName: string): DocumentType {
   if (lowerName.includes('prescription') || lowerName.includes('presc') || lowerName.includes('rx')) {
     return "prescription"
   }
-  
-  // X-ray patterns
-  if (lowerName.includes('xray') || lowerName.includes('x-ray') || lowerName.includes('x_ray') || 
-      lowerName.includes('radiograph') || lowerName.endsWith('.dcm')) {
-    return "x-ray"
+
+  // Laboratory reports: blood/urine tests, pathology, lab results
+  if (
+    lowerName.includes('lab') ||
+    lowerName.includes('laboratory') ||
+    lowerName.includes('blood test') ||
+    lowerName.includes('urine') ||
+    lowerName.includes('pathology') ||
+    lowerName.includes('cbc') ||
+    lowerName.includes('biochemistry') ||
+    lowerName.includes('hba1c') ||
+    lowerName.includes('lipid profile')
+  ) {
+    return "laboratory-report"
   }
-  
-  // Lab report patterns
-  if (lowerName.includes('lab') || lowerName.includes('laboratory') || 
-      lowerName.includes('test') || lowerName.includes('blood') || 
-      lowerName.includes('urine') || lowerName.includes('pathology')) {
-    return "lab-report"
+
+  // Cardiology reports: ECG/EKG, echo, treadmill, angiography, cardiac
+  if (
+    lowerName.includes('ecg') ||
+    lowerName.includes('ekg') ||
+    lowerName.includes('electrocardiogram') ||
+    lowerName.includes('echo') ||
+    lowerName.includes('2d echo') ||
+    lowerName.includes('tmt') ||
+    lowerName.includes('stress test') ||
+    lowerName.includes('angiography') ||
+    lowerName.includes('cardio') ||
+    lowerName.includes('cardiac') ||
+    lowerName.includes('holter')
+  ) {
+    return "cardiology-report"
   }
-  
-  // MRI patterns (check before generic scan)
-  if (lowerName.includes('mri') || lowerName.includes('magnetic resonance')) {
-    return "mri"
-  }
-  
-  // CT scan patterns (check before generic scan)
-  if (lowerName.includes('ct') || lowerName.includes('cat') || 
-      lowerName.includes('computed tomography')) {
-    return "ct-scan"
-  }
-  
-  // Ultrasound patterns
-  if (lowerName.includes('ultrasound') || lowerName.includes('sonography')) {
-    return "ultrasound"
-  }
-  
-  // Generic scan patterns (check last)
-  if (lowerName.includes('scan')) {
-    return "scan"
-  }
-  
-  // ECG patterns
-  if (lowerName.includes('ecg') || lowerName.includes('ekg') || 
-      lowerName.includes('electrocardiogram')) {
-    return "ecg"
-  }
-  
-  // Report patterns (generic)
-  if (lowerName.includes('report') || lowerName.includes('result') || 
-      lowerName.includes('findings')) {
-    return "report"
+
+  // Radiology reports: X‑ray, CT, MRI, ultrasound and imaging scans
+  if (
+    lowerName.includes('xray') ||
+    lowerName.includes('x-ray') ||
+    lowerName.includes('x_ray') ||
+    lowerName.includes('radiograph') ||
+    lowerName.includes('radiology') ||
+    lowerName.includes('imaging') ||
+    lowerName.includes('scan') ||
+    lowerName.includes('ct') ||
+    lowerName.includes('cat scan') ||
+    lowerName.includes('computed tomography') ||
+    lowerName.includes('mri') ||
+    lowerName.includes('magnetic resonance') ||
+    lowerName.includes('ultrasound') ||
+    lowerName.includes('sonography') ||
+    lowerName.endsWith('.dcm')
+  ) {
+    return "radiology-report"
   }
   
   // Default to "other" if no pattern matches
@@ -144,53 +151,59 @@ export function detectDocumentTypeFromText(text: string): DocumentType {
     return "prescription"
   }
   
-  // X-ray patterns
-  if (lowerText.includes('xray') || lowerText.includes('x-ray') || 
-      lowerText.includes('x_ray') || lowerText.includes('radiograph') ||
-      lowerText.includes('radiography')) {
-    return "x-ray"
+  // Laboratory report patterns
+  if (
+    lowerText.includes('lab') ||
+    lowerText.includes('laboratory') ||
+    lowerText.includes('blood test') ||
+    lowerText.includes('urine test') ||
+    lowerText.includes('pathology') ||
+    lowerText.includes('lab report') ||
+    lowerText.includes('test report') ||
+    lowerText.includes('cbc') ||
+    lowerText.includes('biochemistry')
+  ) {
+    return "laboratory-report"
   }
-  
-  // Lab report patterns
-  if (lowerText.includes('lab') || lowerText.includes('laboratory') || 
-      lowerText.includes('test') || lowerText.includes('blood test') ||
-      lowerText.includes('urine test') || lowerText.includes('pathology') ||
-      lowerText.includes('lab report') || lowerText.includes('test report')) {
-    return "lab-report"
+
+  // Cardiology report patterns
+  if (
+    lowerText.includes('ecg') ||
+    lowerText.includes('ekg') ||
+    lowerText.includes('electrocardiogram') ||
+    lowerText.includes('cardio') ||
+    lowerText.includes('cardiac') ||
+    lowerText.includes('echo') ||
+    lowerText.includes('2d echo') ||
+    lowerText.includes('tmt') ||
+    lowerText.includes('stress test') ||
+    lowerText.includes('angiography') ||
+    lowerText.includes('holter')
+  ) {
+    return "cardiology-report"
   }
-  
-  // MRI patterns (check before generic scan)
-  if (lowerText.includes('mri') || lowerText.includes('magnetic resonance')) {
-    return "mri"
-  }
-  
-  // CT scan patterns (check before generic scan)
-  if (lowerText.includes('ct scan') || lowerText.includes('ct-scan') || 
-      lowerText.includes('cat scan') || lowerText.includes('computed tomography')) {
-    return "ct-scan"
-  }
-  
-  // Ultrasound patterns
-  if (lowerText.includes('ultrasound') || lowerText.includes('sonography') ||
-      lowerText.includes('sonogram')) {
-    return "ultrasound"
-  }
-  
-  // ECG patterns
-  if (lowerText.includes('ecg') || lowerText.includes('ekg') || 
-      lowerText.includes('electrocardiogram')) {
-    return "ecg"
-  }
-  
-  // Generic scan patterns (check last)
-  if (lowerText.includes('scan')) {
-    return "scan"
-  }
-  
-  // Report patterns (generic)
-  if (lowerText.includes('report') || lowerText.includes('result') || 
-      lowerText.includes('findings') || lowerText.includes('medical report')) {
-    return "report"
+
+  // Radiology report patterns
+  if (
+    lowerText.includes('xray') ||
+    lowerText.includes('x-ray') ||
+    lowerText.includes('x_ray') ||
+    lowerText.includes('radiograph') ||
+    lowerText.includes('radiography') ||
+    lowerText.includes('radiology') ||
+    lowerText.includes('imaging') ||
+    lowerText.includes('mri') ||
+    lowerText.includes('magnetic resonance') ||
+    lowerText.includes('ct scan') ||
+    lowerText.includes('ct-scan') ||
+    lowerText.includes('cat scan') ||
+    lowerText.includes('computed tomography') ||
+    lowerText.includes('ultrasound') ||
+    lowerText.includes('sonography') ||
+    lowerText.includes('sonogram') ||
+    lowerText.includes('scan')
+  ) {
+    return "radiology-report"
   }
   
   // Default to "other" if no pattern matches
@@ -507,8 +520,7 @@ export function detectDocumentTypeFromContent(content: string): DocumentType | n
   const lowerContent = content.toLowerCase()
   const headerSection = lowerContent.substring(0, 3000)
   
-  // MRI patterns (check FIRST - before other patterns, as it's very specific)
-  // Use both regex and simple string matching for maximum coverage
+  // MRI patterns (used as part of radiology-report detection)
   const mriPatterns = [
     /\bmri\b/i,  // "MRI" as a word
     /mri\s+of\s+the/i,  // "MRI OF THE"
@@ -536,20 +548,20 @@ export function detectDocumentTypeFromContent(content: string): DocumentType | n
   // Try regex patterns first (more precise)
   for (const pattern of mriPatterns) {
     if (pattern.test(headerSection)) {
-      return "mri"
+      return "radiology-report"
     }
   }
   
   // Fallback to simple string matching (handles spacing variations)
   for (const mriString of mriStrings) {
     if (headerSection.includes(mriString)) {
-      return "mri"
+      return "radiology-report"
     }
   }
   
   // Last resort: check if "mri" appears anywhere (very lenient)
   if (/\bmri\b/i.test(headerSection) || headerSection.includes('mri')) {
-    return "mri"
+    return "radiology-report"
   }
   
   // Prescription patterns
@@ -558,57 +570,45 @@ export function detectDocumentTypeFromContent(content: string): DocumentType | n
     return "prescription"
   }
   
-  // CT scan patterns (check before generic scan)
+  // CT scan patterns (radiology)
   if (headerSection.includes('ct scan') || headerSection.includes('computed tomography') ||
       headerSection.includes('cat scan') || headerSection.includes('ct-scan')) {
-    return "ct-scan"
+    return "radiology-report"
   }
   
-  // X-ray patterns
+  // X-ray patterns (radiology)
   if (headerSection.includes('x-ray') || headerSection.includes('xray') ||
       headerSection.includes('radiograph') || headerSection.includes('radiography')) {
-    return "x-ray"
+    return "radiology-report"
   }
   
-  // Ultrasound patterns
+  // Ultrasound patterns (radiology)
   if (headerSection.includes('ultrasound') || headerSection.includes('sonography') ||
       headerSection.includes('usg')) {
-    return "ultrasound"
+    return "radiology-report"
   }
   
-  // Lab report patterns
+  // Lab report patterns (laboratory-report)
   if (headerSection.includes('lab report') || headerSection.includes('laboratory report') ||
       headerSection.includes('blood test') || headerSection.includes('pathology report') ||
       headerSection.includes('cbc') || headerSection.includes('complete blood count') ||
       headerSection.includes('urine test') || headerSection.includes('biochemistry')) {
-    return "lab-report"
+    return "laboratory-report"
   }
   
-  // ECG patterns
+  // ECG patterns (cardiology-report)
   if (headerSection.includes('ecg') || headerSection.includes('ekg') ||
       headerSection.includes('electrocardiogram') || headerSection.includes('electrocardiography')) {
-    return "ecg"
+    return "cardiology-report"
   }
   
-  // Generic scan patterns
-  if (headerSection.includes('scan report') || headerSection.includes('scanning')) {
-    return "scan"
-  }
-  
-  // Report patterns (generic - check last, but be careful not to match MRI reports)
-  // Only match "report" if it's NOT part of "mri report", "ct scan report", etc.
-  const hasReport = headerSection.includes('report') || headerSection.includes('findings') ||
-      headerSection.includes('diagnosis')
-  
-  // Only return "report" if we haven't already matched a specific type above
-  // This prevents "MRI REPORT" from being classified as just "report"
-  if (hasReport && !headerSection.includes('mri') && !headerSection.includes('ct scan') && 
-      !headerSection.includes('x-ray') && !headerSection.includes('ultrasound') &&
-      !headerSection.includes('lab report') && !headerSection.includes('ecg')) {
-    return "report"
-  }
-  
-  // If we found "report" but it's part of a specific type, return null to let filename detection handle it
+  // Generic "report" wording without specific hints – let filename decide
+  const hasReport =
+    headerSection.includes('report') ||
+    headerSection.includes('result') ||
+    headerSection.includes('findings') ||
+    headerSection.includes('diagnosis')
+
   if (hasReport) {
     return null
   }
@@ -706,26 +706,17 @@ export async function detectDocumentTypeEnhanced(
         const contentType = detectDocumentTypeFromContent(pdfText)
         const contentSpecialty = detectSpecialtyFromContent(pdfText)
         
-        // If content analysis found a specific type (not "other" or "report"), ALWAYS use it
-        if (contentType && contentType !== "other" && contentType !== "report") {
+        // If content analysis found a specific type (not "other"), ALWAYS use it
+        if (contentType && contentType !== "other") {
           return {
             type: contentType,
             specialty: contentSpecialty || filenameSpecialty,
             source: 'content'
           }
         }
-        
-        // If content found "report" and filename was "other", use "report"
-        if (contentType === "report" && filenameType === "other") {
-          return {
-            type: "report",
-            specialty: contentSpecialty || filenameSpecialty,
-            source: 'content'
-          }
-        }
-        
+
         // If content analysis returned null or "other", but filename gave us something specific, use filename
-        if ((!contentType || contentType === "other") && filenameType !== "other" && filenameType !== "report") {
+        if ((!contentType || contentType === "other") && filenameType !== "other") {
           return {
             type: filenameType,
             specialty: filenameSpecialty,
@@ -738,7 +729,7 @@ export async function detectDocumentTypeEnhanced(
     }
   } else {
     // For non-PDFs, use filename detection if it's specific
-    if (filenameType !== "other" && filenameType !== "report") {
+    if (filenameType !== "other") {
       return {
         type: filenameType,
         specialty: filenameSpecialty,

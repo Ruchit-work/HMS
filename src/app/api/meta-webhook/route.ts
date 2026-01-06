@@ -185,6 +185,13 @@ export async function POST(req: Request) {
       try {
         await handleImageMessage(from, message, value)
       } catch (error: any) {
+        // Log the error for debugging
+        console.error("Error in handleImageMessage:", {
+          error: error?.message || String(error),
+          stack: error?.stack,
+          code: error?.code,
+          from: from
+        })
         // If handler fails, send error message
         await sendTextMessage(
           from,
@@ -3441,6 +3448,11 @@ async function handleImageMessage(phone: string, message: any, value: any) {
 
     const bucket = getStorage().bucket(storageBucket)
     const patientId = patient.data.patientId || patient.id
+    
+    if (!patientId) {
+      throw new Error("Patient ID is missing")
+    }
+    
     const timestamp = Date.now()
     const randomString = Math.random().toString(36).substring(2, 9)
     const lastDot = mediaData.fileName.lastIndexOf('.')
@@ -3451,9 +3463,11 @@ async function handleImageMessage(phone: string, message: any, value: any) {
     const storagePath = `hospitals/${hospitalId}/patients/${patientId}/${finalFileName}`
 
     const fileRef = bucket.file(storagePath)
+    
+    // Upload file to storage
     await fileRef.save(mediaData.buffer, {
       metadata: {
-        contentType: mediaData.mimeType,
+        contentType: mediaData.mimeType || 'image/jpeg',
         metadata: {
           originalFileName: mediaData.fileName,
           uploadedBy: "whatsapp",
@@ -3465,7 +3479,14 @@ async function handleImageMessage(phone: string, message: any, value: any) {
       },
     })
 
-    await fileRef.makePublic()
+    // Try to make file public (may fail if bucket doesn't allow public access)
+    try {
+      await fileRef.makePublic()
+    } catch (publicError: any) {
+      // Log but don't fail - we can still use signed URLs if needed
+      console.warn("Could not make file public (this is OK if using signed URLs):", publicError?.message)
+    }
+    
     const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
 
     // Save metadata to Firestore
@@ -3478,7 +3499,7 @@ async function handleImageMessage(phone: string, message: any, value: any) {
       fileName: finalFileName,
       originalFileName: mediaData.fileName,
       fileType: detectedType,
-      mimeType: mediaData.mimeType,
+      mimeType: mediaData.mimeType || 'image/jpeg',
       fileSize: mediaData.buffer.length,
       storagePath: storagePath,
       downloadUrl: downloadUrl,
@@ -3500,15 +3521,54 @@ async function handleImageMessage(phone: string, message: any, value: any) {
       documentData.description = caption.trim()
     }
 
-    const documentsRef = db.collection(getHospitalCollectionPath(hospitalId, "documents"))
-    await documentsRef.add(documentData)
+    // Save to Firestore with error handling
+    try {
+      const documentsRef = db.collection(getHospitalCollectionPath(hospitalId, "documents"))
+      await documentsRef.add(documentData)
+    } catch (firestoreError: any) {
+      // If Firestore save fails, log but don't fail the entire operation
+      // The file is already uploaded to storage
+      console.error("Error saving document metadata to Firestore:", {
+        error: firestoreError?.message || String(firestoreError),
+        code: firestoreError?.code,
+        hospitalId,
+        patientId
+      })
+      // Continue - file is uploaded, just metadata save failed
+    }
 
     await sendTextMessage(
       phone,
       `✅ Image uploaded successfully!\n\n📄 Type: ${detectedType}\n📝 Saved to your medical records.`
     )
   } catch (error: any) {
-    await sendTextMessage(phone, "❌ Failed to save image. Please try again or contact reception.")
+    // Log the actual error for debugging
+    console.error("Error saving image to Firebase:", {
+      error: error?.message || String(error),
+      stack: error?.stack,
+      code: error?.code,
+      patientId: patient.data.patientId || patient.id,
+      hospitalId: hospitalId,
+      fileName: mediaData?.fileName,
+      fileSize: mediaData?.buffer?.length
+    })
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = "❌ Failed to save image. Please try again or contact reception."
+    
+    if (error?.code === 'storage/unauthorized' || error?.code === 403) {
+      errorMessage = "❌ Permission denied. Please contact reception to resolve this issue."
+    } else if (error?.code === 'storage/object-not-found' || error?.code === 404) {
+      errorMessage = "❌ Storage configuration error. Please contact reception."
+    } else if (error?.code === 'storage/quota-exceeded') {
+      errorMessage = "❌ Storage quota exceeded. Please contact reception."
+    } else if (error?.message?.includes('bucket') || error?.message?.includes('storage')) {
+      errorMessage = "❌ Storage service error. Please contact reception."
+    } else if (error?.code === 'permission-denied' || error?.code === 7) {
+      errorMessage = "❌ Database permission error. Please contact reception."
+    }
+    
+    await sendTextMessage(phone, errorMessage)
   }
 }
 

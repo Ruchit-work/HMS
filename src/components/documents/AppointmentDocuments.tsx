@@ -21,6 +21,7 @@ interface AppointmentDocumentsProps {
   canEdit?: boolean
   canDelete?: boolean
   className?: string
+  onlyCurrentAppointment?: boolean
 }
 
 export default function AppointmentDocuments({
@@ -33,6 +34,7 @@ export default function AppointmentDocuments({
   canEdit = true,
   canDelete = true,
   className = "",
+  onlyCurrentAppointment = false,
 }: AppointmentDocumentsProps) {
   const { activeHospitalId } = useMultiHospital()
   const [patientUid, setPatientUid] = useState<string>(initialPatientUid || "")
@@ -213,34 +215,30 @@ export default function AppointmentDocuments({
       // Get Firebase Auth token
       const currentUser = auth.currentUser
       if (!currentUser) {
-        throw new Error("You must be logged in to unlink documents")
+        throw new Error("You must be logged in to delete documents")
       }
 
       const token = await currentUser.getIdToken()
 
-      // Unlink document from appointment (update document to remove appointmentId)
+      // Permanently delete document (Firestore + Storage) using DELETE endpoint
       const response = await fetch(`/api/documents/${documentToDelete}`, {
-        method: "PUT",
+        method: "DELETE",
         headers: {
           "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          appointmentId: null, // Remove appointment link
-        }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to unlink document")
+        throw new Error(data.error || "Failed to delete document")
       }
 
       // Get document name before removing from state
-      const unlinkedDoc = documents.find(doc => doc.id === documentToDelete)
-      const documentName = unlinkedDoc?.originalFileName || "Document"
+      const deletedDoc = documents.find(doc => doc.id === documentToDelete)
+      const documentName = deletedDoc?.originalFileName || "Document"
 
-      // The API already handles unlinking from appointment
+      // Remove from local state so it disappears everywhere in this view
       setDocuments((prev) => prev.filter((doc) => doc.id !== documentToDelete))
       setSelectedDocument(null)
       setDeleteConfirmOpen(false)
@@ -249,14 +247,14 @@ export default function AppointmentDocuments({
       // Show success notification
       setNotification({
         type: "success",
-        message: `Document "${documentName}" removed from appointment successfully!`
+        message: `Document "${documentName}" deleted permanently.`
       })
       // Clear notification after 3 seconds
       setTimeout(() => setNotification(null), 3000)
     } catch (err: any) {
       setNotification({
         type: "error",
-        message: err.message || "Failed to unlink document"
+        message: err.message || "Failed to delete document"
       })
       // Clear error notification after 5 seconds
       setTimeout(() => setNotification(null), 5000)
@@ -281,15 +279,10 @@ export default function AppointmentDocuments({
 
   const getFileTypeIcon = (fileType: string): string => {
     const icons: Record<string, string> = {
-      report: "📄",
+      "laboratory-report": "🧪",
+      "radiology-report": "🩻",
+      "cardiology-report": "❤️",
       prescription: "💊",
-      "x-ray": "🩻",
-      "lab-report": "🧪",
-      scan: "🔬",
-      ultrasound: "📡",
-      mri: "🧲",
-      "ct-scan": "⚡",
-      ecg: "📈",
       other: "📎",
     }
     return icons[fileType] || "📎"
@@ -297,6 +290,9 @@ export default function AppointmentDocuments({
 
   // Allow adding documents even for completed appointments
   const canAddDocuments = canUpload && (appointmentStatus === "completed" || appointmentStatus === "confirmed" || appointmentStatus === "pending")
+
+  const docsForThisAppointment = documents.filter((doc) => doc.appointmentId === appointmentId)
+  const listDocuments = onlyCurrentAppointment ? docsForThisAppointment : documents
 
   return (
     <div className={className}>
@@ -315,46 +311,21 @@ export default function AppointmentDocuments({
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Documents & Reports</h3>
           <p className="text-sm text-gray-600 mt-1">
-            {documents.length} document{documents.length !== 1 ? "s" : ""} {documents.length > 0 && documents.some(d => d.appointmentId === appointmentId) ? "linked to this appointment" : "available for this patient"}
+            {onlyCurrentAppointment
+              ? docsForThisAppointment.length > 0
+                ? `${docsForThisAppointment.length} document${docsForThisAppointment.length !== 1 ? "s" : ""} linked to this appointment`
+                : "This appointment does not have any document attached."
+              : `${documents.length} document${documents.length !== 1 ? "s" : ""} ${
+                  documents.length > 0 && documents.some((d) => d.appointmentId === appointmentId)
+                    ? "linked to this appointment"
+                    : "available for this patient"
+                }`}
           </p>
         </div>
-        {canAddDocuments && (
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-          >
-            {showUpload ? "Cancel" : "Add Document"}
-          </button>
-        )}
+        {/* Upload button removed - now handled in Complete Consultation Form */}
       </div>
 
-      {/* Upload Section */}
-      {showUpload && canAddDocuments && (
-        <div className="mb-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
-          {patientUid && patientUid.trim() !== "" ? (
-            <DocumentUpload
-              patientId={patientId}
-              patientUid={patientUid}
-              appointmentId={appointmentId}
-              specialty={appointmentSpecialty}
-              onUploadSuccess={handleUploadSuccess}
-              onUploadError={(err) => {
-                setNotification({
-                  type: "error",
-                  message: err
-                })
-                setTimeout(() => setNotification(null), 5000)
-              }}
-              allowBulk={true}
-            />
-          ) : (
-            <div className="text-center py-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-sm text-gray-600">Loading patient information...</p>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Upload Section - Removed, now handled in Complete Consultation Form */}
 
       {/* Documents List */}
       {loading ? (
@@ -372,7 +343,7 @@ export default function AppointmentDocuments({
             Retry
           </button>
         </div>
-      ) : documents.length === 0 ? (
+      ) : listDocuments.length === 0 ? (
         <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
           <svg
             className="mx-auto h-12 w-12 text-gray-400"
@@ -387,20 +358,26 @@ export default function AppointmentDocuments({
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
             />
           </svg>
-          <p className="mt-2 text-sm text-gray-600">No documents found for this patient</p>
-          <p className="mt-1 text-xs text-gray-500">Documents uploaded for this patient will appear here</p>
-          {canAddDocuments && (
-            <button
-              onClick={() => setShowUpload(true)}
-              className="mt-3 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-            >
-              Add Document
-            </button>
+          {onlyCurrentAppointment ? (
+            <>
+              <p className="mt-2 text-sm text-gray-600">This appointment does not have any document attached.</p>
+              <p className="mt-1 text-xs text-gray-500">
+                When your doctor uploads reports for this visit, they will appear here.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-sm text-gray-600">No documents found for this patient</p>
+              <p className="mt-1 text-xs text-gray-500">Documents uploaded for this patient will appear here</p>
+              <p className="mt-2 text-xs text-gray-500">
+                Use the "Add Documents" button in the Complete Consultation Form to upload documents.
+              </p>
+            </>
           )}
         </div>
       ) : (
         <div className="space-y-2">
-          {documents.map((doc) => {
+          {listDocuments.map((doc) => {
             const isLinkedToThisAppointment = appointmentId && doc.appointmentId === appointmentId
             return (
             <div
@@ -456,8 +433,8 @@ export default function AppointmentDocuments({
 
       {/* Document Viewer Modal */}
       {selectedDocument && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full h-[92vh] flex flex-col">
             <DocumentViewer
               document={selectedDocument}
               onClose={() => setSelectedDocument(null)}
@@ -472,9 +449,9 @@ export default function AppointmentDocuments({
       {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={deleteConfirmOpen}
-        title="Remove Document"
-        message="Are you sure you want to remove this document from this appointment? The document will be unlinked but not deleted."
-        confirmText="Remove"
+        title="Delete Document"
+        message="Are you sure you want to permanently delete this document? This action cannot be undone and the file will be removed from all places."
+        confirmText="Delete"
         cancelText="Cancel"
         onConfirm={confirmDelete}
         onCancel={() => {

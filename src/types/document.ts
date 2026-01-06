@@ -1,13 +1,8 @@
-export type DocumentType = 
-  | "report" 
-  | "prescription" 
-  | "x-ray" 
-  | "lab-report" 
-  | "scan" 
-  | "ultrasound"
-  | "mri"
-  | "ct-scan"
-  | "ecg"
+export type DocumentType =
+  | "laboratory-report"
+  | "radiology-report"
+  | "cardiology-report"
+  | "prescription"
   | "other"
 
 export type DocumentStatus = "active" | "archived" | "deleted"
@@ -28,6 +23,10 @@ export interface DocumentMetadata {
   description?: string
   tags?: string[]
   appointmentId?: string // Linked appointment ID
+  doctorId?: string // Doctor ID from the appointment
+  doctorName?: string // Doctor name from the appointment
+  appointmentDate?: string // Appointment date from the appointment
+  patientName?: string // Patient name from the appointment/patient record
   uploadedBy: {
     uid: string
     role: "doctor" | "receptionist" | "patient"

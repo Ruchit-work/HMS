@@ -267,6 +267,31 @@ export async function POST(request: NextRequest) {
           isLinkedToAppointment: !!appointmentId,
         }
 
+        // If linked to appointment, fetch appointment data to get doctor/appointment/patient metadata
+        if (appointmentId) {
+          try {
+            const appointmentRef = db.collection(getHospitalCollectionPath(hospitalId, "appointments")).doc(appointmentId)
+            const appointmentDoc = await appointmentRef.get()
+            if (appointmentDoc.exists) {
+              const appointmentData = appointmentDoc.data()
+              if (appointmentData?.doctorId) {
+                documentData.doctorId = appointmentData.doctorId
+              }
+              if (appointmentData?.doctorName) {
+                documentData.doctorName = appointmentData.doctorName
+              }
+              if (appointmentData?.appointmentDate) {
+                documentData.appointmentDate = appointmentData.appointmentDate
+              }
+              if (appointmentData?.patientName) {
+                documentData.patientName = appointmentData.patientName
+              }
+            }
+          } catch (err) {
+            console.warn("[bulk-upload] Failed to fetch appointment data:", err)
+          }
+        }
+
         // Save metadata to Firestore
         const documentsRef = db.collection(getHospitalCollectionPath(hospitalId, "documents"))
         const docRef = documentsRef.doc()

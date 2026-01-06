@@ -21,6 +21,9 @@ import DiagnosisSelector from "@/components/doctor/DiagnosisSelector"
 import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
 import InlineAnatomyViewer, { type AnatomyViewerData } from "@/components/doctor/InlineAnatomyViewer"
 import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
+import DocumentUpload from "@/components/documents/DocumentUpload"
+import DocumentViewer from "@/components/documents/DocumentViewer"
+import { DocumentMetadata } from "@/types/document"
 import { getAvailableAnatomyModels, type AnatomyModel } from "@/utils/anatomyModelMapping"
 
 // Helper function to parse and render prescription text
@@ -177,6 +180,7 @@ function DoctorAppointmentsContent() {
   const [aiPrescription, setAiPrescription] = useState<{[key: string]: {medicine: string, notes: string}}>({})
   const [loadingAiPrescription, setLoadingAiPrescription] = useState<{[key: string]: boolean}>({})
   const [showAiPrescriptionSuggestion, setShowAiPrescriptionSuggestion] = useState<{[key: string]: boolean}>({})
+  const [removedAiMedicines, setRemovedAiMedicines] = useState<{[appointmentId: string]: number[]}>({})
   const [patientHistory, setPatientHistory] = useState<AppointmentType[]>([])
   const [historySearchFilters, setHistorySearchFilters] = useState<{ [key: string]: { text: string; date: string } }>({})
   const [historyTabFilters, setHistoryTabFilters] = useState<{ text: string; date: string }>({ text: "", date: "" })
@@ -185,6 +189,12 @@ function DoctorAppointmentsContent() {
   const [aiDiagnosis, setAiDiagnosis] = useState<{[key: string]: string}>({})
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{[key: string]: boolean}>({})
   const [showHistory, setShowHistory] = useState<{[key: string]: boolean}>({})
+  const [showAllDoctorsHistory, setShowAllDoctorsHistory] = useState<{[key: string]: boolean}>({})
+  const [expandedDoctors, setExpandedDoctors] = useState<{[key: string]: boolean}>({})
+  const [showDocuments, setShowDocuments] = useState<{[key: string]: boolean}>({})
+  const [showDocumentUpload, setShowDocumentUpload] = useState<{[key: string]: boolean}>({})
+  const [historyDocuments, setHistoryDocuments] = useState<{[appointmentId: string]: DocumentMetadata[]}>({})
+  const [selectedHistoryDocument, setSelectedHistoryDocument] = useState<DocumentMetadata | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [admitting, setAdmitting] = useState<{ [key: string]: boolean }>({})
   const [showReportModal, setShowReportModal] = useState(false)
@@ -515,32 +525,90 @@ function DoctorAppointmentsContent() {
     if (expandedAppointment === appointmentId) {
       setExpandedAppointment(null)
       setPatientHistory([])
+      setShowHistory({})
+      setShowAllDoctorsHistory(prev => ({ ...prev, [appointmentId]: false }))
     } else {
       setExpandedAppointment(appointmentId)
       
       const appointment = appointments.find(apt => apt.id === appointmentId)
-      if (appointment && appointment.patientId) {
+      if (appointment && appointment.patientId && activeHospitalId) {
         try {
+          // Use hospital-scoped collection
+          const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
+          // Always fetch all completed appointments for this patient (all doctors)
           const patientAppointmentsQuery = query(
-            collection(db, "appointments"), 
+            appointmentsRef, 
             where("patientId", "==", appointment.patientId),
             where("status", "==", "completed")
           )
+          
           const snapshot = await getDocs(patientAppointmentsQuery)
-      const history = snapshot.docs
+          const history = snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() } as AppointmentType))
             .filter((apt: AppointmentType) => apt.id !== appointmentId)
             .sort((a: AppointmentType, b: AppointmentType) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime())
           setPatientHistory(history)
+          // Keep history accordion closed by default; only open when user clicks
           setHistorySearchFilters(prev => ({
             ...prev,
             [appointmentId]: { text: "", date: "" }
           }))
+          
+          // Fetch documents for each history item
+          if (history.length > 0 && user) {
+            fetchHistoryDocuments(history.map(h => h.id), appointment.patientUid || appointment.patientId)
+          }
         } catch (error) {
-
+          console.error("Error fetching patient history:", error)
         }
       }
     }
+  }
+
+  // Fetch documents for history appointments
+  const fetchHistoryDocuments = async (appointmentIds: string[], patientUid: string) => {
+    if (!patientUid || !user || appointmentIds.length === 0) return
+    
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) return
+      
+      const token = await currentUser.getIdToken()
+      const params = new URLSearchParams()
+      params.append("patientUid", patientUid)
+      params.append("status", "active")
+      
+      const response = await fetch(`/api/documents?${params.toString()}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      })
+      
+      const data = await response.json()
+      if (response.ok && data.documents) {
+        // Group documents by appointmentId
+        const documentsByAppointment: {[appointmentId: string]: DocumentMetadata[]} = {}
+        data.documents.forEach((doc: DocumentMetadata) => {
+          if (doc.appointmentId && appointmentIds.includes(doc.appointmentId)) {
+            if (!documentsByAppointment[doc.appointmentId]) {
+              documentsByAppointment[doc.appointmentId] = []
+            }
+            documentsByAppointment[doc.appointmentId].push(doc)
+          }
+        })
+        setHistoryDocuments(prev => ({ ...prev, ...documentsByAppointment }))
+      }
+    } catch (error) {
+      console.error("Error fetching history documents:", error)
+    }
+  }
+
+  // Toggle to show/hide other doctors' history (no re-fetch, we already have all history)
+  const toggleAllDoctorsHistory = (appointmentId: string) => {
+    setShowAllDoctorsHistory(prev => ({
+      ...prev,
+      [appointmentId]: !(prev[appointmentId] || false),
+    }))
   }
 
   const _handleHistorySearchChange = (appointmentId: string, field: "text" | "date", value: string) => {
@@ -570,27 +638,24 @@ function DoctorAppointmentsContent() {
     
     if (sameDoctorHistory.length > 0) {
       const latest = sameDoctorHistory[0] // Already sorted by date desc
+      const latestAny: any = latest
       return {
+        appointmentId: latest.id,
         doctorName: userData?.name || "Dr. " + (userData?.firstName || "Unknown"),
         date: new Date(latest.appointmentDate).toLocaleDateString(),
         medicine: latest.medicine,
-        notes: latest.doctorNotes
+        notes: latest.doctorNotes,
+        finalDiagnosis: Array.isArray(latestAny.finalDiagnosis) ? latestAny.finalDiagnosis : [],
+        customDiagnosis: latestAny.customDiagnosis || "",
+        documents: historyDocuments[latest.id] || []
       }
     }
     return null
   }
 
   const handleCompleteConsultationClick = (appointmentId: string) => {
-    // Get available anatomy models for this doctor's specialization
-    const availableModels = getAvailableAnatomyModels(userData?.specialization)
-    
-    // If only one model is available, auto-select it
-    if (availableModels.length === 1) {
-      handleConsultationModeSelect('anatomy', availableModels[0].type)
-      return
-    }
-    
-    // Show modal to choose consultation mode
+    // Always show modal to let doctor choose between Normal and 3D Anatomy,
+    // regardless of how many anatomy models are available.
     setShowConsultationModeModal({
       open: true,
       appointmentId: appointmentId
@@ -693,11 +758,14 @@ function DoctorAppointmentsContent() {
           customDiagnosis: "",
         },
       }))
-      setShowAiPrescriptionSuggestion({...showAiPrescriptionSuggestion, [appointmentId]: initialMedicines.length === 0})
-      // Auto-generate AI prescription when form opens (only if no medicines from anatomy)
-      if (appointment && initialMedicines.length === 0) {
-        handleGenerateAiPrescription(appointmentId)
-      }
+      // Mark that AI suggestion should be visible for this appointment
+      setShowAiPrescriptionSuggestion(prev => ({ ...prev, [appointmentId]: true }))
+      // Clear any previous removed-medicine state
+      setRemovedAiMedicines(prev => {
+        const updated = { ...prev }
+        delete updated[appointmentId]
+        return updated
+      })
     } else {
       // Clean up when closing
       setCompletionData((prev) => {
@@ -709,6 +777,13 @@ function DoctorAppointmentsContent() {
       const newAiPrescription = {...aiPrescription}
       delete newAiPrescription[appointmentId]
       setAiPrescription(newAiPrescription)
+      
+      // Clear removed medicines for this appointment
+      setRemovedAiMedicines(prev => {
+        const updated = {...prev}
+        delete updated[appointmentId]
+        return updated
+      })
     }
   }
 
@@ -1092,7 +1167,8 @@ function DoctorAppointmentsContent() {
     const appointment = appointments.find(apt => apt.id === appointmentId)
     if (!appointment) return
 
-    setLoadingAiPrescription({...loadingAiPrescription, [appointmentId]: true})
+    // Start loading for this appointment
+    setLoadingAiPrescription(prev => ({ ...prev, [appointmentId]: true }))
     try {
       const ageValue = calculateAge(appointment.patientDateOfBirth)
       let patientInfo = `Age: ${ageValue}, Gender: ${appointment.patientGender || 'Unknown'}, Blood Group: ${appointment.patientBloodGroup || 'Unknown'}`
@@ -1128,25 +1204,41 @@ function DoctorAppointmentsContent() {
         }
       )
 
-      setAiPrescription({
-        ...aiPrescription,
+      setAiPrescription(prev => ({
+        ...prev,
         [appointmentId]: {
           medicine: data.medicine || "",
           notes: data.notes || ""
         }
-      })
+      }))
+      setShowAiPrescriptionSuggestion(prev => ({...prev, [appointmentId]: true}))
       setNotification({ type: "success", message: "AI prescription generated!" })
     } catch (error: unknown) {
-
       const errorMessage = (error as { response?: { data?: { error?: string } } }).response?.data?.error || (error as Error).message || "Failed to generate AI prescription"
       setNotification({ 
         type: "error", 
         message: `AI Prescription Error: ${errorMessage}` 
       })
     } finally {
-      setLoadingAiPrescription({...loadingAiPrescription, [appointmentId]: false})
+      setLoadingAiPrescription(prev => ({ ...prev, [appointmentId]: false }))
     }
   }
+
+  // Auto-generate AI prescription when consultation form opens (no button click)
+  useEffect(() => {
+    appointments.forEach((apt) => {
+      const isFormOpen = showCompletionForm[apt.id]
+      const hasSuggestion = !!aiPrescription[apt.id]?.medicine
+      const isLoading = !!loadingAiPrescription[apt.id]
+      const explicitlyHidden = showAiPrescriptionSuggestion[apt.id] === false
+
+      if (isFormOpen && !hasSuggestion && !isLoading && !explicitlyHidden) {
+        // Mark suggestion as visible and trigger generation once
+        setShowAiPrescriptionSuggestion(prev => ({ ...prev, [apt.id]: true }))
+        handleGenerateAiPrescription(apt.id)
+      }
+    })
+  }, [appointments, showCompletionForm, aiPrescription, loadingAiPrescription, showAiPrescriptionSuggestion])
 
   // Helper function to parse AI prescription text into structured format
   const parseAiPrescription = (text: string): Array<{name: string, dosage: string, frequency: string, duration: string}> => {
@@ -1181,14 +1273,18 @@ function DoctorAppointmentsContent() {
         let frequency = ""
         let duration = ""
         
-        // Look for common patterns like "500mg", "1-0-1", "2 times daily", "for 5 days"
-        const dosageMatch = trimmedLine.match(/(\d+(?:\.\d+)?\s*(?:mg|g|ml|tablet|tab|capsule|cap))/i)
+        // Look for common patterns like "500mg", "50mcg", "1 tablet", etc.
+        const dosageMatch = trimmedLine.match(/(\d+(?:\.\d+)?\s*(?:mcg|µg|mg|g|ml|tablet|tab|capsule|cap))/i)
         if (dosageMatch) {
           dosage = dosageMatch[1]
-          name = name.replace(dosageMatch[0], '').trim()
+          // Remove dosage (and any surrounding brackets) from the name
+          name = name
+            .replace(dosageMatch[0], '')
+            .replace(/\[[^\]]*\]/g, '')  // remove [50mcg] style blocks
+            .trim()
         }
         
-        const frequencyMatch = trimmedLine.match(/(\d+[-\s]\d+[-\s]\d+|\d+\s*(?:times|tab|cap)s?\s*(?:daily|per day|a day)|once|twice)/i)
+        const frequencyMatch = trimmedLine.match(/(\d+[-\s]\d+[-\s]\d+|\d+\s*(?:times|tab|cap)s?\s*(?:daily|per day|a day)|once|twice|daily)/i)
         if (frequencyMatch) {
           frequency = frequencyMatch[1]
           name = name.replace(frequencyMatch[0], '').trim()
@@ -1197,10 +1293,18 @@ function DoctorAppointmentsContent() {
         const durationMatch = trimmedLine.match(/(?:for|duration|take|continue)\s+(\d+\s*(?:days?|weeks?|months?|times?))?/i)
         if (durationMatch && durationMatch[1]) {
           duration = durationMatch[1]
+          // Remove the whole duration phrase from name (e.g. "for 3 months")
+          name = name.replace(durationMatch[0], '').trim()
         }
         
-        // Clean up name (remove extra spaces and punctuation)
-        name = name.replace(/[,;:]\s*$/, '').trim()
+        // Clean up name (remove extra spaces, brackets, trailing hyphens, and extra words)
+        name = name
+          .replace(/\[[^\]]*\]/g, '')                    // any remaining [ ... ]
+          .replace(/\s*-\s*(daily|once|twice).*$/i, '')  // "- daily for 3 months" etc
+          .replace(/\s*-\s*$/, '')                       // trailing hyphen
+          .replace(/[,;:]\s*$/, '')                      // trailing punctuation
+          .replace(/\s{2,}/g, ' ')                       // collapse multiple spaces
+          .trim()
         
         currentMedicine = { name: name || "Medicine", dosage, frequency, duration }
       } else if (currentMedicine) {
@@ -2467,86 +2571,6 @@ function DoctorAppointmentsContent() {
                                   </p>
                                 </div>
                               )}
-                              
-                              {/* Latest Checkup Recommendation - Only show if available */}
-                              {(() => {
-                                const latestRecommendation = getLatestCheckupRecommendation(appointment)
-                                return latestRecommendation && (
-                                  <div className="bg-blue-50 rounded-lg p-4 border-2 border-blue-200 mt-3">
-                                    <div className="flex items-center gap-2 mb-3">
-                                      <span className="text-blue-600 text-lg">🩺</span>
-                                      <h5 className="font-bold text-blue-800 text-sm">Latest Recommendation</h5>
-                                      <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                                        {latestRecommendation.date}
-                                      </span>
-                                    </div>
-                                    
-                                    {latestRecommendation.medicine && (() => {
-                                      const parsed = parsePrescription(latestRecommendation.medicine)
-                                      if (parsed && parsed.medicines.length > 0) {
-                                        return (
-                                          <div className="mb-3">
-                                            <span className="text-blue-700 text-xs font-semibold block mb-2">💊 Previous Medicine:</span>
-                                            <div className="bg-white rounded-lg p-3 border border-blue-200">
-                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                {parsed.medicines.map((med, index) => (
-                                                  <div key={index} className="bg-gray-50 border border-gray-200 rounded p-2">
-                                                    <div className="flex items-start gap-1.5 mb-1">
-                                                      <span className="text-sm">{med.emoji}</span>
-                                                      <div className="flex-1">
-                                                        <h6 className="font-semibold text-gray-900 text-xs">
-                                                          {med.name}
-                                                          {med.dosage && <span className="text-gray-600 font-normal">({med.dosage})</span>}
-                                                        </h6>
-                                                      </div>
-                                                    </div>
-                                                    <div className="ml-5 space-y-0.5 text-xs text-gray-700">
-                                                      {med.frequency && (
-                                                        <div className="flex items-center gap-1.5">
-                                                          <span className="text-gray-400">•</span>
-                                                          <span>{med.frequency}</span>
-                                                        </div>
-                                                      )}
-                                                      {med.duration && (
-                                                        <div className="flex items-center gap-1.5">
-                                                          <span className="text-gray-400">•</span>
-                                                          <span><span className="font-medium">Duration:</span> {med.duration}</span>
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )
-                                      } else {
-                                        return (
-                                          <div className="mb-3">
-                                            <span className="text-blue-700 text-xs font-semibold block mb-1">💊 Previous Medicine:</span>
-                                            <p className="text-blue-900 text-sm font-medium bg-white p-2 rounded border border-blue-200 whitespace-pre-line">
-                                              {latestRecommendation.medicine}
-                                            </p>
-                                          </div>
-                                        )
-                                      }
-                                    })()}
-                                    
-                                    {latestRecommendation.notes && (
-                                      <div className="mb-2">
-                                        <span className="text-blue-700 text-xs font-semibold block mb-1">📝 Previous Notes:</span>
-                                        <p className="text-blue-900 text-sm font-medium bg-white p-2 rounded border border-blue-200 whitespace-pre-line">
-                                          {latestRecommendation.notes}
-                                        </p>
-                                      </div>
-                                    )}
-                                    
-                                    <div className="text-xs text-blue-600 font-medium mt-2">
-                                      Recommended by {latestRecommendation.doctorName}
-                                    </div>
-                                  </div>
-                                )
-                              })()}
                             </div>
                             </div>
                           </div>
@@ -2637,8 +2661,185 @@ function DoctorAppointmentsContent() {
                           </div>
                         </div>
 
-                      {/* Bottom Section: Medical Info + AI Diagnosis (Full Width) */}
+                      {/* Bottom Section: Latest Recommendation + Medical Info + AI Diagnosis (Full Width) */}
                       <div className="space-y-4">
+                        {/* Last Appointment Details - Full width section */}
+                        {(() => {
+                          const latestRecommendation = getLatestCheckupRecommendation(appointment)
+                          return latestRecommendation && (
+                            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl p-4 md:p-5 border border-blue-200/70 shadow-sm">
+                              <div className="flex flex-wrap items-center justify-between gap-3 mb-3 border-b border-blue-100 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                                    🩺
+                                  </div>
+                                  <div>
+                                    <h5 className="font-bold text-blue-900 text-sm md:text-base">
+                                      Last appointment detials
+                                    </h5>
+                                    <p className="text-[11px] text-blue-700/80">
+                                      Summary of the most recent completed visit
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-[11px] md:text-xs text-blue-700 bg-white/80 px-2.5 py-1 rounded-full border border-blue-200 shadow-sm">
+                                  {latestRecommendation.date}
+                                </span>
+                              </div>
+
+                              {/* Diagnosis from last appointment */}
+                              {(latestRecommendation.finalDiagnosis?.length > 0 || latestRecommendation.customDiagnosis) && (
+                                <div className="mb-3">
+                                  <span className="text-blue-900 text-xs font-semibold block mb-2">
+                                    🧾 Diagnosis
+                                  </span>
+                                  {latestRecommendation.finalDiagnosis?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 mb-1">
+                                      {latestRecommendation.finalDiagnosis.map((diagnosis: string, index: number) => (
+                                        <span
+                                          key={index}
+                                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                                        >
+                                          {diagnosis}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {latestRecommendation.customDiagnosis && (
+                                    <div className="mt-1 bg-white rounded-lg border border-blue-100 px-2.5 py-1.5">
+                                      <span className="text-[11px] font-semibold text-blue-800 block mb-0.5">
+                                        Custom:
+                                      </span>
+                                      <p className="text-[11px] text-blue-900 whitespace-pre-line">
+                                        {latestRecommendation.customDiagnosis}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {latestRecommendation.medicine && (() => {
+                                const parsed = parsePrescription(latestRecommendation.medicine)
+                                if (parsed && parsed.medicines.length > 0) {
+                                  return (
+                                    <div className="mb-3">
+                                      <span className="text-blue-800 text-xs font-semibold block mb-2">
+                                        💊 Previous Medicines
+                                      </span>
+                                      <div className="bg-white rounded-lg p-3 border border-blue-100">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                          {parsed.medicines.map((med, index) => (
+                                            <div
+                                              key={index}
+                                              className="bg-blue-50/60 border border-blue-100 rounded-lg p-2 flex flex-col gap-1"
+                                            >
+                                              <div className="flex items-start gap-1.5">
+                                                <span className="text-sm">{med.emoji}</span>
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="font-semibold text-[12px] text-blue-900 truncate">
+                                                    {med.name}
+                                                    {med.dosage && (
+                                                      <span className="text-[11px] text-blue-700 font-normal ml-1">
+                                                        ({med.dosage})
+                                                      </span>
+                                                    )}
+                                                  </p>
+                                                  {(med.frequency || med.duration) && (
+                                                    <div className="flex flex-wrap items-center gap-1 mt-0.5 text-[11px] text-blue-800/90">
+                                                      {med.frequency && (
+                                                        <span className="inline-flex items-center gap-1">
+                                                          <span className="text-blue-400">⏱</span>
+                                                          <span>{med.frequency}</span>
+                                                        </span>
+                                                      )}
+                                                      {med.duration && (
+                                                        <span className="inline-flex items-center gap-1">
+                                                          <span className="text-blue-400">📅</span>
+                                                          <span>{med.duration}</span>
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                } else {
+                                  return (
+                                    <div className="mb-3">
+                                      <span className="text-blue-800 text-xs font-semibold block mb-1">
+                                        💊 Previous Medicines
+                                      </span>
+                                      <p className="text-blue-900 text-sm font-medium bg-white p-2 rounded-lg border border-blue-100 whitespace-pre-line">
+                                        {latestRecommendation.medicine}
+                                      </p>
+                                    </div>
+                                  )
+                                }
+                              })()}
+
+                              {latestRecommendation.notes && (
+                                <div className="mb-2">
+                                  <span className="text-blue-800 text-xs font-semibold block mb-1">
+                                    📝 Previous Notes
+                                  </span>
+                                  <p className="text-blue-900 text-xs md:text-sm font-medium bg-white p-2 rounded-lg border border-blue-100 whitespace-pre-line line-hight-1">
+                                    {latestRecommendation.notes}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Documents from last appointment */}
+                              {(() => {
+                                const docs =
+                                  latestRecommendation.appointmentId &&
+                                  historyDocuments[latestRecommendation.appointmentId]
+                                    ? historyDocuments[latestRecommendation.appointmentId]
+                                    : []
+                                return (
+                                  <div className="mb-2">
+                                    <span className="text-blue-800 text-xs font-semibold block mb-1">
+                                      📄 Documents
+                                    </span>
+                                    {docs.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {docs.map((doc) => (
+                                          <button
+                                            key={doc.id}
+                                            type="button"
+                                            onClick={() => setSelectedHistoryDocument(doc)}
+                                            className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-[11px] bg-white/90 text-blue-800 border border-blue-100 hover:bg-blue-50 transition-colors"
+                                          >
+                                            <span>📄</span>
+                                            <span className="truncate flex-1 text-left">
+                                              {doc.originalFileName}
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[11px] text-blue-900 bg-white p-2 rounded-lg border border-blue-100">
+                                        📄 Documents: No any document attached.
+                                      </p>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+
+                              <div className="mt-2 text-[11px] md:text-xs text-blue-700 font-medium flex items-center gap-1">
+                                <span className="text-blue-500">👨‍⚕️</span>
+                                <span>
+                                  Recommended by <span className="font-semibold">{latestRecommendation.doctorName}</span>
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })()}
+
                         {/* Medical Information */}
                         <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 border border-emerald-100/50 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex items-center gap-2 mb-3 pb-2 border-b border-emerald-200">
@@ -2933,150 +3134,269 @@ function DoctorAppointmentsContent() {
                           })
 
                           return (
-                            <div className="mt-4">
-                              <div className="bg-white rounded-xl p-4 border-2 border-slate-200 shadow-sm">
+                            <div className="mt-3">
+                              <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
                                 <button
                                   onClick={() => setShowHistory({ ...showHistory, [appointment.id]: !showHistory[appointment.id] })}
-                                  className="w-full flex items-center justify-between hover:bg-slate-50 rounded-lg p-2 transition-colors"
+                                  className="w-full flex items-center justify-between hover:bg-slate-50 rounded-lg p-1.5 transition-colors"
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xl">📚</span>
-                                    <h4 className="font-semibold text-slate-800 text-base">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-base">📚</span>
+                                    <h4 className="font-semibold text-slate-800 text-sm">
                                       Previous Checkup History ({filteredHistory.length}/{historyForPatient.length})
                                     </h4>
                                   </div>
                                   <div className={`transition-transform duration-200 ${showHistory[appointment.id] ? "rotate-180" : ""}`}>
-                                    <span className="text-slate-600 text-lg">▼</span>
+                                    <span className="text-slate-600 text-sm">▼</span>
                                   </div>
                                 </button>
 
-                                {showHistory[appointment.id] && (
-                                  <div className="mt-4 space-y-3">
-                                    {filteredHistory.length === 0 ? (
-                                      <div className="text-sm text-slate-500 text-center py-6 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                                        No visits match the current search filters.
+                                {showHistory[appointment.id] && (() => {
+                                  // Group history by doctor
+                                  const showAll = showAllDoctorsHistory[appointment.id] || false
+                                  const currentDoctorId = appointment.doctorId
+                                  const currentDoctorHistory = filteredHistory.filter(item => item.doctorId === currentDoctorId)
+                                  const otherDoctorsHistory = showAll 
+                                    ? filteredHistory.filter(item => item.doctorId !== currentDoctorId)
+                                    : []
+                                  
+                                  // Group other doctors' history by doctor
+                                  const otherDoctorsGrouped: Record<string, AppointmentType[]> = {}
+                                  otherDoctorsHistory.forEach(item => {
+                                    const doctorKey = `${item.doctorId}_${item.doctorName || 'Unknown'}_${item.doctorSpecialization || ''}`
+                                    if (!otherDoctorsGrouped[doctorKey]) {
+                                      otherDoctorsGrouped[doctorKey] = []
+                                    }
+                                    otherDoctorsGrouped[doctorKey].push(item)
+                                  })
+
+                                  // Helper function to render history item
+                                  const renderHistoryItem = (historyItem: AppointmentType, visitNumber: string | number, isCurrentDoctor: boolean = true) => (
+                                    <div key={historyItem.id} className={`p-2 rounded border ${isCurrentDoctor ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-300'}`}>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <p className={`text-xs font-semibold ${isCurrentDoctor ? 'text-gray-900' : 'text-slate-700'}`}>
+                                          Visit #{visitNumber}
+                                        </p>
+                                        <p className={`text-[10px] ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-500'}`}>
+                                          {new Date(historyItem.appointmentDate).toLocaleDateString()}
+                                        </p>
                                       </div>
-                                    ) : (
-                                      filteredHistory.map((historyItem) => {
-                                        const visitIndex = historyForPatient.findIndex(item => item.id === historyItem.id)
-                                        const visitNumber = visitIndex >= 0 ? historyForPatient.length - visitIndex : "-"
-                                        return (
-                                          <div key={historyItem.id} className="bg-white p-3 rounded border">
-                                            <div className="flex items-center justify-between mb-2">
-                                              <p className="text-sm font-semibold text-gray-900">
-                                                Visit #{visitNumber}
-                                              </p>
-                                              <p className="text-xs text-gray-600">
-                                                {new Date(historyItem.appointmentDate).toLocaleDateString()}
-                                              </p>
+                                      <div className="space-y-1 text-[11px]">
+                                        <div>
+                                          <span className={`font-medium ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}>Chief Complaint:</span>
+                                          <p className={`mt-0.5 ${isCurrentDoctor ? 'text-gray-900' : 'text-slate-800'}`}>{historyItem.chiefComplaint}</p>
+                                        </div>
+                                        {historyItem.associatedSymptoms && (
+                                          <div>
+                                            <span className={`font-medium ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}>Symptoms:</span>
+                                            <p className={`mt-0.5 whitespace-pre-line ${isCurrentDoctor ? 'text-gray-900' : 'text-slate-800'}`}>{historyItem.associatedSymptoms}</p>
+                                          </div>
+                                        )}
+                                        {((historyItem as any).finalDiagnosis && (historyItem as any).finalDiagnosis.length > 0) && (
+                                          <div>
+                                            <span className={`font-medium ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}>Final Diagnosis:</span>
+                                            <div className="flex flex-wrap gap-1 mt-0.5">
+                                              {(historyItem as any).finalDiagnosis.map((diagnosis: string, index: number) => (
+                                                <span
+                                                  key={index}
+                                                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isCurrentDoctor ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-slate-100 border border-slate-300 text-slate-700'}`}
+                                                >
+                                                  {diagnosis}
+                                                </span>
+                                              ))}
                                             </div>
-                                            <div className="space-y-2 text-xs">
-                                              <div>
-                                                <span className="text-gray-600 font-medium">Chief Complaint:</span>
-                                                <p className="text-gray-900 mt-1">{historyItem.chiefComplaint}</p>
+                                            {(historyItem as any).customDiagnosis && (
+                                              <div className={`mt-1 rounded px-1.5 py-0.5 text-[10px] ${isCurrentDoctor ? 'bg-purple-50 border border-purple-200 text-purple-800' : 'bg-slate-100 border border-slate-300 text-slate-700'}`}>
+                                                <span className="font-semibold">Custom:</span> {(historyItem as any).customDiagnosis}
                                               </div>
-                                              {historyItem.associatedSymptoms && (
-                                                <div>
-                                                  <span className="text-gray-600 font-medium">Symptoms:</span>
-                                                  <p className="text-gray-900 mt-1 whitespace-pre-line">{historyItem.associatedSymptoms}</p>
-                                                </div>
-                                              )}
-                                              {((historyItem as any).finalDiagnosis && (historyItem as any).finalDiagnosis.length > 0) && (
-                                                <div>
-                                                  <span className="text-gray-600 font-medium">Final Diagnosis:</span>
-                                                  <div className="flex flex-wrap gap-1.5 mt-1">
-                                                    {(historyItem as any).finalDiagnosis.map((diagnosis: string, index: number) => (
-                                                      <span
-                                                        key={index}
-                                                        className="inline-flex items-center px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-xs font-medium text-blue-700"
-                                                      >
-                                                        {diagnosis}
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                  {(historyItem as any).customDiagnosis && (
-                                                    <div className="mt-1.5 bg-purple-50 border border-purple-200 rounded px-2 py-1 text-xs text-purple-800">
-                                                      <span className="font-semibold">Custom:</span> {(historyItem as any).customDiagnosis}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              )}
-                                              {historyItem.medicine && (() => {
-                                                const parsed = parsePrescription(historyItem.medicine)
-                                                if (parsed && parsed.medicines.length > 0) {
-                                                  return (
-                                                    <div>
-                                                      <span className="text-gray-600 font-medium mb-2 block">💊 Prescribed Medicines:</span>
-                                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                                                        {parsed.medicines.map((med, medIndex) => (
-                                                          <div key={medIndex} className="bg-gray-50 border border-gray-200 rounded p-2">
-                                                            <div className="flex items-start gap-1.5 mb-1">
-                                                              <span className="text-sm">{med.emoji}</span>
-                                                              <div className="flex-1">
-                                                                <h6 className="font-semibold text-gray-900 text-xs">
-                                                                  {med.name}
-                                                                  {med.dosage && <span className="text-gray-600 font-normal">({med.dosage})</span>}
-                                                                </h6>
-                                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                        {historyItem.medicine && (() => {
+                                          const parsed = parsePrescription(historyItem.medicine)
+                                          if (parsed && parsed.medicines.length > 0) {
+                                            return (
+                                              <div>
+                                                <span className={`font-medium mb-0.5 block text-[11px] ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}>💊 Medicines:</span>
+                                                <div className="grid grid-cols-3 gap-1">
+                                                  {parsed.medicines.map((med, medIndex) => (
+                                                    <div key={medIndex} className={`border rounded p-1 ${isCurrentDoctor ? 'bg-gray-50 border-gray-200' : 'bg-slate-100 border-slate-300'}`}>
+                                                      <div className="flex items-start gap-0.5">
+                                                        <span className="text-[10px]">{med.emoji}</span>
+                                                        <div className="flex-1 min-w-0">
+                                                          <span className={`font-semibold text-[11px] leading-tight ${isCurrentDoctor ? 'text-gray-900' : 'text-slate-800'}`}>
+                                                            {med.name}
+                                                            {med.dosage && <span className={`font-normal text-[10px] ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}> ({med.dosage})</span>}
+                                                          </span>
+                                                          {(med.frequency || med.duration) && (
+                                                            <div className="flex items-center gap-1 mt-0.5 text-[10px] leading-tight" style={{ color: isCurrentDoctor ? '#6B7280' : '#64748B' }}>
+                                                              {med.frequency && <span>{med.frequency}</span>}
+                                                              {med.frequency && med.duration && <span>•</span>}
+                                                              {med.duration && <span>{med.duration}</span>}
                                                             </div>
-                                                            <div className="ml-5 space-y-0.5 text-xs text-gray-700">
-                                                              {med.frequency && (
-                                                                <div className="flex items-center gap-1.5">
-                                                                  <span className="text-gray-400">•</span>
-                                                                  <span>{med.frequency}</span>
-                                                                </div>
-                                                              )}
-                                                              {med.duration && (
-                                                                <div className="flex items-center gap-1.5">
-                                                                  <span className="text-gray-400">•</span>
-                                                                  <span><span className="font-medium">Duration:</span> {med.duration}</span>
-                                                                </div>
-                                                              )}
-                                                            </div>
-                                                          </div>
-                                                        ))}
+                                                          )}
+                                                        </div>
                                                       </div>
                                                     </div>
-                                                  )
-                                                } else {
-                                                  return (
-                                                    <div>
-                                                      <span className="text-gray-600 font-medium">💊 Medicine:</span>
-                                                      <p className="text-gray-900 mt-1 whitespace-pre-line">{historyItem.medicine}</p>
-                                                    </div>
-                                                  )
-                                                }
-                                              })()}
-                                              {historyItem.doctorNotes && (
-                                                <div>
-                                                  <span className="text-gray-600 font-medium">📝 Notes:</span>
-                                                  <p className="text-gray-900 mt-1 whitespace-pre-line">{historyItem.doctorNotes}</p>
+                                                  ))}
                                                 </div>
-                                              )}
+                                              </div>
+                                            )
+                                          } else {
+                                            return (
+                                              <div>
+                                                <span className={`font-medium text-[11px] ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}>💊 Medicine:</span>
+                                                <p className={`mt-0.5 whitespace-pre-line text-[11px] ${isCurrentDoctor ? 'text-gray-900' : 'text-slate-800'}`}>{historyItem.medicine}</p>
+                                              </div>
+                                            )
+                                          }
+                                        })()}
+                                        {historyItem.doctorNotes && (
+                                          <div>
+                                            <span className={`font-medium ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}>📝 Notes:</span>
+                                            <p className={`mt-0.5 whitespace-pre-line ${isCurrentDoctor ? 'text-gray-900' : 'text-slate-800'}`}>{historyItem.doctorNotes}</p>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Documents for this visit */}
+                                        {historyDocuments[historyItem.id] && historyDocuments[historyItem.id].length > 0 && (
+                                          <div className="mt-2 pt-2 border-t border-slate-200">
+                                            <span className={`font-medium text-[11px] ${isCurrentDoctor ? 'text-gray-600' : 'text-slate-600'}`}>📄 Documents ({historyDocuments[historyItem.id].length}):</span>
+                                            <div className="mt-1 space-y-1">
+                                              {historyDocuments[historyItem.id].map((doc) => (
+                                                <button
+                                                  key={doc.id}
+                                                  onClick={() => setSelectedHistoryDocument(doc)}
+                                                  className={`w-full flex items-center gap-1.5 p-1 rounded text-[10px] cursor-pointer hover:bg-opacity-80 transition-colors ${isCurrentDoctor ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                                                >
+                                                  <span>📄</span>
+                                                  <span className="truncate flex-1 text-left">{doc.originalFileName}</span>
+                                                </button>
+                                              ))}
                                             </div>
                                           </div>
-                                        )
-                                      })
-                                    )}
-                                  </div>
-                                )}
+                                        )}
+                                      </div>
+                                    </div>
+                                  )
+
+                                  return (
+                                    <div className="mt-3 space-y-2">
+                                      {filteredHistory.length === 0 ? (
+                                        <div className="text-xs text-slate-500 text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                                          No visits match the current search filters.
+                                        </div>
+                                      ) : (
+                                        <>
+                                          {/* Current Doctor's History */}
+                                          {currentDoctorHistory.length > 0 && (
+                                            <div className="space-y-2">
+                                              {currentDoctorHistory.map((historyItem) => {
+                                                const visitIndex = historyForPatient.findIndex(item => item.id === historyItem.id)
+                                                const visitNumber = visitIndex >= 0 ? historyForPatient.length - visitIndex : "-"
+                                                return renderHistoryItem(historyItem, visitNumber, true)
+                                              })}
+                                            </div>
+                                          )}
+
+                                          {/* Other Doctors' History - Accordion Format */}
+                                          {showAll && Object.keys(otherDoctorsGrouped).length > 0 && (
+                                            <div className="space-y-2 mt-3 pt-3 border-t-2 border-slate-300">
+                                              <h5 className="text-xs font-semibold text-slate-700 mb-1.5">Other Doctors' History</h5>
+                                              {Object.entries(otherDoctorsGrouped).map(([doctorKey, doctorHistory]) => {
+                                                const firstItem = doctorHistory[0]
+                                                const doctorName = firstItem.doctorName || 'Unknown Doctor'
+                                                const doctorSpecialization = firstItem.doctorSpecialization || 'General'
+                                                const accordionKey = `${appointment.id}_${doctorKey}`
+                                                
+                                                return (
+                                                  <div key={doctorKey} className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50">
+                                                    <button
+                                                      onClick={() => setExpandedDoctors(prev => ({ ...prev, [accordionKey]: !prev[accordionKey] }))}
+                                                      className="w-full flex items-center justify-between p-2 bg-gradient-to-r from-slate-100 to-slate-50 hover:from-slate-200 hover:to-slate-100 transition-colors"
+                                                    >
+                                                      <div className="flex items-center gap-1.5">
+                                                        <span className="text-sm">👨‍⚕️</span>
+                                                        <div className="text-left">
+                                                          <p className="text-xs font-semibold text-slate-800">{doctorName}</p>
+                                                          <p className="text-[10px] text-slate-600">{doctorSpecialization}</p>
+                                                        </div>
+                                                      </div>
+                                                      <div className={`transition-transform duration-200 ${expandedDoctors[accordionKey] ? "rotate-180" : ""}`}>
+                                                        <span className="text-slate-600 text-sm">▼</span>
+                                                      </div>
+                                                    </button>
+                                                    {expandedDoctors[accordionKey] && (
+                                                      <div className="p-2 space-y-2 bg-white">
+                                                        {doctorHistory.map((historyItem) => {
+                                                          const visitIndex = historyForPatient.findIndex(item => item.id === historyItem.id)
+                                                          const visitNumber = visitIndex >= 0 ? historyForPatient.length - visitIndex : "-"
+                                                          return renderHistoryItem(historyItem, visitNumber, false)
+                                                        })}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          )}
+
+                                          {/* Toggle Button at Bottom */}
+                                          <div className="mt-3 pt-3 border-t border-slate-200">
+                                            <button
+                                              onClick={() => toggleAllDoctorsHistory(appointment.id)}
+                                              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-xs font-medium"
+                                            >
+                                              <svg className={`w-3.5 h-3.5 transition-transform ${showAll ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                              </svg>
+                                              {showAll ? 'Hide Other Doctors\' History' : 'Show All Doctors\' History'}
+                                            </button>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             </div>
                           )
                         })(                          )}
 
-                          {/* Documents & Reports Section */}
-                          <div className="mt-4">
-                            <AppointmentDocuments
-                              appointmentId={appointment.id}
-                              patientId={appointment.patientId}
-                              patientUid={appointment.patientUid || ""}
-                              appointmentSpecialty={appointment.doctorSpecialization}
-                              appointmentStatus={appointment.status}
-                              canUpload={true}
-                              canEdit={true}
-                              canDelete={true}
-                            />
+                          {/* Documents & Reports Section - Accordion */}
+                          <div className="mt-3">
+                            <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                              <button
+                                onClick={() => setShowDocuments(prev => ({ ...prev, [appointment.id]: !prev[appointment.id] }))}
+                                className="w-full flex items-center justify-between hover:bg-slate-50 rounded-lg p-1.5 transition-colors"
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-base">📄</span>
+                                  <h4 className="font-semibold text-slate-800 text-sm">
+                                   All  Documents & Reports
+                                  </h4>
+                                </div>
+                                <div className={`transition-transform duration-200 ${showDocuments[appointment.id] ? "rotate-180" : ""}`}>
+                                  <span className="text-slate-600 text-sm">▼</span>
+                                </div>
+                              </button>
+
+                              {showDocuments[appointment.id] && (
+                                <div className="mt-3">
+                                  <AppointmentDocuments
+                                    appointmentId={appointment.id}
+                                    patientId={appointment.patientId}
+                                    // Fallback to patientId if patientUid is missing so uploads work for legacy data
+                                    patientUid={appointment.patientUid || appointment.patientId || ""}
+                                    appointmentSpecialty={appointment.doctorSpecialization}
+                                    appointmentStatus={appointment.status}
+                                    canUpload={true}
+                                    canEdit={true}
+                                    canDelete={true}
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           {/* Complete Consultation Button - Show at bottom if AI not shown yet */}
@@ -3395,7 +3715,7 @@ function DoctorAppointmentsContent() {
                                         }
                                         return null
                                       })()}
-                                      <p className="text-xs text-gray-500">Add</p>
+                                      {/* AI Suggest button removed – AI now handled via auto/section below */}
                                     </div>
                                   </div>
                                   
@@ -3410,41 +3730,176 @@ function DoctorAppointmentsContent() {
                                         <span className="text-xs font-medium text-purple-700">Generating AI prescription...</span>
                                       </div>
                                     </div>
-                                  ) : showAiPrescriptionSuggestion[appointment.id] && aiPrescription[appointment.id]?.medicine ? (
-                                    <div className="mb-2 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-300 rounded p-2 shadow-sm">
-                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-1.5">
+                                  ) : (showAiPrescriptionSuggestion[appointment.id] && aiPrescription[appointment.id]?.medicine) ? (() => {
+                                    const parsedMedicines = parseAiPrescription(aiPrescription[appointment.id].medicine)
+                                    const removedIndices = removedAiMedicines[appointment.id] || []
+                                    const visibleMedicines = parsedMedicines.filter((_, idx) => !removedIndices.includes(idx))
+                                    
+                                    return (
+                                      <div className="mb-2 space-y-2">
+                                        <div className="flex items-center justify-between mb-1">
                                           <div className="flex items-center gap-1.5">
-                                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                          </svg>
-                                          <span className="text-xs font-semibold text-purple-700 uppercase">AI Generated</span>
-                                        </div>
-                                          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleAcceptPrescription(appointment.id)}
-                                              className="flex items-center justify-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded transition-all"
-                                          >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                             </svg>
-                                            Accept
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeclinePrescription(appointment.id)}
-                                              className="flex items-center justify-center gap-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded transition-all"
-                                          >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                            Decline
-                                          </button>
+                                            <span className="text-xs font-semibold text-purple-700 uppercase">AI Suggested Medicines</span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const existing = completionData[appointment.id]?.medicines || []
+                                                const existingNames = existing.map(m => (m.name || "").toLowerCase().trim())
+                                                const toAdd = visibleMedicines.filter(m => !existingNames.includes((m.name || "").toLowerCase().trim()))
+                                                if (toAdd.length === 0) {
+                                                  // If everything already added, just hide suggestions
+                                                  setShowAiPrescriptionSuggestion(prev => ({ ...prev, [appointment.id]: false }))
+                                                  return
+                                                }
+                                                setCompletionData(prev => ({
+                                                  ...prev,
+                                                  [appointment.id]: {
+                                                    ...prev[appointment.id],
+                                                    medicines: [...existing, ...toAdd],
+                                                  },
+                                                }))
+                                                // After adding all, hide suggestion box
+                                                setShowAiPrescriptionSuggestion(prev => ({ ...prev, [appointment.id]: false }))
+                                                setRemovedAiMedicines(prev => ({ ...prev, [appointment.id]: [] }))
+                                              }}
+                                              className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white text-[10px] font-semibold rounded"
+                                            >
+                                              Add All
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                // Regenerate suggestion
+                                                setRemovedAiMedicines(prev => ({ ...prev, [appointment.id]: [] }))
+                                                handleGenerateAiPrescription(appointment.id)
+                                              }}
+                                              disabled={loadingAiPrescription[appointment.id]}
+                                              className="flex items-center justify-center gap-1 px-2 py-0.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-semibold rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                              title="Regenerate AI suggestion"
+                                            >
+                                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                              </svg>
+                                              Regenerate
+                                            </button>
+                                          </div>
                                         </div>
+                                        
+                                        {visibleMedicines.length > 0 ? (
+                                          <div className="space-y-1.5">
+                                            {visibleMedicines.map((med, displayIndex) => {
+                                              // Find the original index in parsedMedicines array
+                                              let medIndex = -1
+                                              let foundCount = 0
+                                              for (let i = 0; i < parsedMedicines.length; i++) {
+                                                if (!removedIndices.includes(i) && 
+                                                    parsedMedicines[i].name === med.name &&
+                                                    parsedMedicines[i].dosage === med.dosage &&
+                                                    parsedMedicines[i].frequency === med.frequency &&
+                                                    parsedMedicines[i].duration === med.duration) {
+                                                  if (foundCount === displayIndex) {
+                                                    medIndex = i
+                                                    break
+                                                  }
+                                                  foundCount++
+                                                }
+                                              }
+                                              
+                                              // Fallback to displayIndex if not found
+                                              if (medIndex === -1) {
+                                                medIndex = displayIndex
+                                              }
+                                              
+                                              const isAlreadyAdded = (completionData[appointment.id]?.medicines || []).some(
+                                                (m: any) => m.name?.toLowerCase().trim() === med.name?.toLowerCase().trim()
+                                              )
+                                              
+                                              return (
+                                                <div key={`${medIndex}-${med.name}`} className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded p-2 relative">
+                                                  <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                      <div className="flex items-center gap-1 mb-1">
+                                                        <span className="text-xs font-semibold text-purple-900">{med.name || "Medicine"}</span>
+                                                      </div>
+                                                      <div className="space-y-0.5 text-[10px] text-purple-700">
+                                                        {med.dosage && (
+                                                          <div><span className="font-medium">Dosage:</span> {med.dosage}</div>
+                                                        )}
+                                                        {med.frequency && (
+                                                          <div><span className="font-medium">Frequency:</span> {med.frequency}</div>
+                                                        )}
+                                                        {med.duration && (
+                                                          <div><span className="font-medium">Duration:</span> {med.duration}</div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                      {!isAlreadyAdded ? (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            setCompletionData((prev) => ({
+                                                              ...prev,
+                                                              [appointment.id]: {
+                                                                ...prev[appointment.id],
+                                                                medicines: [...(prev[appointment.id]?.medicines || []), med],
+                                                              },
+                                                            }))
+                                                            // Remove this medicine from AI suggestions after adding
+                                                            setRemovedAiMedicines(prev => ({
+                                                              ...prev,
+                                                              [appointment.id]: [...(prev[appointment.id] || []), medIndex]
+                                                            }))
+                                                          }}
+                                                          className="p-1 bg-green-500 hover:bg-green-600 text-white rounded transition-all"
+                                                          title="Add medicine"
+                                                        >
+                                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                          </svg>
+                                                        </button>
+                                                      ) : (
+                                                        <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded">Added</span>
+                                                      )}
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setRemovedAiMedicines(prev => ({
+                                                            ...prev,
+                                                            [appointment.id]: [...(prev[appointment.id] || []), medIndex]
+                                                          }))
+                                                          if (visibleMedicines.length === 1) {
+                                                            handleDeclinePrescription(appointment.id)
+                                                          }
+                                                        }}
+                                                        className="p-1 bg-red-500 hover:bg-red-600 text-white rounded transition-all"
+                                                        title="Remove from suggestion"
+                                                      >
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        ) : (
+                                          <div className="bg-white rounded p-2 border border-purple-100">
+                                            <pre className="text-xs text-gray-800 whitespace-pre-wrap font-sans">{aiPrescription[appointment.id].medicine}</pre>
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="bg-white rounded p-2 border border-purple-100">
-                                        <pre className="text-xs text-gray-800 whitespace-pre-wrap font-sans">{aiPrescription[appointment.id].medicine}</pre>
-                                      </div>
+                                    )
+                                  })() : showAiPrescriptionSuggestion[appointment.id] ? (
+                                    <div className="mb-2 bg-yellow-50 border border-yellow-200 rounded p-2">
+                                      <p className="text-xs text-yellow-700">AI prescription is being generated. Please wait...</p>
                                     </div>
                                   ) : null}
 
@@ -3768,9 +4223,9 @@ function DoctorAppointmentsContent() {
                                         },
                                       }))
                                     }
-                                    rows={3}
+                                    rows={2}
                                     placeholder="Enter observations, diagnosis, recommendations..."
-                                    className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
                                   />
                                 </div>
 
@@ -3821,6 +4276,62 @@ function DoctorAppointmentsContent() {
                                         rows={2}
                                         placeholder="Enter note for re-checkup (e.g., 'Follow-up required in 2 weeks', 'Monitor blood pressure')"
                                         className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs resize-none"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Document Upload Section */}
+                                <div className="border-t border-slate-200 pt-3 mt-3">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-xs font-medium text-gray-700">
+                                      Documents & Reports <span className="text-gray-400 text-xs">(Optional)</span>
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowDocumentUpload(prev => ({ ...prev, [appointment.id]: !prev[appointment.id] }))}
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition-all flex items-center gap-1"
+                                    >
+                                      {showDocumentUpload[appointment.id] ? (
+                                        <>
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                          </svg>
+                                          Hide
+                                        </>
+                                      ) : (
+                                        <>
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                          </svg>
+                                          Add Documents
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                  {showDocumentUpload[appointment.id] && (
+                                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                      <DocumentUpload
+                                        patientId={appointment.patientId}
+                                        // Fallback to patientId if patientUid is missing (legacy/WhatsApp appointments)
+                                        patientUid={appointment.patientUid || appointment.patientId || ""}
+                                        appointmentId={appointment.id}
+                                        specialty={appointment.doctorSpecialization}
+                                        onUploadSuccess={(document: DocumentMetadata) => {
+                                          setNotification({
+                                            type: "success",
+                                            message: `Document "${document.originalFileName}" uploaded successfully!`
+                                          })
+                                          setTimeout(() => setNotification(null), 3000)
+                                        }}
+                                        onUploadError={(error: string) => {
+                                          setNotification({
+                                            type: "error",
+                                            message: error
+                                          })
+                                          setTimeout(() => setNotification(null), 5000)
+                                        }}
+                                        allowBulk={true}
                                       />
                                     </div>
                                   )}
@@ -4237,11 +4748,25 @@ function DoctorAppointmentsContent() {
                 </div>
               )}
             </div>
-          </div>
+        </div>
         )
       })()}
 
+      {/* Document Viewer Modal for History Documents */}
+      {selectedHistoryDocument && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full h-[92vh] flex flex-col overflow-y-auto">
+            <DocumentViewer
+              document={selectedHistoryDocument}
+              onClose={() => setSelectedHistoryDocument(null)}
+              canEdit={false}
+              canDelete={false}
+            />
+          </div>
         </div>
+      )}
+
+    </div>
   )
 }
 

@@ -178,11 +178,41 @@ export async function PUT(
           }
         }
         updateData.appointmentId = admin.firestore.FieldValue.delete()
+        updateData.doctorId = admin.firestore.FieldValue.delete()
+        updateData.appointmentDate = admin.firestore.FieldValue.delete()
         updateData.isLinkedToAppointment = false
       } else {
         // Link to new appointment
         updateData.appointmentId = body.appointmentId
         updateData.isLinkedToAppointment = true
+        
+        // Fetch appointment data to get doctorId and appointmentDate
+        if (body.doctorId !== undefined) {
+          updateData.doctorId = body.doctorId
+        }
+        if (body.appointmentDate !== undefined) {
+          updateData.appointmentDate = body.appointmentDate
+        }
+        
+        // If doctorId or appointmentDate not provided, fetch from appointment
+        if (!body.doctorId || !body.appointmentDate) {
+          try {
+            const appointmentRef = db.collection(getHospitalCollectionPath(hospitalId, "appointments")).doc(body.appointmentId)
+            const appointmentDoc = await appointmentRef.get()
+            if (appointmentDoc.exists) {
+              const appointmentData = appointmentDoc.data()
+              if (!body.doctorId && appointmentData?.doctorId) {
+                updateData.doctorId = appointmentData.doctorId
+              }
+              if (!body.appointmentDate && appointmentData?.appointmentDate) {
+                updateData.appointmentDate = appointmentData.appointmentDate
+              }
+            }
+          } catch (err) {
+            console.warn("[document-update] Failed to fetch appointment data:", err)
+          }
+        }
+        
         // Add to appointment's documentIds array
         try {
           const appointmentRef = db.collection(getHospitalCollectionPath(hospitalId, "appointments")).doc(body.appointmentId)
@@ -193,6 +223,14 @@ export async function PUT(
         } catch (err) {
         }
       }
+    }
+    
+    // Allow updating doctorId and appointmentDate independently
+    if (body.doctorId !== undefined && body.appointmentId) {
+      updateData.doctorId = body.doctorId
+    }
+    if (body.appointmentDate !== undefined && body.appointmentId) {
+      updateData.appointmentDate = body.appointmentDate
     }
 
     await docRef.update(updateData)
