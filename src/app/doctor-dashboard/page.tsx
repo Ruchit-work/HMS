@@ -337,7 +337,11 @@ export default function DoctorDashboard() {
       return
     }
     
-    if (!completionData.medicine.trim() || !completionData.notes.trim()) {
+    // Ensure medicine and notes are never undefined
+    const medicine = completionData.medicine || ""
+    const notes = completionData.notes || ""
+    
+    if (!medicine.trim() || !notes.trim()) {
       setNotification({ 
         type: "error", 
         message: "Please fill in both medicine and notes" 
@@ -349,8 +353,8 @@ export default function DoctorDashboard() {
     try {
       const result = await completeAppointment(
         selectedAppointmentId,
-        completionData.medicine,
-        completionData.notes,
+        medicine,
+        notes,
         activeHospitalId
       )
 

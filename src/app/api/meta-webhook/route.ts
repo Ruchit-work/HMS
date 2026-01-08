@@ -3481,7 +3481,7 @@ async function handleImageMessage(phone: string, message: any, value: any) {
 
     // Try to make file public (may fail if bucket doesn't allow public access)
     try {
-      await fileRef.makePublic()
+    await fileRef.makePublic()
     } catch (publicError: any) {
       // Log but don't fail - we can still use signed URLs if needed
       console.warn("Could not make file public (this is OK if using signed URLs):", publicError?.message)
@@ -3523,8 +3523,8 @@ async function handleImageMessage(phone: string, message: any, value: any) {
 
     // Save to Firestore with error handling
     try {
-      const documentsRef = db.collection(getHospitalCollectionPath(hospitalId, "documents"))
-      await documentsRef.add(documentData)
+    const documentsRef = db.collection(getHospitalCollectionPath(hospitalId, "documents"))
+    await documentsRef.add(documentData)
     } catch (firestoreError: any) {
       // If Firestore save fails, log but don't fail the entire operation
       // The file is already uploaded to storage

@@ -150,10 +150,11 @@ export const completeAppointment = async (
   const updatedHistory = [...existingHistory, diagnosisHistoryEntry]
 
   // Build update object - only include customDiagnosis if it has a value
+  // Ensure notes and medicine are never undefined (Firestore doesn't allow undefined values)
   const updateData: any = {
     status: "completed",
-    medicine: medicine,
-    doctorNotes: notes,
+    medicine: medicine || "",
+    doctorNotes: notes || "",
     finalDiagnosis: finalDiagnosis,
     diagnosisHistory: updatedHistory,
     completedAt: new Date().toISOString(),

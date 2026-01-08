@@ -578,11 +578,11 @@ function ENTAnatomyPageContent() {
       // Complete the appointment
       await completeAppointment(
         appointmentId,
-        medicineText,
-        comprehensiveNotes,
+        medicineText || "", // Ensure never undefined
+        comprehensiveNotes || "", // Ensure never undefined
         activeHospitalId,
         filteredDiagnoses,
-        finalCustomDiagnosis,
+        finalCustomDiagnosis || "",
         user?.uid,
         "doctor"
       )
@@ -731,11 +731,11 @@ function ENTAnatomyPageContent() {
       // Complete the appointment
       await completeAppointment(
         appointmentId,
-        medicineText,
-        comprehensiveNotes,
+        medicineText || "", // Ensure never undefined
+        comprehensiveNotes || "", // Ensure never undefined
         activeHospitalId,
         filteredDiagnoses,
-        finalCustomDiagnosis,
+        finalCustomDiagnosis || "",
         user?.uid,
         "doctor"
       )

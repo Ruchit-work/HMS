@@ -42,121 +42,204 @@ export const formatCurrency = (amount?: number | null, includePrefix = true) => 
 export function generateAppointmentConfirmationPDF(appointment: Appointment) {
   const pdf = new jsPDF()
   const pageWidth = pdf.internal.pageSize.getWidth()
+  const pageHeight = pdf.internal.pageSize.getHeight()
   const margin = 20
+  const docMargin = 15
 
-  // Header
-  pdf.setFillColor(45, 55, 72)
-  pdf.rect(0, 0, pageWidth, 45, "F")
+  // Light blue background
+  pdf.setFillColor(173, 216, 230)
+  pdf.rect(0, 0, pageWidth, pageHeight, 'F')
+
+  // White document area
+  const docWidth = pageWidth - docMargin * 2
+  const docHeight = pageHeight - docMargin * 2
+  pdf.setFillColor(255, 255, 255)
+  pdf.setDrawColor(200, 200, 200)
+  pdf.rect(docMargin, docMargin, docWidth, docHeight, 'FD')
+
+  // Teal/mint green bands
+  pdf.setFillColor(72, 209, 204)
+  pdf.rect(docMargin, docMargin, docWidth, 8, 'F')
+  pdf.rect(docMargin, pageHeight - docMargin - 8, docWidth, 8, 'F')
+
+  let yPos = docMargin + 15
+  const leftX = docMargin + 10
+  const rightX = docMargin + docWidth - 10
+
+  // Logo and Hospital Name
+  pdf.setFillColor(147, 51, 234)
+  pdf.circle(leftX + 8, yPos + 5, 4, 'F')
+  pdf.setFillColor(72, 209, 204)
+  pdf.circle(leftX + 12, yPos + 5, 4, 'F')
+
+  pdf.setFontSize(18)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setTextColor(75, 85, 99)
+  pdf.text('HOSPITAL', leftX, yPos + 8)
+  pdf.setFontSize(8)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('SLOGAN HERE', leftX, yPos + 12)
+
+  // Appointment Confirmation Title
+  pdf.setFontSize(20)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setTextColor(75, 85, 99)
+  pdf.text('APPOINTMENT CONFIRMATION', leftX, yPos + 20)
+
+  // Booking ID and Date
+  pdf.setFontSize(10)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setTextColor(71, 85, 105)
+  pdf.text(`Booking ID: ${safeText(appointment.transactionId, "N/A")}`, rightX, yPos + 8, { align: 'right' })
+  pdf.text(`Date: ${formatDate(appointment.createdAt, { year: 'numeric', month: '2-digit', day: '2-digit' })}`, rightX, yPos + 13, { align: 'right' })
+
+  yPos += 35
+
+  // Appointment To Section
+  pdf.setFontSize(10)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setTextColor(71, 85, 105)
+  pdf.text('Appointment for:', leftX, yPos)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(11)
+  pdf.setTextColor(30, 41, 59)
+  pdf.text(safeText(appointment.patientName), leftX, yPos + 6)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  pdf.setTextColor(71, 85, 105)
+  const address = safeText((appointment as any).patientAddress, 'Address not provided')
+  const addressLines = pdf.splitTextToSize(address, docWidth / 2 - 20)
+  addressLines.forEach((line: string, idx: number) => {
+    pdf.text(line, leftX, yPos + 12 + idx * 5)
+  })
+
+  yPos += 30
+
+  // Service Description Table
+  const colWidths = [15, 80, 30, 25, 30]
+  const tableWidth = docWidth - 20
+  const headerHeight = 10
+
+  // Dark purple/blue header
+  pdf.setFillColor(75, 85, 99)
+  pdf.rect(leftX, yPos, tableWidth, headerHeight, 'F')
+  
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
   pdf.setTextColor(255, 255, 255)
-  pdf.setFontSize(22)
-  pdf.setFont("helvetica", "bold")
-  pdf.text("Appointment Confirmation", pageWidth / 2, 20, { align: "center" })
+  let currentX = leftX + 2
+  pdf.text('NO.', currentX, yPos + 7)
+  currentX += colWidths[0]
+  pdf.text('SERVICE DESCRIPTION', currentX, yPos + 7)
+  currentX += colWidths[1]
+  pdf.text('PRICE', currentX, yPos + 7)
+  currentX += colWidths[2]
+  pdf.text('QTY.', currentX, yPos + 7)
+  currentX += colWidths[3]
+  pdf.text('TOTAL', currentX, yPos + 7)
 
-  pdf.setFontSize(12)
-  pdf.setFont("helvetica", "normal")
-  pdf.text(`Booking ID: ${safeText(appointment.transactionId, "N/A")}`, pageWidth / 2, 32, { align: "center" })
+  yPos += headerHeight + 2
 
-  // Success icon
-  pdf.setFontSize(36)
-  pdf.text("✔", pageWidth / 2, 60, { align: "center" })
+  // Service Items
+  const currencySymbol = '₹'
+  const services = [{
+    desc: `Consultation - Dr. ${safeText(appointment.doctorName)} (${safeText(appointment.doctorSpecialization)})`,
+    price: appointment.totalConsultationFee || 0,
+    qty: 1,
+    total: appointment.totalConsultationFee || 0
+  }]
 
-  let yPos = 70
-
-  const drawCard = (title: string, body: () => void) => {
-    const cardStart = yPos
-    const cardWidth = pageWidth - margin * 2
-    const padding = 8
-
-    pdf.setFillColor(248, 250, 252)
+  let subtotal = 0
+  services.forEach((service, idx) => {
+    if (idx % 2 === 0) {
+      pdf.setFillColor(255, 255, 255)
+    } else {
+      pdf.setFillColor(249, 250, 251)
+    }
+    pdf.rect(leftX, yPos - 4, tableWidth, 8, 'F')
     pdf.setDrawColor(226, 232, 240)
-    pdf.rect(margin, cardStart, cardWidth, 10, "F")
+    pdf.rect(leftX, yPos - 4, tableWidth, 8)
 
-    pdf.setFont("helvetica", "bold")
-    pdf.setFontSize(12)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
     pdf.setTextColor(30, 41, 59)
-    pdf.text(title, margin + padding, cardStart + 7)
 
-    pdf.setFont("helvetica", "normal")
-    pdf.setFontSize(11)
-    pdf.setTextColor(71, 85, 105)
+    currentX = leftX + 2
+    pdf.text('1', currentX, yPos)
+    currentX += colWidths[0]
+    
+    const descLines = pdf.splitTextToSize(service.desc, colWidths[1] - 4)
+    pdf.text(descLines[0] || service.desc.substring(0, 30), currentX, yPos)
+    currentX += colWidths[1]
+    
+    pdf.text(`${currencySymbol}${service.price.toFixed(2)}`, currentX, yPos)
+    currentX += colWidths[2]
+    
+    pdf.text('1', currentX, yPos)
+    currentX += colWidths[3]
+    
+    pdf.text(`${currencySymbol}${service.total.toFixed(2)}`, currentX, yPos)
 
-    yPos += 14
-    body()
-    const endY = yPos + padding
-
-    pdf.setDrawColor(226, 232, 240)
-    pdf.rect(margin, cardStart, cardWidth, Math.max(endY - cardStart, 24))
-
-    yPos = endY + 6
-  }
-
-  drawCard("Appointment Details", () => {
-    const details = [
-      `Patient: ${safeText(appointment.patientName)}`,
-      `Doctor: Dr. ${safeText(appointment.doctorName)}`,
-      `Specialization: ${safeText(appointment.doctorSpecialization)}`,
-      `Date: ${formatDate(appointment.appointmentDate)}`,
-      `Time: ${safeText(appointment.appointmentTime, "Not set")}`
-    ]
-
-    details.forEach(line => {
-      pdf.text(line, margin + 8, yPos)
-      yPos += 7
-    })
-
-    if (appointment.chiefComplaint) {
-      yPos += 3
-      pdf.setFont("helvetica", "bold")
-      pdf.setTextColor(15, 118, 110)
-      pdf.text("Symptoms / Chief Complaint", margin + 8, yPos)
-      pdf.setFont("helvetica", "normal")
-      pdf.setTextColor(71, 85, 105)
-      yPos += 6
-      const symptoms = Array.isArray(appointment.chiefComplaint)
-        ? appointment.chiefComplaint
-        : appointment.chiefComplaint.split(/[,•-]/).map((s) => s.trim()).filter(Boolean)
-      if (symptoms.length === 0) symptoms.push(appointment.chiefComplaint)
-
-      symptoms.forEach((symptom) => {
-        pdf.text(`• ${symptom}`, margin + 10, yPos)
-        yPos += 6
-      })
-    }
+    subtotal += service.total
+    yPos += 8
   })
 
-  drawCard("Payment Summary", () => {
-    pdf.text(`Payment Method: ${safeText(appointment.paymentMethod, "Not provided")}`, margin + 8, yPos)
-    yPos += 7
-    pdf.text(`Payment Status: ${safeText(appointment.paymentStatus, "Pending")}`, margin + 8, yPos)
-    yPos += 7
-    pdf.text(`Amount Paid: ${formatCurrency(appointment.paymentAmount)}`, margin + 8, yPos)
-    yPos += 7
+  yPos += 10
 
-    if (appointment.paymentType === "partial" && appointment.remainingAmount) {
-      pdf.setTextColor(220, 38, 38)
-      pdf.text(`Remaining at Hospital: ${formatCurrency(appointment.remainingAmount)}`, margin + 8, yPos)
-      pdf.setTextColor(71, 85, 105)
-      yPos += 7
-    }
-  })
+  // Summary Section
+  const summaryWidth = (docWidth - 30) / 2
+  const summaryRightX = leftX + summaryWidth + 10
+  const shipping = 0
+  const taxRate = 0
+  const total = subtotal + shipping + taxRate
 
-  drawCard("Hospital Notes", () => {
-    const notes = [
-      "Please arrive 15 minutes before your appointment.",
-      "Carry a valid ID and any prior medical records.",
-      `Booking Date: ${formatDate(appointment.createdAt, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "numeric",
-        minute: "numeric"
-      })}`
-    ]
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  pdf.setTextColor(71, 85, 105)
+  pdf.text('Subtotal', summaryRightX, yPos)
+  pdf.text(`${currencySymbol}${subtotal.toFixed(2)}`, summaryRightX + summaryWidth - 30, yPos, { align: 'right' })
+  yPos += 6
 
-    notes.forEach(line => {
-      pdf.text(line, margin + 8, yPos)
-      yPos += 6
-    })
+  // Total bar
+  pdf.setFillColor(72, 209, 204)
+  pdf.rect(summaryRightX, yPos - 2, summaryWidth - 10, 8, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(11)
+  pdf.setTextColor(255, 255, 255)
+  pdf.text('TOTAL', summaryRightX + 2, yPos + 5)
+  pdf.text(`${currencySymbol}${total.toFixed(2)}`, summaryRightX + summaryWidth - 30, yPos + 5, { align: 'right' })
+
+  yPos += 20
+
+  // Contact Information
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(30, 41, 59)
+  pdf.text('Questions:', leftX, yPos)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(71, 85, 105)
+  pdf.text(`Email us: mail@yourcompany.com`, leftX, yPos + 6)
+  pdf.text(`Call us: +12 345 6789 0`, leftX, yPos + 11)
+
+  // Notes
+  yPos += 20
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(10)
+  pdf.setTextColor(30, 41, 59)
+  pdf.text('Important Notes:', leftX, yPos)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(71, 85, 105)
+  const notes = [
+    "Please arrive 15 minutes before your appointment.",
+    "Carry a valid ID and any prior medical records.",
+    `Appointment Date: ${formatDate(appointment.appointmentDate)}`,
+    `Appointment Time: ${safeText(appointment.appointmentTime, "Not set")}`
+  ]
+  notes.forEach((note, idx) => {
+    pdf.text(`• ${note}`, leftX, yPos + 6 + idx * 5)
   })
 
   pdf.save(`Appointment-Confirmation-${safeText(appointment.transactionId, "N/A")}.pdf`)
@@ -410,370 +493,343 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
   const margin = 20
+  const docMargin = 15 // Margin for the white document area
 
   const createdDate = appointment.updatedAt || appointment.createdAt
-  const formattedCreatedDate = formatDate(createdDate)
+  const formattedCreatedDate = formatDate(createdDate, { year: 'numeric', month: '2-digit', day: '2-digit' })
   const consultationDate = `${formatDate(appointment.appointmentDate)} at ${safeText(appointment.appointmentTime, 'Not set')}`
   const patientAge = appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) : null
 
-  // Header banner
-  doc.setFillColor(20, 184, 166)
-  doc.rect(0, 0, pageWidth, 40, 'F')
+  // Light blue background (entire page)
+  doc.setFillColor(173, 216, 230) // Light blue
+  doc.rect(0, 0, pageWidth, pageHeight, 'F')
 
-  doc.setFontSize(24)
-  doc.setTextColor(255, 255, 255)
-  doc.setFont('helvetica', 'bold')
-  doc.text('HMS', margin, 16)
-
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Hospital Management System', margin, 23)
-  doc.text('Medical Prescription', margin, 29)
-
-  doc.setFontSize(9)
-  doc.text(`Prescription Date: ${formattedCreatedDate}`, pageWidth - margin, 14, { align: 'right' })
-  doc.text(`Prescription ID: ${safeText(appointment.id?.substring(0, 12)?.toUpperCase(), 'N/A')}`, pageWidth - margin, 20, { align: 'right' })
-  doc.text(`Patient ID: ${safeText(appointment.patientId, 'N/A')}`, pageWidth - margin, 26, { align: 'right' })
-
-  let yPos = 50
-
-  // Doctor Details
-  doc.setFillColor(241, 245, 249)
-  doc.rect(margin, yPos, pageWidth - 2 * margin, 32, 'F')
-  doc.setTextColor(30, 41, 59)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.text('Doctor Information', margin + 5, yPos + 8)
-
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(71, 85, 105)
-  doc.setFontSize(10)
-  doc.text(`Doctor Name: Dr. ${safeText(appointment.doctorName)}`, margin + 5, yPos + 16)
-  doc.text(`Specialization: ${safeText(appointment.doctorSpecialization)}`, margin + 5, yPos + 22)
-  doc.text(`Consultation Date: ${consultationDate}`, margin + 5, yPos + 28)
-
-  yPos += 42
-
-  // Patient details
-  doc.setFillColor(241, 245, 249)
-  doc.rect(margin, yPos, pageWidth - 2 * margin, 42, 'F')
-
-  doc.setFontSize(12)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(30, 41, 59)
-  doc.text('Patient Information', margin + 5, yPos + 8)
-
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(71, 85, 105)
-
-  const patientDetailsLeft = [
-    `Name: ${safeText(appointment.patientName)}`,
-    `Age: ${patientAge ?? 'Not available'}`,
-    `Gender: ${safeText(appointment.patientGender, 'Not specified')}`,
-    `Blood Group: ${safeText(appointment.patientBloodGroup, 'Not specified')}`
-  ]
-  const patientDetailsRight = [
-    `Email: ${safeText(appointment.patientEmail)}`,
-    `Phone: ${safeText(appointment.patientPhone)}`,
-    `Address: ${safeText((appointment as any).patientAddress)}`,
-    `Occupation: ${safeText(appointment.patientOccupation)}`
-  ]
-
-  patientDetailsLeft.forEach((line, index) => {
-    doc.text(line, margin + 5, yPos + 16 + index * 6)
-  })
-  patientDetailsRight.forEach((line, index) => {
-    doc.text(line, margin + (pageWidth - 2 * margin) / 2 + 5, yPos + 16 + index * 6)
-  })
-
-  yPos += 52
-
-  // Vitals & Lifestyle info if available
-  const vitals = [
-    appointment.vitalTemperatureC !== undefined && appointment.vitalTemperatureC !== null ? `Temperature: ${appointment.vitalTemperatureC} °C` : null,
-    appointment.vitalBloodPressure ? `Blood Pressure: ${appointment.vitalBloodPressure}` : null,
-    appointment.vitalHeartRate !== undefined && appointment.vitalHeartRate !== null ? `Heart Rate: ${appointment.vitalHeartRate} bpm` : null,
-    appointment.vitalRespiratoryRate !== undefined && appointment.vitalRespiratoryRate !== null ? `Respiratory Rate: ${appointment.vitalRespiratoryRate} breaths/min` : null,
-    appointment.vitalSpO2 !== undefined && appointment.vitalSpO2 !== null ? `SpO₂: ${appointment.vitalSpO2}%` : null,
-    appointment.patientWeightKg !== undefined && appointment.patientWeightKg !== null ? `Weight: ${appointment.patientWeightKg} kg` : null,
-    appointment.patientHeightCm !== undefined && appointment.patientHeightCm !== null ? `Height: ${appointment.patientHeightCm} cm` : null
-  ].filter(Boolean) as string[]
-
-  const lifestyle = [
-    appointment.patientSmokingHabits ? `Smoking: ${appointment.patientSmokingHabits}` : null,
-    appointment.patientDrinkingHabits ? `Alcohol: ${appointment.patientDrinkingHabits}` : null,
-    appointment.patientVegetarian !== undefined ? `Diet: ${appointment.patientVegetarian ? 'Vegetarian' : 'Non-Vegetarian'}` : null,
-    appointment.patientPregnancyStatus ? `Pregnancy Status: ${appointment.patientPregnancyStatus}` : null,
-    appointment.patientFamilyHistory ? `Family History: ${appointment.patientFamilyHistory}` : null
-  ].filter(Boolean) as string[]
-
-  if (vitals.length || lifestyle.length) {
-    doc.setFillColor(236, 254, 255)
-    doc.rect(margin, yPos, pageWidth - 2 * margin, 10 + (Math.max(vitals.length, lifestyle.length) || 1) * 6, 'F')
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(14, 116, 144)
-    doc.setFontSize(11)
-    doc.text('Clinical Snapshot', margin + 5, yPos + 7)
-
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(71, 85, 105)
-    doc.setFontSize(9.5)
-
-    vitals.forEach((line, index) => {
-      doc.text(line, margin + 5, yPos + 14 + index * 6)
-    })
-    lifestyle.forEach((line, index) => {
-      doc.text(line, margin + (pageWidth - 2 * margin) / 2 + 5, yPos + 14 + index * 6)
-    })
-
-    yPos += 18 + Math.max(vitals.length, lifestyle.length) * 6
-  }
-
-  // Clinical summary
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.setTextColor(30, 41, 59)
-  doc.text('Chief Complaint', margin, yPos + 6)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(71, 85, 105)
-  doc.setFontSize(10)
-  const complaint = safeText(appointment.chiefComplaint, 'No chief complaint recorded.')
-  const complaintLines = doc.splitTextToSize(complaint, pageWidth - 2 * margin)
-  doc.text(complaintLines, margin, yPos + 13)
-  yPos += 13 + complaintLines.length * 5
-
-  // Final Diagnosis
-  if ((appointment as any).finalDiagnosis && Array.isArray((appointment as any).finalDiagnosis) && (appointment as any).finalDiagnosis.length > 0) {
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(30, 41, 59)
-    doc.setFontSize(11)
-    doc.text('Final Diagnosis', margin, yPos + 6)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(71, 85, 105)
-    doc.setFontSize(10)
-    
-    const diagnoses = (appointment as any).finalDiagnosis as string[]
-    diagnoses.forEach((diagnosis, index) => {
-      doc.text(`• ${diagnosis}`, margin + 3, yPos + 13 + index * 5)
-    })
-    yPos += 13 + diagnoses.length * 5
-
-    if ((appointment as any).customDiagnosis) {
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(124, 58, 237)
-      doc.setFontSize(10)
-      doc.text('Custom Diagnosis:', margin + 3, yPos + 5)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(71, 85, 105)
-      const customDiagnosisLines = doc.splitTextToSize((appointment as any).customDiagnosis, pageWidth - 2 * margin - 6)
-      customDiagnosisLines.forEach((line: string, idx: number) => {
-        doc.text(line, margin + 3, yPos + 10 + idx * 5)
-      })
-      yPos += 10 + customDiagnosisLines.length * 5
-    }
-  }
-
-  if (appointment.medicalHistory) {
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(30, 41, 59)
-    doc.setFontSize(11)
-    doc.text('Relevant Medical History', margin, yPos + 6)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(71, 85, 105)
-    doc.setFontSize(10)
-    const historyLines = doc.splitTextToSize(appointment.medicalHistory, pageWidth - 2 * margin)
-    doc.text(historyLines, margin, yPos + 13)
-    yPos += 13 + historyLines.length * 5
-  }
-
-  if (appointment.patientAllergies || appointment.patientCurrentMedications) {
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(30, 41, 59)
-    doc.setFontSize(11)
-    doc.text('Allergies & Current Medications', margin, yPos + 6)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(71, 85, 105)
-    doc.setFontSize(10)
-
-    const allergyText = safeText(appointment.patientAllergies, 'No allergies recorded.')
-    const medicationText = safeText(appointment.patientCurrentMedications, 'No current medications recorded.')
-
-    const allergyLines = doc.splitTextToSize(`Allergies: ${allergyText}`, pageWidth - 2 * margin)
-    doc.text(allergyLines, margin, yPos + 13)
-    yPos += allergyLines.length * 5 + 3
-
-    const medicationLines = doc.splitTextToSize(`Current Medications: ${medicationText}`, pageWidth - 2 * margin)
-    doc.text(medicationLines, margin, yPos + 13)
-    yPos += medicationLines.length * 5 + 5
-  }
-
-  // Prescriptions
-  doc.setFillColor(16, 185, 129)
-  doc.rect(margin, yPos + 5, pageWidth - 2 * margin, 8, 'F')
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.setTextColor(255, 255, 255)
-  doc.text('Prescription Plan', margin + 5, yPos + 11)
-
-  yPos += 20
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.setTextColor(30, 41, 59)
-
-  const structuredPrescription = parsePrescriptionText(appointment.medicine)
-
-  if (structuredPrescription && structuredPrescription.medicines.length > 0) {
-    structuredPrescription.medicines.forEach((med, idx) => {
-      const detailLines: string[] = []
-      if (med.frequency) detailLines.push(`• ${sanitizeForPdf(med.frequency)}`)
-      if (med.duration) detailLines.push(`• Duration: ${sanitizeForPdf(med.duration)}`)
-
-      const boxHeight = 14 + detailLines.length * 5
-      doc.setFillColor(248, 250, 252)
-      doc.setDrawColor(226, 232, 240)
-      doc.rect(margin, yPos, pageWidth - 2 * margin, boxHeight, 'F')
-
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(17, 24, 39)
-      const title = `${idx + 1}. ${sanitizeForPdf(med.name)}${med.dosage ? ` (${sanitizeForPdf(med.dosage)})` : ''}`
-      doc.text(title.trim(), margin + 5, yPos + 6)
-
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(55, 65, 81)
-      detailLines.forEach((line: string, idx: number) => {
-        doc.text(line, margin + 7, yPos + 11 + idx * 5)
-      })
-
-      yPos += boxHeight + 6
-    })
-
-    if (structuredPrescription.advice) {
-      const adviceLines = doc.splitTextToSize(sanitizeForPdf(structuredPrescription.advice), pageWidth - 2 * margin - 10)
-      const adviceHeight = 12 + adviceLines.length * 5
-      doc.setFillColor(254, 249, 195)
-      doc.setDrawColor(250, 204, 21)
-      doc.rect(margin, yPos, pageWidth - 2 * margin, adviceHeight, 'F')
-
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(120, 53, 15)
-      doc.text('📌 Advice', margin + 5, yPos + 6)
-
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(146, 64, 14)
-      adviceLines.forEach((line: string, idx: number) => {
-        doc.text(line, margin + 5, yPos + 11 + idx * 5)
-      })
-
-      yPos += adviceHeight + 6
-    }
-  } else if (appointment.medicine) {
-    const medicineLines = doc.splitTextToSize(appointment.medicine, pageWidth - 2 * margin)
-    doc.text(medicineLines, margin, yPos)
-    yPos += medicineLines.length * 5 + 5
-  } else {
-    doc.setTextColor(148, 163, 184)
-    doc.text('No medicines prescribed in this consultation.', margin, yPos)
-    yPos += 5
-  }
-
-  if (appointment.doctorNotes) {
-    doc.setFillColor(59, 130, 246)
-    doc.rect(margin, yPos + 5, pageWidth - 2 * margin, 8, 'F')
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(12)
-    doc.setTextColor(255, 255, 255)
-    doc.text('Doctor Instructions', margin + 5, yPos + 11)
-
-    yPos += 20
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(30, 41, 59)
-    const notesLines = doc.splitTextToSize(appointment.doctorNotes, pageWidth - 2 * margin)
-    doc.text(notesLines, margin, yPos)
-    yPos += notesLines.length * 5 + 5
-  }
-
-  const followUp = safeText((appointment as any).followUpAdvice, '')
-  if (followUp && followUp !== 'Not provided') {
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(30, 41, 59)
-    doc.setFontSize(11)
-    doc.text('Follow-up Advice', margin, yPos + 6)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(71, 85, 105)
-    doc.setFontSize(10)
-    const followUpLines = doc.splitTextToSize(followUp, pageWidth - 2 * margin)
-    doc.text(followUpLines, margin, yPos + 13)
-    yPos += 13 + followUpLines.length * 5
-  }
-
-  // Payment summary
-  const paymentBlockHeight = 42
-  if (yPos + paymentBlockHeight + 30 > pageHeight) {
-    doc.addPage()
-    yPos = margin
-  }
-
-  const cardWidth = pageWidth - 2 * margin
+  // White document area
+  const docWidth = pageWidth - docMargin * 2
+  const docHeight = pageHeight - docMargin * 2
   doc.setFillColor(255, 255, 255)
-  doc.setDrawColor(203, 213, 225)
-  doc.rect(margin, yPos, cardWidth, paymentBlockHeight, 'FD')
+  doc.setDrawColor(200, 200, 200)
+  doc.rect(docMargin, docMargin, docWidth, docHeight, 'FD')
 
-  doc.setFillColor(15, 118, 110)
-  doc.rect(margin, yPos, cardWidth, 9, 'F')
+  // Teal/mint green band at top
+  doc.setFillColor(72, 209, 204) // Teal/mint green
+  doc.rect(docMargin, docMargin, docWidth, 8, 'F')
+
+  // Teal/mint green band at bottom
+  doc.rect(docMargin, pageHeight - docMargin - 8, docWidth, 8, 'F')
+
+  let yPos = docMargin + 15
+
+  // Logo and Hospital Name Section
+  const leftX = docMargin + 10
+  const rightX = docMargin + docWidth - 10
+
+  // Logo placeholder (you can add an actual logo image here)
+  doc.setFillColor(147, 51, 234) // Purple
+  doc.circle(leftX + 8, yPos + 5, 4, 'F')
+  doc.setFillColor(72, 209, 204) // Teal
+  doc.circle(leftX + 12, yPos + 5, 4, 'F')
+
+  // Hospital Name
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(75, 85, 99) // Dark gray/purple
+  doc.text('HOSPITAL', leftX, yPos + 8)
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(100, 116, 139)
+  doc.text('SLOGAN HERE', leftX, yPos + 12)
+
+  // Invoice Title
+  doc.setFontSize(20)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(75, 85, 99)
+  doc.text('INVOICE', leftX, yPos + 20)
+
+  // Prescription Date, ID, and Patient ID (right side)
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(71, 85, 105)
+  const prescriptionDate = formatDate(createdDate)
+  doc.text(`Prescription Date: ${prescriptionDate}`, rightX, yPos + 8, { align: 'right' })
+  doc.text(`Prescription ID: ${safeText(appointment.id?.substring(0, 12)?.toUpperCase(), 'N/A')}`, rightX, yPos + 13, { align: 'right' })
+  doc.text(`Patient ID: ${safeText(appointment.patientId, 'N/A')}`, rightX, yPos + 18, { align: 'right' })
+
+  yPos += 25
+
+  // Horizontal line after logo and patient ID section
+  doc.setDrawColor(200, 200, 200)
+  doc.line(leftX, yPos, rightX, yPos)
+
+  yPos += 10
+
+  // Patient Information Section (Two Columns)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(30, 41, 59)
+  doc.text('Patient Information', leftX, yPos)
+  
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(71, 85, 105)
+  let infoY = yPos + 7
+  const infoColumnWidth = (docWidth - 20) / 2
+  const infoRightX = leftX + infoColumnWidth + 10
+  
+  // Left Column
+  doc.text(`Name: ${safeText(appointment.patientName)}`, leftX, infoY)
+  infoY += 5
+  doc.text(`Age: ${patientAge ?? 'Not available'}`, leftX, infoY)
+  infoY += 5
+  doc.text(`Gender: ${safeText(appointment.patientGender, 'Not specified')}`, leftX, infoY)
+  infoY += 5
+  doc.text(`Blood Group: ${safeText(appointment.patientBloodGroup, 'Not specified')}`, leftX, infoY)
+  
+  // Right Column
+  let infoRightY = yPos + 7
+  doc.text(`Email: ${safeText(appointment.patientEmail)}`, infoRightX, infoRightY)
+  infoRightY += 5
+  doc.text(`Phone: ${safeText(appointment.patientPhone)}`, infoRightX, infoRightY)
+  infoRightY += 5
+  const address = safeText((appointment as any).patientAddress, 'Not provided')
+  const addressLines = doc.splitTextToSize(`Address: ${address}`, infoColumnWidth - 10)
+  addressLines.forEach((line: string, idx: number) => {
+    doc.text(line, infoRightX, infoRightY + (idx * 5))
+  })
+  infoRightY += addressLines.length * 5
+  doc.text(`Occupation: ${safeText(appointment.patientOccupation, 'Not provided')}`, infoRightX, infoRightY)
+
+  // Use the maximum Y position from both columns
+  yPos = Math.max(infoY, infoRightY) + 10
+
+  // Doctor Information Section (Two Columns)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(30, 41, 59)
+  doc.text('Doctor Information', leftX, yPos)
+  
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(71, 85, 105)
+  infoY = yPos + 7
+  
+  // Left Column
+  doc.text(`Doctor Name: Dr. ${safeText(appointment.doctorName)}`, leftX, infoY)
+  infoY += 5
+  doc.text(`Specialization: ${safeText(appointment.doctorSpecialization)}`, leftX, infoY)
+  
+  // Right Column
+  infoRightY = yPos + 7
+  const consultationDateLines = doc.splitTextToSize(`Consultation Date: ${consultationDate}`, infoColumnWidth - 10)
+  consultationDateLines.forEach((line: string, idx: number) => {
+    doc.text(line, infoRightX, infoRightY + (idx * 5))
+  })
+
+  yPos = Math.max(infoY, infoRightY + consultationDateLines.length * 5) + 15
+
+  // Prescription Table Header (only NO. and SERVICE DESCRIPTION)
+  const tableStartY = yPos
+  const colWidths = [15, 150] // NO., SERVICE DESCRIPTION only
+  const tableWidth = docWidth - 20
+  const headerHeight = 10
+
+  // Dark purple/blue header
+  doc.setFillColor(75, 85, 99) // Dark purple/blue
+  doc.rect(leftX, yPos, tableWidth, headerHeight, 'F')
+  
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(255, 255, 255)
+  let currentX = leftX + 2
+  doc.text('NO.', currentX, yPos + 7)
+  currentX += colWidths[0]
+  doc.text('SERVICE DESCRIPTION', currentX, yPos + 7)
+
+  yPos += headerHeight + 2
+
+  // Prescription Items (medicines only, no consultation, no prices)
+  const structuredPrescription = parsePrescriptionText(appointment.medicine)
+  let itemNumber = 1
+  const medicines: Array<{ desc: string }> = []
+
+  // Add medicines as prescription items
+  if (structuredPrescription && structuredPrescription.medicines.length > 0) {
+    structuredPrescription.medicines.forEach((med) => {
+      let medDesc = sanitizeForPdf(med.name)
+      // Format: "MedicineName a day (dosage) - Frequency"
+      medDesc += ' a day'
+      if (med.dosage) {
+        medDesc += ` (${sanitizeForPdf(med.dosage)})`
+      }
+      if (med.frequency) {
+        // Format frequency nicely
+        const freq = sanitizeForPdf(med.frequency)
+        if (freq.toLowerCase().includes('once')) {
+          medDesc += ' - Once'
+        } else if (freq.toLowerCase().includes('twice')) {
+          medDesc += ' - Twice'
+        } else if (freq.toLowerCase().includes('three times') || freq.toLowerCase().includes('3 times')) {
+          medDesc += ' - Three times'
+        } else if (freq.toLowerCase().includes('four times') || freq.toLowerCase().includes('4 times')) {
+          medDesc += ' - Four times'
+        } else {
+          medDesc += ` - ${freq}`
+        }
+      }
+      // Duration is typically not shown in the main description, but can be added if needed
+      medicines.push({
+        desc: medDesc
+      })
+    })
+  } else if (appointment.medicine) {
+    // If medicine is not structured, add as a single item
+    medicines.push({
+      desc: sanitizeForPdf(appointment.medicine)
+    })
+  }
+
+  medicines.forEach((medicine, idx) => {
+    if (yPos > pageHeight - docMargin - 100) {
+      doc.addPage()
+      // Redraw background and bands on new page
+      doc.setFillColor(173, 216, 230)
+      doc.rect(0, 0, pageWidth, pageHeight, 'F')
+      doc.setFillColor(255, 255, 255)
+      doc.rect(docMargin, docMargin, docWidth, docHeight, 'FD')
+      doc.setFillColor(72, 209, 204)
+      doc.rect(docMargin, docMargin, docWidth, 8, 'F')
+      doc.rect(docMargin, pageHeight - docMargin - 8, docWidth, 8, 'F')
+      yPos = docMargin + 15
+    }
+
+    // Row background (alternate)
+    if (idx % 2 === 0) {
+      doc.setFillColor(255, 255, 255)
+    } else {
+      doc.setFillColor(249, 250, 251)
+    }
+    doc.rect(leftX, yPos - 4, tableWidth, 8, 'F')
+    doc.setDrawColor(226, 232, 240)
+    doc.rect(leftX, yPos - 4, tableWidth, 8)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(30, 41, 59)
+
+    currentX = leftX + 2
+    doc.text(String(itemNumber), currentX, yPos)
+    currentX += colWidths[0]
+    
+    const descLines = doc.splitTextToSize(medicine.desc, colWidths[1] - 4)
+    // Use first line, but allow wrapping if needed
+    if (descLines.length > 0) {
+      doc.text(descLines[0], currentX, yPos)
+      // If text wraps, add more lines
+      if (descLines.length > 1 && yPos + 6 < pageHeight - docMargin - 20) {
+        descLines.slice(1).forEach((line: string, lineIdx: number) => {
+          doc.text(line, currentX, yPos + 5 + (lineIdx * 5))
+        })
+        yPos += (descLines.length - 1) * 5
+      }
+    }
+
+    itemNumber++
+    yPos += 10 // Increased spacing between rows
+  })
+
+  yPos += 10
+
+  // Invoice Summary (Right side only, no Terms and Conditions here)
+  const summaryWidth = (docWidth - 30) / 2
+  const summaryRightX = leftX + summaryWidth + 10
+  const consultationFee = appointment.totalConsultationFee || 0
+  const total = consultationFee
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(71, 85, 105)
+  doc.text('Subtotal', summaryRightX, yPos)
+  // Use INR instead of ₹ symbol to avoid rendering issues
+  doc.text(`INR ${consultationFee.toFixed(2)}`, summaryRightX + summaryWidth - 10, yPos, { align: 'right' })
+  yPos += 8
+
+  // Total bar (teal/mint green)
+  doc.setFillColor(72, 209, 204) // Teal/mint green
+  doc.rect(summaryRightX, yPos - 2, summaryWidth - 10, 8, 'F')
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
   doc.setTextColor(255, 255, 255)
-  doc.text('Payment Summary', margin + 5, yPos + 6.5)
+  doc.text('TOTAL', summaryRightX + 2, yPos + 5)
+  doc.text(`INR ${total.toFixed(2)}`, summaryRightX + summaryWidth - 10, yPos + 5, { align: 'right' })
 
-  const leftX = margin + 5
-  const rightX = margin + cardWidth / 2 + 5
-  const innerY = yPos + 15
+  yPos += 15
 
+  // Contact and Payment Information
+  const contactY = yPos
+  const contactWidth = (docWidth - 30) / 2
+
+  // Questions Section (Left)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(30, 41, 59)
+  doc.text('Questions:', leftX, contactY)
   doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
   doc.setTextColor(71, 85, 105)
-  doc.setFontSize(9.5)
+  doc.text(`Email us: mail@yourcompany.com`, leftX, contactY + 6)
+  doc.text(`Call us: +12 345 6789 0`, leftX, contactY + 11)
 
-  doc.text(`Method: ${safeText(appointment.paymentMethod)}`, leftX, innerY)
-  doc.text(`Status: ${safeText(appointment.paymentStatus)}`, leftX, innerY + 6)
-  doc.text(`Transaction: ${safeText(appointment.transactionId)}`, leftX, innerY + 12)
+  // Payment Info Section (Right)
+  const paymentRightX = leftX + contactWidth + 10
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(30, 41, 59)
+  doc.text('Payment Info:', paymentRightX, contactY)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(71, 85, 105)
+  doc.text(`Account #: ${safeText(appointment.transactionId?.substring(0, 15), '1234 5677 5432')}`, paymentRightX, contactY + 6)
+  doc.text(`A/C Name: ${safeText(appointment.patientName)}`, paymentRightX, contactY + 11)
+  doc.text(`Bank Details: Add your bank details`, paymentRightX, contactY + 16)
+
+  // Terms and Conditions at the bottom (on the same page)
+  // Calculate available space and position terms to fit on current page
+  const termsText = 'The origins of the first constellations date back to prehistoric times. Their purpose was to tell stories of their beliefs, experiences, creation, or mythology. The recognition of constellations has changed over time. They varied in size or shape, others became popular and then were forgotten.'
+  const termsLines = doc.splitTextToSize(termsText, docWidth - 20)
+  const termsHeight = 6 + (termsLines.length * 4) + 5 // Header + text + spacing
+  
+  // Position terms at the bottom, but ensure it fits on current page
+  let termsY = pageHeight - docMargin - 8 - termsHeight - 5 // Above bottom band with some spacing
+  
+  // If terms would overlap with other content, position it right after Payment Info
+  if (termsY < contactY + 25) {
+    termsY = contactY + 25
+  }
+  
+  // If still doesn't fit, reduce spacing but keep on same page
+  if (termsY + termsHeight > pageHeight - docMargin - 8) {
+    termsY = pageHeight - docMargin - 8 - termsHeight - 2 // Minimal spacing above bottom band
+  }
 
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(15, 118, 110)
-  doc.setFontSize(11)
-  doc.text(`Total Fee`, rightX, innerY)
-  doc.setFontSize(13)
-  doc.text(`INR ${formatCurrency(appointment.totalConsultationFee, false)}`, rightX, innerY + 5)
-
-  doc.setFontSize(11)
-  doc.setTextColor(107, 114, 128)
-  doc.text(`Amount Paid`, rightX, innerY + 13)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(22, 101, 52)
-  doc.setFontSize(13)
-  doc.text(`INR ${formatCurrency(appointment.paymentAmount, false)}`, rightX, innerY + 18)
-
-  yPos += paymentBlockHeight + 12
-
-  // Footer & signature
-  doc.setDrawColor(203, 213, 225)
-  doc.line(margin, pageHeight - 30, pageWidth - margin, pageHeight - 30)
-
-  doc.setFont('helvetica', 'italic')
   doc.setFontSize(10)
   doc.setTextColor(30, 41, 59)
-  doc.text('___________________________', pageWidth - margin - 55, pageHeight - 24)
+  doc.text('Terms and Conditions', leftX, termsY)
   doc.setFont('helvetica', 'normal')
-  doc.text(`Dr. ${safeText(appointment.doctorName)}`, pageWidth - margin - 55, pageHeight - 18)
   doc.setFontSize(8)
-  doc.setTextColor(100, 116, 139)
-  doc.text(safeText(appointment.doctorSpecialization), pageWidth - margin - 55, pageHeight - 14)
+  doc.setTextColor(71, 85, 105)
+  termsLines.forEach((line: string, idx: number) => {
+    doc.text(line, leftX, termsY + 6 + idx * 4)
+  })
 
-  doc.setFontSize(7.5)
-  doc.setTextColor(148, 163, 184)
-  doc.text('HMS - Hospital Management System | Professional Healthcare Solutions', pageWidth / 2, pageHeight - 18, { align: 'center' })
-  doc.text('This is a computer generated prescription. No signature is required.', pageWidth / 2, pageHeight - 12, { align: 'center' })
+  // Signature Area (above Terms and Conditions)
+  const signatureY = termsY - 15
+  doc.setDrawColor(200, 200, 200)
+  doc.line(paymentRightX, signatureY, paymentRightX + contactWidth - 10, signatureY)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(71, 85, 105)
+  doc.text('Authorised Sign', paymentRightX, signatureY + 6)
 
   if (!options.forPreview) {
     const fileName = `Prescription_${safeText(appointment.patientName, 'Patient')}_${new Date(appointment.appointmentDate).toISOString().split('T')[0]}.pdf`.replace(/\s+/g, '_')

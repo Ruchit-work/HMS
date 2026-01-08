@@ -274,14 +274,38 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 // Continue with Firestore deletion even if auth deletion fails
             }
             
-            // Then delete from Firestore
-            const doctorRef = doc(db, 'doctors', deleteDoctor.id)
-            await deleteDoc(doctorRef)
-            setDoctors(prev => prev.filter(d => d.id !== deleteDoctor.id))
+            // Delete from Firestore - all locations for permanent deletion
+            const doctorId = deleteDoctor.id
+            
+            // Get doctor's hospitalId if available, otherwise use activeHospitalId
+            const doctorHospitalId = (deleteDoctor as any).hospitalId || activeHospitalId
+            
+            // Delete from main doctors collection
+            const doctorRef = doc(db, 'doctors', doctorId)
+            await deleteDoc(doctorRef).catch(() => {
+                // Ignore if doesn't exist
+            })
+            
+            // Delete from hospital-specific doctors collection
+            if (doctorHospitalId) {
+                const hospitalDoctorRef = getHospitalCollection(doctorHospitalId, 'doctors')
+                const hospitalDoctorDocRef = doc(hospitalDoctorRef, doctorId)
+                await deleteDoc(hospitalDoctorDocRef).catch(() => {
+                    // Ignore if doesn't exist
+                })
+            }
+            
+            // Delete from users collection (for multi-hospital support)
+            const userRef = doc(db, 'users', doctorId)
+            await deleteDoc(userRef).catch(() => {
+                // Ignore if doesn't exist
+            })
+            
+            setDoctors(prev => prev.filter(d => d.id !== doctorId))
             setShowViewModal(false)
             setDeleteModal(false)
             setDeleteDoctor(null)
-            setSuccessMessage('Doctor deleted successfully from database and authentication!')
+            setSuccessMessage('Doctor permanently deleted from all locations (database, authentication, and hospital collections)!')
             setTimeout(() => {
                 setSuccessMessage(null)
             }, 3000)
@@ -430,14 +454,36 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
 
             }
             
-            // Delete from Firestore
+            // Delete from Firestore - all locations for permanent deletion
+            // Get doctor's hospitalId if available, otherwise use activeHospitalId
+            const rejectedDoctor = pendingDoctors.find(d => d.id === doctorId)
+            const doctorHospitalId = (rejectedDoctor as any)?.hospitalId || activeHospitalId
+            
+            // Delete from main doctors collection
             const doctorRef = doc(db, 'doctors', doctorId)
-            await deleteDoc(doctorRef)
+            await deleteDoc(doctorRef).catch(() => {
+                // Ignore if doesn't exist
+            })
+            
+            // Delete from hospital-specific doctors collection
+            if (doctorHospitalId) {
+                const hospitalDoctorRef = getHospitalCollection(doctorHospitalId, 'doctors')
+                const hospitalDoctorDocRef = doc(hospitalDoctorRef, doctorId)
+                await deleteDoc(hospitalDoctorDocRef).catch(() => {
+                    // Ignore if doesn't exist
+                })
+            }
+            
+            // Delete from users collection (for multi-hospital support)
+            const userRef = doc(db, 'users', doctorId)
+            await deleteDoc(userRef).catch(() => {
+                // Ignore if doesn't exist
+            })
             
             // Update local state
             setPendingDoctors(prev => prev.filter(d => d.id !== doctorId))
             
-            setSuccessMessage('Doctor rejected and removed successfully!')
+            setSuccessMessage('Doctor permanently rejected and deleted from all locations!')
             setTimeout(() => {
                 setSuccessMessage(null)
             }, 3000)

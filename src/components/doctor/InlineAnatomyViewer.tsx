@@ -646,11 +646,11 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
 
       await completeAppointment(
         appointmentId!,
-        medicineText,
-        comprehensiveNotes,
+        medicineText || "", // Ensure never undefined
+        comprehensiveNotes || "", // Ensure never undefined
         activeHospitalId!,
         filteredDiagnoses,
-        finalCustomDiagnosis,
+        finalCustomDiagnosis || "",
         user?.uid || undefined,
         "doctor"
       )
@@ -796,11 +796,11 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
 
       await completeAppointment(
         appointmentId!,
-        medicineText,
-        comprehensiveNotes,
+        medicineText || "", // Ensure never undefined
+        comprehensiveNotes || "", // Ensure never undefined
         activeHospitalId!,
         filteredDiagnoses,
-        finalCustomDiagnosis,
+        finalCustomDiagnosis || "",
         user?.uid || undefined,
         "doctor"
       )
