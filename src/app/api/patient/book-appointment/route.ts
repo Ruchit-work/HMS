@@ -6,6 +6,7 @@ import { applyRateLimit } from "@/utils/rateLimit"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 import { isDateBlocked } from "@/utils/blockedDates"
+import { logApiError, createErrorResponse } from "@/utils/errorLogger"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
               appointmentData.branchName = patientData.defaultBranchName || ""
             }
           }
-        } catch (error) {
+        } catch {
           // Continue without branch if patient lookup fails
         }
       }
@@ -159,7 +160,7 @@ export async function POST(request: Request) {
               const patientData = patientDoc.data()
               patientPhone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || patientData?.mobile || ""
             }
-          } catch (error) {
+          } catch {
           }
         }
 
@@ -224,7 +225,7 @@ See you soon! 🏥`
           }
         } else {
         }
-      } catch (whatsappError) {
+      } catch {
         // Don't fail the appointment booking if WhatsApp fails
       }
 
@@ -327,6 +328,13 @@ See you soon! 🏥`
   } catch (error) {
     const message = (error as Error).message
     
+    // Log error with context
+    logApiError(error, request, auth, {
+      action: "book-appointment",
+      hospitalId: (await getAppointmentHospitalId((error as { appointmentId?: string }).appointmentId || "").catch(() => null)) || undefined,
+      appointmentId: (error as { appointmentId?: string }).appointmentId,
+    })
+    
     if (message === "SLOT_ALREADY_BOOKED") {
       return NextResponse.json({ error: "This slot was just booked. Please choose another time." }, { status: 409 })
     }
@@ -336,7 +344,7 @@ See you soon! 🏥`
     if (message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "You cannot modify this appointment" }, { status: 403 })
     }
-    return NextResponse.json({ error: message || "Failed to process appointment" }, { status: 500 })
+    return createErrorResponse(error, request, auth, { action: "book-appointment" })
   }
 }
 

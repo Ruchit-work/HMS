@@ -102,25 +102,66 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
           todayAppointments.map(doc => (doc as any).patientId || (doc as any).patientUid)
         )
 
-        setStats({
+        const newStats: DashboardStats = {
           todayAppointments: todayAppointments.length,
           pendingWhatsAppBookings: whatsappPending.length,
           totalPatientsToday: uniquePatients.size,
           pendingBilling: pendingBilling.length,
-          completedAppointments: completedToday.length
-        })
+          completedAppointments: completedToday.length,
+        }
+
+        setStats(newStats)
+
+        // Generate notifications based on latest stats
+        const notifs: Notification[] = []
+
+        if (newStats.pendingWhatsAppBookings > 0) {
+          notifs.push({
+            id: 'whatsapp-pending',
+            title: 'WhatsApp Bookings Pending',
+            message: `${newStats.pendingWhatsAppBookings} WhatsApp bookings need your attention`,
+            type: 'warning',
+            timestamp: new Date().toISOString(),
+            read: false,
+          })
+        }
+
+        if (newStats.pendingBilling > 5) {
+          notifs.push({
+            id: 'billing-pending',
+            title: 'Multiple Pending Payments',
+            message: `${newStats.pendingBilling} appointments have pending payments`,
+            type: 'info',
+            timestamp: new Date().toISOString(),
+            read: false,
+          })
+        }
+
+        const now = new Date()
+        const currentHour = now.getHours()
+        if (currentHour >= 9 && currentHour <= 17 && newStats.todayAppointments === 0) {
+          notifs.push({
+            id: 'no-appointments',
+            title: 'No Appointments Today',
+            message: 'No appointments scheduled for today yet',
+            type: 'info',
+            timestamp: new Date().toISOString(),
+            read: false,
+          })
+        }
+
+        setNotifications(notifs)
 
         // Update recent activity
         updateRecentActivity(allAppointments)
         
         setLoading(false)
-      }, (error) => {
+      }, () => {
         setLoading(false)
       })
     }
 
     setupRealtimeListeners()
-    fetchNotifications() // Notifications are generated based on stats, so fetch them separately
 
     // Cleanup function
     return () => {
@@ -182,21 +223,7 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
     setRecentActivity(activities.slice(0, 8))
   }
 
-  const _fetchDashboardData = async () => {
-    try {
-      setLoading(true)
-      await Promise.all([
-        fetchStats(),
-        fetchRecentActivity(),
-        fetchNotifications()
-      ])
-    } catch (error) {
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchStats = async () => {
+  const _fetchStats = async () => {
     if (!activeHospitalId) return
     
     const today = new Date().toISOString().split('T')[0]
@@ -245,8 +272,9 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
       completedAppointments: completedToday.length
     })
   }
+  void _fetchStats;
 
-  const fetchRecentActivity = async () => {
+  const _fetchRecentActivity = async () => {
     if (!activeHospitalId) return
     
     const activities: RecentActivity[] = []
@@ -299,55 +327,14 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
           })
         }
       })
-    } catch (error) {
+    } catch {
     }
 
     // Sort by timestamp (newest first) and take top 8
     activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     setRecentActivity(activities.slice(0, 8))
   }
-
-  const fetchNotifications = async () => {
-    // Generate notifications based on current data
-    const notifs: Notification[] = []
-    
-    if (stats.pendingWhatsAppBookings > 0) {
-      notifs.push({
-        id: 'whatsapp-pending',
-        title: 'WhatsApp Bookings Pending',
-        message: `${stats.pendingWhatsAppBookings} WhatsApp bookings need your attention`,
-        type: 'warning',
-        timestamp: new Date().toISOString(),
-        read: false
-      })
-    }
-
-    if (stats.pendingBilling > 5) {
-      notifs.push({
-        id: 'billing-pending',
-        title: 'Multiple Pending Payments',
-        message: `${stats.pendingBilling} appointments have pending payments`,
-        type: 'info',
-        timestamp: new Date().toISOString(),
-        read: false
-      })
-    }
-
-    const now = new Date()
-    const currentHour = now.getHours()
-    if (currentHour >= 9 && currentHour <= 17 && stats.todayAppointments === 0) {
-      notifs.push({
-        id: 'no-appointments',
-        title: 'No Appointments Today',
-        message: 'No appointments scheduled for today yet',
-        type: 'info',
-        timestamp: new Date().toISOString(),
-        read: false
-      })
-    }
-
-    setNotifications(notifs)
-  }
+  void _fetchRecentActivity;
 
   const getActivityIcon = (type: RecentActivity['type']) => {
     switch (type) {

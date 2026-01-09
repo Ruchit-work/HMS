@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         { status: 403 }
       )
     }
-  } catch (err) {
+  } catch {
     // Continue if check fails
   }
 
@@ -254,7 +254,7 @@ export async function POST(request: Request) {
             }
           }
         }
-      } catch (error) {
+      } catch {
       }
     } else {
     }

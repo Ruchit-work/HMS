@@ -77,7 +77,7 @@ export async function POST(
           const composedName = [patient?.firstName, patient?.lastName].filter(Boolean).join(" ").trim()
           patientNameResolved = composedName || patient?.fullName || patientNameResolved
         }
-      } catch (err) {
+      } catch {
 
       }
     }

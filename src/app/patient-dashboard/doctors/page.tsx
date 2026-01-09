@@ -50,7 +50,7 @@ export default function DoctorsPage() {
         
         setDoctors(doctorsList)
         setFilteredDoctors(doctorsList)
-      } catch (error) {
+      } catch {
       } finally {
         setLoading(false)
       }
@@ -59,7 +59,6 @@ export default function DoctorsPage() {
     if (user) {
       fetchDoctors()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId])
 
   useEffect(() => {

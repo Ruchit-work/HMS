@@ -323,12 +323,16 @@ if (typeof globalThis !== 'undefined') {
   // Polyfill DOMMatrix - simple stub
   if (!globalThis.DOMMatrix) {
     (globalThis as any).DOMMatrix = class DOMMatrix {
-      constructor(init?: string | number[]) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      constructor(..._args: any[]) {
         // Stub implementation
       }
-      static fromMatrix(other?: any) { return new DOMMatrix() }
-      static fromFloat32Array(array: Float32Array) { return new DOMMatrix() }
-      static fromFloat64Array(array: Float64Array) { return new DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      static fromMatrix(..._args: any[]) { return new DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      static fromFloat32Array(..._args: any[]) { return new DOMMatrix() }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      static fromFloat64Array(..._args: any[]) { return new DOMMatrix() }
     }
   }
   
@@ -338,7 +342,7 @@ if (typeof globalThis !== 'undefined') {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { ImageData: CanvasImageData } = require('canvas')
       globalThis.ImageData = CanvasImageData
-    } catch (e) {
+    } catch {
       // Fallback stub
       (globalThis as any).ImageData = class ImageData {
         constructor(public data: Uint8ClampedArray, public width: number, public height?: number) {}
@@ -349,17 +353,27 @@ if (typeof globalThis !== 'undefined') {
   // Polyfill Path2D - simple stub
   if (!globalThis.Path2D) {
     (globalThis as any).Path2D = class Path2D {
-      constructor(path?: string | Path2D) {}
-      addPath(path: Path2D, transform?: any) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      constructor(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      addPath(..._args: any[]) {}
       closePath() {}
-      moveTo(x: number, y: number) {}
-      lineTo(x: number, y: number) {}
-      bezierCurveTo(cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number) {}
-      quadraticCurveTo(cpx: number, cpy: number, x: number, y: number) {}
-      arc(x: number, y: number, radius: number, startAngle: number, endAngle: number, anticlockwise?: boolean) {}
-      arcTo(x1: number, y1: number, x2: number, y2: number, radius: number) {}
-      ellipse(x: number, y: number, radiusX: number, radiusY: number, rotation: number, startAngle: number, endAngle: number, anticlockwise?: boolean) {}
-      rect(x: number, y: number, w: number, h: number) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      moveTo(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      lineTo(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      bezierCurveTo(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      quadraticCurveTo(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      arc(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      arcTo(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      ellipse(..._args: any[]) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      rect(..._args: any[]) {}
     }
   }
 }
@@ -393,7 +407,7 @@ export async function extractPdfText(pdfBuffer: Buffer, maxPages: number = 2): P
         } else {
           pdfParse = required
         }
-      } catch (requireError: any) {
+      } catch {
         // Silently fail and try next method
       }
     }
@@ -440,7 +454,7 @@ export async function extractPdfText(pdfBuffer: Buffer, maxPages: number = 2): P
             }
           }
         }
-      } catch (importError: any) {
+      } catch {
         // Silently fail
       }
     }
@@ -492,7 +506,7 @@ export async function extractPdfText(pdfBuffer: Buffer, maxPages: number = 2): P
           } else {
             throw new Error("Could not find PDFParse class")
           }
-        } catch (requireError: any) {
+        } catch {
           throw callError
         }
       } else {
@@ -502,7 +516,7 @@ export async function extractPdfText(pdfBuffer: Buffer, maxPages: number = 2): P
     
     const extractedText = data?.text || data?.Text || ""
     return extractedText
-  } catch (error: any) {
+  } catch {
     // Return empty string on error - don't throw, just fail silently
     return ""
   }
@@ -724,7 +738,7 @@ export async function detectDocumentTypeEnhanced(
           }
         }
       }
-    } catch (error: any) {
+    } catch {
       // Silently fall back to filename detection
     }
   } else {

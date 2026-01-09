@@ -281,7 +281,7 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
       }).sort((a, b) => b.performanceScore - a.performanceScore)
 
       setReceptionistAnalytics(receptionistStats)
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false)
     }

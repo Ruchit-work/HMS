@@ -113,11 +113,6 @@ export default function PatientDashboard() {
   }
 
 
-  // Open cancel confirmation modal
-  const _openCancelModal = (appointment: Appointment) => {
-    setAppointmentToCancel(appointment)
-    setShowCancelModal(true)
-  }
 
   // Handle appointment cancellation
   const handleCancelAppointment = async () => {
@@ -164,11 +159,6 @@ export default function PatientDashboard() {
       const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
       return dateA - dateB // Earlier appointments first
     })
-  
-  const _completedAppointments = appointments.filter(apt => String(apt.status || "").toLowerCase() === "completed")
-  const _upcomingAppointments = activeAppointments
-    .filter(apt => new Date(`${apt.appointmentDate} ${apt.appointmentTime}`).getTime() > Date.now())
-    .length
   const awaitingReschedule = appointments.filter(
     apt => String(apt.status || "").toLowerCase() === "awaiting_reschedule"
   )
@@ -193,7 +183,7 @@ export default function PatientDashboard() {
       })
       setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: 'refund_requested' as any, refundRequested: true } : a))
       setNotification({ type: 'success', message: 'Refund request submitted. We will process it shortly.' })
-    } catch (e) {
+    } catch {
       setNotification({ type: 'error', message: 'Failed to submit refund request. Please try again.' })
     }
   }

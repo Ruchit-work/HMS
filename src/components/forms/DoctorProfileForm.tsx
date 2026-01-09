@@ -109,10 +109,6 @@ export default function DoctorProfileForm({
   )
   const [showBranchTimings, setShowBranchTimings] = useState<{ [branchId: string]: boolean }>({})
 
-  const _allSpecializations = useMemo(
-    () => specializationCategories.flatMap((cat) => cat.specializations),
-    []
-  )
 
   const { activeHospitalId } = useMultiHospital()
 
@@ -126,7 +122,7 @@ export default function DoctorProfileForm({
         if (data.success && data.branches) {
           setBranches(data.branches)
         }
-      } catch (error) {
+      } catch {
       }
     }
     fetchBranches()

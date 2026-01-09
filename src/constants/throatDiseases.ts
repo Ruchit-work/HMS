@@ -1,5 +1,5 @@
 // Throat anatomy parts with associated diseases, symptoms, prescriptions, and medicines
-import { Disease, EarPartData } from './earDiseases'
+import { EarPartData } from './earDiseases'
 
 export type ThroatPartData = EarPartData
 

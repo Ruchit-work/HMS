@@ -80,7 +80,7 @@ export default function ReceptionistDashboard() {
         } else {
           setUserName("Receptionist")
         }
-      } catch (error) {
+      } catch {
 
         setUserName("Receptionist")
       } finally {
@@ -105,7 +105,7 @@ export default function ReceptionistDashboard() {
         },
       })
       if (!res.ok) {
-        const text = await res.text().catch(() => "")
+        await res.text().catch(() => "")
 
         setWhatsappPendingCount(0)
         return
@@ -113,7 +113,7 @@ export default function ReceptionistDashboard() {
       const data = await res.json().catch(() => ({}))
       const appointments = Array.isArray(data?.appointments) ? data.appointments : []
       setWhatsappPendingCount(appointments.length)
-    } catch (error) {
+    } catch {
 
       setWhatsappPendingCount(0)
     }
@@ -230,7 +230,7 @@ export default function ReceptionistDashboard() {
           const data = receptionistDoc.data()
           setReceptionistBranchId(data.branchId || null)
         }
-      } catch (error) {
+      } catch {
 
       }
     }
@@ -256,7 +256,7 @@ export default function ReceptionistDashboard() {
       sessionStorage.clear()
       // Force redirect after sign out
       window.location.href = "/auth/login?role=receptionist"
-    } catch (error) {
+    } catch {
 
       setNotification({ type: "error", message: "Failed to logout. Please try again." })
       setLogoutLoading(false)

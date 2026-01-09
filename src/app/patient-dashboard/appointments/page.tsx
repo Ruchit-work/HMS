@@ -150,7 +150,7 @@ export default function PatientAppointments() {
         })
 
         setAppointments(appointmentList)
-      } catch (error) {
+      } catch {
         setNotification({
           type: "error",
           message: "Failed to load appointments. Please try again."

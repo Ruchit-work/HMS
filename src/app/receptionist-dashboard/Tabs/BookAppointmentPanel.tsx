@@ -421,13 +421,12 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         const patientsQuery = query(getHospitalCollection(activeHospitalId, "patients"), where("status", "in", ["active", "inactive"]))
         const patientSnap = await getDocs(patientsQuery)
         setPatients(patientSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      } catch (error) {
+      } catch {
 
       }
     })()
 
     return () => unsubscribe()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeHospitalId])
 
   useEffect(() => {
@@ -535,14 +534,13 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         })
         
         setAvailableSlots(filtered)
-      } catch (error) {
+      } catch {
 
         setAvailableSlots([])
       }
     }
 
     computeSlots()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDoctorId, appointmentDate, doctors, activeHospitalId])
 
   useEffect(() => {

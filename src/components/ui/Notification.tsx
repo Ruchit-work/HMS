@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import { sanitizeErrorMessage, makeConcise } from '@/utils/messageSanitizer'
 
 interface NotificationProps {
   type: 'success' | 'error' | 'info'
@@ -9,24 +10,37 @@ interface NotificationProps {
   durationMs?: number
   countdownSeconds?: number
   onCountdownComplete?: () => void
+  /** If true, sanitizes technical error messages to user-friendly ones */
+  sanitize?: boolean
+  /** Maximum message length (default: 120 characters) */
+  maxLength?: number
 }
 
 export default function Notification({
   type,
   message,
   onClose,
-  durationMs = 10000,
+  durationMs,
   countdownSeconds,
   onCountdownComplete,
+  sanitize = true,
+  maxLength = 120,
 }: NotificationProps) {
+  // Auto-determine duration based on type if not provided
+  const defaultDuration = durationMs ?? (type === 'error' ? 8000 : type === 'success' ? 5000 : 6000)
+  
+  // Sanitize and make concise
+  const displayMessage = sanitize && type === 'error' 
+    ? makeConcise(sanitizeErrorMessage(message), maxLength)
+    : makeConcise(message, maxLength)
   const [remaining, setRemaining] = useState<number | null>(
     countdownSeconds !== undefined ? countdownSeconds : null
   )
 
   useEffect(() => {
-    const timer = setTimeout(onClose, durationMs)
+    const timer = setTimeout(onClose, defaultDuration)
     return () => clearTimeout(timer)
-  }, [onClose, durationMs])
+  }, [onClose, defaultDuration])
 
   useEffect(() => {
     if (remaining === null) return
@@ -59,7 +73,7 @@ export default function Notification({
               type === 'error' ? 'text-red-800' :
               'text-blue-800'
             }`}>
-              {message}
+              {displayMessage}
             </p>
             {remaining !== null && remaining > 0 && (
               <p className={`text-xs mt-1 font-semibold ${
@@ -73,7 +87,8 @@ export default function Notification({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 rounded"
+            aria-label="Dismiss notification"
           >
             ×
           </button>
@@ -87,7 +102,7 @@ export default function Notification({
               type === 'error' ? 'bg-red-500' :
               'bg-blue-500'
             }`}
-            style={{ animation: `shrink ${durationMs / 1000}s linear forwards` }}
+            style={{ animation: `shrink ${defaultDuration / 1000}s linear forwards` }}
           />
         </div>
       </div>

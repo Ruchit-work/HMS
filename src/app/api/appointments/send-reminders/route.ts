@@ -195,7 +195,7 @@ export async function GET(request: Request) {
                 hospitalId: hospital.id,
               })
             }
-          } catch (error: any) {
+          } catch {
             hospitalErrors++
             totalErrors++
           }
@@ -207,7 +207,7 @@ export async function GET(request: Request) {
           remindersSent: hospitalRemindersSent,
           errors: hospitalErrors,
         })
-      } catch (error: any) {
+      } catch {
         results.push({
           hospitalId: hospital.id,
           hospitalName: hospital.name,

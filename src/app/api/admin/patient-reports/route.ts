@@ -177,7 +177,7 @@ export async function GET(request: Request) {
           const receptionistData = receptionistDoc.data()
           receptionistBranchId = receptionistData?.branchId || null
         }
-      } catch (err) {
+      } catch {
       }
     } else if (userRole === "doctor") {
       // For doctors, use their own ID
@@ -196,7 +196,7 @@ export async function GET(request: Request) {
         .where('status', 'in', ['active', 'inactive'])
         .orderBy('createdAt', 'desc')
         .get()
-    } catch (error: any) {
+    } catch {
       // If orderBy fails (no index), fetch without ordering and sort client-side
       patientsSnapshot = await patientsRef
         .where('status', 'in', ['active', 'inactive'])

@@ -1,7 +1,6 @@
-import { ref, uploadBytes, getDownloadURL, deleteObject, type StorageReference } from "firebase/storage"
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"
 import { storage } from "@/firebase/config"
 import { generateSafeFileName } from "./documentDetection"
-import { DocumentMetadata, DocumentType } from "@/types/document"
 
 /**
  * Upload file to Firebase Storage
@@ -10,8 +9,7 @@ import { DocumentMetadata, DocumentType } from "@/types/document"
 export async function uploadDocumentToStorage(
   file: File,
   patientId: string,
-  hospitalId: string,
-  fileType: DocumentType
+  hospitalId: string
 ): Promise<{ storagePath: string; downloadUrl: string }> {
   // Generate safe filename
   const safeFileName = generateSafeFileName(file.name, patientId)

@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
             finalPatientId = patientData?.patientId || patientUid
           }
         }
-      } catch (err) {
+      } catch {
         // Use patientUid as fallback
         finalPatientId = patientUid
       }
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
               const appointmentData = appointmentDoc.data()
               detectedSpecialty = appointmentData?.doctorSpecialization || detectedSpecialty
             }
-          } catch (err) {
+          } catch {
           }
         }
 
@@ -305,7 +305,7 @@ export async function POST(request: NextRequest) {
               documentIds: admin.firestore.FieldValue.arrayUnion(docRef.id),
               updatedAt: now,
             })
-          } catch (err) {
+          } catch {
           }
         }
 

@@ -234,7 +234,6 @@ export async function POST(request: NextRequest) {
     let fileRef
     let downloadUrl
     let uploadSuccess = false
-    let lastError: any = null
     
     // Try primary bucket first
     try {
@@ -266,8 +265,6 @@ export async function POST(request: NextRequest) {
       console.log("[document-upload] 🔗 Download URL:", downloadUrl)
       uploadSuccess = true
     } catch (uploadError: any) {
-      lastError = uploadError
-      
       // Check if it's a bucket not found error - try alternative format
       if (uploadError.message?.includes("does not exist") || uploadError.message?.includes("not found") || uploadError.code === 404) {
         console.log("[document-upload] ℹ️ Primary bucket format not found, trying alternative (this is normal)")
@@ -308,7 +305,6 @@ export async function POST(request: NextRequest) {
             uploadSuccess = true
           } catch (altError: any) {
             console.error("[document-upload] ❌ Alternative bucket also failed:", altError.message)
-            lastError = altError
           }
         }
       }

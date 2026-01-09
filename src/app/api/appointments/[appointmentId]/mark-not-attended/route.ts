@@ -186,7 +186,7 @@ export async function POST(
               messageId: whatsappResult.sid,
               hospitalId,
             })
-          } catch (error) {
+          } catch {
             // Don't fail if storing fails
           }
         } else {
@@ -194,7 +194,7 @@ export async function POST(
         }
       } else {
       }
-    } catch (error) {
+    } catch {
       // Don't fail the request if WhatsApp fails - appointment is already marked as not attended
     }
 

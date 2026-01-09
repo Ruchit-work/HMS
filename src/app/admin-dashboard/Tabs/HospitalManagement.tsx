@@ -53,7 +53,7 @@ export default function HospitalManagement() {
         ...doc.data()
       } as Hospital))
       setHospitals(hospitalsList)
-    } catch (err: any) {
+    } catch {
       setError('Failed to load hospitals. Please try again.')
     } finally {
       setLoading(false)

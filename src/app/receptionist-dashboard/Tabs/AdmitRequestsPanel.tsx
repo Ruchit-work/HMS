@@ -184,7 +184,7 @@ export default function AdmitRequestsPanel({ onNotification }: AdmitRequestsPane
         })
       }
       setRooms(roomsList)
-    } catch (error) {
+    } catch {
     } finally {
       setRoomsLoading(false)
     }

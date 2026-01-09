@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
             finalPatientName = composed || patientData?.fullName || finalPatientName
           }
         }
-      } catch (err) {
+      } catch {
 
       }
     }

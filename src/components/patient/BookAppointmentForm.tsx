@@ -7,9 +7,8 @@ import DoctorCard from "@/components/ui/DoctorCard"
 import SymptomSelector, { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import SmartQuestions from "./SmartQuestions"
 import MedicalHistoryChecklist from "./MedicalHistoryChecklist"
-import { isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, isDateBlocked, getBlockedDateInfo, generateTimeSlots, isTimeSlotAvailable, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import { isSlotInPast, formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText, generateTimeSlots, isTimeSlotAvailable, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/blockedDates"
-import PaymentMethodSection, { PaymentData as PPaymentData, PaymentMethodOption } from "@/components/payments/PaymentMethodSection"
 import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
@@ -53,15 +52,6 @@ export default function BookAppointmentForm({
     time: "",
     problem: "",
     medicalHistory: ""
-  })
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption | null>(null)
-  const [paymentType, setPaymentType] = useState<"full" | "partial">("full")
-  const [paymentData, setPaymentData] = useState<PaymentData>({
-    cardNumber: "",
-    cardName: "",
-    expiryDate: "",
-    cvv: "",
-    upiId: ""
   })
   const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([])
   const [bookedTimeSlots, setBookedTimeSlots] = useState<string[]>([])
@@ -136,7 +126,7 @@ export default function BookAppointmentForm({
             setSelectedBranch(data.branches[0])
           }
         }
-      } catch (error) {
+      } catch {
       } finally {
         setLoadingBranches(false)
       }
@@ -150,7 +140,6 @@ export default function BookAppointmentForm({
     if (initialDoctorId && !selectedDoctor) {
       setSelectedDoctor(initialDoctorId)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDoctorId, selectedDoctor])
 
   // Keep local view in sync if parent sends fresh data
@@ -158,19 +147,13 @@ export default function BookAppointmentForm({
     setLocalUserData(userData)
   }, [userData])
 
-  // Dynamic consultation fee based on selected doctor
+  // Currently selected doctor details (used in slots logic and summary UI)
   const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
-  const CONSULTATION_FEE = selectedDoctorData?.consultationFee || 500
-  
-  // Calculate payment amounts based on payment type
-  const PARTIAL_PAYMENT_AMOUNT = Math.ceil(CONSULTATION_FEE * 0.1) // 10% upfront
-  const REMAINING_AMOUNT = CONSULTATION_FEE - PARTIAL_PAYMENT_AMOUNT // 90% at hospital
-  const AMOUNT_TO_PAY = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
 
   // Fetch available time slots when doctor and date are selected
   useEffect(() => {
     const fetchAvailableSlots = async () => {
-      if (!selectedDoctor || !appointmentData.date || !selectedDoctorData) {
+      if (!selectedDoctor || !appointmentData.date) {
         setAvailableTimeSlots([])
         setBookedTimeSlots([])
         setAllTimeSlots([])
@@ -247,7 +230,7 @@ export default function BookAppointmentForm({
         // Get doctor's visiting hours for the selected date (use branch timings if available)
         const selectedDate = new Date(appointmentData.date)
         // Use branch timings if branch is selected, otherwise use doctor's visiting hours
-        let visitingHours = selectedDoctorData.visitingHours || DEFAULT_VISITING_HOURS
+        let visitingHours = (selectedDoctorData?.visitingHours || DEFAULT_VISITING_HOURS)
         if (selectedBranch && selectedBranch.timings) {
           // Convert branch timings to VisitingHours format
           const branchVisitingHours = {
@@ -274,7 +257,7 @@ export default function BookAppointmentForm({
               : { isAvailable: false, slots: [] },
           }
           // Check if doctor has branch-specific timings for this branch
-          if (selectedDoctorData.branchTimings && selectedBranchId && selectedDoctorData.branchTimings[selectedBranchId]) {
+          if (selectedDoctorData?.branchTimings && selectedBranchId && selectedDoctorData.branchTimings[selectedBranchId]) {
             visitingHours = selectedDoctorData.branchTimings[selectedBranchId]
           } else {
             visitingHours = branchVisitingHours
@@ -328,7 +311,7 @@ export default function BookAppointmentForm({
            setHasDuplicateAppointment(false)
            setDuplicateAppointmentTime("")
         }
-      } catch (error) {
+      } catch {
         setAvailableTimeSlots([])
         setBookedTimeSlots([])
         setAllTimeSlots([])
@@ -342,7 +325,7 @@ export default function BookAppointmentForm({
 
     fetchAvailableSlots()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDoctor, appointmentData.date, selectedDoctorData, selectedBranchId, selectedBranch])
+  }, [selectedDoctor, appointmentData.date, selectedBranchId, selectedBranch])
 
   const nextStep = () => {
     if (currentStep < totalSteps && canProceedToNextStep()) {
@@ -391,7 +374,7 @@ export default function BookAppointmentForm({
       setLocalUserData(prev => ({ ...prev, [field]: profileDraft[field] as never }))
       if (field === 'allergies') setAllergies(String(profileDraft[field] || ''))
       if (field === 'currentMedications') setCurrentMedications(String(profileDraft[field] || ''))
-    } catch (e) {
+    } catch {
     } finally {
       setEditingField(null)
       setProfileDraft({})
@@ -468,7 +451,6 @@ export default function BookAppointmentForm({
     const complaint = detail ? `${categoryLabel}: ${detail}` : categoryLabel
 
     setAppointmentData(prev => ({ ...prev, problem: complaint }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSymptomCategory, symptomAnswers, appointmentData.problem, appointmentData.additionalConcern, previousSymptomCategory])
 
   // Auto-generate medical history from selections
@@ -526,7 +508,6 @@ export default function BookAppointmentForm({
         setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symptomAnswers, selectedSymptomCategory, appointmentData.additionalConcern, appointmentData.problem])
 
 
@@ -670,14 +651,6 @@ export default function BookAppointmentForm({
       medicalHistory: ""
     })
     setSelectedDoctor("")
-    setPaymentData({
-      cardNumber: "",
-      cardName: "",
-      expiryDate: "",
-      cvv: "",
-      upiId: ""
-    })
-    setPaymentMethod(null)
   }
 
 
@@ -690,13 +663,6 @@ export default function BookAppointmentForm({
       medicalHistory: ""
     })
     setSelectedDoctor("")
-    setPaymentData({
-      cardNumber: "",
-      cardName: "",
-      expiryDate: "",
-      cvv: "",
-      upiId: ""
-    })
   }
 
   const steps = [

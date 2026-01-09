@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata, DocumentType } from "@/types/document"
 import DocumentUpload from "./DocumentUpload"
 import DocumentViewer from "./DocumentViewer"
 import { ConfirmDialog } from "@/components/ui/Modals"
-import { auth, db } from "@/firebase/config"
+import { auth } from "@/firebase/config"
 import { doc, getDoc, query, where, getDocs, orderBy, limit } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -76,23 +76,7 @@ export default function DocumentsTab({
     }
   }, [selectedPatient, initialPatientId, initialPatientUid, showPatientSelector])
 
-  useEffect(() => {
-    // For doctor Documents & Reports page (with patient selector),
-    // don't fetch any documents until a patient is selected.
-    // For other contexts (no selector), keep existing behaviour.
-    if (showPatientSelector && !patientUid && !initialPatientUid) {
-      setDocuments([])
-      setAllDocuments([])
-      setHasMore(false)
-      setLastDocId(null)
-      return
-    }
-
-    // Note: searchQuery and date filters are applied client-side, so we don't include them in dependencies
-    fetchDocuments()
-  }, [patientUid, initialPatientUid, appointmentId, fileTypeFilter, specialtyFilter, showAllSpecialties, showPatientSelector])
-
-  const fetchDocuments = async (loadMore = false) => {
+  const fetchDocuments = useCallback(async (loadMore = false) => {
     if (loadMore) {
       setLoadingMore(true)
     } else {
@@ -195,7 +179,36 @@ export default function DocumentsTab({
       setLoading(false)
       setLoadingMore(false)
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    patientUid,
+    initialPatientUid,
+    patientId,
+    initialPatientId,
+    appointmentId,
+    fileTypeFilter,
+    specialtyFilter,
+    showAllSpecialties,
+    lastDocId,
+    allDocuments,
+  ])
+
+  useEffect(() => {
+    // For doctor Documents & Reports page (with patient selector),
+    // don't fetch any documents until a patient is selected.
+    // For other contexts (no selector), keep existing behaviour.
+    if (showPatientSelector && !patientUid && !initialPatientUid) {
+      setDocuments([])
+      setAllDocuments([])
+      setHasMore(false)
+      setLastDocId(null)
+      return
+    }
+
+    // Note: searchQuery and date filters are applied client-side, so we don't include them in dependencies
+    fetchDocuments()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientUid, initialPatientUid, appointmentId, fileTypeFilter, specialtyFilter, showAllSpecialties, showPatientSelector])
   
   const handleLoadMore = () => {
     fetchDocuments(true)
@@ -273,7 +286,7 @@ export default function DocumentsTab({
             }
           }
         }
-      } catch (err) {
+      } catch {
       }
     })
 
@@ -342,7 +355,7 @@ export default function DocumentsTab({
                   }
                 }
               }
-            } catch (error) {
+            } catch {
               // If query fails (e.g., missing index), try without orderBy
               try {
                 const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")

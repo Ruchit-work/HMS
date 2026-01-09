@@ -89,7 +89,7 @@ export async function POST(request: Request) {
           }
         }
       }
-    } catch (error) {
+    } catch {
     }
 
     // Delete user from Firebase Auth

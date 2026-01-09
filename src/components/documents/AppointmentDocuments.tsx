@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata } from "@/types/document"
-import DocumentUpload from "./DocumentUpload"
 import DocumentViewer from "./DocumentViewer"
 import { ConfirmDialog } from "@/components/ui/Modals"
-import { auth, db } from "@/firebase/config"
+import { auth } from "@/firebase/config"
 import { doc, getDoc } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -28,9 +27,6 @@ export default function AppointmentDocuments({
   appointmentId,
   patientId,
   patientUid: initialPatientUid,
-  appointmentSpecialty,
-  appointmentStatus,
-  canUpload = true,
   canEdit = true,
   canDelete = true,
   className = "",
@@ -42,7 +38,6 @@ export default function AppointmentDocuments({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedDocument, setSelectedDocument] = useState<DocumentMetadata | null>(null)
-  const [showUpload, setShowUpload] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -71,7 +66,7 @@ export default function AppointmentDocuments({
             // Try using patientId as patientUid as fallback
             setPatientUid(patientId)
           }
-        } catch (err: any) {
+        } catch {
           // Fallback: use patientId as patientUid
           setPatientUid(patientId)
         }
@@ -106,7 +101,7 @@ export default function AppointmentDocuments({
             // Try using patientId as patientUid as fallback
             setPatientUid(patientId)
           }
-        } catch (err: any) {
+        } catch {
           // Fallback: use patientId as patientUid
           setPatientUid(patientId)
         }
@@ -119,22 +114,7 @@ export default function AppointmentDocuments({
     fetchPatientUid()
   }, [patientId, patientUid, activeHospitalId])
 
-  useEffect(() => {
-    // Reset state when patientUid changes (appointmentId is optional)
-    if (!patientUid || patientUid.trim() === "") {
-      setLoading(false)
-      setDocuments([])
-      if (patientId) {
-        setError("Loading patient information...")
-      } else {
-        setError("Patient UID is required")
-      }
-      return
-    }
-    fetchDocuments()
-  }, [appointmentId, patientUid, patientId])
-
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     if (!patientUid) {
       setLoading(false)
       setDocuments([])
@@ -188,19 +168,22 @@ export default function AppointmentDocuments({
     } finally {
       setLoading(false)
     }
-  }
+  }, [patientUid, patientId, appointmentId])
 
-  const handleUploadSuccess = (document: DocumentMetadata) => {
-    setDocuments((prev) => [document, ...prev])
-    setShowUpload(false)
-    setNotification({
-      type: "success",
-      message: `Document "${document.originalFileName}" uploaded successfully!`
-    })
-    fetchDocuments() // Refresh list
-    // Clear notification after 3 seconds
-    setTimeout(() => setNotification(null), 3000)
-  }
+  useEffect(() => {
+    // Reset state when patientUid changes (appointmentId is optional)
+    if (!patientUid || patientUid.trim() === "") {
+      setLoading(false)
+      setDocuments([])
+      if (patientId) {
+        setError("Loading patient information...")
+      } else {
+        setError("Patient UID is required")
+      }
+      return
+    }
+    fetchDocuments()
+  }, [appointmentId, patientUid, patientId, fetchDocuments])
 
   const handleDelete = async (documentId: string) => {
     setDocumentToDelete(documentId)
@@ -287,9 +270,6 @@ export default function AppointmentDocuments({
     }
     return icons[fileType] || "📎"
   }
-
-  // Allow adding documents even for completed appointments
-  const canAddDocuments = canUpload && (appointmentStatus === "completed" || appointmentStatus === "confirmed" || appointmentStatus === "pending")
 
   const docsForThisAppointment = documents.filter((doc) => doc.appointmentId === appointmentId)
   const listDocuments = onlyCurrentAppointment ? docsForThisAppointment : documents

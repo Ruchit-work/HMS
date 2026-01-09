@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot, collection, deleteDoc } from "firebase/firestore"
@@ -15,7 +15,7 @@ import VisitingHoursEditor from "@/components/doctor/VisitingHoursEditor"
 import BlockedDatesManager from "@/components/doctor/BlockedDatesManager"
 import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
 import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
+import { getStatusColor } from "@/utils/appointmentHelpers"
 import NotificationBadge from "@/components/ui/NotificationBadge"
 import Notification from "@/components/ui/Notification"
 import type { Branch } from "@/types/branch"
@@ -36,21 +36,14 @@ export default function DoctorDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
-  const [, setUpdating] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [, setShowCompletionModal] = useState(false)
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
-  const [completionData, setCompletionData] = useState({
-    medicine: "",
-    notes: ""
-  })
   const [visitingHours, setVisitingHours] = useState<VisitingHours>(DEFAULT_VISITING_HOURS)
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
   const [blockedDrafts, setBlockedDrafts] = useState<BlockedDate[]>([])
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [rejectedRequests, setRejectedRequests] = useState<any[]>([])
-  const [dismissedRequestIds, setDismissedRequestIds] = useState<string[]>([])
+  const [dismissedRequestIds] = useState<string[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
   const [loadingBranches, setLoadingBranches] = useState(false)
@@ -60,7 +53,7 @@ export default function DoctorDashboard() {
   const { activeHospitalId } = useMultiHospital()
 
   // Function to set up real-time appointments listener
-  const setupAppointmentsListener = (doctorId: string, branchId: string | null) => {
+  const setupAppointmentsListener = useCallback((doctorId: string, branchId: string | null) => {
     if (!activeHospitalId) return () => {}
     
     try {
@@ -90,14 +83,14 @@ export default function DoctorDashboard() {
           })
         
         setAppointments(appointmentsList)
-      }, (error) => {
+      }, () => {
       })
       
       return unsubscribe
-    } catch (error) {
+    } catch {
       return () => {} // Return empty function if setup fails
     }
-  }
+  }, [activeHospitalId])
 
   // Fetch branches
   useEffect(() => {
@@ -125,7 +118,7 @@ export default function DoctorDashboard() {
         if (data.success && data.branches) {
           setBranches(data.branches)
         }
-      } catch (error) {
+      } catch {
       } finally {
         setLoadingBranches(false)
       }
@@ -135,7 +128,7 @@ export default function DoctorDashboard() {
   }, [activeHospitalId, user, loading])
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
 
     let unsubscribeAppointments: (() => void) | null = null
     let unsubscribeScheduleRequests: (() => void) | null = null
@@ -172,7 +165,7 @@ export default function DoctorDashboard() {
           
           setPendingRequests(pending)
           setRejectedRequests(rejected)
-        }, (error) => {
+        }, () => {
         })
       }
     }
@@ -188,8 +181,7 @@ export default function DoctorDashboard() {
         unsubscribeScheduleRequests()
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, selectedBranchId])
+  }, [user, activeHospitalId, selectedBranchId, setupAppointmentsListener])
 
   // Manual refresh function
   const handleRefreshAppointments = async () => {
@@ -310,116 +302,11 @@ export default function DoctorDashboard() {
     return null
   }
 
-  // Open completion modal
-  const _openCompletionModal = (appointmentId: string) => {
-    setSelectedAppointmentId(appointmentId)
-    setShowCompletionModal(true)
-  }
-
   const viewAppointmentDetails = (appointment: Appointment) => {
     // Store the appointment ID in sessionStorage to auto-expand it on the appointments page
     sessionStorage.setItem('expandAppointmentId', appointment.id)
     // Navigate to appointments page using Next.js router
     router.push('/doctor-dashboard/appointments')
-  }
-
-  // Complete appointment with medicine and notes
-  const _handleCompleteAppointment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!selectedAppointmentId) return
-
-    if (!activeHospitalId) {
-      setNotification({ 
-        type: "error", 
-        message: "Hospital context is not available. Please refresh the page." 
-      })
-      return
-    }
-    
-    // Ensure medicine and notes are never undefined
-    const medicine = completionData.medicine || ""
-    const notes = completionData.notes || ""
-    
-    if (!medicine.trim() || !notes.trim()) {
-      setNotification({ 
-        type: "error", 
-        message: "Please fill in both medicine and notes" 
-      })
-      return
-    }
-
-    setUpdating(true)
-    try {
-      const result = await completeAppointment(
-        selectedAppointmentId,
-        medicine,
-        notes,
-        activeHospitalId
-      )
-
-      // Update local state
-      const updatedAppointments = appointments.map(apt => 
-        apt.id === selectedAppointmentId 
-          ? { ...apt, ...result.updates } 
-          : apt
-      )
-      setAppointments(updatedAppointments)
-
-      // Find the completed appointment to send WhatsApp message
-      const completedAppointment = updatedAppointments.find(apt => apt.id === selectedAppointmentId)
-
-      // Send completion WhatsApp message with Google Review link
-      if (completedAppointment) {
-        try {
-          const currentUser = auth.currentUser
-          if (currentUser) {
-            const token = await currentUser.getIdToken()
-            const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                appointmentId: selectedAppointmentId,
-                patientId: completedAppointment.patientId,
-                patientPhone: completedAppointment.patientPhone,
-                patientName: completedAppointment.patientName,
-                hospitalId: activeHospitalId, // Pass hospitalId to API
-              }),
-            })
-
-            const responseData = await completionResponse.json().catch(() => ({}))
-            
-            if (!completionResponse.ok) {
-            } else {
-            }
-          } else {
-          }
-        } catch (error) {
-          // Don't fail the completion if WhatsApp fails
-        }
-      } else {
-      }
-
-      setNotification({ 
-        type: "success", 
-        message: result.message
-      })
-
-      // Reset and close modal
-      setCompletionData({ medicine: "", notes: "" })
-      setShowCompletionModal(false)
-      setSelectedAppointmentId(null)
-    } catch (error: unknown) {
-      setNotification({ 
-        type: "error", 
-        message: (error as Error).message || "Failed to complete appointment" 
-      })
-    } finally {
-      setUpdating(false)
-    }
   }
 
   // Shared comparator to sort appointments by combined date and time (earliest first)

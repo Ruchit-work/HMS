@@ -44,7 +44,7 @@ export async function getUserActiveHospitalId(userId: string): Promise<string | 
     }
     
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -86,7 +86,7 @@ export async function getDoctorHospitalId(doctorId: string): Promise<string | nu
     }
     
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -117,7 +117,7 @@ export async function getAppointmentHospitalId(appointmentId: string): Promise<s
     }
     
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -137,7 +137,7 @@ export async function getAllActiveHospitals(): Promise<Array<{ id: string; name:
       name: doc.data().name || 'Unknown Hospital',
       ...doc.data()
     }))
-  } catch (error) {
+  } catch {
     return []
   }
 }

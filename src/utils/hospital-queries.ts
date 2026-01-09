@@ -85,7 +85,7 @@ export async function checkHospitalAccess(
     }
 
     return false
-  } catch (error) {
+  } catch {
     return false
   }
 }

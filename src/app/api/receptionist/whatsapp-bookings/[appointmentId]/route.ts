@@ -36,7 +36,7 @@ export async function PUT(
     let body: any
     try {
       body = await request.json()
-    } catch (parseError) {
+    } catch {
       return Response.json(
         { error: "Invalid request body", details: "Failed to parse JSON" },
         { status: 400 }
@@ -277,7 +277,7 @@ export async function PUT(
             }
           }
         }
-      } catch (patientUpdateError) {
+      } catch {
         // Don't fail the appointment update if patient update fails
       }
     }
@@ -355,7 +355,7 @@ See you soon! 🏥`
           }
         } else {
         }
-      } catch (whatsappError: any) {
+      } catch {
         // Don't fail the update if WhatsApp fails
       }
     }

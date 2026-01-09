@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import GlobalHeader from "@/components/ui/GlobalHeader";
 import { MultiHospitalProvider } from "@/contexts/MultiHospitalContext";
+import ErrorBoundaryWrapper from "@/components/ui/ErrorBoundaryWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,10 +31,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <GlobalHeader />
-        <MultiHospitalProvider>
-          {children}
-        </MultiHospitalProvider>
+        <ErrorBoundaryWrapper>
+          <GlobalHeader />
+          <MultiHospitalProvider>
+            {children}
+          </MultiHospitalProvider>
+        </ErrorBoundaryWrapper>
       </body>
     </html>
   );

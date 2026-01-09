@@ -1,3 +1,5 @@
+import { formatDateForDisplay, formatDateTimeForDisplay, formatAppointmentDateTime as formatAppointmentDateTimeTZ } from "@/utils/timezone"
+
 export function calculateAge(dateOfBirth?: string | null): number | null {
   if (!dateOfBirth) return null
 
@@ -18,7 +20,8 @@ export function calculateAge(dateOfBirth?: string | null): number | null {
 export const formatDate = (dateString: string) => {
   if (!dateString) return 'N/A'
   try {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    // Use timezone utility for consistent Indian locale formatting
+    return formatDateForDisplay(dateString, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -31,7 +34,8 @@ export const formatDate = (dateString: string) => {
 export const formatDateTime = (dateString: string) => {
   if (!dateString) return 'N/A'
   try {
-    return new Date(dateString).toLocaleString('en-US', {
+    // Use timezone utility for consistent Indian locale formatting
+    return formatDateTimeForDisplay(dateString, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -43,34 +47,15 @@ export const formatDateTime = (dateString: string) => {
   }
 }
 
-
 export function formatAppointmentDateTime(date: string, time: string): string {
   if (!date) return "the scheduled time"
   
-  const isoString = `${date}T${time || "00:00"}`
-  const dt = new Date(isoString)
-  
-  // If date is invalid, return a fallback
-  if (Number.isNaN(dt.getTime())) {
+  try {
+    // Use timezone utility for consistent formatting
+    return formatAppointmentDateTimeTZ(date, time)
+  } catch {
+    // Fallback if parsing fails
     return time ? `${date} at ${time}` : date
   }
-
-  // Format date in Indian locale (en-IN) for consistency with appointment display
-  const formattedDate = dt.toLocaleDateString("en-IN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-
-  // If no time provided, return only the date
-  if (!time) return formattedDate
-
-  // Format time in Indian locale (en-IN) for 12-hour format with AM/PM
-  const formattedTime = dt.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-
-  return `${formattedDate} at ${formattedTime}`
 }
 

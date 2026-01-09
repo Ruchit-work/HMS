@@ -100,7 +100,7 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
     }
 
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -148,27 +148,25 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
           return
         }
 
-        // ⚠️ TEMPORARILY DISABLED: MFA verification for staff roles (for testing with trial Twilio account)
-        // TODO: Uncomment this section when ready for production 2FA
-        // Verify MFA for staff roles
-        // if (
-        //   userRoleData.role === "admin" ||
-        //   userRoleData.role === "doctor" ||
-        //   userRoleData.role === "receptionist"
-        // ) {
-        //   const tokenResult = await currentUser.getIdTokenResult(true)
-        //   const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-        //   const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-        //   const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+        // Verify MFA for staff roles (admin, doctor, receptionist)
+        if (
+          userRoleData.role === "admin" ||
+          userRoleData.role === "doctor" ||
+          userRoleData.role === "receptionist"
+        ) {
+          const tokenResult = await currentUser.getIdTokenResult(true)
+          const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+          const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+          const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
 
-        //   if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-        //     await signOut(auth)
-        //     const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
-        //     router.replace(loginPath)
-        //     setLoading(false)
-        //     return
-        //   }
-        // }
+          if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+            await signOut(auth)
+            const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
+            router.replace(loginPath)
+            setLoading(false)
+            return
+          }
+        }
 
         // If route requires specific role and user has different role
         if (requiredRole && requiredRole !== userRoleData.role) {
@@ -185,7 +183,7 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
           data: userRoleData.data
         })
         setLoading(false)
-      } catch (error) {
+      } catch {
         setLoading(false)
       }
     })
@@ -207,24 +205,23 @@ export function usePublicRoute() {
       // User is logged in - check their role and redirect to dashboard using cached data
       const userRoleData = await getUserRole(currentUser.uid)
       if (userRoleData) {
-        // ⚠️ TEMPORARILY DISABLED: MFA check for staff roles in public routes (for testing with trial Twilio account)
-        // TODO: Uncomment this section when ready for production 2FA
-        // if (
-        //   userRoleData.role === "admin" ||
-        //   userRoleData.role === "doctor" ||
-        //   userRoleData.role === "receptionist"
-        // ) {
-        //     const tokenResult = await currentUser.getIdTokenResult(true)
-        //     const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-        //     const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-        //     const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+        // Enforce MFA for staff roles before auto-redirecting from public routes
+        if (
+          userRoleData.role === "admin" ||
+          userRoleData.role === "doctor" ||
+          userRoleData.role === "receptionist"
+        ) {
+          const tokenResult = await currentUser.getIdTokenResult(true)
+          const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+          const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+          const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
 
-        //     if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-        //       // MFA not complete yet - allow login page to handle OTP flow
-        //       setLoading(false)
-        //       return
-        //     }
-        // }
+          if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+            // MFA not complete yet - allow login/OTP flow to handle it
+            setLoading(false)
+            return false
+          }
+        }
 
         router.replace(`/${userRoleData.role}-dashboard`)
         return true // Indicates redirect happened

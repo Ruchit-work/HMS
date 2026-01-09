@@ -84,7 +84,7 @@ export async function POST(request: Request) {
           } else {
           }
         }
-      } catch (error) {
+      } catch {
       }
     }
     
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
           }
         } else {
         }
-      } catch (error) {
+      } catch {
       }
     }
 
@@ -164,7 +164,7 @@ export async function POST(request: Request) {
         status: "sent",
         messageId: result.sid,
       })
-    } catch (error) {
+    } catch {
       // Don't fail the request if storing fails
     }
 

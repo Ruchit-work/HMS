@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata } from "@/types/document"
 import DocumentViewer from "./DocumentViewer"
 import { auth } from "@/firebase/config"
@@ -28,13 +28,7 @@ export default function DocumentListCompact({
   const [selectedDocument, setSelectedDocument] = useState<DocumentMetadata | null>(null)
   const [showAll, setShowAll] = useState(false)
 
-  useEffect(() => {
-    if (patientUid || patientId) {
-      fetchDocuments()
-    }
-  }, [patientId, patientUid, appointmentId])
-
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     if (!patientUid && !patientId) {
       setDocuments([])
       return
@@ -81,7 +75,13 @@ export default function DocumentListCompact({
     } finally {
       setLoading(false)
     }
-  }
+  }, [patientUid, patientId, appointmentId])
+
+  useEffect(() => {
+    if (patientUid || patientId) {
+      fetchDocuments()
+    }
+  }, [patientId, patientUid, appointmentId, fetchDocuments])
 
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString("en-US", {

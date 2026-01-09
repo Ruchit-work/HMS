@@ -2,6 +2,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { applyRateLimit } from "@/utils/rateLimit"
 import { getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { logApiError, createErrorResponse } from "@/utils/errorLogger"
 
 export async function POST(req: Request) {
   // Apply rate limiting first
@@ -33,8 +34,8 @@ export async function POST(req: Request) {
   // Declare variables outside try block for catch block access
   let billingId: string | undefined
   let method: "card" | "upi" | "cash" | "demo" = "card"
-  const _isAdmissionBilling = false
   let totalAmount = 0
+  let body: any = {}
 
   try {
     const initResult = initFirebaseAdmin("patient-billing-pay API")
@@ -42,14 +43,12 @@ export async function POST(req: Request) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
 
-    const body = await req.json().catch(() => ({}))
+    body = await req.json().catch(() => ({}))
     billingId = body?.billingId
     const paymentMethod = body?.paymentMethod || "card"
     method = paymentMethod
     const actor = body?.actor
-    const type = body?.type
     const actorType: "patient" | "receptionist" | "admin" = actor || (isPatient ? "patient" : "receptionist")
-    const _billingType: "admission" | "appointment" | undefined = type
 
     if (!billingId || typeof billingId !== "string") {
       return Response.json({ error: "Missing billingId" }, { status: 400 })
@@ -134,10 +133,6 @@ export async function POST(req: Request) {
         ? Number(billingData.totalAmount || 0)
         : Number(billingData.paymentAmount || billingData.totalConsultationFee || 0)
 
-      const _patientUid = billingData.patientUid ? String(billingData.patientUid) : null
-      const _patientId = billingData.patientId ? String(billingData.patientId) : null
-
-
       const paymentMetadata =
         actorType === "receptionist"
           ? {
@@ -187,10 +182,21 @@ export async function POST(req: Request) {
       transactionId,
     })
   } catch (error: any) {
-    return Response.json(
-      { error: error?.message || "Failed to pay bill" },
-      { status: 500 }
-    )
+    // Extract hospitalId from billing data if available
+    const hospitalId = (error as { hospitalId?: string }).hospitalId || body?.hospitalId
+    
+    // Log error with context (avoid logging sensitive payment details)
+    logApiError(error, req, auth, {
+      action: "billing-pay",
+      hospitalId: hospitalId,
+      appointmentId: (error as { appointmentId?: string }).appointmentId,
+      patientId: auth?.user?.uid,
+    })
+    
+    return createErrorResponse(error, req, auth, {
+      action: "billing-pay",
+      hospitalId: hospitalId,
+    }, "Failed to process payment. Please try again.")
   }
 }
 

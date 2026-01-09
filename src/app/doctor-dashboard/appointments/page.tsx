@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from "firebase/firestore"
+import { doc, getDoc, query, where, getDocs, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -18,14 +18,27 @@ import Pagination from "@/components/ui/Pagination"
 import { fetchMedicineSuggestions, MedicineSuggestion, recordMedicineSuggestions } from "@/utils/medicineSuggestions"
 import type { Branch } from "@/types/branch"
 import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
-import InlineAnatomyViewer, { type AnatomyViewerData } from "@/components/doctor/InlineAnatomyViewer"
+import dynamic from "next/dynamic"
 import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
+import type { AnatomyViewerData } from "@/components/doctor/InlineAnatomyViewer"
+
+// Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
+const InlineAnatomyViewer = dynamic(
+  () => import("@/components/doctor/InlineAnatomyViewer"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
+        <div className="text-slate-600">Loading 3D Anatomy Model...</div>
+      </div>
+    ),
+  }
+)
 import { DocumentMetadata } from "@/types/document"
-import { parsePrescription as parsePrescriptionUtil, parseAiPrescription as parseAiPrescriptionUtil } from "@/utils/appointments/prescriptionParsers"
+import { parsePrescription as parsePrescriptionUtil } from "@/utils/appointments/prescriptionParsers"
 import { formatMedicinesAsText as formatMedicinesAsTextUtil } from "@/utils/appointments/prescriptionFormatters"
 import { isToday as isTodayUtil, isTomorrow as isTomorrowUtil, isThisWeek as isThisWeekUtil, isNextWeek as isNextWeekUtil, sortByDateTime as sortByDateTimeUtil, sortByDateTimeDesc as sortByDateTimeDescUtil } from "@/utils/appointments/appointmentFilters"
 import { TabKey, CompletionFormEntry, UserData, hasValidPrescriptionInput } from "@/types/appointments"
-import LastAppointmentDetails from "@/components/doctor/appointments/LastAppointmentDetails"
 import ConsultationModeModal from "@/components/doctor/appointments/ConsultationModeModal"
 import CompletionForm from "@/components/doctor/appointments/CompletionForm"
 import PatientInfoSection from "@/components/doctor/appointments/PatientInfoSection"
@@ -40,7 +53,6 @@ import { HistoryDocumentViewer } from "@/components/doctor/appointments/HistoryD
 import PageHeader from "@/components/doctor/appointments/PageHeader"
 import StatsBar from "@/components/doctor/appointments/StatsBar"
 import FilterBar from "@/components/doctor/appointments/FilterBar"
-import AppointmentCard from "@/components/doctor/appointments/AppointmentCard"
 import EmptyState from "@/components/doctor/appointments/EmptyState"
 import HistorySearch from "@/components/doctor/appointments/HistorySearch"
 
@@ -351,8 +363,6 @@ function DoctorAppointmentsContent() {
   const [aiDiagnosis, setAiDiagnosis] = useState<{ [key: string]: string }>({})
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{ [key: string]: boolean }>({})
   const [showHistory, setShowHistory] = useState<{ [key: string]: boolean }>({})
-  const [showAllDoctorsHistory, setShowAllDoctorsHistory] = useState<{ [key: string]: boolean }>({})
-  const [expandedDoctors, setExpandedDoctors] = useState<{ [key: string]: boolean }>({})
   const [showDocumentUpload, setShowDocumentUpload] = useState<{ [key: string]: boolean }>({})
   const [historyDocuments, setHistoryDocuments] = useState<{ [appointmentId: string]: DocumentMetadata[] }>({})
   const [selectedHistoryDocument, setSelectedHistoryDocument] = useState<DocumentMetadata | null>(null)
@@ -412,7 +422,7 @@ function DoctorAppointmentsContent() {
       setMedicineSuggestionsLoading(true)
       const suggestions = await fetchMedicineSuggestions(100)
       setMedicineSuggestions(suggestions)
-    } catch (error) {
+    } catch {
     } finally {
       setMedicineSuggestionsLoading(false)
     }
@@ -482,7 +492,7 @@ function DoctorAppointmentsContent() {
         if (data.success && data.branches) {
           setBranches(data.branches)
         }
-      } catch (error) {
+      } catch {
       } finally {
         setLoadingBranches(false)
       }
@@ -520,7 +530,7 @@ function DoctorAppointmentsContent() {
 
         setAppointments(appointmentsList)
       },
-      (error) => {}
+      () => {}
     )
 
     return unsubscribe
@@ -591,7 +601,7 @@ function DoctorAppointmentsContent() {
         type: "success",
         message: "Appointments are automatically updated in real-time!",
       })
-    } catch (error) {
+    } catch {
       setNotification({ type: "error", message: "Failed to refresh appointments" })
     } finally {
       setRefreshing(false)
@@ -695,7 +705,6 @@ function DoctorAppointmentsContent() {
       setExpandedAppointment(null)
       setPatientHistory([])
       setShowHistory({})
-      setShowAllDoctorsHistory((prev) => ({ ...prev, [appointmentId]: false }))
     } else {
       setExpandedAppointment(appointmentId)
       
@@ -783,34 +792,6 @@ function DoctorAppointmentsContent() {
     } catch (error) {
       console.error("Error fetching history documents:", error)
     }
-  }
-
-  const toggleAllDoctorsHistory = (appointmentId: string) => {
-    setShowAllDoctorsHistory((prev) => ({
-      ...prev,
-      [appointmentId]: !(prev[appointmentId] || false),
-    }))
-  }
-
-  const _handleHistorySearchChange = (
-    appointmentId: string,
-    field: "text" | "date",
-    value: string
-  ) => {
-    setHistorySearchFilters((prev) => ({
-      ...prev,
-      [appointmentId]: {
-        ...(prev[appointmentId] || { text: "", date: "" }),
-        [field]: value,
-      },
-    }))
-  }
-
-  const _clearHistoryFilters = (appointmentId: string) => {
-    setHistorySearchFilters((prev) => ({
-      ...prev,
-      [appointmentId]: { text: "", date: "" },
-    }))
   }
 
   const getLatestCheckupRecommendation = (appointment: AppointmentType) => {
@@ -973,7 +954,7 @@ function DoctorAppointmentsContent() {
           initialNotes = notesParts.join("\n")
 
           sessionStorage.removeItem(anatomyDataKey)
-        } catch (error) {}
+        } catch {}
       }
 
       setCompletionData((prev) => ({
@@ -1090,13 +1071,11 @@ function DoctorAppointmentsContent() {
       const errorResponse = (error as { response?: { data?: unknown; status?: number } }).response
 
       let errorMessage = "Failed to get AI diagnosis"
-      let _errorDetails: any = null
 
       if (errorResponse?.data) {
         if (typeof errorResponse.data === "object") {
           const data = errorResponse.data as { error?: string; details?: any }
           errorMessage = data.error || errorMessage
-          _errorDetails = data.details
         } else if (typeof errorResponse.data === "string") {
           errorMessage = errorResponse.data
         }
@@ -1130,7 +1109,7 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const handleGenerateAiPrescription = async (appointmentId: string, showNotification: boolean = true) => {
+  const handleGenerateAiPrescription = useCallback(async (appointmentId: string, showNotification: boolean = true) => {
     if (!appointmentId) return
 
     const appointment = appointments.find((apt) => apt.id === appointmentId)
@@ -1152,7 +1131,7 @@ function DoctorAppointmentsContent() {
 
       const currentUser = auth.currentUser
       if (!currentUser) {
-        throw new Error("You must be logged in to generate AI prescription")
+        throw new Error("You must be logged in to generate a prescription")
       }
       const token = await currentUser.getIdToken()
 
@@ -1186,48 +1165,22 @@ function DoctorAppointmentsContent() {
       setShowAiPrescriptionSuggestion((prev) => ({ ...prev, [appointmentId]: true }))
       
       // Only show notification if explicitly requested and it's a new generation
-      if (showNotification && !hasExistingPrescription) {
-        setNotification({ type: "success", message: "AI prescription generated!" })
+        if (showNotification && !hasExistingPrescription) {
+          setNotification({ type: "success", message: "Prescription generated!" })
       }
     } catch (error: unknown) {
       const errorMessage =
         (error as { response?: { data?: { error?: string } } }).response?.data?.error ||
         (error as Error).message ||
-        "Failed to generate AI prescription"
+        "Failed to generate prescription"
       setNotification({
         type: "error",
-        message: `AI Prescription Error: ${errorMessage}`,
+        message: errorMessage,
       })
     } finally {
       setLoadingAiPrescription((prev) => ({ ...prev, [appointmentId]: false }))
     }
-  }
-
-  const parseAiPrescription = parseAiPrescriptionUtil
-
-  const handleAcceptPrescription = (appointmentId: string) => {
-    if (aiPrescription[appointmentId]) {
-      const parsedMedicines = parseAiPrescription(aiPrescription[appointmentId].medicine)
-      setCompletionData((prev) => ({
-        ...prev,
-        [appointmentId]: {
-          ...prev[appointmentId],
-          medicines:
-            parsedMedicines.length > 0
-              ? parsedMedicines
-              : [{ name: "", dosage: "", frequency: "", duration: "" }],
-        },
-      }))
-      setShowAiPrescriptionSuggestion({
-        ...showAiPrescriptionSuggestion,
-        [appointmentId]: false,
-      })
-      setNotification({
-        type: "success",
-        message: "AI prescription accepted! You can still edit it.",
-      })
-    }
-  }
+  }, [appointments, aiPrescription])
 
   const handleDeclinePrescription = (appointmentId: string) => {
     setShowAiPrescriptionSuggestion({
@@ -1516,7 +1469,7 @@ function DoctorAppointmentsContent() {
             }
           }
         }
-      } catch (error) {
+      } catch {
       }
     } else {
     }
@@ -1547,7 +1500,7 @@ function DoctorAppointmentsContent() {
 
         if (!response.ok) {
         }
-      } catch (error) {
+      } catch {
       }
     }
 
@@ -1565,7 +1518,7 @@ function DoctorAppointmentsContent() {
     try {
       await recordMedicineSuggestions(formData.medicines)
       await refreshMedicineSuggestions()
-    } catch (suggestionError) {}
+    } catch {}
 
     setCompletionData((prev) => {
       const updated = { ...prev }
@@ -1595,8 +1548,6 @@ function DoctorAppointmentsContent() {
     e.preventDefault()
 
     if (!appointmentId) return
-
-    const appointment = appointments.find((apt) => apt.id === appointmentId)
 
     const currentData: CompletionFormEntry = completionData[appointmentId] || {
       medicines: [],
@@ -1852,7 +1803,7 @@ function DoctorAppointmentsContent() {
     const sorted = [...filteredHistoryAppointments].sort(sortByDateTimeDesc)
     const startIndex = (historyPage - 1) * historyPageSize
     return sorted.slice(startIndex, startIndex + historyPageSize)
-  }, [filteredHistoryAppointments, historyPage, historyPageSize])
+  }, [filteredHistoryAppointments, historyPage, historyPageSize, sortByDateTimeDesc])
 
   useEffect(() => {
     if (historyPage > totalHistoryPages) {
@@ -1889,6 +1840,7 @@ function DoctorAppointmentsContent() {
     loadingAiPrescription,
     showAiPrescriptionSuggestion,
     consultationMode,
+    handleGenerateAiPrescription,
   ])
 
   // Get all appointments for non-history tabs (before pagination)
@@ -2284,11 +2236,8 @@ function DoctorAppointmentsContent() {
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <h4 className="font-semibold text-gray-900 text-sm truncate">
-                                          AI Diagnostic Assistant
+                                          AI Diagnosis
                                         </h4>
-                                        <p className="text-xs text-gray-600 truncate">
-                                          Groq Llama 3.3 70B
-                                        </p>
                                       </div>
                                     </div>
                                     <button

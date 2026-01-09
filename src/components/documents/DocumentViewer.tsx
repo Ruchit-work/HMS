@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata } from "@/types/document"
 import { auth } from "@/firebase/config"
 
@@ -26,7 +26,7 @@ export default function DocumentViewer({
   const [loading, setLoading] = useState(!document.downloadUrl) // Only load if we don't have a URL
   const [error, setError] = useState<string | null>(null)
 
-  const fetchDownloadUrl = async () => {
+  const fetchDownloadUrl = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -55,7 +55,7 @@ export default function DocumentViewer({
     } finally {
       setLoading(false)
     }
-  }
+  }, [document.id])
 
   useEffect(() => {
     // If document already has downloadUrl, use it directly (especially for images)
@@ -69,7 +69,7 @@ export default function DocumentViewer({
     if (!document.downloadUrl) {
       fetchDownloadUrl()
     }
-  }, [document.id, document.downloadUrl, isImage])
+  }, [document.id, document.downloadUrl, isImage, fetchDownloadUrl])
 
   const handleDownload = () => {
     if (downloadUrl) {
@@ -225,7 +225,7 @@ export default function DocumentViewer({
                   src={downloadUrl}
                   alt={document.originalFileName}
                   className="max-w-full max-h-[82vh] object-contain mx-auto rounded-lg shadow-lg"
-                  onError={(e) => {
+                  onError={() => {
                     setError("Failed to load image. The file may be corrupted or inaccessible.")
                   }}
                   onLoad={() => {

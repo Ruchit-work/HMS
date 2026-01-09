@@ -60,7 +60,7 @@ export async function GET(request: Request) {
           const receptionistData = receptionistDoc.data()
           receptionistBranchId = receptionistData?.branchId || null
         }
-      } catch (err) {
+      } catch {
       }
     }
 
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
             if (appointmentData && !appointmentData.branchId) {
               continue
             }
-          } catch (err) {
+          } catch {
             // Skip if we can't verify branch
             continue
           }
@@ -160,7 +160,7 @@ export async function GET(request: Request) {
               patientUid = patientDoc.id
             }
           }
-        } catch (err) {
+        } catch {
         }
       }
 
@@ -266,7 +266,7 @@ export async function GET(request: Request) {
         for (const doc of appointmentsDocs) {
           seenAppointmentIds.add(doc.id)
         }
-      } catch (fallbackError: any) {
+      } catch {
       }
     }
 
@@ -300,7 +300,7 @@ export async function GET(request: Request) {
           seenAppointmentIds.add(doc.id)
         }
       }
-    } catch (groupError: any) {
+    } catch {
     }
 
     for (const docSnap of appointmentsDocs) {
@@ -356,7 +356,7 @@ export async function GET(request: Request) {
               patientUid = patientDoc.id
             }
           }
-        } catch (err) {
+        } catch {
         }
       }
 

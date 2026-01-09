@@ -54,7 +54,7 @@ export async function GET(
         "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       },
     })
-  } catch (error: any) {
+  } catch {
     return new NextResponse("Error generating PDF", { status: 500 })
   }
 }

@@ -90,7 +90,7 @@ export default function GlobalHeader() {
         return data.status === "confirmed" && !data.whatsappPending
       })
       setAppointmentCount(confirmedAppointments.length)
-    }, (error) => {
+    }, () => {
       setAppointmentCount(0)
     })
 

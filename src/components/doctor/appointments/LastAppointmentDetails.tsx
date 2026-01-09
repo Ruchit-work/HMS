@@ -1,6 +1,5 @@
 "use client"
 
-import { Appointment as AppointmentType } from "@/types/patient"
 import { DocumentMetadata } from "@/types/document"
 import { parsePrescription } from "@/utils/appointments/prescriptionParsers"
 

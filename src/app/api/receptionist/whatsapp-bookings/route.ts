@@ -32,7 +32,7 @@ export async function GET(request: Request) {
           const receptionistData = receptionistDoc.data()
           receptionistBranchId = receptionistData?.branchId || null
         }
-      } catch (err) {
+      } catch {
       }
     }
     
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
         appointmentsSnapshot.docs.forEach((doc) => {
           appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
         })
-      } catch (error: any) {
+      } catch {
       }
       
       // Also fetch appointments with status whatsapp_pending (for backward compatibility)
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
             appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
           }
         })
-      } catch (error: any) {
+      } catch {
       }
     }
     
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
         appointmentsSnapshot.docs.forEach((doc) => {
           appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
         })
-      } catch (error: any) {
+      } catch {
       }
 
       // Also fetch appointments with status whatsapp_pending (for backward compatibility)
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
             appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
           }
         })
-      } catch (error: any) {
+      } catch {
       }
     }
 

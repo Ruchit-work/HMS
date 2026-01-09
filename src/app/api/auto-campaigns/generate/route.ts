@@ -40,7 +40,7 @@ async function cleanupExpiredAutoCampaigns(db: Firestore) {
         deleted += 1
       }
     }
-  } catch (error) {
+  } catch {
   }
 
   return deleted
@@ -146,7 +146,7 @@ export async function GET(request: Request) {
       try {
         const db = admin.firestore()
         autoExpired = await cleanupExpiredAutoCampaigns(db)
-      } catch (cleanupError) {
+      } catch {
       }
       
       return NextResponse.json({
@@ -248,7 +248,7 @@ export async function GET(request: Request) {
               }
             }
           })
-        } catch (queryError) {
+        } catch {
           alreadyExists = false
         }
 
@@ -297,7 +297,7 @@ export async function GET(request: Request) {
                   }
                 }
               }
-            } catch (error) {
+            } catch {
             }
           } else {
             continue
@@ -402,7 +402,7 @@ To book an appointment or learn more, please use the options below:`
                   .collection(getHospitalCollectionPath(hospital.id, "patients"))
                   .where("status", "in", ["active"])
                   .get()
-              } catch (indexError: any) {
+              } catch {
                 // If index doesn't exist, try getting all patients and filter
                 const allPatients = await db
                   .collection(getHospitalCollectionPath(hospital.id, "patients"))
@@ -473,27 +473,25 @@ To book an appointment or learn more, please use the options below:`
                   // Patient has no phone number, skipping
                 }
               })
-            } catch (error) {
+            } catch {
             }
 
             // Await all WhatsApp promises and log results
             if (whatsAppPromises.length > 0) {
               try {
                 const results = await Promise.all(whatsAppPromises)
-                const successCount = results.filter(r => r.success).length
                 const failureCount = results.filter(r => !r.success).length
                 if (failureCount > 0) {
-                  const failures = results.filter(r => !r.success)
                   // Some WhatsApp messages failed to send
                 }
-              } catch (error) {
+              } catch {
               }
             } else {
             }
-          } catch (error) {
+          } catch {
           }
         }
-      } catch (error) {
+      } catch {
         // Continue with other campaigns even if one fails
       }
     } // End of health day loop
@@ -517,7 +515,7 @@ To book an appointment or learn more, please use the options below:`
 
     try {
       await db.collection("cron_logs").add(executionLog)
-    } catch (logError) {
+    } catch {
     }
 
     return NextResponse.json({
@@ -552,7 +550,7 @@ To book an appointment or learn more, please use the options below:`
         })
         
       }
-    } catch (logError) {
+    } catch {
       // Don't fail the request if logging fails
     }
 

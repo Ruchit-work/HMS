@@ -61,7 +61,7 @@ export async function POST(request) {
         }
       }
     }
-  } catch (err) {
+  } catch {
     // Continue if check fails
   }
 

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
           const patientData = patientDoc.data()
           phone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || ""
         }
-      } catch (error) {
+      } catch {
       }
     }
 
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
                      patientData?.fullName || 
                      "Patient"
       }
-    } catch (error) {
+    } catch {
     }
 
     // Format appointment date for display
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
         sentAt: new Date().toISOString(),
         status: "pending",
       })
-    } catch (error) {
+    } catch {
       // Don't fail the request if storing fails
     }
 

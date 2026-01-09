@@ -12,7 +12,7 @@ export const releaseAppointmentSlot = async (doctorId?: string, date?: string, t
   if (!slotId) return
   try {
     await deleteDoc(doc(db, SLOT_COLLECTION, slotId))
-  } catch (error) {
+  } catch {
   }
 }
 import { Appointment } from "@/types/patient"
@@ -102,11 +102,10 @@ export const completeAppointment = async (
   const apt = aptSnap.data() as any
 
   // Rule 1: Only today's appointments may be completed
-  // COMMENTED OUT FOR TESTING - Allow completing appointments from any date
-  // const isToday = new Date(String(apt.appointmentDate)).toDateString() === new Date().toDateString()
-  // if (!isToday) {
-  //   throw new Error("Only today's appointments can be completed")
-  // }
+  const isToday = new Date(String(apt.appointmentDate)).toDateString() === new Date().toDateString()
+  if (!isToday) {
+    throw new Error("Only today's appointments can be completed")
+  }
 
   // Rule 2: Must complete earliest pending first
   const doctorId = String(apt.doctorId || "")

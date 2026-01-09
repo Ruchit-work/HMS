@@ -45,7 +45,7 @@ export function useNewItems(badgeKey: BadgeKey) {
         }
       }
       setLastViewedAt(null)
-    } catch (error) {
+    } catch {
       setLastViewedAt(null)
     }
   }, [storageKey])

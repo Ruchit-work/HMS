@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/hospital-queries"
@@ -74,12 +74,7 @@ export default function DoctorAnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<"week" | "month" | "quarter" | "year">("month")
 
-  useEffect(() => {
-    if (!user || !activeHospitalId) return
-    fetchAnalytics()
-  }, [user, activeHospitalId, dateRange])
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     if (!user?.uid || !activeHospitalId) return
 
     try {
@@ -351,11 +346,16 @@ export default function DoctorAnalyticsPage() {
         recurringConditions: [],
         monthlyStats
       })
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, activeHospitalId, dateRange])
+
+  useEffect(() => {
+    if (!user || !activeHospitalId) return
+    fetchAnalytics()
+  }, [user, activeHospitalId, dateRange, fetchAnalytics])
 
   const formatHour12 = (hour: number): string => {
     const period = hour >= 12 ? "PM" : "AM"

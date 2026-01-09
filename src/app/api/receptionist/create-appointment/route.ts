@@ -1,18 +1,16 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { formatAppointmentDateTime } from "@/utils/date"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/rateLimit"
+import { logApiError, createErrorResponse } from "@/utils/errorLogger"
 
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
-  const _friendlyName = patientName.trim().split(" ")[0] || "there"
   const fullName = patientName.trim() || "Patient"
   const doctorName: string = appointmentData.doctorName || "our doctor"
   const doctorSpecialization: string = appointmentData.doctorSpecialization || ""
-  const _schedule = formatAppointmentDateTime(appointmentData.appointmentDate, appointmentData.appointmentTime)
   const appointmentId = appointmentData.appointmentId || appointmentData.id || "N/A"
   const paymentMethod = appointmentData.paymentMethod || appointmentData.paymentOption || "Cash"
   const paymentAmount = appointmentData.paymentAmount || appointmentData.totalConsultationFee || 0
@@ -106,6 +104,10 @@ export async function POST(request: Request) {
     return rateLimitWithUser // Rate limited
   }
 
+  // Declare variables outside try block for catch block access
+  let appointmentData: any = null
+  let appointmentId: string | null = null
+
   try {
     const initResult = initFirebaseAdmin("create-appointment API")
     if (!initResult.ok) {
@@ -113,7 +115,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const appointmentData = body?.appointmentData
+    appointmentData = body?.appointmentData
     if (!appointmentData) {
       return Response.json({ error: "Missing appointmentData" }, { status: 400 })
     }
@@ -249,7 +251,7 @@ export async function POST(request: Request) {
     const firestore = admin.firestore()
     // Use normalized time for slot document ID (already normalized above)
     const slotDocId = `${docData.doctorId}_${docData.appointmentDate}_${normalizedAppointmentTime}`.replace(/[:\s]/g, "-")
-    let appointmentId: string | null = null
+    appointmentId = null // Reset for this transaction
 
     await firestore.runTransaction(async (transaction) => {
       const slotRef = firestore.collection("appointmentSlots").doc(slotDocId)
@@ -283,7 +285,7 @@ export async function POST(request: Request) {
           const patientData = patientDoc.data()
           patientPhone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || patientData?.mobile || ""
         }
-      } catch (error) {
+      } catch {
       }
     }
 
@@ -302,17 +304,32 @@ export async function POST(request: Request) {
           appointmentDate: docData.appointmentDate,
           appointmentTime: docData.appointmentTime,
         })
-      } catch (error) {
+      } catch {
       }
     } else {
     }
 
     return Response.json({ success: true, id: appointmentId })
   } catch (error: any) {
+    // Log error with context
+    const hospitalId = await getDoctorHospitalId(String(appointmentData?.doctorId || "")).catch(() => null)
+    logApiError(error, request, auth, {
+      action: "create-appointment",
+      hospitalId: hospitalId || undefined,
+      appointmentId: appointmentId || undefined,
+      patientId: appointmentData?.patientId,
+      doctorId: appointmentData?.doctorId,
+      receptionistId: auth?.user?.uid,
+    })
+    
     if (error?.message === "SLOT_ALREADY_BOOKED") {
       return Response.json({ error: "This time slot has already been booked. Please select another slot." }, { status: 409 })
     }
-    return Response.json({ error: error?.message || "Failed to create appointment" }, { status: 500 })
+    return createErrorResponse(error, request, auth, {
+      action: "create-appointment",
+      hospitalId: hospitalId || undefined,
+      appointmentId: appointmentId || undefined,
+    })
   }
 }
 

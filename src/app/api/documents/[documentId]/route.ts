@@ -70,7 +70,7 @@ export async function GET(
         expires: Date.now() + 3600 * 1000, // 1 hour
       })
       documentData.downloadUrl = url
-    } catch (err) {
+    } catch {
     }
 
     const document: DocumentMetadata = {
@@ -174,7 +174,7 @@ export async function PUT(
               documentIds: admin.firestore.FieldValue.arrayRemove(documentId),
               updatedAt: new Date().toISOString(),
             })
-          } catch (err) {
+          } catch {
           }
         }
         updateData.appointmentId = admin.firestore.FieldValue.delete()
@@ -220,7 +220,7 @@ export async function PUT(
             documentIds: admin.firestore.FieldValue.arrayUnion(documentId),
             updatedAt: new Date().toISOString(),
           })
-        } catch (err) {
+        } catch {
         }
       }
     }
@@ -318,7 +318,7 @@ export async function DELETE(
             documentIds: admin.firestore.FieldValue.arrayRemove(documentId),
             updatedAt: new Date().toISOString(),
           })
-        } catch (err) {
+        } catch {
         }
       }
 
@@ -326,13 +326,13 @@ export async function DELETE(
       try {
         const fileRef = bucket.file(documentData.storagePath)
         await fileRef.delete()
-      } catch (storageError: any) {
+      } catch {
         // If file doesn't exist in storage, that's okay - continue with Firestore deletion
       }
 
       // Delete the document from Firestore (permanent deletion)
       await docRef.delete()
-    } catch (err) {
+    } catch {
       return NextResponse.json(
         { error: "Failed to delete document" },
         { status: 500 }

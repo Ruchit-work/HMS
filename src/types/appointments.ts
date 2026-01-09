@@ -1,5 +1,3 @@
-import { Appointment as AppointmentType } from "@/types/patient"
-
 export type TabKey = "today" | "tomorrow" | "thisWeek" | "nextWeek" | "history"
 
 export type CompletionFormEntry = {

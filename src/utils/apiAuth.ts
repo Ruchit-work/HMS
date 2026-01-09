@@ -48,7 +48,7 @@ export async function verifyAuthToken(token: string): Promise<VerifiedTokenData 
       email: decodedToken.email || null,
       authTime: decodedToken.auth_time ? String(decodedToken.auth_time) : null,
     }
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -115,7 +115,7 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
     }
 
     return null
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -127,11 +127,13 @@ interface AuthenticateOptions {
 
 
 
+// Staff roles that require MFA
+const MFA_REQUIRED_ROLES: UserRole[] = ["admin", "doctor", "receptionist"]
+
 export async function authenticateRequest(
   request: Request,
   requiredRole?: UserRole,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _options?: AuthenticateOptions
+  options?: AuthenticateOptions
 ): Promise<AuthResult> {
   // Extract token from Authorization header
   const token = extractAuthToken(request)
@@ -183,35 +185,40 @@ export async function authenticateRequest(
     }
   }
 
-  // ⚠️ TEMPORARILY DISABLED: MFA enforcement for staff roles (for testing with trial Twilio account)
-  // TODO: Uncomment this section when ready for production 2FA
   // Enforce MFA for staff roles unless explicitly skipped (e.g., during MFA verification flow)
-  // const shouldCheckMfa = !options?.skipMfaCheck && MFA_REQUIRED_ROLES.includes(roleData.role)
-  // if (shouldCheckMfa) {
-  //   const tokenAuthTime = tokenData.authTime
-  //   const db = admin.firestore()
-  //   const mfaDoc = await db.collection("mfaSessions").doc(tokenData.uid).get()
-  //   const storedAuthTime = mfaDoc.exists ? String(mfaDoc.data()?.authTime || "") : ""
+  const shouldCheckMfa = !options?.skipMfaCheck && MFA_REQUIRED_ROLES.includes(roleData.role)
+  if (shouldCheckMfa) {
+    const tokenAuthTime = tokenData.authTime
+    const db = admin.firestore()
+    const mfaDoc = await db.collection("mfaSessions").doc(tokenData.uid).get()
+    const storedAuthTime = mfaDoc.exists ? String(mfaDoc.data()?.authTime || "") : ""
 
-  //   if (!tokenAuthTime || !storedAuthTime || storedAuthTime !== tokenAuthTime) {
-  //     const { logAuthzEvent } = await import("@/utils/auditLog")
-  //     await logAuthzEvent(
-  //       "permission_denied",
-  //       request,
-  //       tokenData.uid,
-  //       tokenData.email || undefined,
-  //       roleData.role,
-  //       undefined,
-  //       undefined,
-  //       "Multi-factor authentication required or expired"
-  //     )
-  //     return {
-  //       success: false,
-  //       error: "Additional verification required. Please sign in again and complete OTP verification.",
-  //       statusCode: 401,
-  //     }
-  //   }
-  // }
+    if (!tokenAuthTime || !storedAuthTime || storedAuthTime !== tokenAuthTime) {
+      // TODO: Add audit logging when auditLog utility is available
+      // Log authorization event for MFA failure (optional - requires auditLog utility)
+      // try {
+      //   const { logAuthzEvent } = await import("@/utils/auditLog")
+      //   await logAuthzEvent(
+      //     "permission_denied",
+      //     request,
+      //     tokenData.uid,
+      //     tokenData.email || undefined,
+      //     roleData.role,
+      //     undefined,
+      //     undefined,
+      //     "Multi-factor authentication required or expired"
+      //   )
+      // } catch {
+      //   // Audit logging not available - continue without logging
+      // }
+      
+      return {
+        success: false,
+        error: "Additional verification required. Please sign in again and complete OTP verification.",
+        statusCode: 401,
+      }
+    }
+  }
 
 
   return {

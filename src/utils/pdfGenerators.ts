@@ -6,6 +6,7 @@
 import jsPDF from "jspdf"
 import { Appointment } from "@/types/patient"
 import { calculateAge } from "@/utils/date"
+import { formatDateForPDF } from "@/utils/timezone"
 
 // ============================================================================
 // Shared Helper Functions
@@ -21,7 +22,8 @@ export const formatDate = (value?: string, options?: Intl.DateTimeFormatOptions)
   if (!value) return "Not provided"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString("en-US", options ?? {
+  // Use en-IN locale and default timezone for consistent formatting
+  return formatDateForPDF(date, options ?? {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -43,7 +45,6 @@ export function generateAppointmentConfirmationPDF(appointment: Appointment) {
   const pdf = new jsPDF()
   const pageWidth = pdf.internal.pageSize.getWidth()
   const pageHeight = pdf.internal.pageSize.getHeight()
-  const margin = 20
   const docMargin = 15
 
   // Light blue background
@@ -492,11 +493,9 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
-  const margin = 20
   const docMargin = 15 // Margin for the white document area
 
   const createdDate = appointment.updatedAt || appointment.createdAt
-  const formattedCreatedDate = formatDate(createdDate, { year: 'numeric', month: '2-digit', day: '2-digit' })
   const consultationDate = `${formatDate(appointment.appointmentDate)} at ${safeText(appointment.appointmentTime, 'Not set')}`
   const patientAge = appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) : null
 
@@ -628,7 +627,6 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
   yPos = Math.max(infoY, infoRightY + consultationDateLines.length * 5) + 15
 
   // Prescription Table Header (only NO. and SERVICE DESCRIPTION)
-  const tableStartY = yPos
   const colWidths = [15, 150] // NO., SERVICE DESCRIPTION only
   const tableWidth = docWidth - 20
   const headerHeight = 10
@@ -1018,7 +1016,7 @@ export function generatePatientReportPDF(
     pdf.text('Appointment Details', startX, yPos)
     yPos += 10
 
-    patientsWithAppointments.forEach((patient, patientIndex) => {
+    patientsWithAppointments.forEach((patient) => {
       if (!patient.appointments || patient.appointments.length === 0) return
 
       // Check if we need a new page

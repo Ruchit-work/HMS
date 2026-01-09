@@ -89,7 +89,7 @@ export async function GET(request: Request) {
               patientUid = patientDoc.id
             }
           }
-        } catch (err) {
+        } catch {
         }
       }
 
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
               branchId = aptDoc.data()?.branchId || null
             }
           }
-        } catch (err) {
+        } catch {
         }
       }
 
@@ -225,7 +225,7 @@ export async function GET(request: Request) {
         for (const doc of appointmentsDocs) {
           seenAppointmentIds.add(doc.id)
         }
-      } catch (fallbackError: any) {
+      } catch {
       }
     }
 
@@ -246,7 +246,7 @@ export async function GET(request: Request) {
           seenAppointmentIds.add(doc.id)
         }
       }
-    } catch (groupError: any) {
+    } catch {
       // Error grouping appointments by branch
     }
 
@@ -291,7 +291,7 @@ export async function GET(request: Request) {
               patientUid = patientDoc.id
             }
           }
-        } catch (err) {
+        } catch {
         }
       }
 

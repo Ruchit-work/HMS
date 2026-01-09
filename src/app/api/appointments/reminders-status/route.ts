@@ -46,7 +46,7 @@ export async function GET(request: Request) {
           hospitalId: data.hospitalId,
         }
       })
-    } catch (error) {
+    } catch {
       // Continue without logs if query fails (e.g., missing index)
     }
 
@@ -126,10 +126,10 @@ export async function GET(request: Request) {
               }
             }
           }
-        } catch (error) {
+        } catch {
         }
       }
-    } catch (error) {
+    } catch {
     }
 
     // Get recent reminders (last 7 days)
@@ -154,7 +154,7 @@ export async function GET(request: Request) {
           status: data.status || "sent",
         }
       })
-    } catch (error) {
+    } catch {
     }
 
     // Check if cron is configured

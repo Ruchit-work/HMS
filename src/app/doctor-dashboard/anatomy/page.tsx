@@ -9,7 +9,7 @@ import { earPartsData, type Disease } from '@/constants/earDiseases'
 import { completeAppointment } from '@/utils/appointmentHelpers'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useAuth } from '@/hooks/useAuth'
-import { auth, db } from '@/firebase/config'
+import { auth } from '@/firebase/config'
 import { ENT_DIAGNOSES, CUSTOM_DIAGNOSIS_OPTION } from '@/constants/entDiagnoses'
 import Notification from '@/components/ui/Notification'
 import { doc, getDoc } from 'firebase/firestore'
@@ -257,7 +257,7 @@ function ENTAnatomyPageContent() {
       try {
         const suggestions = await fetchMedicineSuggestions(100)
         setMedicineSuggestions(suggestions)
-      } catch (error) {
+      } catch {
 
       }
     }
@@ -512,7 +512,6 @@ function ENTAnatomyPageContent() {
     // Merge medicines from both 3D and 2D sections (if 2D section has data, prefer it; otherwise use 3D)
     const finalMedicines = selectedMedicines2D.length > 0 ? selectedMedicines2D : selectedMedicines
     const finalDisease = selectedDisease2D || selectedDisease
-    const finalPart = selectedPart2D || selectedPart
     const finalPartInfo = selectedPartInfo2D || selectedPartInfo
     const finalNotes = notes2D || notes
 
@@ -614,7 +613,7 @@ function ENTAnatomyPageContent() {
               }),
             })
 
-            const responseData = await completionResponse.json().catch(() => ({}))
+            await completionResponse.json().catch(() => ({}))
             
             if (completionResponse.ok) {
 
@@ -623,7 +622,7 @@ function ENTAnatomyPageContent() {
             }
           }
         }
-      } catch (whatsappError) {
+      } catch {
 
         // Don't fail the completion if WhatsApp fails
       }
@@ -657,7 +656,6 @@ function ENTAnatomyPageContent() {
   }
 
   // Separate handler for 2D section - now also directly completes the appointment
-  // eslint-disable-next-line prefer-const
   const handleCompleteCheckup2D = async () => {
     if (!appointmentId) {
       setNotification({ type: "error", message: "Appointment ID is missing" })
@@ -767,7 +765,7 @@ function ENTAnatomyPageContent() {
               }),
             })
 
-            const responseData = await completionResponse.json().catch(() => ({}))
+            await completionResponse.json().catch(() => ({}))
             
             if (completionResponse.ok) {
 
@@ -776,7 +774,7 @@ function ENTAnatomyPageContent() {
             }
           }
         }
-      } catch (whatsappError) {
+      } catch {
 
         // Don't fail the completion if WhatsApp fails
       }

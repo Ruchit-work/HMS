@@ -49,7 +49,6 @@ function SignUpContent() {
   const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [loadingHospitals, setLoadingHospitals] = useState(false);
-  const [, setShowHospitalSelection] = useState(false);
 
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
@@ -90,7 +89,7 @@ function SignUpContent() {
           setSelectedHospitalId(data.hospitals[0].id);
         }
       }
-    } catch (err) {
+    } catch {
       setError("Failed to load hospitals. Please refresh the page.");
     } finally {
       setLoadingHospitals(false);
@@ -126,7 +125,7 @@ function SignUpContent() {
           setBranches([]);
           setSelectedBranchId("");
         }
-      } catch (err) {
+      } catch {
         // Do not block signup entirely; just clear branches
         setBranches([]);
         setSelectedBranchId("");
@@ -363,7 +362,7 @@ Thank you for choosing Harmony Medical Services! 🏥`;
             if (!data?.success) {
               // Handle error silently
             }
-          } catch (err) {
+          } catch {
             // Handle error silently
           }
         })()

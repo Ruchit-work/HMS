@@ -433,20 +433,6 @@ const anatomicalNameToPartMap: Record<string, Record<string, string>> = {
   ear: {}
 }
 
-// Helper function to get all names from object hierarchy for debugging
-function getObjectHierarchyNames(object: THREE.Object3D): string[] {
-  const names: string[] = []
-  let current: THREE.Object3D | null = object
-  let depth = 0
-  while (current && depth < 5) {
-    if (current.name && current.name.trim()) {
-      names.push(current.name.trim())
-    }
-    current = current.parent
-    depth++
-  }
-  return names
-}
 
 // Helper function to find part name from mesh name - maps generic names to real part names
 function findPartName(object: THREE.Object3D, modelPath: string = '/models/ear/ear-anatomy.glb'): string | null {
@@ -753,7 +739,7 @@ function ENTModel({ onPartSelect, selectedPart: externalSelectedPart, modelPath 
   const [hoveredPart, setHoveredPart] = useState<string | null>(null)
   const groupRef = useRef<THREE.Group>(null)
   const modelRef = useRef<THREE.Group | null>(null)
-  const { gl, camera, raycaster, scene: r3fScene } = useThree()
+  const { gl, camera, raycaster } = useThree()
   const isDraggingRef = useRef(false)
   const pointerDownRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const initializedRef = useRef(false)
@@ -1058,7 +1044,7 @@ function ENTModel({ onPartSelect, selectedPart: externalSelectedPart, modelPath 
     
     pointerDownRef.current = null
     isDraggingRef.current = false
-  }, [selectedPart, camera, raycaster, onPartSelect, gl])
+  }, [selectedPart, camera, raycaster, onPartSelect, gl, modelPath])
 
   // Handle click directly (simpler approach) - MUST be before conditional return
   const handleClick = React.useCallback((event: any) => {

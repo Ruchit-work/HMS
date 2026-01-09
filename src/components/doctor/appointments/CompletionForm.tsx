@@ -167,7 +167,6 @@ export default function CompletionForm({
 
         {/* AI Generated Prescription Suggestion Box */}
         <AIPrescriptionSuggestion
-          appointmentId={appointment.id}
           isLoading={loadingAiPrescription}
           isVisible={showAiPrescriptionSuggestion}
           aiPrescriptionText={aiPrescription?.medicine}

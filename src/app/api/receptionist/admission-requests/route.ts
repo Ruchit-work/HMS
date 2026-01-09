@@ -44,7 +44,7 @@ export async function GET(request: Request) {
                 doctorSpecialization: aptData.doctorSpecialization || null
               }
             }
-          } catch (err) {
+          } catch {
           }
         }
 

@@ -227,7 +227,7 @@ export default function InteractiveMouthSVG({ onPartSelect, selectedPart }: Inte
             text.removeEventListener('mouseenter', mouseEnterHandler)
             text.removeEventListener('mouseleave', mouseLeaveHandler)
           })
-        } catch (e) {
+        } catch {
           // Skip if text doesn't have valid bbox
         }
       })
@@ -297,10 +297,11 @@ export default function InteractiveMouthSVG({ onPartSelect, selectedPart }: Inte
 
     updateHighlights()
 
+    const currentHitAreaRefs = hitAreaRefs.current
     return () => {
       clearTimeout(timeoutId)
       cleanupFunctions.forEach(cleanup => cleanup())
-      hitAreaRefs.current.clear()
+      currentHitAreaRefs.clear()
     }
   }, [svgContent, selectedPart, hoveredPart, onPartSelect])
 

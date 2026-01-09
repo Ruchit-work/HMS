@@ -108,7 +108,7 @@ export default function AdminAssignment() {
       }
 
       setAdmins(adminsList)
-    } catch (err: any) {
+    } catch {
       setError('Failed to load data. Please try again.')
     } finally {
       setLoading(false)
@@ -239,7 +239,7 @@ export default function AdminAssignment() {
       })
 
       if (!authDeleteResponse.ok) {
-        const authError = await authDeleteResponse.json().catch(() => ({}))
+        await authDeleteResponse.json().catch(() => ({}))
         // Continue with Firestore deletion even if auth deletion fails
       }
 

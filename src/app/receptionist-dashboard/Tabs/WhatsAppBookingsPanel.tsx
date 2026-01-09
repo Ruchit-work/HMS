@@ -123,7 +123,6 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
           // Only show appointments that match the receptionist's branch OR have no branch assigned
           if (receptionistBranchId) {
             const receptionistBranchIdStr = String(receptionistBranchId).trim().toLowerCase()
-            const beforeFilter = bookingsList.length
             
            bookingsList = bookingsList.filter((apt) => {
               const aptBranchId = (apt as any).branchId
@@ -190,7 +189,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
         ...doc.data(),
       })) as Doctor[]
       setDoctors(doctorsList)
-    } catch (error) {
+    } catch {
     } finally {
       setDoctorsLoading(false)
     }

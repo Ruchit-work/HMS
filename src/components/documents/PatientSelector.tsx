@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { auth } from "@/firebase/config"
 import { getDocs } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
@@ -35,16 +35,7 @@ export default function PatientSelector({
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (searchQuery.trim().length >= 2) {
-      searchPatients(searchQuery.trim())
-    } else {
-      setPatients([])
-      setShowSuggestions(false)
-    }
-  }, [searchQuery, activeHospitalId])
-
-  const searchPatients = async (searchTerm: string) => {
+  const searchPatients = useCallback(async (searchTerm: string) => {
     if (!activeHospitalId) {
       return
     }
@@ -98,13 +89,22 @@ export default function PatientSelector({
       const patientList = Array.from(patientMap.values())
       setPatients(patientList)
       setShowSuggestions(patientList.length > 0)
-    } catch (error: any) {
+    } catch {
       setPatients([])
       setShowSuggestions(false)
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeHospitalId])
+
+  useEffect(() => {
+    if (searchQuery.trim().length >= 2) {
+      searchPatients(searchQuery.trim())
+    } else {
+      setPatients([])
+      setShowSuggestions(false)
+    }
+  }, [searchQuery, activeHospitalId, searchPatients])
 
   const handleSelectPatient = (patient: Patient) => {
     setSearchQuery(`${patient.firstName} ${patient.lastName}`.trim())

@@ -114,12 +114,6 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
     }
   }
 
-  const _handleRemoveBlockedDate = (dateToRemove: string) => {
-    const next = blockedDates.filter(d => d.date !== dateToRemove)
-    onChange(next)
-    persist(next)
-  }
-
   const handleRemoveDraftDate = (dateToRemove: string) => {
     if (onDraftChange) {
       const next = (draftDates || []).filter(d => d.date !== dateToRemove)

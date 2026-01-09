@@ -2,13 +2,12 @@ import { NextResponse } from "next/server"
 import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, sendFlowMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import { isDateBlocked as isDateBlockedFromRaw, normalizeBlockedDates } from "@/utils/blockedDates"
+import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/blockedDates"
 import { generateAppointmentConfirmationPDFBase64 } from "@/utils/pdfGenerators"
 import { Appointment } from "@/types/patient"
 import { getDoctorHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/serverHospitalQueries"
 import { detectDocumentType, detectDocumentTypeFromText, detectDocumentTypeEnhanced, detectSpecialty } from "@/utils/documentDetection"
 import { getStorage } from "firebase-admin/storage"
-import { DocumentMetadata } from "@/types/document"
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -107,8 +106,7 @@ export async function POST(req: Request) {
     // Handle list selections (date/time pickers)
     if (messageType === "interactive" && message.interactive?.type === "list_reply") {
       const selectedId = message.interactive.list_reply?.id
-      const selectedTitle = message.interactive.list_reply?.title
-      await handleListSelection(from, selectedId, selectedTitle)
+      await handleListSelection(from, selectedId)
       return NextResponse.json({ success: true })
     }
 
@@ -175,7 +173,7 @@ export async function POST(req: Request) {
         }
         
         // Not in booking, send welcome button
-        await handleIncomingText(from, text)
+        await handleIncomingText(from)
       }
       return NextResponse.json({ success: true })
     }
@@ -183,7 +181,7 @@ export async function POST(req: Request) {
     // Handle image messages - check both type and message.image property
     if (messageType === "image" || message.image) {
       try {
-        await handleImageMessage(from, message, value)
+        await handleImageMessage(from, message)
       } catch (error: any) {
         // Log the error for debugging
         console.error("Error in handleImageMessage:", {
@@ -204,8 +202,8 @@ export async function POST(req: Request) {
     // Handle document messages - check both type and message.document property
     if (messageType === "document" || message.document) {
       try {
-        await handleDocumentMessage(from, message, value)
-      } catch (error: any) {
+        await handleDocumentMessage(from, message)
+      } catch {
         // If handler fails, send error message
         await sendTextMessage(
           from,
@@ -288,7 +286,7 @@ async function handleHelpCenter(phone: string) {
   )
 }
 
-async function handleIncomingText(phone: string, _text: string) {
+async function handleIncomingText(phone: string) {
   // Send button message instead of Flow directly
   const buttonResponse = await sendButtonMessage(
     phone,
@@ -348,56 +346,6 @@ function getTranslation(key: keyof typeof translations, language: Language = "en
   return translations[key]?.[language] || translations[key]?.english || ""
 }
 
-function _formatTranslation(template: string, vars: Record<string, string | number>): string {
-  let result = template
-  Object.keys(vars).forEach((key) => {
-    result = result.replace(new RegExp(`\\{${key}\\}`, "g"), String(vars[key]))
-  })
-  return result
-}
-
-function _capitalizeName(value: string): string {
-  if (!value) return ""
-  return value
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ")
-}
-
-async function _ensureDefaultDoctor(
-  db: FirebaseFirestore.Firestore,
-  sessionRef: FirebaseFirestore.DocumentReference,
-  session: BookingSession | null,
-  phone: string,
-  language: Language
-) {
-  if (session?.doctorId) {
-    const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
-    if (doctorDoc.exists) {
-      return { id: doctorDoc.id, data: doctorDoc.data()! }
-    }
-  }
-
-  const doctorsSnapshot = await db.collection("doctors").where("status", "==", "active").limit(1).get()
-  if (doctorsSnapshot.empty) {
-    const msg =
-      language === "gujarati"
-        ? "❌ હાલમાં કોઈ ડૉક્ટર ઉપલબ્ધ નથી. કૃપા કરીને થોડા સમય પછી ફરી પ્રયત્ન કરો અથવા રિસેપ્શનનો સંપર્ક કરો."
-        : "❌ No doctors are available right now. Please try again later or contact reception."
-    await sendTextMessage(phone, msg)
-    return null
-  }
-
-  const doctorDoc = doctorsSnapshot.docs[0]
-  await sessionRef.update({
-    doctorId: doctorDoc.id,
-    updatedAt: new Date().toISOString(),
-  })
-
-  return { id: doctorDoc.id, data: doctorDoc.data()! }
-}
-
 async function moveToBranchSelection(
   db: FirebaseFirestore.Firestore,
   phone: string,
@@ -415,7 +363,7 @@ async function moveToBranchSelection(
         const patientData = patientDoc.data()
         defaultBranchId = patientData?.defaultBranchId || null
       }
-    } catch (error) {
+    } catch {
 
     }
   }
@@ -429,7 +377,7 @@ async function moveToBranchSelection(
         const patientData = patientDoc.data()
         hospitalId = patientData?.hospitalId || null
       }
-    } catch (error) {
+    } catch {
 
     }
   }
@@ -481,7 +429,7 @@ async function moveToBranchSelection(
   await sendTextMessage(phone, introMsg)
 
   // Create branch selection buttons
-  const branchButtons = branches.map((branch: any, index: number) => {
+  const branchButtons = branches.map((branch: any) => {
     const isDefault = branch.id === defaultBranchId
     const title = isDefault 
       ? `${branch.name} (Default)`
@@ -666,7 +614,7 @@ async function processBookingConfirmation(
             undefined
         }
       }
-    } catch (error) {
+    } catch {
 
     }
   }
@@ -680,7 +628,7 @@ async function processBookingConfirmation(
           consultationFee = doctorDoc.data()?.consultationFee
         }
       }
-    } catch (error) {
+    } catch {
 
     }
 
@@ -729,7 +677,7 @@ async function processBookingConfirmation(
           branchId = patientData?.defaultBranchId || null
           branchName = patientData?.defaultBranchName || null
         }
-      } catch (error) {
+      } catch {
 
       }
     }
@@ -766,7 +714,7 @@ async function processBookingConfirmation(
             branchName = branch.data().name || null
           }
         }
-      } catch (error) {
+      } catch {
 
       }
     }
@@ -989,7 +937,7 @@ async function handleFlowCompletion(value: any): Promise<Response> {
           const day = String(parsedDate.getDate()).padStart(2, "0")
           appointmentDate = `${year}-${month}-${day}`
         }
-      } catch (e) {
+      } catch {
 
       }
     }
@@ -1157,7 +1105,7 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         branchId = patientData?.defaultBranchId || null
         branchName = patientData?.defaultBranchName || null
       }
-    } catch (error) {
+    } catch {
 
     }
   }
@@ -1198,7 +1146,7 @@ async function handleFlowCompletion(value: any): Promise<Response> {
           branchName = branch.data().name || null
         }
       }
-    } catch (error) {
+    } catch {
 
     }
   }
@@ -1471,7 +1419,7 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
           branchId = patientData?.defaultBranchId || null
           branchName = patientData?.defaultBranchName || null
         }
-      } catch (error) {
+      } catch {
 
       }
     }
@@ -1486,7 +1434,7 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
             const patientData = patientDoc.data()
             hospitalId = patientData?.hospitalId || null
           }
-        } catch (error) {
+        } catch {
 
         }
       }
@@ -1620,7 +1568,7 @@ async function handleRegistrationPrompt(phone: string) {
 
     // Send language picker
     await sendLanguagePicker(phone)
-  } catch (error) {
+  } catch {
 
     await sendTextMessage(
       phone,
@@ -1701,7 +1649,7 @@ async function handleRegistrationFullName(
     }
     
     return true
-  } catch (error: any) {
+  } catch {
 
     const errorMsg = language === "gujarati"
       ? "❌ રજિસ્ટ્રેશન દરમિયાન ભૂલ આવી. કૃપા કરીને ફરીથી પ્રયાસ કરો અથવા રિસેપ્શનને કૉલ કરો."
@@ -2039,7 +1987,7 @@ async function sendTimeSlotListForPeriod(
   }
 }
 
-async function handleListSelection(phone: string, selectedId: string, _selectedTitle: string) {
+async function handleListSelection(phone: string, selectedId: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
@@ -2365,8 +2313,6 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   const timeSlots = generateTimeSlots()
   let selectedSlots: string[] = []
 
-  const isToday = session.appointmentDate === new Date().toISOString().split("T")[0]
-
   if (buttonId === "time_quick_morning") {
     // Morning slots: 9:00 AM to 1:00 PM (09:00 to 13:00)
     selectedSlots = timeSlots.filter(slot => {
@@ -2440,7 +2386,7 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   await sendTimeSlotListForPeriod(phone, availableSlotsForPeriod, language, periodLabel)
 }
 
-async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english", _showButtons: boolean = true) {
+async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english") {
   const db = admin.firestore()
   
   // Use new hourly slot system
@@ -2735,7 +2681,7 @@ async function handleConfirmation(
             updatedAt: new Date().toISOString(),
           })
         }
-      } catch (recreateError) {
+      } catch {
 
       }
     }
@@ -2968,7 +2914,6 @@ function checkDateAvailability(dateStr: string, doctorData: any): { isBlocked: b
   if (blockedDates.length > 0) {
     if (isDateBlockedFromRaw(dateStr, blockedDates)) {
       // Find the reason for the blocked date
-      const _normalizedDates = normalizeBlockedDates(blockedDates)
       const blockedDate = blockedDates.find((bd: any) => {
         const normalizedDate = bd?.date ? String(bd.date).slice(0, 10) : ""
         return normalizedDate === dateStr
@@ -3273,7 +3218,7 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
       if (!testResponse.ok) {
         throw new Error(`PDF URL not accessible: ${testResponse.status}`)
       }
-    } catch (urlError: any) {
+    } catch {
 
       // Still try to send, but log the issue
     }
@@ -3299,7 +3244,7 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
         "📄 Your appointment confirmation PDF has been sent above. Please check your WhatsApp messages."
       )
     }
-    } catch (error: any) {
+    } catch {
 
       // Don't fail the booking if PDF fails
       await sendTextMessage(
@@ -3358,7 +3303,7 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<{ buffer: Buffer;
     const fileName = mediaData.filename || mediaData.name || `whatsapp_${mediaId}.${mimeType.includes('pdf') ? 'pdf' : mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'jpg' : 'png'}`
 
     return { buffer, mimeType, fileName }
-  } catch (error) {
+  } catch {
     return null
   }
 }
@@ -3366,7 +3311,7 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<{ buffer: Buffer;
 /**
  * Handle image messages from WhatsApp
  */
-async function handleImageMessage(phone: string, message: any, value: any) {
+async function handleImageMessage(phone: string, message: any) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
 
@@ -3575,7 +3520,7 @@ async function handleImageMessage(phone: string, message: any, value: any) {
 /**
  * Handle document messages from WhatsApp
  */
-async function handleDocumentMessage(phone: string, message: any, value: any) {
+async function handleDocumentMessage(phone: string, message: any) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
 
@@ -3660,7 +3605,7 @@ async function handleDocumentMessage(phone: string, message: any, value: any) {
       if (enhancedResult.specialty) {
         detectedSpecialty = enhancedResult.specialty
       }
-    } catch (error) {
+    } catch {
       // Fallback to filename detection if content analysis fails
     }
   }
@@ -3761,7 +3706,7 @@ async function handleDocumentMessage(phone: string, message: any, value: any) {
       phone,
       `✅ Document uploaded successfully!\n\n📄 Type: ${detectedType}\n📝 Saved to your medical records.`
     )
-  } catch (error: any) {
+  } catch {
     await sendTextMessage(phone, "❌ Failed to save document. Please try again or contact reception.")
   }
 }

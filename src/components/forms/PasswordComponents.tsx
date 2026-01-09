@@ -95,7 +95,6 @@ export function ChangePasswordSection({
   const [confirmNewPassword, setConfirmNewPassword] = useState("")
   const [changing, setChanging] = useState(false)
 
-  const primary = accent === "purple" ? "purple" : "teal"
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -12,7 +12,7 @@ import { dentalPartsData } from '@/constants/dentalDiseases'
 import { completeAppointment } from '@/utils/appointmentHelpers'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useAuth } from '@/hooks/useAuth'
-import { auth, db } from '@/firebase/config'
+import { auth } from '@/firebase/config'
 import { ENT_DIAGNOSES, CUSTOM_DIAGNOSIS_OPTION } from '@/constants/entDiagnoses'
 import { doc, getDoc } from 'firebase/firestore'
 import { getHospitalCollection } from '@/utils/hospital-queries'
@@ -276,7 +276,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       try {
         const suggestions = await fetchMedicineSuggestions(100)
         setMedicineSuggestions(suggestions)
-      } catch (error) {
+      } catch {
 
       }
     }
@@ -566,9 +566,6 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
 
     const finalMedicines = selectedMedicines2D.length > 0 ? selectedMedicines2D : selectedMedicines
     const finalDisease = selectedDisease2D || selectedDisease
-    const finalPart = selectedPart2D || selectedPart
-    const finalPartInfo = selectedPartInfo2D || selectedPartInfo
-    const finalNotes = notes2D || notes
 
     if (finalMedicines.length === 0 || !finalMedicines.some(med => med.name && med.name.trim())) {
       setNotification({ type: "error", message: "Please add at least one medicine with a name before completing the checkup" })
@@ -658,7 +655,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       // Save medicines to database for future autocomplete (auto-save after first use)
       try {
         await recordMedicineSuggestions(finalMedicines)
-      } catch (error) {
+      } catch {
 
         // Don't block completion if medicine saving fails
       }
@@ -689,7 +686,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
               }),
             })
 
-            const responseData = await completionResponse.json().catch(() => ({}))
+            await completionResponse.json().catch(() => ({}))
             
             if (completionResponse.ok) {
 
@@ -698,7 +695,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
             }
           }
         }
-      } catch (whatsappError) {
+      } catch {
 
       }
 
@@ -808,7 +805,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       // Save medicines to database for future autocomplete (auto-save after first use)
       try {
         await recordMedicineSuggestions(selectedMedicines2D)
-      } catch (error) {
+      } catch {
 
         // Don't block completion if medicine saving fails
       }
@@ -839,7 +836,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
               }),
             })
 
-            const responseData = await completionResponse.json().catch(() => ({}))
+            await completionResponse.json().catch(() => ({}))
             
             if (completionResponse.ok) {
 
@@ -848,7 +845,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
             }
           }
         }
-      } catch (whatsappError) {
+      } catch {
 
       }
 

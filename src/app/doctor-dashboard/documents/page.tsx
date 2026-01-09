@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import DocumentsTab from "@/components/documents/DocumentsTab"
@@ -8,8 +8,8 @@ import LoadingSpinner from "@/components/ui/StatusComponents"
 
 export default function DoctorDocumentsPage() {
   const { user, loading: authLoading } = useAuth("doctor")
-  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
-  const [selectedPatient, setSelectedPatient] = useState<{ id: string; uid: string; patientId: string; firstName: string; lastName: string; email: string; phone?: string } | null>(null)
+  const { loading: hospitalLoading } = useMultiHospital()
+  const [selectedPatient] = useState<{ id: string; uid: string; patientId: string; firstName: string; lastName: string; email: string; phone?: string } | null>(null)
 
   if (authLoading || hospitalLoading) {
     return <LoadingSpinner message="Loading..." />

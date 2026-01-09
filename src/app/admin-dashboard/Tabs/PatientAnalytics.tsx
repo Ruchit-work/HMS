@@ -778,7 +778,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
       })
 
       const diagnosisTrends = Object.entries(monthlyDiagnosisData)
-        .map(([key, data]: [string, any]) => {
+        .map(([, data]: [string, any]) => {
           const { _label, ...diagnoses } = data
           const totalCases = Object.values(diagnoses).reduce((sum: number, count: any) => sum + count, 0)
           return {
@@ -903,7 +903,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         diagnosisTrends,
         symptomDiagnosisCorrelation
       })
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false)
     }

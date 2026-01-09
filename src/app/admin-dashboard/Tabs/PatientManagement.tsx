@@ -125,10 +125,10 @@ export default function PatientManagement({
                 })
                 
                 if (!authDeleteResponse.ok) {
-                    const authError = await authDeleteResponse.json().catch(() => ({}))
+                    await authDeleteResponse.json().catch(() => ({}))
                     // Continue with Firestore deletion even if auth deletion fails
                 }
-            } catch (authError) {
+            } catch {
                 // Continue with Firestore deletion even if auth deletion fails
             }
             
@@ -137,13 +137,13 @@ export default function PatientManagement({
                 try {
                     const scopedRef = doc(getHospitalCollection(activeHospitalId, 'patients'), deletePatient.id)
                     await deleteDoc(scopedRef)
-                } catch (e) {
+                } catch {
                 }
             }
             try {
                 const legacyRef = doc(db, 'patients', deletePatient.id)
                 await deleteDoc(legacyRef)
-            } catch (e) {
+            } catch {
             }
             
             // Update local state (this list comes from hospital-scoped patients)

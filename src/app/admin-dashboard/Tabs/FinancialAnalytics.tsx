@@ -667,7 +667,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
         seasonalRevenueChanges,
         revenueAnomalies
       })
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false)
     }

@@ -81,15 +81,6 @@ export default function DiagnosisSelector({
     toggleDiagnosis(CUSTOM_DIAGNOSIS_OPTION)
   }
 
-  const getCategoryLabel = (category: EntDiagnosis["category"]) => {
-    switch (category) {
-      case "ear": return "Ear"
-      case "nose": return "Nose"
-      case "throat": return "Throat"
-      default: return "General"
-    }
-  }
-
   const getCategoryColor = (category: EntDiagnosis["category"]) => {
     switch (category) {
       case "ear": return "bg-blue-50 border-blue-200 text-blue-700"

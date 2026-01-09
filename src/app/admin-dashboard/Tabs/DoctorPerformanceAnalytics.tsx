@@ -225,7 +225,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
       }).sort((a, b) => b.totalPatientsSeen - a.totalPatientsSeen)
 
       setDoctorAnalytics(analytics)
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false)
     }

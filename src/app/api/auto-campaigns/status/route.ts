@@ -61,7 +61,7 @@ export async function GET(request: Request) {
           triggeredBy: data.triggeredBy || "unknown",
         }
       })
-    } catch (error) {
+    } catch {
       // Continue without logs if query fails (e.g., missing index)
     }
 
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
           status: data.status,
         }
       })
-    } catch (error) {
+    } catch {
       // Continue without recent campaigns if query fails (e.g., missing index)
     }
 

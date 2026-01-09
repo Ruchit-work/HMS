@@ -115,7 +115,6 @@ export default function AdminDashboard() {
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null)
   const [processingRefundId, setProcessingRefundId] = useState<string | null>(null)
   const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
-  const [loadingRefunds, _setLoadingRefunds] = useState(false)
   const [newAppointmentsCount, setNewAppointmentsCount] = useState(0)
   const [newPatientsCount, setNewPatientsCount] = useState(0)
   const [pendingBillingCount, setPendingBillingCount] = useState(0)
@@ -183,7 +182,7 @@ export default function AdminDashboard() {
         } else {
 
         }
-      } catch (error) {
+      } catch {
 
       }
     }
@@ -520,7 +519,7 @@ export default function AdminDashboard() {
       setLoadingRequests(false)
 
 
-    } catch (error) {
+    } catch {
 
       setNotification({ 
         type: "error", 
@@ -915,7 +914,7 @@ export default function AdminDashboard() {
       }))
       
       setPendingRequests(reqs)
-    }, (error) => {
+    }, () => {
 
     })
 
@@ -960,7 +959,7 @@ export default function AdminDashboard() {
       }))
       
       setPendingRefunds(refundsEnriched)
-    }, (error) => {
+    }, () => {
 
     })
 
@@ -976,13 +975,6 @@ export default function AdminDashboard() {
       setActiveTab("overview")
     }
   }, [isSuperAdmin, activeTab])
-
-  const _handleRefresh = async (e?: React.MouseEvent) => {
-    e?.preventDefault()
-    e?.stopPropagation()
-    await fetchDashboardData()
-    setNotification({ type: "success", message: "Dashboard data refreshed!" })
-  }
 
   const approveRequest = async (request: any) => {
     setProcessingRequestId(request.id)
@@ -1076,7 +1068,7 @@ export default function AdminDashboard() {
       sessionStorage.clear()
       // Force redirect after sign out
       window.location.href = "/auth/login?role=admin"
-    } catch (error) {
+    } catch {
 
       setNotification({ 
         type: "error", 
@@ -2023,9 +2015,7 @@ export default function AdminDashboard() {
                   <h3 className="text-base sm:text-lg font-semibold text-gray-900">Refund Requests</h3>
                   <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">{pendingRefunds.length} pending</span>
                 </div>
-                {loadingRefunds ? (
-                  <div className="text-sm text-gray-500">Loading refund requests…</div>
-                ) : pendingRefunds.length === 0 ? (
+                {pendingRefunds.length === 0 ? (
                   <div className="text-sm text-gray-500">No pending refund requests</div>
                 ) : (
                   <div className="overflow-x-auto">

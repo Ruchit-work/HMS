@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { getDocs, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
-import { db, auth } from '@/firebase/config'
+import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/hospital-queries'
@@ -299,6 +299,15 @@ export default function AppoinmentManagement({
                     appointmentsList = appointmentsList.filter(apt => apt.branchId === effectiveSelectedBranchId)
                 }
                 
+                // Sort by newest first (createdAt descending, fallback to updatedAt)
+                appointmentsList = appointmentsList.sort((a, b) => {
+                    const aDate = a.createdAt || a.updatedAt || ''
+                    const bDate = b.createdAt || b.updatedAt || ''
+                    if (aDate < bDate) return 1
+                    if (aDate > bDate) return -1
+                    return 0
+                })
+                
                 setAppointments(appointmentsList)
                 setFilteredAppointments(appointmentsList)
                 setLastUpdated(new Date())
@@ -345,7 +354,7 @@ export default function AppoinmentManagement({
                 if (data.success && data.branches) {
                     setBranches(data.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
                 }
-            } catch (error) {
+            } catch {
 
             }
         })()
@@ -421,9 +430,9 @@ export default function AppoinmentManagement({
             })
         }
 
-        // Apply sorting
-        if (sortField) {
-            filtered = [...filtered].sort((a, b) => {
+        // Apply sorting - default to newest first (createdAt descending) when no sortField is set
+        filtered = [...filtered].sort((a, b) => {
+            if (sortField) {
                 let aValue = ''
                 let bValue = ''
                 
@@ -459,8 +468,15 @@ export default function AppoinmentManagement({
                 if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1
                 if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1
                 return 0
-            })
-        }
+            } else {
+                // Default sort: newest first (createdAt descending, fallback to updatedAt)
+                const aDate = a.createdAt || a.updatedAt || ''
+                const bDate = b.createdAt || b.updatedAt || ''
+                if (aDate < bDate) return 1
+                if (aDate > bDate) return -1
+                return 0
+            }
+        })
         
         setFilteredAppointments(filtered)
     }, [search, appointments, sortField, sortOrder, selectedDoctorId, timeRange, statusFilter])

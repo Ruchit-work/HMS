@@ -113,7 +113,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
       })
 
       setReceptionists(receptionistsList)
-    } catch (err: any) {
+    } catch {
 
       setError('Failed to load receptionists. Please try again.')
     } finally {
@@ -152,7 +152,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
         } else {
 
         }
-      } catch (err) {
+      } catch {
 
       } finally {
         setBranchesLoading(false)
@@ -298,10 +298,10 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
         })
 
         if (!authDeleteResponse.ok) {
-          const authError = await authDeleteResponse.json().catch(() => ({}))
+          await authDeleteResponse.json().catch(() => ({}))
 
         }
-      } catch (authErr) {
+      } catch {
 
       }
 

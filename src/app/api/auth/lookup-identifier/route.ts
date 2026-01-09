@@ -116,7 +116,7 @@ export async function POST(request: Request) {
       { error: "We couldn't find an account with that phone number." },
       { status: 404 }
     )
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to look up account. Please try again later." },
       { status: 500 }

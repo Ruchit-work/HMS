@@ -51,7 +51,7 @@ function BookAppointmentContent() {
       const response = await sendWhatsAppMessage({ to, message })
       if (!response.success) {
       }
-    } catch (error) {
+    } catch {
     }
   }, [])
 
@@ -71,7 +71,6 @@ function BookAppointmentContent() {
       chiefComplaint?: string
     }) => {
       const fullName = [opts.patientFirstName, opts.patientLastName].filter(Boolean).join(" ") || "there"
-      const _friendlyName = opts.patientFirstName || "there"
 
       let doctorLabel = opts.doctorName?.trim() || ""
       if (doctorLabel) {
@@ -157,7 +156,6 @@ See you soon! 🏥`
         ;(maybeUnsubPromise as any)()
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeHospitalId])
 
   if (loading) {

@@ -83,25 +83,6 @@ function LoginContent() {
     return `**** **** ${lastFour}`
   }
 
-  const extractPhoneNumber = (profile: any) => {
-    if (!profile) return null
-    const candidateFields = [
-      "mfaPhone",
-      "phoneNumber",
-      "phone",
-      "contactNumber",
-      "mobile",
-      "contact",
-    ]
-    for (const field of candidateFields) {
-      const value = profile[field]
-      if (typeof value === "string" && value.trim()) {
-        return value.trim()
-      }
-    }
-    return null
-  }
-
   const determineUserRole = async (user: User) => {
     // Check users collection first (multi-hospital support)
     const userDoc = await getDoc(doc(db, "users", user.uid))
@@ -224,7 +205,7 @@ function LoginContent() {
           updatedAt: new Date().toISOString(),
         }, { merge: true })
       }
-    } catch (err) {
+    } catch {
       // Don't block login if sync fails
     }
     
@@ -257,7 +238,7 @@ function LoginContent() {
               body: JSON.stringify({ hospitalId }),
             })
             sessionStorage.setItem("activeHospitalId", hospitalId)
-          } catch (err) {
+          } catch {
           }
         }
         redirectPath = roleInfo.redirect
@@ -297,7 +278,7 @@ function LoginContent() {
               body: JSON.stringify({ hospitalId }),
             })
             sessionStorage.setItem("activeHospitalId", hospitalId)
-          } catch (err) {
+          } catch {
           }
         }
       }
@@ -337,28 +318,6 @@ function LoginContent() {
     }
   }
 
-  const _beginMfaFlow = async (user: User, roleInfo: { role: DashboardRole; data: any; redirect: string }) => {
-    const phone = extractPhoneNumber(roleInfo.data)
-    if (!phone) {
-      setError(
-        "No phone number found for this account. Please contact your administrator to update your profile before logging in."
-      )
-      await auth.signOut()
-      setLoading(false)
-      return
-    }
-
-    setPendingUser(user)
-    setPendingRole(roleInfo.role)
-    setPendingRedirect(roleInfo.redirect)
-    setPendingPhone(phone)
-    setMfaRequired(true)
-    setOtpCode("")
-    setOtpError("")
-    setSuccess("")
-    setLoading(false)
-    await sendOtpCode(phone)
-  }
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

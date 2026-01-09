@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/apiAuth"
 import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
-import { DocumentFilter, DocumentMetadata } from "@/types/document"
+import { DocumentMetadata } from "@/types/document"
 
 export async function GET(request: NextRequest) {
   try {
@@ -94,7 +94,6 @@ export async function GET(request: NextRequest) {
 
     // Execute query - try with orderBy, fallback without if index missing
     let snapshot
-    let lastDocument: any = null
     try {
       let finalQuery = query.orderBy("uploadedAt", "desc")
       
@@ -106,7 +105,7 @@ export async function GET(request: NextRequest) {
           if (lastDoc.exists) {
             finalQuery = finalQuery.startAfter(lastDoc) as any
           }
-        } catch (cursorError: any) {
+        } catch {
           // Continue without cursor if it fails
         }
       }
@@ -117,12 +116,7 @@ export async function GET(request: NextRequest) {
       }
       
       snapshot = await finalQuery.get()
-      
-      // Get the last document for pagination
-      if (snapshot.docs.length > 0) {
-        lastDocument = snapshot.docs[snapshot.docs.length - 1]
-      }
-    } catch (error: any) {
+    } catch {
       // If orderBy fails (likely missing index), fetch without ordering
       try {
         // Remove orderBy and try again
@@ -151,12 +145,7 @@ export async function GET(request: NextRequest) {
         }
         
         snapshot = await fallbackQuery.get()
-        
-        // Get the last document for pagination (fallback query)
-        if (snapshot.docs.length > 0) {
-          lastDocument = snapshot.docs[snapshot.docs.length - 1]
-        }
-      } catch (fallbackError: any) {
+      } catch {
         return NextResponse.json(
           { error: "Failed to fetch documents. Please check Firestore indexes." },
           { status: 500 }

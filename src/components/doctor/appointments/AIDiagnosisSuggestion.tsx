@@ -37,8 +37,7 @@ export default function AIDiagnosisSuggestion({
               🤖
             </div>
             <div>
-              <h4 className="font-bold text-white text-base">AI Diagnosis Suggestion</h4>
-              <p className="text-slate-300 text-xs">Powered by Groq Llama 3.3 70B</p>
+              <h4 className="font-bold text-white text-base">Diagnosis Suggestion</h4>
             </div>
           </div>
           <button

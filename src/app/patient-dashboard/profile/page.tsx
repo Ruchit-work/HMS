@@ -36,7 +36,7 @@ export default function PatientProfilePage() {
           const data = patientDoc.data() as UserData
           setUserData(data)
         }
-      } catch (error) {
+      } catch {
       } finally {
         setLoading(false)
       }
@@ -104,7 +104,7 @@ export default function PatientProfilePage() {
       setLogoutLoading(true)
       await signOut(auth)
       router.replace("/auth/login?role=patient")
-    } catch (error) {
+    } catch {
       setNotification({ 
         type: "error", 
         message: "Failed to logout. Please try again." 

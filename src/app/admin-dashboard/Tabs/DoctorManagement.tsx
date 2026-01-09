@@ -265,11 +265,11 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 })
                 
                 if (!authDeleteResponse.ok) {
-                    const authError = await authDeleteResponse.json().catch(() => ({}))
+                    await authDeleteResponse.json().catch(() => ({}))
 
                     // Continue with Firestore deletion even if auth deletion fails
                 }
-            } catch (authError) {
+            } catch {
 
                 // Continue with Firestore deletion even if auth deletion fails
             }
@@ -447,10 +447,10 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 })
                 
                 if (!authDeleteResponse.ok) {
-                    const authError = await authDeleteResponse.json().catch(() => ({}))
+                    await authDeleteResponse.json().catch(() => ({}))
 
                 }
-            } catch (authError) {
+            } catch {
 
             }
             

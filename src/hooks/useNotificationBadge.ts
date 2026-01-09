@@ -86,7 +86,7 @@ export function useNotificationBadge({
           setLastViewedAt(timestamp)
         }
       }
-    } catch (error) {
+    } catch {
     }
   }, [storageKey])
 
@@ -97,7 +97,7 @@ export function useNotificationBadge({
     
     try {
       localStorage.setItem(storageKey, now.toString())
-    } catch (error) {
+    } catch {
     }
     
     // Immediately clear the badge

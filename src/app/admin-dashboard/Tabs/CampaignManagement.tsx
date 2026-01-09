@@ -57,7 +57,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       })
       setCampaigns(campaignsData)
       return campaignsData
-    } catch (error) {
+    } catch {
       try {
         const q = query(collection(db, 'campaigns'))
         const snap = await getDocs(q)
@@ -72,7 +72,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
         })
         setCampaigns(campaignsData)
         return campaignsData
-      } catch (fallbackError) {
+      } catch {
         return campaigns
       }
     }
@@ -108,7 +108,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       if (data.success) {
         setCronStatus(data)
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoadingCronStatus(false)
     }
@@ -318,7 +318,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       }
       setEditingId(null)
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (error) {
+    } catch {
     } finally {
       setSaving(false)
     }
@@ -334,7 +334,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
       await reloadCampaigns()
       setSuccessMessage(`✅ Campaign ${next === 'published' ? 'published' : 'unpublished'} successfully!`)
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (error) {
+    } catch {
       setSuccessMessage(`❌ Failed to ${next === 'published' ? 'publish' : 'unpublish'} campaign. Please try again.`)
       setTimeout(() => setSuccessMessage(null), 4000)
     } finally {
