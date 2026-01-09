@@ -34,20 +34,3 @@ export interface MultiHospitalUser {
   updatedAt?: Timestamp | string
 }
 
-/**
- * Helper type for user data with hospital context
- */
-export interface UserWithHospital {
-  user: MultiHospitalUser
-  activeHospital: Hospital | null
-  allHospitals: Hospital[]
-}
-
-/**
- * Branch reference for users
- */
-export interface BranchReference {
-  branchId: string | null
-  branchName?: string
-}
-

@@ -45,28 +45,6 @@ export interface DocumentMetadata {
   isLinkedToAppointment?: boolean
 }
 
-export interface DocumentUploadRequest {
-  patientId: string
-  patientUid: string
-  appointmentId?: string
-  fileType?: DocumentType // Optional, will be auto-detected if not provided
-  specialty?: string // Optional, will be auto-detected or use appointment specialty
-  description?: string
-  tags?: string[]
-}
-
-export interface DocumentFilter {
-  patientId?: string
-  appointmentId?: string
-  fileType?: DocumentType | DocumentType[]
-  specialty?: string
-  dateFrom?: string
-  dateTo?: string
-  uploadedBy?: string
-  searchQuery?: string
-  status?: DocumentStatus
-}
-
 export interface BulkUploadResult {
   success: DocumentMetadata[]
   failed: Array<{
@@ -74,16 +52,4 @@ export interface BulkUploadResult {
     error: string
   }>
 }
-
-export interface DocumentVersion {
-  version: number
-  documentId: string
-  previousVersionId?: string
-  replacedAt: string
-  replacedBy: {
-    uid: string
-    role: "doctor" | "receptionist"
-    name: string
-  }
-}
-
+   

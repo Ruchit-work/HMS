@@ -9,6 +9,48 @@ import { getDoctorHospitalId, getHospitalCollectionPath, getAllActiveHospitals }
 import { detectDocumentType, detectDocumentTypeFromText, detectDocumentTypeEnhanced, detectSpecialty } from "@/utils/documentDetection"
 import { getStorage } from "firebase-admin/storage"
 
+// Button handler registry
+const BUTTON_HANDLERS: Record<string, (from: string) => Promise<void>> = {
+  book_appointment: (from) => startBookingWithFlow(from),
+  help_center: (from) => handleHelpCenter(from),
+  register_yes: (from) => handleRegistrationPrompt(from),
+  booking_confirm: (from) => handleConfirmationButtonClick(from, "confirm"),
+  booking_cancel: (from) => handleConfirmationButtonClick(from, "cancel"),
+  recheckup_pick_date: (from) => handleRecheckupPickDate(from),
+}
+
+// Language helper
+const t = (key: keyof typeof translations, lang: Language = "english"): string => 
+  translations[key]?.[lang] || translations[key]?.english || ""
+
+const lang = (lang: Language, guj: string, eng: string): string => lang === "gujarati" ? guj : eng
+
+// Session helpers
+async function getSession(phone: string): Promise<{ ref: FirebaseFirestore.DocumentReference; data: BookingSession | null }> {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const ref = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const snap = await ref.get()
+  return { ref, data: snap.exists ? (snap.data() as BookingSession) : null }
+}
+
+async function clearSession(phone: string): Promise<void> {
+  const { ref } = await getSession(phone)
+  await ref.delete()
+}
+
+// Message sending with fallback
+async function sendWithFallback(
+  phone: string,
+  buttonResponse: { success: boolean },
+  message: string,
+  fallback?: string
+): Promise<void> {
+  if (!buttonResponse.success) {
+    await sendTextMessage(phone, fallback || message)
+  }
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const mode = searchParams.get("hub.mode")
@@ -59,48 +101,18 @@ export async function POST(req: Request) {
     // Handle button clicks
     if (messageType === "interactive" && message.interactive?.type === "button_reply") {
       const buttonId = message.interactive.button_reply?.id
-      if (buttonId === "book_appointment") {
-        await startBookingWithFlow(from)
-        return NextResponse.json({ success: true })
-      }
-      if (buttonId === "help_center") {
-        await handleHelpCenter(from)
-        return NextResponse.json({ success: true })
-      }
+      if (!buttonId) return NextResponse.json({ success: true })
       
-      if (buttonId === "register_yes") {
-        await handleRegistrationPrompt(from)
-        return NextResponse.json({ success: true })
-      }
-      
-      if (buttonId === "booking_confirm" || buttonId === "booking_cancel") {
-        await handleConfirmationButtonClick(from, buttonId === "booking_confirm" ? "confirm" : "cancel")
-        return NextResponse.json({ success: true })
-      }
-
-      // Handle branch selection buttons
-      if (buttonId.startsWith("branch_")) {
+      if (BUTTON_HANDLERS[buttonId]) {
+        await BUTTON_HANDLERS[buttonId](from)
+      } else if (buttonId.startsWith("branch_")) {
         await handleBranchButtonClick(from, buttonId)
-        return NextResponse.json({ success: true })
-      }
-
-      // Handle date quick buttons (including "date_show_all")
-      if (buttonId.startsWith("date_")) {
+      } else if (buttonId.startsWith("date_")) {
         await handleDateButtonClick(from, buttonId)
-        return NextResponse.json({ success: true })
-      }
-      
-      // Handle time quick buttons
-      if (buttonId.startsWith("time_quick_")) {
+      } else if (buttonId.startsWith("time_quick_")) {
         await handleTimeButtonClick(from, buttonId)
-        return NextResponse.json({ success: true })
       }
-      
-      // Handle re-checkup pick date button
-      if (buttonId === "recheckup_pick_date") {
-        await handleRecheckupPickDate(from)
-        return NextResponse.json({ success: true })
-      }
+      return NextResponse.json({ success: true })
     }
 
     // Handle list selections (date/time pickers)
@@ -116,63 +128,31 @@ export async function POST(req: Request) {
       const trimmedText = text.trim().toLowerCase()
       
       // Check for greetings FIRST (before booking conversation check)
-      // This ensures greetings always show, even if there's an existing booking session
       const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
-      if (greetings.some(greeting => trimmedText === greeting || trimmedText.startsWith(greeting + " "))) {
-        // Clear any existing booking session when greeting
-        const db = admin.firestore()
-        const normalizedPhone = formatPhoneNumber(from)
-        const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-        const sessionDoc = await sessionRef.get()
-        if (sessionDoc.exists) {
-          await sessionRef.delete()
-        }
+      if (greetings.some(g => trimmedText === g || trimmedText.startsWith(g + " "))) {
+        await clearSession(from)
         await handleGreeting(from)
         return NextResponse.json({ success: true })
       }
       
-      // Check for cancel/stop keywords even when not in booking (to acknowledge the command)
-      const cancelKeywords = [
-        "cancel", "stop", "abort", "quit", "exit", "no", "nevermind", 
-        "never mind", "don't", "dont", "skip", "end", "finish"
-      ]
-      if (cancelKeywords.some(keyword => trimmedText === keyword || trimmedText.includes(keyword))) {
-        // Check if there's a booking session to cancel
-        const db = admin.firestore()
-        const normalizedPhone = formatPhoneNumber(from)
-        const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-        const sessionDoc = await sessionRef.get()
-        
-        if (sessionDoc.exists) {
-          // Cancel existing booking session
-          await sessionRef.delete()
-          await sendTextMessage(
-            from,
-            "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
-          )
-        } else {
-          // No active booking, just acknowledge
-          await sendTextMessage(
-            from,
-            "✅ Understood. No active booking to cancel.\n\nHow can I help you today? Type 'hi' to see options or 'Book' to start booking an appointment."
-          )
-        }
+      // Check for cancel/stop keywords
+      const cancelKeywords = ["cancel", "stop", "abort", "quit", "exit", "no", "nevermind", "never mind", "don't", "dont", "skip", "end", "finish"]
+      if (cancelKeywords.some(k => trimmedText === k || trimmedText.includes(k))) {
+        const { data } = await getSession(from)
+        await clearSession(from)
+        await sendTextMessage(from, data 
+          ? "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
+          : "✅ Understood. No active booking to cancel.\n\nHow can I help you today? Type 'hi' to see options or 'Book' to start booking an appointment.")
         return NextResponse.json({ success: true })
       }
       
       // Check if user is in booking conversation
       const isInBooking = await handleBookingConversation(from, text)
       if (!isInBooking) {
-        // Check for "thanks" message
-        if (trimmedText === "thanks" || trimmedText === "thank you" || trimmedText === "thankyou" || trimmedText.includes("thank")) {
-          await sendTextMessage(
-            from,
-            "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥"
-          )
+        if (trimmedText.includes("thank")) {
+          await sendTextMessage(from, "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥")
           return NextResponse.json({ success: true })
         }
-        
-        // Not in booking, send welcome button
         await handleIncomingText(from)
       }
       return NextResponse.json({ success: true })
@@ -232,32 +212,18 @@ export async function POST(req: Request) {
 async function handleGreeting(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
-  
-  // Check if patient exists
   const patient = await findPatientByPhone(db, normalizedPhone)
   
   if (!patient) {
-    // Unknown number - ask for registration
     const buttonResponse = await sendMultiButtonMessage(
       phone,
       "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?",
-      [
-        { id: "register_yes", title: "✅ Yes, Register" },
-        { id: "help_center", title: "🆘 Help Center" },
-      ],
+      [{ id: "register_yes", title: "✅ Yes, Register" }, { id: "help_center", title: "🆘 Help Center" }],
       "Harmony Medical Services"
     )
-
-    if (!buttonResponse.success) {
-
-      // Fallback to text message
-      await sendTextMessage(
-        phone,
-        "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?\n\nReply 'Yes' to register or 'Help' for assistance."
-      )
-    }
+    await sendWithFallback(phone, buttonResponse, "", 
+      "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?\n\nReply 'Yes' to register or 'Help' for assistance.")
   } else {
-    // Registered patient - greet and ask about booking
     const buttonResponse = await sendButtonMessage(
       phone,
       "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?",
@@ -265,15 +231,8 @@ async function handleGreeting(phone: string) {
       "book_appointment",
       "📅 Book Appointment"
     )
-
-    if (!buttonResponse.success) {
-
-      // Fallback to text message
-      await sendTextMessage(
-        phone,
-        "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?\n\nType 'Book' to book an appointment or 'Help' for assistance."
-      )
-    }
+    await sendWithFallback(phone, buttonResponse, "",
+      "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?\n\nType 'Book' to book an appointment or 'Help' for assistance.")
   }
 }
 
@@ -287,7 +246,6 @@ async function handleHelpCenter(phone: string) {
 }
 
 async function handleIncomingText(phone: string) {
-  // Send button message instead of Flow directly
   const buttonResponse = await sendButtonMessage(
     phone,
     "Hi! 👋 Welcome to Harmony Medical Services.\n\nWould you like to book an appointment? Click the button below to get started.",
@@ -295,14 +253,8 @@ async function handleIncomingText(phone: string) {
     "book_appointment",
     "Book Appointment"
   )
-
-  if (!buttonResponse.success) {
-
-    await sendTextMessage(
-      phone,
-      "Hi! 👋 Welcome to Harmony Medical Services.\n\nTo book an appointment, please contact our reception at +91-XXXXXXXXXX."
-    )
-  }
+  await sendWithFallback(phone, buttonResponse, "",
+    "Hi! 👋 Welcome to Harmony Medical Services.\n\nTo book an appointment, please contact our reception at +91-XXXXXXXXXX.")
 }
 
 // Translation helper for multi-language support
@@ -343,7 +295,7 @@ const translations: Translations = {
 }
 
 function getTranslation(key: keyof typeof translations, language: Language = "english"): string {
-  return translations[key]?.[language] || translations[key]?.english || ""
+  return t(key, language)
 }
 
 async function moveToBranchSelection(
@@ -391,10 +343,9 @@ async function moveToBranchSelection(
   }
 
   if (!hospitalId) {
-    const errorMsg = language === "gujarati"
-      ? "❌ હોસ્પિટલ મળી નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો."
-      : "❌ Hospital not found. Please contact reception."
-    await sendTextMessage(phone, errorMsg)
+    await sendTextMessage(phone, lang(language,
+      "❌ હોસ્પિટલ મળી નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો.",
+      "❌ Hospital not found. Please contact reception."))
     return
   }
 
@@ -411,22 +362,16 @@ async function moveToBranchSelection(
   }))
 
   if (branches.length === 0) {
-    const errorMsg = language === "gujarati"
-      ? "❌ કોઈ બ્રાન્ચ મળ્યું નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો."
-      : "❌ No branches found. Please contact reception."
-    await sendTextMessage(phone, errorMsg)
+    await sendTextMessage(phone, lang(language, 
+      "❌ કોઈ બ્રાન્ચ મળ્યું નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો.",
+      "❌ No branches found. Please contact reception."))
     return
   }
 
-  await sessionRef.update({
-    state: "selecting_branch",
-    updatedAt: new Date().toISOString(),
-  })
-
-  const introMsg = language === "gujarati"
-    ? "🏥 કૃપા કરીને તમારી બ્રાન્ચ પસંદ કરો:"
-    : "🏥 Please select your branch:"
-  await sendTextMessage(phone, introMsg)
+  await sessionRef.update({ state: "selecting_branch", updatedAt: new Date().toISOString() })
+  await sendTextMessage(phone, lang(language, 
+    "🏥 કૃપા કરીને તમારી બ્રાન્ચ પસંદ કરો:",
+    "🏥 Please select your branch:"))
 
   // Create branch selection buttons
   const branchButtons = branches.map((branch: any) => {
@@ -450,9 +395,7 @@ async function moveToBranchSelection(
 
   await sendMultiButtonMessage(
     phone,
-    language === "gujarati"
-      ? "તમારી બ્રાન્ચ પસંદ કરો અથવા 'Next' પર ક્લિક કરો:"
-      : "Select your branch or click 'Next' to use default:",
+    lang(language, "તમારી બ્રાન્ચ પસંદ કરો અથવા 'Next' પર ક્લિક કરો:", "Select your branch or click 'Next' to use default:"),
     branchButtons,
     "Harmony Medical Services"
   )
@@ -522,32 +465,18 @@ async function sendConfirmationButtons(
     hour12: true,
   })
 
-  const message =
-    language === "gujarati"
-      ? `📋 *અપોઇન્ટમેન્ટની વિગતો*\n\n📅 તારીખ: ${dateDisplay}\n🕒 સમય: ${timeDisplay}\n\nકૃપા કરીને ખાતરી કરો. ડૉક્ટર રિસેપ્શન દ્વારા સોંપવામાં આવશે.`
-      : `📋 *Appointment Details*\n\n📅 Date: ${dateDisplay}\n🕒 Time: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception.`
+  const message = lang(language,
+    `📋 *અપોઇન્ટમેન્ટની વિગતો*\n\n📅 તારીખ: ${dateDisplay}\n🕒 સમય: ${timeDisplay}\n\nકૃપા કરીને ખાતરી કરો. ડૉક્ટર રિસેપ્શન દ્વારા સોંપવામાં આવશે.`,
+    `📋 *Appointment Details*\n\n📅 Date: ${dateDisplay}\n🕒 Time: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception.`)
 
   const buttons = [
-    {
-      id: "booking_confirm",
-      title: language === "gujarati" ? "✅ ખાતરી કરો" : "✅ Confirm",
-    },
-    {
-      id: "booking_cancel",
-      title: language === "gujarati" ? "❌ રદ કરો" : "❌ Cancel",
-    },
+    { id: "booking_confirm", title: lang(language, "✅ ખાતરી કરો", "✅ Confirm") },
+    { id: "booking_cancel", title: lang(language, "❌ રદ કરો", "❌ Cancel") },
   ]
 
   const buttonResponse = await sendMultiButtonMessage(phone, message, buttons, "Harmony Medical Services")
-
-  if (!buttonResponse.success) {
-
-    const fallback =
-      language === "gujarati"
-        ? `${message}\n\nકૃપા કરીને "confirm" અથવા "cancel" લખી જવાબ આપો.`
-        : `${message}\n\nPlease reply with "confirm" or "cancel".`
-    await sendTextMessage(phone, fallback)
-  }
+  await sendWithFallback(phone, buttonResponse, message,
+    lang(language, `${message}\n\nકૃપા કરીને "confirm" અથવા "cancel" લખી જવાબ આપો.`, `${message}\n\nPlease reply with "confirm" or "cancel".`))
 }
 
 async function processBookingConfirmation(
@@ -562,20 +491,16 @@ async function processBookingConfirmation(
 
   if (action === "cancel") {
     await sessionRef.delete()
-    const msg =
-      language === "gujarati"
-        ? "❌ બુકિંગ રદ કરાયું. તમે જ્યારે ઇચ્છો ત્યારે ફરીથી 'Book Appointment' લખીને શરૂ કરી શકો છો."
-        : "❌ Booking cancelled. You can start again anytime by typing 'Book Appointment'."
-    await sendTextMessage(phone, msg)
+    await sendTextMessage(phone, lang(language,
+      "❌ બુકિંગ રદ કરાયું. તમે જ્યારે ઇચ્છો ત્યારે ફરીથી 'Book Appointment' લખીને શરૂ કરી શકો છો.",
+      "❌ Booking cancelled. You can start again anytime by typing 'Book Appointment'."))
     return
   }
 
   if (!session.appointmentDate || !session.appointmentTime) {
-    const errorMsg =
-      language === "gujarati"
-        ? "❌ તારીખ અથવા સમય મળ્યો નથી. કૃપા કરીને ફરીથી શરૂઆત કરો."
-        : "❌ Missing date or time. Please start over."
-    await sendTextMessage(phone, errorMsg)
+    await sendTextMessage(phone, lang(language,
+      "❌ તારીખ અથવા સમય મળ્યો નથી. કૃપા કરીને ફરીથી શરૂઆત કરો.",
+      "❌ Missing date or time. Please start over."))
     await sessionRef.delete()
     return
   }
@@ -775,19 +700,15 @@ async function processBookingConfirmation(
       await sessionRef.update({ state: "selecting_time" })
     } else if (error.message?.startsWith("DATE_BLOCKED:")) {
       const reason = error.message.replace("DATE_BLOCKED: ", "")
-      const errorMsg = language === "gujarati"
-        ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
-        : `❌ *Date Not Available*\n\n${reason}\n\nPlease select another date.`
-      await sendTextMessage(phone, errorMsg)
+      await sendTextMessage(phone, lang(language,
+        `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`,
+        `❌ *Date Not Available*\n\n${reason}\n\nPlease select another date.`))
       await sendDatePicker(phone, assignedDoctorId, language)
       await sessionRef.update({ state: "selecting_date" })
     } else {
-      await sendTextMessage(
-        phone,
-        language === "gujarati"
-          ? "❌ બુકિંગ દરમિયાન ભૂલ આવી. કૃપા કરીને થોડા સમય પછી ફરી પ્રયાસ કરો."
-          : "❌ We hit an error while booking. Please try again shortly."
-      )
+      await sendTextMessage(phone, lang(language,
+        "❌ બુકિંગ દરમિયાન ભૂલ આવી. કૃપા કરીને થોડા સમય પછી ફરી પ્રયાસ કરો.",
+        "❌ We hit an error while booking. Please try again shortly."))
       await sessionRef.delete()
     }
   }
@@ -1380,12 +1301,9 @@ async function handleBranchSelection(
 ): Promise<boolean> {
   const language = session.language || "english"
   
-  // This function handles text input for branch selection (fallback)
-  // But typically branch selection is done via buttons
-  const errorMsg = language === "gujarati"
-    ? "❌ કૃપા કરીને ઉપરની બટનોમાંથી બ્રાન્ચ પસંદ કરો."
-    : "❌ Please select a branch from the buttons above."
-  await sendTextMessage(phone, errorMsg)
+  await sendTextMessage(phone, lang(language,
+    "❌ કૃપા કરીને ઉપરની બટનોમાંથી બ્રાન્ચ પસંદ કરો.",
+    "❌ Please select a branch from the buttons above."))
   
   // Re-send branch selection
   await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)

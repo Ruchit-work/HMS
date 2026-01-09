@@ -30,6 +30,14 @@ import BranchManagement from "./Tabs/BranchManagement"
 import AdminProtected from "@/components/AdminProtected"
 import PieChart, { DEFAULT_COLORS, DEFAULT_COLORS_ALT } from "./components/PieChart"
 import StatCard from "./components/StatCard"
+import TabButton from "@/components/admin/TabButton"
+import SubTabNavigation from "@/components/admin/SubTabNavigation"
+import {
+  calculateAllTrends,
+  calculateRevenue,
+  calculateCommonConditions,
+  calculateMostPrescribedMedicines
+} from "@/utils/dashboardCalculations"
 
 interface UserData {
   id: string;
@@ -239,24 +247,10 @@ export default function AdminDashboard() {
         new Date(apt.appointmentDate).toDateString() === today
       ).length
 
-      // Calculate revenue
-      const totalRevenue = allAppointments
-        .filter(apt => apt.status === "completed")
-        .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
-
-      // Monthly revenue (last 30 days)
-      const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      const monthlyRevenue = allAppointments
-        .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= thirtyDaysAgo)
-        .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
-
-      // Weekly revenue (last 7 days)
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-      const weeklyRevenue = allAppointments
-        .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= sevenDaysAgo)
-        .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
+      // Calculate revenue using utility functions
+      const totalRevenue = calculateRevenue(allAppointments, Infinity)
+      const monthlyRevenue = calculateRevenue(allAppointments, 30)
+      const weeklyRevenue = calculateRevenue(allAppointments, 7)
 
       // Get recent appointments (last 5) - use hospital-scoped collection
       const recentAppointmentsQuery = query(
@@ -270,205 +264,10 @@ export default function AdminDashboard() {
         ...doc.data() 
       } as AppointmentType))
 
-      // Aggregate appointments for trend views
-      const parsedAppointments = allAppointments
-        .map((apt) => {
-          if (!apt.appointmentDate) return null
-          const dt = new Date(apt.appointmentDate)
-          if (Number.isNaN(dt.getTime())) return null
-          dt.setHours(0, 0, 0, 0)
-          return dt
-        })
-        .filter((value): value is Date => Boolean(value))
-
-      const now = new Date()
-      now.setHours(0, 0, 0, 0)
-
-      // Weekly: current week (Mon-Sun)
-      const weeklyTrend: TrendPoint[] = []
-      let weeklyTotal = 0
-      const startOfWeek = new Date(now)
-      const dayOfWeek = startOfWeek.getDay() // Sun=0
-      const distanceToMonday = (dayOfWeek + 6) % 7
-      startOfWeek.setDate(startOfWeek.getDate() - distanceToMonday)
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(endOfWeek.getDate() + 6)
-
-      for (let offset = 0; offset < 7; offset++) {
-        const currentDay = new Date(startOfWeek)
-        currentDay.setDate(startOfWeek.getDate() + offset)
-        const nextDay = new Date(currentDay)
-        nextDay.setDate(currentDay.getDate() + 1)
-        const label = currentDay.toLocaleDateString("en-US", { weekday: "short" })
-        const fullLabel = currentDay.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-        const count = parsedAppointments.filter((dt) => dt >= currentDay && dt < nextDay).length
-        weeklyTotal += count
-        weeklyTrend.push({ label, fullLabel, count })
-      }
-
-      // Monthly: current month segmented into buckets
-      const monthlyTrend: TrendPoint[] = []
-      let monthlyTotal = 0
-      const currentYear = now.getFullYear()
-      const currentMonth = now.getMonth()
-      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
-      const bucketRanges: Array<[number, number]> = [
-        [1, 5],
-        [6, 10],
-        [11, 15],
-        [16, 20],
-        [21, 25],
-        [26, daysInMonth]
-      ]
-
-      bucketRanges.forEach(([startDay, endDay]) => {
-        if (startDay > daysInMonth) {
-          return
-        }
-        const adjustedEndDay = Math.min(endDay, daysInMonth)
-        const bucketLabel = `${startDay}-${adjustedEndDay}`
-        const startDate = new Date(currentYear, currentMonth, startDay)
-        const endDate = new Date(currentYear, currentMonth, adjustedEndDay + 1)
-        const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
-        monthlyTotal += count
-        monthlyTrend.push({
-          label: bucketLabel,
-          fullLabel: `${bucketLabel} ${startDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`,
-          count
-        })
-      })
-
-      // Yearly: each month of current year
-      const yearlyTrend: TrendPoint[] = []
-      let yearlyTotal = 0
-      for (let month = 0; month < 12; month++) {
-        const startDate = new Date(currentYear, month, 1)
-        const endDate = new Date(currentYear, month + 1, 1)
-        const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
-        yearlyTotal += count
-        yearlyTrend.push({
-          label: startDate.toLocaleDateString("en-US", { month: "short" }),
-          fullLabel: startDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-          count
-        })
-      }
-
-      // Calculate common conditions from chief complaints
-      const conditionCounts: { [key: string]: number } = {}
-      allAppointments.forEach(apt => {
-        const complaint = apt.chiefComplaint?.toLowerCase() || ''
-        
-        // Extract common conditions from complaints
-        const conditions = [
-          'fever', 'cough', 'headache', 'pain', 'cold', 'flu', 'diabetes', 'hypertension',
-          'asthma', 'depression', 'anxiety', 'back pain', 'chest pain', 'stomach pain',
-          'skin problem', 'allergy', 'infection', 'blood pressure', 'heart', 'lung',
-          'kidney', 'liver', 'eye', 'ear', 'nose', 'throat', 'dental', 'mental health'
-        ]
-        
-        conditions.forEach(condition => {
-          if (complaint.includes(condition)) {
-            conditionCounts[condition] = (conditionCounts[condition] || 0) + 1
-          }
-        })
-      })
-
-      const commonConditions = Object.entries(conditionCounts)
-        .map(([condition, count]) => ({ condition, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 8) // Top 8 conditions
-
-      // Helper function to extract medicine names from prescription text
-      const extractMedicines = (medicineText: string | undefined): string[] => {
-        if (!medicineText || medicineText.trim() === '') return []
-        
-        const medicines: string[] = []
-        const lines = medicineText.split('\n').filter(line => line.trim())
-        
-        for (const line of lines) {
-          const lowerLine = line.toLowerCase().trim()
-          if (lowerLine.includes('prescription') || 
-              lowerLine.includes('advice') || 
-              lowerLine.includes('diet') ||
-              lowerLine.includes('follow') ||
-              lowerLine.includes('next') ||
-              lowerLine.includes('visit') ||
-              lowerLine.includes('days') && !/[a-zA-Z]/.test(lowerLine.replace(/\d+\s*days?/gi, '')) ||
-              lowerLine.startsWith('•') && (lowerLine.includes('times') || lowerLine.includes('daily'))) {
-            continue
-          }
-          
-          let medicineName = ''
-          const emojiMatch = line.match(/\*[1-9]️⃣\s+(.+?)\*/)
-          if (emojiMatch && emojiMatch[1]) {
-            medicineName = emojiMatch[1]
-          } else {
-            const numberMatch = line.match(/^\d+[.)]\s*(.+?)(?:\s*[-–—]|$)/)
-            if (numberMatch && numberMatch[1]) {
-              medicineName = numberMatch[1]
-            } else if (/^[A-Z][a-z]+/.test(line.trim())) {
-              medicineName = line.trim()
-            }
-          }
-          
-          if (medicineName) {
-            const cleanName = medicineName
-              .replace(/\d+(?:\.\d+)?\s*(?:mg|g|ml|mcg|microgram|gram|milligram|capsule|tablet|tab|cap|drops?|syrup|injection|amp|vial)/gi, '')
-              .replace(/\b(?:daily|once|twice|thrice|three times|four times|\d+\s*times|after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime)\b/gi, '')
-              .replace(/\b(?:for|duration|continue|take)\s+\d+\s*(?:days?|weeks?|months?|hours?)\b/gi, '')
-              .replace(/\b(?:after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime|times|per day|as directed|as needed)\b/gi, '')
-              .replace(/\[.*?\]/g, '')
-              .replace(/\(.*?\)/g, '')
-              .replace(/\s*[-–—]\s*/g, ' ')
-              .replace(/\s*:\s*/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-            
-            const words = cleanName.split(/\s+/).filter(word => {
-              const lowerWord = word.toLowerCase()
-              return !['take', 'give', 'use', 'apply', 'drink', 'eat', 'with', 'after', 'before'].includes(lowerWord) &&
-                     word.length > 1 &&
-                     /[a-zA-Z]/.test(word)
-            })
-            
-            if (words.length > 0) {
-              const name = words.slice(0, 3).join(' ').trim()
-              if (name && name.length > 2 && name.length < 50) {
-                medicines.push(name)
-              }
-            }
-          }
-        }
-        
-        return medicines
-      }
-
-      // Calculate most prescribed medicines
-      const medicineCounts: Record<string, number> = {}
-      let totalPrescriptions = 0
-      
-      allAppointments.forEach(apt => {
-        if ((apt as any).medicine && apt.status === 'completed') {
-          const medicines = extractMedicines((apt as any).medicine)
-          medicines.forEach(medicine => {
-            const normalizedName = medicine
-              .split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-              .join(' ')
-            medicineCounts[normalizedName] = (medicineCounts[normalizedName] || 0) + 1
-            totalPrescriptions++
-          })
-        }
-      })
-
-      const mostPrescribedMedicines = Object.entries(medicineCounts)
-        .map(([medicineName, prescriptionCount]) => ({
-          medicineName,
-          prescriptionCount,
-          percentage: totalPrescriptions > 0 ? (prescriptionCount / totalPrescriptions) * 100 : 0
-        }))
-        .sort((a, b) => b.prescriptionCount - a.prescriptionCount)
-        .slice(0, 10)
+      // Calculate trends and analytics using utility functions
+      const trends = calculateAllTrends(allAppointments)
+      const commonConditions = calculateCommonConditions(allAppointments)
+      const mostPrescribedMedicines = calculateMostPrescribedMedicines(allAppointments)
 
       setStats({
         totalPatients,
@@ -480,16 +279,8 @@ export default function AdminDashboard() {
         totalRevenue,
         monthlyRevenue,
         weeklyRevenue,
-        appointmentTrends: {
-          weekly: weeklyTrend,
-          monthly: monthlyTrend,
-          yearly: yearlyTrend
-        },
-        appointmentTotals: {
-          weekly: weeklyTotal,
-          monthly: monthlyTotal,
-          yearly: yearlyTotal
-        },
+        appointmentTrends: trends,
+        appointmentTotals: trends.totals,
         commonConditions,
         mostPrescribedMedicines
       })
@@ -568,227 +359,17 @@ export default function AdminDashboard() {
       new Date(apt.appointmentDate).toDateString() === today
     ).length
 
-    // Calculate revenue
-    const totalRevenue = filteredAppointments
-      .filter(apt => apt.status === "completed")
-      .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
-
-    // Monthly revenue (last 30 days)
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    const monthlyRevenue = filteredAppointments
-      .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= thirtyDaysAgo)
-      .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
-
-    // Weekly revenue (last 7 days)
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    const weeklyRevenue = filteredAppointments
-      .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= sevenDaysAgo)
-      .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
-
-    // Aggregate appointments for trend views
-    const parsedAppointments = filteredAppointments
-      .map((apt) => {
-        if (!apt.appointmentDate) return null
-        const dt = new Date(apt.appointmentDate)
-        if (Number.isNaN(dt.getTime())) return null
-        dt.setHours(0, 0, 0, 0)
-        return dt
-      })
-      .filter((value): value is Date => Boolean(value))
-
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-
-    // Weekly: current week (Mon-Sun)
-    const weeklyTrend: TrendPoint[] = []
-    let weeklyTotal = 0
-    const startOfWeek = new Date(now)
-    const dayOfWeek = startOfWeek.getDay()
-    const distanceToMonday = (dayOfWeek + 6) % 7
-    startOfWeek.setDate(startOfWeek.getDate() - distanceToMonday)
-    const endOfWeek = new Date(startOfWeek)
-    endOfWeek.setDate(endOfWeek.getDate() + 6)
-
-    for (let offset = 0; offset < 7; offset++) {
-      const currentDay = new Date(startOfWeek)
-      currentDay.setDate(startOfWeek.getDate() + offset)
-      const nextDay = new Date(currentDay)
-      nextDay.setDate(currentDay.getDate() + 1)
-      const label = currentDay.toLocaleDateString("en-US", { weekday: "short" })
-      const fullLabel = currentDay.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-      const count = parsedAppointments.filter((dt) => dt >= currentDay && dt < nextDay).length
-      weeklyTotal += count
-      weeklyTrend.push({ label, fullLabel, count })
-    }
-
-    // Monthly: current month segmented into buckets
-    const monthlyTrend: TrendPoint[] = []
-    let monthlyTotal = 0
-    const currentYear = now.getFullYear()
-    const currentMonth = now.getMonth()
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
-    const bucketRanges: Array<[number, number]> = [
-      [1, 5],
-      [6, 10],
-      [11, 15],
-      [16, 20],
-      [21, 25],
-      [26, daysInMonth]
-    ]
-
-    bucketRanges.forEach(([startDay, endDay]) => {
-      if (startDay > daysInMonth) {
-        return
-      }
-      const adjustedEndDay = Math.min(endDay, daysInMonth)
-      const bucketLabel = `${startDay}-${adjustedEndDay}`
-      const startDate = new Date(currentYear, currentMonth, startDay)
-      const endDate = new Date(currentYear, currentMonth, adjustedEndDay + 1)
-      const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
-      monthlyTotal += count
-      monthlyTrend.push({
-        label: bucketLabel,
-        fullLabel: `${bucketLabel} ${startDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`,
-        count
-      })
-    })
-
-    // Yearly: each month of current year
-    const yearlyTrend: TrendPoint[] = []
-    let yearlyTotal = 0
-    for (let month = 0; month < 12; month++) {
-      const startDate = new Date(currentYear, month, 1)
-      const endDate = new Date(currentYear, month + 1, 1)
-      const count = parsedAppointments.filter((dt) => dt >= startDate && dt < endDate).length
-      yearlyTotal += count
-      yearlyTrend.push({
-        label: startDate.toLocaleDateString("en-US", { month: "short" }),
-        fullLabel: startDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-        count
-      })
-    }
-
-    // Calculate common conditions from chief complaints
-    const conditionCounts: { [key: string]: number } = {}
-    filteredAppointments.forEach(apt => {
-      const complaint = apt.chiefComplaint?.toLowerCase() || ''
-      
-      const conditions = [
-        'fever', 'cough', 'headache', 'pain', 'cold', 'flu', 'diabetes', 'hypertension',
-        'asthma', 'depression', 'anxiety', 'back pain', 'chest pain', 'stomach pain',
-        'skin problem', 'allergy', 'infection', 'blood pressure', 'heart', 'lung',
-        'kidney', 'liver', 'eye', 'ear', 'nose', 'throat', 'dental', 'mental health'
-      ]
-      
-      conditions.forEach(condition => {
-        if (complaint.includes(condition)) {
-          conditionCounts[condition] = (conditionCounts[condition] || 0) + 1
-        }
-      })
-    })
-
-    const commonConditions = Object.entries(conditionCounts)
-      .map(([condition, count]) => ({ condition, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8)
-
-    // Helper function to extract medicine names from prescription text
-    const extractMedicines = (medicineText: string | undefined): string[] => {
-      if (!medicineText || medicineText.trim() === '') return []
-      
-      const medicines: string[] = []
-      const lines = medicineText.split('\n').filter(line => line.trim())
-      
-      for (const line of lines) {
-        const lowerLine = line.toLowerCase().trim()
-        if (lowerLine.includes('prescription') || 
-            lowerLine.includes('advice') || 
-            lowerLine.includes('diet') ||
-            lowerLine.includes('follow') ||
-            lowerLine.includes('next') ||
-            lowerLine.includes('visit') ||
-            lowerLine.includes('days') && !/[a-zA-Z]/.test(lowerLine.replace(/\d+\s*days?/gi, '')) ||
-            lowerLine.startsWith('•') && (lowerLine.includes('times') || lowerLine.includes('daily'))) {
-          continue
-        }
-        
-        let medicineName = ''
-        const emojiMatch = line.match(/\*[1-9]️⃣\s+(.+?)\*/)
-        if (emojiMatch && emojiMatch[1]) {
-          medicineName = emojiMatch[1]
-        } else {
-          const numberMatch = line.match(/^\d+[.)]\s*(.+?)(?:\s*[-–—]|$)/)
-          if (numberMatch && numberMatch[1]) {
-            medicineName = numberMatch[1]
-          } else if (/^[A-Z][a-z]+/.test(line.trim())) {
-            medicineName = line.trim()
-          }
-        }
-        
-        if (medicineName) {
-          const cleanName = medicineName
-            .replace(/\d+(?:\.\d+)?\s*(?:mg|g|ml|mcg|microgram|gram|milligram|capsule|tablet|tab|cap|drops?|syrup|injection|amp|vial)/gi, '')
-            .replace(/\b(?:daily|once|twice|thrice|three times|four times|\d+\s*times|after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime)\b/gi, '')
-            .replace(/\b(?:for|duration|continue|take)\s+\d+\s*(?:days?|weeks?|months?|hours?)\b/gi, '')
-            .replace(/\b(?:after|before|with|meals?|food|empty stomach|morning|evening|night|bedtime|times|per day|as directed|as needed)\b/gi, '')
-            .replace(/\[.*?\]/g, '')
-            .replace(/\(.*?\)/g, '')
-            .replace(/\s*[-–—]\s*/g, ' ')
-            .replace(/\s*:\s*/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-          
-          const words = cleanName.split(/\s+/).filter(word => {
-            const lowerWord = word.toLowerCase()
-            return !['take', 'give', 'use', 'apply', 'drink', 'eat', 'with', 'after', 'before'].includes(lowerWord) &&
-                   word.length > 1 &&
-                   /[a-zA-Z]/.test(word)
-          })
-          
-          if (words.length > 0) {
-            const name = words.slice(0, 3).join(' ').trim()
-            if (name && name.length > 2 && name.length < 50) {
-              medicines.push(name)
-            }
-          }
-        }
-      }
-      
-      return medicines
-    }
-
-    // Calculate most prescribed medicines
-    const medicineCounts: Record<string, number> = {}
-    let totalPrescriptions = 0
-    
-    filteredAppointments.forEach(apt => {
-      if ((apt as any).medicine && apt.status === 'completed') {
-        const medicines = extractMedicines((apt as any).medicine)
-        medicines.forEach(medicine => {
-          const normalizedName = medicine
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ')
-          medicineCounts[normalizedName] = (medicineCounts[normalizedName] || 0) + 1
-          totalPrescriptions++
-        })
-      }
-    })
-
-    const mostPrescribedMedicines = Object.entries(medicineCounts)
-      .map(([medicineName, prescriptionCount]) => ({
-        medicineName,
-        prescriptionCount,
-        percentage: totalPrescriptions > 0 ? (prescriptionCount / totalPrescriptions) * 100 : 0
-      }))
-      .sort((a, b) => b.prescriptionCount - a.prescriptionCount)
-      .slice(0, 10)
+    // Calculate revenue and trends using utility functions
+    const totalRevenue = calculateRevenue(filteredAppointments, Infinity)
+    const monthlyRevenue = calculateRevenue(filteredAppointments, 30)
+    const weeklyRevenue = calculateRevenue(filteredAppointments, 7)
+    const trends = calculateAllTrends(filteredAppointments)
+    const commonConditions = calculateCommonConditions(filteredAppointments)
+    const mostPrescribedMedicines = calculateMostPrescribedMedicines(filteredAppointments)
 
     return {
       totalPatients,
-      totalDoctors: stats.totalDoctors, // Doctors count doesn't change with branch filter
+      totalDoctors: stats.totalDoctors,
       totalAppointments,
       todayAppointments,
       completedAppointments,
@@ -796,16 +377,8 @@ export default function AdminDashboard() {
       totalRevenue,
       monthlyRevenue,
       weeklyRevenue,
-      appointmentTrends: {
-        weekly: weeklyTrend,
-        monthly: monthlyTrend,
-        yearly: yearlyTrend
-      },
-      appointmentTotals: {
-        weekly: weeklyTotal,
-        monthly: monthlyTotal,
-        yearly: yearlyTotal
-      },
+      appointmentTrends: trends,
+      appointmentTotals: trends.totals,
       commonConditions,
       mostPrescribedMedicines
     }
@@ -1137,247 +710,160 @@ export default function AdminDashboard() {
         {/* Navigation Menu */}
         <nav className="flex-1 flex flex-col mt-4 px-3">
           <div className="flex-1 space-y-1">
-            {/* Dashboard Overview */}
-            <div className="relative">
-              <button 
-                onClick={() => { setActiveTab("overview"); setSidebarOpen(false) }} 
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                  activeTab === "overview" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <div className={`p-1.5 rounded-md ${activeTab === "overview" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
-                  </svg>
-                </div>
-                <span className="font-medium text-sm">Dashboard Overview</span>
-              </button>
-              <NotificationBadge 
-                count={overviewBadge.displayCount}
-                position="top-right"
-              />
-            </div>
+            <TabButton
+              id="overview"
+              activeTab={activeTab}
+              onClick={() => { setActiveTab("overview"); setSidebarOpen(false) }}
+              icon={
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                </svg>
+              }
+              label="Dashboard Overview"
+              badgeCount={overviewBadge.displayCount}
+            />
             
-            {/* Patients */}
-            <div className="relative">
-              <button 
-                onClick={() => { setActiveTab("patients"); setSidebarOpen(false) }} 
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                  activeTab === "patients" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <div className={`p-1.5 rounded-md ${activeTab === "patients" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                <span className="font-medium text-sm">Patients</span>
-              </button>
-              <NotificationBadge 
-                count={patientsBadge.displayCount} 
-                position="top-right" 
-                size="sm" 
-                color="blue" 
-                animate 
-              />
-            </div>
+            <TabButton
+              id="patients"
+              activeTab={activeTab}
+              onClick={() => { setActiveTab("patients"); setSidebarOpen(false) }}
+              icon={
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              }
+              label="Patients"
+              badgeCount={patientsBadge.displayCount}
+              badgeProps={{ size: "sm", color: "blue", animate: true }}
+            />
             
-            {/* Doctors */}
-            <button 
-              onClick={() => { setActiveTab("doctors"); setSidebarOpen(false) }} 
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                activeTab === "doctors" 
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <div className={`p-1.5 rounded-md ${activeTab === "doctors" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+            <TabButton
+              id="doctors"
+              activeTab={activeTab}
+              onClick={() => { setActiveTab("doctors"); setSidebarOpen(false) }}
+              icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-              </div>
-              <span className="font-medium text-sm">Doctors</span>
-            </button>
+              }
+              label="Doctors"
+            />
 
-            {/* Campaigns - Only for Regular Admins */}
             {!isSuperAdmin && (
-              <button 
-                onClick={() => { setActiveTab("campaigns"); setSidebarOpen(false) }} 
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                  activeTab === "campaigns" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <div className={`p-1.5 rounded-md ${activeTab === "campaigns" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+              <TabButton
+                id="campaigns"
+                activeTab={activeTab}
+                onClick={() => { setActiveTab("campaigns"); setSidebarOpen(false) }}
+                icon={
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
                   </svg>
-                </div>
-                <span className="font-medium text-sm">Campaigns</span>
-              </button>
+                }
+                label="Campaigns"
+              />
             )}
 
-            {/* Appointments */}
-            <div className="relative">
-              <button 
-                onClick={() => { setActiveTab("appointments"); setSidebarOpen(false) }} 
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                  activeTab === "appointments" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <div className={`p-1.5 rounded-md ${activeTab === "appointments" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <span className="font-medium text-sm">Appointments</span>
-              </button>
-              <NotificationBadge 
-                count={appointmentsBadge.displayCount} 
-                position="top-right" 
-                size="sm" 
-                color="orange" 
-                animate 
-              />
-            </div>
+            <TabButton
+              id="appointments"
+              activeTab={activeTab}
+              onClick={() => { setActiveTab("appointments"); setSidebarOpen(false) }}
+              icon={
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              }
+              label="Appointments"
+              badgeCount={appointmentsBadge.displayCount}
+              badgeProps={{ size: "sm", color: "orange", animate: true }}
+            />
             
-            {/* Billing */}
-            <div className="relative">
-              <button 
-                onClick={() => { setActiveTab("billing"); setSidebarOpen(false) }} 
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                  activeTab === "billing" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <div className={`p-1.5 rounded-md ${activeTab === "billing" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <span className="font-medium text-sm">Revenue & Analytics</span>
-              </button>
-              <NotificationBadge 
-                count={billingBadge.displayCount} 
-                position="top-right" 
-                size="sm" 
-                color="red" 
-                animate 
-              />
-            </div>
+            <TabButton
+              id="billing"
+              activeTab={activeTab}
+              onClick={() => { setActiveTab("billing"); setSidebarOpen(false) }}
+              icon={
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+              label="Revenue & Analytics"
+              badgeCount={billingBadge.displayCount}
+              badgeProps={{ size: "sm", color: "red", animate: true }}
+            />
 
-            {/* Analytics */}
-            <button 
-              onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }} 
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                activeTab === "analytics" 
-                  ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md" 
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <div className={`p-1.5 rounded-md ${activeTab === "analytics" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+            <TabButton
+              id="analytics"
+              activeTab={activeTab}
+              onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }}
+              icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-              </div>
-              <span className="font-medium text-sm">Analytics Hub</span>
-            </button>
+              }
+              label="Analytics Hub"
+            />
 
-            {/* Super Admin Only Tabs */}
             {isSuperAdmin && (
               <>
                 <div className="border-t border-slate-300/30 my-2"></div>
                 <div className="px-3 py-1">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Super Admin</p>
                 </div>
-                
-                {/* Hospitals */}
-                <button 
-                  onClick={() => { setActiveTab("hospitals"); setSidebarOpen(false) }} 
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                    activeTab === "hospitals" 
-                      ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md" 
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-md ${activeTab === "hospitals" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                <TabButton
+                  id="hospitals"
+                  activeTab={activeTab}
+                  onClick={() => { setActiveTab("hospitals"); setSidebarOpen(false) }}
+                  icon={
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
-                  </div>
-                  <span className="font-medium text-sm">Hospitals</span>
-                </button>
-
-                {/* Admin Assignment */}
-                <button 
-                  onClick={() => { setActiveTab("admins"); setSidebarOpen(false) }} 
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                    activeTab === "admins" 
-                      ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md" 
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-md ${activeTab === "admins" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                  }
+                  label="Hospitals"
+                />
+                <TabButton
+                  id="admins"
+                  activeTab={activeTab}
+                  onClick={() => { setActiveTab("admins"); setSidebarOpen(false) }}
+                  icon={
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
-                  </div>
-                  <span className="font-medium text-sm">Admin Assignment</span>
-                </button>
+                  }
+                  label="Admin Assignment"
+                />
               </>
             )}
 
-            {/* Regular Admin Only Tabs */}
             {!isSuperAdmin && (
               <>
                 <div className="border-t border-slate-300/30 my-2"></div>
                 <div className="px-3 py-1">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
                 </div>
-                
-                {/* Branch Management */}
-                <button 
-                  onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }} 
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                    activeTab === "branches" 
-                      ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-md ${activeTab === "branches" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                <TabButton
+                  id="branches"
+                  activeTab={activeTab}
+                  onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
+                  icon={
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm12 0h4a2 2 0 012 2v10h-6V9a2 2 0 012-2z" />
                     </svg>
-                  </div>
-                  <span className="font-medium text-sm">Branches</span>
-                </button>
-                
-                {/* Receptionist Management */}
-                <button 
-                  onClick={() => { setActiveTab("receptionists"); setSidebarOpen(false) }} 
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-                    activeTab === "receptionists" 
-                      ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-md ${activeTab === "receptionists" ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
+                  }
+                  label="Branches"
+                />
+                <TabButton
+                  id="receptionists"
+                  activeTab={activeTab}
+                  onClick={() => { setActiveTab("receptionists"); setSidebarOpen(false) }}
+                  icon={
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
-                  </div>
-                  <span className="font-medium text-sm">Receptionists</span>
-                </button>
+                  }
+                  label="Receptionists"
+                />
               </>
             )}
             
@@ -2212,33 +1698,14 @@ export default function AdminDashboard() {
 
           {activeTab === "patients" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
-              {/* Patient Sub-Tabs */}
-              <div className="border-b border-slate-200 px-6 pt-6">
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => setPatientSubTab("all")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      patientSubTab === "all"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    All Patients
-                  </button>
-                  <button
-                    onClick={() => setPatientSubTab("analytics")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      patientSubTab === "analytics"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Analytics & Insights
-                  </button>
-                </div>
-              </div>
-
-              {/* Patient Content */}
+              <SubTabNavigation
+                tabs={[
+                  { id: "all", label: "All Patients" },
+                  { id: "analytics", label: "Analytics & Insights" }
+                ]}
+                activeTab={patientSubTab}
+                onTabChange={setPatientSubTab}
+              />
               <div className="p-6">
                 {patientSubTab === "all" && <PatientManagement selectedBranchId={selectedBranchId} />}
                 {patientSubTab === "analytics" && <PatientAnalytics selectedBranchId={selectedBranchId} />}
@@ -2266,33 +1733,14 @@ export default function AdminDashboard() {
 
           {activeTab === "billing" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
-              {/* Billing Sub-Tabs */}
-              <div className="border-b border-slate-200 px-6 pt-6">
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => setBillingSubTab("all")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      billingSubTab === "all"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    All Records
-                  </button>
-                  <button
-                    onClick={() => setBillingSubTab("analytics")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      billingSubTab === "analytics"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Financial Analytics
-                  </button>
-                </div>
-              </div>
-
-              {/* Billing Content */}
+              <SubTabNavigation
+                tabs={[
+                  { id: "all", label: "All Records" },
+                  { id: "analytics", label: "Financial Analytics" }
+                ]}
+                activeTab={billingSubTab}
+                onTabChange={setBillingSubTab}
+              />
               <div className="p-6">
                 {billingSubTab === "all" && <BillingManagement selectedBranchId={selectedBranchId} />}
                 {billingSubTab === "analytics" && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
@@ -2302,63 +1750,17 @@ export default function AdminDashboard() {
 
           {activeTab === "analytics" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
-              {/* Analytics Sub-Tabs */}
-              <div className="border-b border-slate-200 px-6 pt-6">
-                <div className="flex gap-4 flex-wrap">
-                  <button
-                    onClick={() => setAnalyticsSubTab("overview")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      analyticsSubTab === "overview"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Overview
-                  </button>
-                  <button
-                    onClick={() => setAnalyticsSubTab("patients")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      analyticsSubTab === "patients"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Patient Analytics
-                  </button>
-                  <button
-                    onClick={() => setAnalyticsSubTab("financial")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      analyticsSubTab === "financial"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Financial Analytics
-                  </button>
-                  <button
-                    onClick={() => setAnalyticsSubTab("doctors")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      analyticsSubTab === "doctors"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Doctor Performance
-                  </button>
-                  <button
-                    onClick={() => setAnalyticsSubTab("receptionists")}
-                    className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
-                      analyticsSubTab === "receptionists"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Staff Performance
-                  </button>
-                </div>
-              </div>
-
-              {/* Analytics Content */}
+              <SubTabNavigation
+                tabs={[
+                  { id: "overview", label: "Overview" },
+                  { id: "patients", label: "Patient Analytics" },
+                  { id: "financial", label: "Financial Analytics" },
+                  { id: "doctors", label: "Doctor Performance" },
+                  { id: "receptionists", label: "Staff Performance" }
+                ]}
+                activeTab={analyticsSubTab}
+                onTabChange={setAnalyticsSubTab}
+              />
               <div className="p-6">
                 {analyticsSubTab === "overview" && (
                   <div className="space-y-6">

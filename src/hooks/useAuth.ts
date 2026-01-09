@@ -148,25 +148,31 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
           return
         }
 
+        // MFA verification disabled - commented out to allow login without 2FA
         // Verify MFA for staff roles (admin, doctor, receptionist)
-        if (
-          userRoleData.role === "admin" ||
-          userRoleData.role === "doctor" ||
-          userRoleData.role === "receptionist"
-        ) {
-          const tokenResult = await currentUser.getIdTokenResult(true)
-          const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-          const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-          const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+        // if (
+        //   userRoleData.role === "admin" ||
+        //   userRoleData.role === "doctor" ||
+        //   userRoleData.role === "receptionist"
+        // ) {
+        //   const tokenResult = await currentUser.getIdTokenResult(true)
+        //   const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+        //   const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+        //   const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
 
-          if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-            await signOut(auth)
-            const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
-            router.replace(loginPath)
-            setLoading(false)
-            return
-          }
-        }
+        //   // If no MFA session exists or authTime doesn't match, redirect to login for MFA
+        //   if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+        //     // Check if we're already on login page - if so, don't sign out (let login page handle MFA)
+        //     const currentPath = window.location.pathname
+        //     if (!currentPath.includes('/auth/login')) {
+        //       await signOut(auth)
+        //     }
+        //     const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
+        //     router.replace(loginPath)
+        //     setLoading(false)
+        //     return
+        //   }
+        // }
 
         // If route requires specific role and user has different role
         if (requiredRole && requiredRole !== userRoleData.role) {
@@ -205,23 +211,24 @@ export function usePublicRoute() {
       // User is logged in - check their role and redirect to dashboard using cached data
       const userRoleData = await getUserRole(currentUser.uid)
       if (userRoleData) {
+        // MFA verification disabled - commented out to allow login without 2FA
         // Enforce MFA for staff roles before auto-redirecting from public routes
-        if (
-          userRoleData.role === "admin" ||
-          userRoleData.role === "doctor" ||
-          userRoleData.role === "receptionist"
-        ) {
-          const tokenResult = await currentUser.getIdTokenResult(true)
-          const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-          const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-          const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+        // if (
+        //   userRoleData.role === "admin" ||
+        //   userRoleData.role === "doctor" ||
+        //   userRoleData.role === "receptionist"
+        // ) {
+        //   const tokenResult = await currentUser.getIdTokenResult(true)
+        //   const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+        //   const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+        //   const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
 
-          if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-            // MFA not complete yet - allow login/OTP flow to handle it
-            setLoading(false)
-            return false
-          }
-        }
+        //   // If MFA not complete, don't redirect - let login page handle MFA flow
+        //   if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+        //     setLoading(false)
+        //     return false
+        //   }
+        // }
 
         router.replace(`/${userRoleData.role}-dashboard`)
         return true // Indicates redirect happened

@@ -26,19 +26,3 @@ export interface Branch {
   updatedAt: Timestamp | string
 }
 
-/**
- * Branch-specific doctor timings
- * Allows doctors to have different timings at different branches
- */
-export interface DoctorBranchTimings {
-  [branchId: string]: {
-    monday: { start: string; end: string } | null
-    tuesday: { start: string; end: string } | null
-    wednesday: { start: string; end: string } | null
-    thursday: { start: string; end: string } | null
-    friday: { start: string; end: string } | null
-    saturday: { start: string; end: string } | null
-    sunday: { start: string; end: string } | null
-  }
-}
-

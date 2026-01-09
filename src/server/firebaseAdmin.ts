@@ -77,27 +77,5 @@ export function initFirebaseAdmin(context?: string): InitAdminResult {
   }
 }
 
-export function initFirebaseAdminSimple(context?: string): boolean {
-  return initFirebaseAdmin(context).ok
-}
-
-
-export function getFirestore(context?: string) {
-  const initResult = initFirebaseAdmin(context)
-  if (!initResult.ok) {
-    throw new Error(initResult.error || "Failed to initialize Firebase Admin")
-  }
-  return admin.firestore()
-}
-
-
-export function getAuth(context?: string) {
-  const initResult = initFirebaseAdmin(context)
-  if (!initResult.ok) {
-    throw new Error(initResult.error || "Failed to initialize Firebase Admin")
-  }
-  return admin.auth()
-}
-
 export { admin }
 

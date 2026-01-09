@@ -38,13 +38,73 @@ function LoginContent() {
   const { loading: checking } = usePublicRoute()
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
-  // Immediate synchronous check to prevent flash
+  // Check if user is authenticated but needs MFA
   useEffect(() => {
-    // Check if user is already authenticated synchronously
-    const currentUser = auth.currentUser
-    if (!currentUser && !checking) {
+    const checkMfaStatus = async () => {
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        setIsCheckingAuth(false)
+        return
+      }
+
+      // Check if user needs MFA
+      try {
+        const roleInfo = await determineUserRole(currentUser)
+        if (roleInfo && STAFF_ROLES.includes(roleInfo.role)) {
+          const tokenResult = await currentUser.getIdTokenResult(true)
+          const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
+          const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
+          const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+
+          // If MFA is required but not completed, show MFA form
+          if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
+            // Get phone number from user data
+            const userData = roleInfo.data
+            const phone = userData?.phone || userData?.phoneNumber || ""
+            if (phone) {
+              setPendingUser(currentUser)
+              setPendingRole(roleInfo.role)
+              setPendingPhone(phone)
+              setMfaRequired(true)
+              // Auto-send OTP (defined later in file, but will be available when effect runs)
+              setTimeout(() => {
+                const sendOtp = async () => {
+                  setOtpSending(true)
+                  setOtpError("")
+                  try {
+                    const response = await fetch("/api/auth/send-otp", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ phoneNumber: phone }),
+                    })
+                    const data = await response.json().catch(() => ({}))
+                    if (!response.ok) {
+                      throw new Error(data?.error || "Failed to send OTP")
+                    }
+                    setSuccess("Security code sent successfully.")
+                    setOtpCountdown(45)
+                  } catch (err: any) {
+                    setOtpError(err?.message || "Failed to send OTP")
+                  } finally {
+                    setOtpSending(false)
+                  }
+                }
+                sendOtp()
+              }, 100)
+            }
+          }
+        }
+      } catch {
+        // If check fails, just continue with normal login
+      }
+      
       setIsCheckingAuth(false)
     }
+
+    if (!checking) {
+      checkMfaStatus()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking])
 
   // Handle pageshow event (back button) - re-check auth immediately

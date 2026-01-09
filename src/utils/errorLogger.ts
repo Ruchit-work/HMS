@@ -66,22 +66,23 @@ function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
       continue
     }
     
-    // Recursively sanitize nested objects
-    if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-      sanitized[key] = sanitizeObject(value as Record<string, unknown>)
-    } else if (Array.isArray(value)) {
-      // For arrays, sanitize each object element
+    // Recursively sanitize nested structures
+    if (Array.isArray(value)) {
       sanitized[key] = value.map(item => 
-        typeof item === 'object' && item !== null && !(item instanceof Date)
-          ? sanitizeObject(item as Record<string, unknown>)
-          : item
+        isPlainObject(item) ? sanitizeObject(item as Record<string, unknown>) : item
       )
+    } else if (isPlainObject(value)) {
+      sanitized[key] = sanitizeObject(value as Record<string, unknown>)
     } else {
       sanitized[key] = value
     }
   }
   
   return sanitized
+}
+
+function isPlainObject(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && !(value instanceof Date) && !Array.isArray(value)
 }
 
 /**
@@ -91,16 +92,16 @@ function extractSafeErrorInfo(error: unknown): {
   message: string
   code?: string
   name?: string
-  stack?: string // Only in development
+  stack?: string
 } {
-  const isDevelopment = process.env.NODE_ENV === 'development'
+  const isDev = process.env.NODE_ENV === 'development'
   
   if (error instanceof Error) {
     return {
       message: error.message,
       name: error.name,
       code: (error as { code?: string }).code,
-      stack: isDevelopment ? error.stack : undefined,
+      ...(isDev && { stack: error.stack }),
     }
   }
   
@@ -110,13 +111,11 @@ function extractSafeErrorInfo(error: unknown): {
       message: err.message || String(error),
       code: err.code,
       name: err.name,
-      stack: isDevelopment ? err.stack : undefined,
+      ...(isDev && { stack: err.stack }),
     }
   }
   
-  return {
-    message: String(error),
-  }
+  return { message: String(error) }
 }
 
 /**
