@@ -5,17 +5,17 @@ import { auth, db } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
 import BookAppointmentForm from "@/components/patient/BookAppointmentForm"
-import { AppointmentSuccessModal } from "@/components/patient/AppointmentModals"
-import PageHeader from "@/components/ui/PageHeader"
+import { AppointmentSuccessModal } from "@/components/patient/appointments/AppointmentModals"
+import PageHeader from "@/components/ui/layout/PageHeader"
 import { UserData, Doctor, NotificationData } from "@/types/patient"
-import Footer from "@/components/ui/Footer"
+import Footer from "@/components/ui/layout/Footer"
 import { useSearchParams, useRouter } from "next/navigation"
-import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/whatsapp"
-import { isDateBlocked } from "@/utils/blockedDates"
+import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
+import { isDateBlocked } from "@/utils/analytics/blockedDates"
 
 export default function BookAppointmentPage() {
   return (
@@ -141,6 +141,7 @@ See you soon! 🏥`
         setUserData(data)
       }
 
+      // Start doctors listener immediately (non-blocking)
       const doctorsQuery = query(getHospitalCollection(activeHospitalId, "doctors"), where("status", "==", "active"))
       const unsub = onSnapshot(doctorsQuery, (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Doctor))

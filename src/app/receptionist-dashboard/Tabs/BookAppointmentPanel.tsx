@@ -1,21 +1,22 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef } from "react"
+import { createPortal } from "react-dom"
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import PaymentMethodSection, {
   PaymentData as BookingPaymentData,
   PaymentMethodOption as BookingPaymentMethod,
 } from "@/components/payments/PaymentMethodSection"
 import PasswordRequirements, { isPasswordValid } from "@/components/forms/PasswordComponents"
-import { AppointmentSuccessModal } from "@/components/patient/AppointmentModals"
+import { AppointmentSuccessModal } from "@/components/patient/appointments/AppointmentModals"
 import OTPVerificationModal from "@/components/forms/OTPVerificationModal"
 import { bloodGroups } from "@/constants/signup"
-import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
+import { SYMPTOM_CATEGORIES } from "@/components/patient/symptoms/SymptomSelector"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, normalizeTime } from "@/utils/timeSlots"
-import { isDateBlocked } from "@/utils/blockedDates"
+import { isDateBlocked } from "@/utils/analytics/blockedDates"
 
 interface BookAppointmentPanelProps {
   patientMode: "existing" | "new"
@@ -79,6 +80,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
 
   const [symptomCategory, setSymptomCategory] = useState("")
   const [customSymptom, setCustomSymptom] = useState("")
+  const [symptomSearch, setSymptomSearch] = useState("")
+  const [showSymptomDropdown, setShowSymptomDropdown] = useState(false)
+  const symptomDropdownRef = useRef<HTMLDivElement>(null)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 400 })
 
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod | null>(null)
@@ -209,6 +214,15 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     const category = SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)
     return category ? category.label : "Symptoms recorded"
   }, [symptomCategory, customSymptom])
+
+  // Filter symptoms based on search
+  const filteredSymptoms = useMemo(() => {
+    if (!symptomSearch.trim()) return SYMPTOM_CATEGORIES
+    const searchTerm = symptomSearch.toLowerCase()
+    return SYMPTOM_CATEGORIES.filter((cat) =>
+      cat.label.toLowerCase().includes(searchTerm)
+    )
+  }, [symptomSearch])
 
   const paymentMethods = useMemo<BookingPaymentMethod[]>(() => {
     return ["card", "upi", "cash"]
@@ -554,10 +568,61 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     }
   }, [bookError])
 
+  // Calculate dropdown position and close when clicking outside
+  useEffect(() => {
+    const updateDropdownPosition = () => {
+      if (symptomDropdownRef.current && showSymptomDropdown) {
+        const rect = symptomDropdownRef.current.getBoundingClientRect()
+        setDropdownPosition({
+          top: rect.bottom + 4, // For fixed positioning, use getBoundingClientRect directly
+          left: rect.left,
+          width: rect.width
+        })
+      }
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (showSymptomDropdown) {
+        // Check if click is outside both the container and the portal dropdown
+        const isOutsideContainer = !target.closest('.symptom-dropdown-container')
+        const isOutsideDropdown = !target.closest('[data-symptom-dropdown]')
+        if (isOutsideContainer && isOutsideDropdown) {
+          setShowSymptomDropdown(false)
+        }
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showSymptomDropdown) {
+        setShowSymptomDropdown(false)
+      }
+    }
+
+    if (showSymptomDropdown) {
+      // Update position immediately and after a tiny delay to ensure DOM is ready
+      updateDropdownPosition()
+      const timeoutId = setTimeout(updateDropdownPosition, 0)
+      window.addEventListener('resize', updateDropdownPosition)
+      window.addEventListener('scroll', updateDropdownPosition, true)
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+      
+      return () => {
+        clearTimeout(timeoutId)
+        window.removeEventListener('resize', updateDropdownPosition)
+        window.removeEventListener('scroll', updateDropdownPosition, true)
+        document.removeEventListener('mousedown', handleClickOutside)
+        document.removeEventListener('keydown', handleEscape)
+      }
+    }
+  }, [showSymptomDropdown])
+
   const handleExistingPatientSearch = (value: string) => {
-    const valLower = value.toLowerCase()
     setSearchPatient(value)
     setShowPatientSuggestions(value.trim().length > 0)
+    // Immediate match for exact matches
+    const valLower = value.toLowerCase()
     const match = patients.find((p: any) => {
       const label = `${p.firstName} ${p.lastName} — ${p.email}`
       if (label.toLowerCase() === valLower) return true
@@ -581,6 +646,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     setAppointmentTime("")
     setSymptomCategory("")
     setCustomSymptom("")
+    setSymptomSearch("")
+    setShowSymptomDropdown(false)
     setPaymentMethod(null)
     setAdditionalFees([])
     setPaymentData(emptyBookingPayment)
@@ -866,7 +933,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-6 py-8 shadow-sm">
+      <section className="relative overflow-visible rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-6 py-8 shadow-sm">
         <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-emerald-100 opacity-30" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-sky-200 opacity-20" />
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -1199,7 +1266,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur overflow-visible">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Visit Setup</h3>
@@ -1207,27 +1274,156 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
               </div>
             </div>
 
-            <div className="mt-6 space-y-6">
-              <div>
+            <div className="mt-6 space-y-6 overflow-visible">
+              <div className="relative">
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Symptoms (suggest doctor)</label>
-                <select
-                  value={symptomCategory}
-                  onChange={(e) => {
-                    setSymptomCategory(e.target.value)
-                    setSelectedDoctorId("")
-                    setSelectedDoctorFee(null)
-                    if (e.target.value !== "custom") setCustomSymptom("")
-                  }}
-                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                >
-                  <option value="">Select symptoms (optional)</option>
-                  {SYMPTOM_CATEGORIES.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.label}
-                    </option>
-                  ))}
-                  <option value="custom">Custom...</option>
-                </select>
+                <div className="mt-2 relative symptom-dropdown-container">
+                  {/* Searchable Dropdown */}
+                  <div
+                    ref={symptomDropdownRef}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus-within:border-emerald-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-emerald-100 cursor-pointer"
+                    onClick={() => {
+                      if (!showSymptomDropdown && symptomDropdownRef.current) {
+                        // Calculate position before opening
+                        const rect = symptomDropdownRef.current.getBoundingClientRect()
+                        setDropdownPosition({
+                          top: rect.bottom + 4,
+                          left: rect.left,
+                          width: rect.width
+                        })
+                      }
+                      setShowSymptomDropdown(!showSymptomDropdown)
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={symptomCategory ? "text-slate-900" : "text-slate-400"}>
+                        {symptomCategory === "custom"
+                          ? "Custom..."
+                          : symptomCategory
+                          ? SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)?.label || "Select symptoms (optional)"
+                          : "Select symptoms (optional)"}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-slate-500 transition-transform ${showSymptomDropdown ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Dropdown Menu - Using Portal for proper z-index */}
+                  {showSymptomDropdown && typeof window !== 'undefined' && createPortal(
+                    <div 
+                      data-symptom-dropdown
+                      className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-xl max-h-80 overflow-hidden"
+                      style={{
+                        top: `${dropdownPosition.top}px`,
+                        left: `${dropdownPosition.left}px`,
+                        width: `${dropdownPosition.width || 400}px`
+                      }}
+                    >
+                      {/* Search Input */}
+                      <div className="p-2 border-b border-slate-200">
+                        <div className="relative">
+                          <svg
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <input
+                            type="text"
+                            value={symptomSearch}
+                            onChange={(e) => {
+                              setSymptomSearch(e.target.value)
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Search symptoms..."
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+
+                      {/* Options List */}
+                      <div className="max-h-64 overflow-y-auto">
+                        {/* Clear/None Option */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSymptomCategory("")
+                            setCustomSymptom("")
+                            setSymptomSearch("")
+                            setShowSymptomDropdown(false)
+                            setSelectedDoctorId("")
+                            setSelectedDoctorFee(null)
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-slate-600"
+                        >
+                          Clear selection
+                        </button>
+
+                        {/* Filtered Symptoms */}
+                        {filteredSymptoms.length > 0 ? (
+                          filteredSymptoms.map((cat) => (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSymptomCategory(cat.id)
+                                setSelectedDoctorId("")
+                                setSelectedDoctorFee(null)
+                                setCustomSymptom("")
+                                setSymptomSearch("")
+                                setShowSymptomDropdown(false)
+                              }}
+                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 ${
+                                symptomCategory === cat.id ? "bg-emerald-100 font-semibold" : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{cat.icon}</span>
+                                <span>{cat.label}</span>
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-4 py-3 text-sm text-slate-500 text-center">
+                            No symptoms found
+                          </div>
+                        )}
+
+                        {/* Custom Option */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSymptomCategory("custom")
+                            setSelectedDoctorId("")
+                            setSelectedDoctorFee(null)
+                            setCustomSymptom("")
+                            setSymptomSearch("")
+                            setShowSymptomDropdown(false)
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 border-t border-slate-200 ${
+                            symptomCategory === "custom" ? "bg-emerald-100 font-semibold" : ""
+                          }`}
+                        >
+                          Custom...
+                        </button>
+                      </div>
+                    </div>
+                    , document.body
+                  )}
+                </div>
+
                 {symptomCategory === "custom" && (
                   <div className="mt-3 space-y-2">
                     <input

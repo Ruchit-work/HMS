@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getMessageStatus } from "@/server/whatsapp"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 
 export async function GET(request: Request) {
   // Authenticate request - requires admin or receptionist role

@@ -5,7 +5,7 @@
 
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 
 /**
  * GET /api/auto-campaigns/check

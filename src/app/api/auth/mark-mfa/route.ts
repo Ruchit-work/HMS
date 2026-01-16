@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { admin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse, UserRole } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse, UserRole } from "@/utils/firebase/apiAuth"
 
 const STAFF_ROLES: UserRole[] = ["admin", "doctor", "receptionist"]
 
 export async function POST(request: Request) {
-  const auth = await authenticateRequest(request, undefined, { skipMfaCheck: true })
+  const auth = await authenticateRequest(request, undefined)
   if (!auth.success) {
     return createAuthErrorResponse(auth)
   }

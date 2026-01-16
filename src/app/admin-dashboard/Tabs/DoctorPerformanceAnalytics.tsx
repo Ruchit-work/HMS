@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { getDocs } from 'firebase/firestore'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
-import { getHospitalCollection } from '@/utils/hospital-queries'
-import LoadingSpinner from '@/components/ui/StatusComponents'
+import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 
 interface Appointment {
   id: string

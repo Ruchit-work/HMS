@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState, useCallback } from "react"
 import { getDocs, query, where, onSnapshot } from "firebase/firestore"
 import { auth } from "@/firebase/config"
 import { Appointment } from "@/types/patient"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import { SYMPTOM_CATEGORIES } from "@/components/patient/SymptomSelector"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import { SYMPTOM_CATEGORIES } from "@/components/patient/symptoms/SymptomSelector"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 
 interface WhatsAppBookingsPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
@@ -437,7 +437,14 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
     
     if (!confirmation) return
 
+    // Optimistic update: Remove from UI immediately
+    // Note: Real-time listener will confirm the deletion, but this makes it feel instant
+    const previousBookings = [...bookings]
+    const deletedBookingId = booking.id
+    
+    setBookings(prev => prev.filter(b => b.id !== deletedBookingId))
     setDeleteLoading(booking.id)
+    
     try {
       const currentUser = auth.currentUser
       if (!currentUser) {
@@ -446,7 +453,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
 
       const token = await currentUser.getIdToken()
 
-      const res = await fetch(`/api/receptionist/whatsapp-bookings/${booking.id}`, {
+      const res = await fetch(`/api/receptionist/whatsapp-bookings/${deletedBookingId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -463,8 +470,10 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
       }
 
       notify({ type: "success", message: "WhatsApp booking deleted successfully!" })
-      // Real-time listener will automatically update the list
+      // Real-time listener will automatically update the list (may already be removed)
     } catch (error: any) {
+      // Rollback on error (real-time listener will handle successful deletions)
+      setBookings(previousBookings)
       notify({ type: "error", message: error?.message || "Failed to delete booking" })
     } finally {
       setDeleteLoading(null)

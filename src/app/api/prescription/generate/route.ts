@@ -1,4 +1,4 @@
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 
 export async function POST(req: Request) {
   // Authenticate request - requires doctor role

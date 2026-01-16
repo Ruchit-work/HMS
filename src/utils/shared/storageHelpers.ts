@@ -1,6 +1,6 @@
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"
 import { storage } from "@/firebase/config"
-import { generateSafeFileName } from "./documentDetection"
+import { generateSafeFileName } from "@/utils/documents/documentDetection"
 
 /**
  * Upload file to Firebase Storage

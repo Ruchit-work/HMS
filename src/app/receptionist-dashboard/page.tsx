@@ -4,13 +4,13 @@ import { useEffect, useState, useCallback } from "react"
 import { db, auth } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
-import NotificationBadge from "@/components/ui/NotificationBadge"
+import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { useRouter } from "next/navigation"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import PatientManagement from "@/app/admin-dashboard/Tabs/PatientManagement"
 import PatientAnalytics from "@/app/admin-dashboard/Tabs/PatientAnalytics"
@@ -22,7 +22,7 @@ import BookAppointmentPanel from "@/app/receptionist-dashboard/Tabs/BookAppointm
 import WhatsAppBookingsPanel from "@/app/receptionist-dashboard/Tabs/WhatsAppBookingsPanel"
 import DashboardOverview from "@/app/receptionist-dashboard/Tabs/DashboardOverview"
 import DocumentsTab from "@/components/documents/DocumentsTab"
-import { ConfirmDialog } from "@/components/ui/Modals"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 
 export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -717,6 +717,7 @@ export default function ReceptionistDashboard() {
         onCancel={() => setLogoutConfirmOpen(false)}
         confirmLoading={logoutLoading}
       />
+      
               </div>
     )
 }

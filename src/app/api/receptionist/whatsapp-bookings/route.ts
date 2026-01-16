@@ -1,5 +1,5 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { Appointment } from "@/types/patient"
 
 export async function GET(request: Request) {
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     }
     
     // Get user's active hospital ID
-    const { getUserActiveHospitalId } = await import("@/utils/serverHospitalQueries")
+    const { getUserActiveHospitalId } = await import("@/utils/firebase/serverHospitalQueries")
     const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
     
     // Fetch appointments with whatsappPending flag or status whatsapp_pending

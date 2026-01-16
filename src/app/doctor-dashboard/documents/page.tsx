@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import DocumentsTab from "@/components/documents/DocumentsTab"
-import LoadingSpinner from "@/components/ui/StatusComponents"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 
 export default function DoctorDocumentsPage() {
   const { user, loading: authLoading } = useAuth("doctor")

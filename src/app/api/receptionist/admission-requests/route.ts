@@ -1,5 +1,5 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 
 export async function GET(request: Request) {
   // Authenticate request - requires receptionist or admin role
@@ -24,37 +24,56 @@ export async function GET(request: Request) {
     const snapshot = await firestore
       .collection("admission_requests")
       .orderBy("createdAt", "desc")
+      .limit(100) // Limit to recent 100 requests
       .get()
 
-    const requests = await Promise.all(
-      snapshot.docs.map(async (docSnap) => {
-        const data = docSnap.data() || {}
-        const appointmentId = String(data.appointmentId || "")
-        let appointmentDetails: Record<string, unknown> | null = null
+    // Collect all appointment IDs first
+    const appointmentIds: string[] = []
+    const requestsData = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data() || {}
+      const appointmentId = String(data.appointmentId || "")
+      if (appointmentId && !appointmentIds.includes(appointmentId)) {
+        appointmentIds.push(appointmentId)
+      }
+      return {
+        id: docSnap.id,
+        ...data,
+        appointmentId
+      }
+    })
 
-        if (appointmentId) {
-          try {
-            const aptSnap = await firestore.collection("appointments").doc(appointmentId).get()
+    // Batch fetch all appointments at once (max 10 per batch in Firestore)
+    const appointmentDetailsMap = new Map<string, Record<string, unknown>>()
+    if (appointmentIds.length > 0) {
+      // Firestore batch get limit is 10, so we need to chunk
+      const batchSize = 10
+      for (let i = 0; i < appointmentIds.length; i += batchSize) {
+        const batch = appointmentIds.slice(i, i + batchSize)
+        const appointmentRefs = batch.map(id => firestore.collection("appointments").doc(id))
+        try {
+          const appointmentSnaps = await firestore.getAll(...appointmentRefs)
+          appointmentSnaps.forEach((aptSnap) => {
             if (aptSnap.exists) {
               const aptData = aptSnap.data() || {}
-              appointmentDetails = {
+              appointmentDetailsMap.set(aptSnap.id, {
                 appointmentDate: aptData.appointmentDate || null,
                 appointmentTime: aptData.appointmentTime || null,
                 patientPhone: aptData.patientPhone || null,
                 doctorSpecialization: aptData.doctorSpecialization || null
-              }
+              })
             }
-          } catch {
-          }
+          })
+        } catch {
+          // Continue if batch fails
         }
+      }
+    }
 
-        return {
-          id: docSnap.id,
-          ...data,
-          appointmentDetails
-        }
-      })
-    )
+    // Map appointment details to requests
+    const requests = requestsData.map((req) => ({
+      ...req,
+      appointmentDetails: req.appointmentId ? (appointmentDetailsMap.get(req.appointmentId) || null) : null
+    }))
 
     return Response.json({ requests })
   } catch (error: any) {

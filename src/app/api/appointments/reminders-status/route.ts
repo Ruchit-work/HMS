@@ -2,8 +2,8 @@
 
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 
 export async function GET(request: Request) {

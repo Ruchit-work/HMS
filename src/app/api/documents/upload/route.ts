@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import { DocumentMetadata } from "@/types/document"
 import { getStorage } from "firebase-admin/storage"
-import { detectDocumentTypeEnhanced, validateFileSize } from "@/utils/documentDetection"
+import { detectDocumentTypeEnhanced, validateFileSize } from "@/utils/documents/documentDetection"
 
 // File size validation is now handled by validateFileSize() from documentDetection.ts
 // which applies different limits: PDFs (1KB-20MB), Other files (2MB-10MB)
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
         console.log("[document-upload] Detection result:", JSON.stringify(detectedResult, null, 2))
       } else {
         // For non-PDFs, use simple filename detection
-        const { detectDocumentType, detectSpecialty } = await import("@/utils/documentDetection")
+        const { detectDocumentType, detectSpecialty } = await import("@/utils/documents/documentDetection")
         detectedResult = {
           type: detectDocumentType(file.name),
           specialty: detectSpecialty(file.name),
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     } catch (detectionError: any) {
       // If detection fails, fallback to simple filename detection
       console.error("[document-upload] Enhanced detection failed, using filename detection:", detectionError.message, detectionError.stack)
-      const { detectDocumentType, detectSpecialty } = await import("@/utils/documentDetection")
+      const { detectDocumentType, detectSpecialty } = await import("@/utils/documents/documentDetection")
       detectedResult = {
         type: detectDocumentType(file.name),
         specialty: detectSpecialty(file.name),

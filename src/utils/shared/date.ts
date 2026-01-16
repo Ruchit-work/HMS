@@ -1,4 +1,4 @@
-import { formatDateForDisplay, formatDateTimeForDisplay, formatAppointmentDateTime as formatAppointmentDateTimeTZ } from "@/utils/timezone"
+import { formatDateForDisplay, formatDateTimeForDisplay, formatAppointmentDateTime as formatAppointmentDateTimeTZ } from "@/utils/shared/timezone"
 
 export function calculateAge(dateOfBirth?: string | null): number | null {
   if (!dateOfBirth) return null

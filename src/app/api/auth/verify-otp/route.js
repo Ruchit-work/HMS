@@ -20,7 +20,7 @@ if (!admin.apps.length) {
 export async function POST(request) {
   try {
     // Apply rate limiting
-    const { applyRateLimit } = await import("@/utils/rateLimit");
+    const { applyRateLimit } = await import("@/utils/shared/rateLimit");
     const rateLimitResult = await applyRateLimit(request, "AUTH");
     if (rateLimitResult instanceof Response) {
       return rateLimitResult; // Rate limited

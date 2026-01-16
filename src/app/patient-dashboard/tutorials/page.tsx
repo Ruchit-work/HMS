@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import PageHeader from "@/components/ui/PageHeader"
+import PageHeader from "@/components/ui/layout/PageHeader"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/StatusComponents"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 
 export default function PatientPortalTutorial() {
   // Protect route - only allow patients

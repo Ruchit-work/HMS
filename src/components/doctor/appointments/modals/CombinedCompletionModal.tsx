@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Appointment as AppointmentType } from "@/types/patient"
-import { AnatomyViewerData } from "@/components/doctor/InlineAnatomyViewer"
+import { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
 import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
 
 interface CombinedCompletionModalProps {

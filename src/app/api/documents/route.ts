@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import { DocumentMetadata } from "@/types/document"
 
 export async function GET(request: NextRequest) {

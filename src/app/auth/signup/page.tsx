@@ -10,13 +10,13 @@ import {
   setDoc,
   getDoc,
 } from "firebase/firestore";
-import { getHospitalCollection } from "@/utils/hospital-queries";
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePublicRoute } from "@/hooks/useAuth";
-import LoadingSpinner from "@/components/ui/StatusComponents";
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents";
 import OTPVerificationModal from "@/components/forms/OTPVerificationModal";
-import Notification from "@/components/ui/Notification";
+import Notification from "@/components/ui/feedback/Notification";
 import PatientProfileForm, {
   PatientProfileFormValues,
 } from "@/components/forms/PatientProfileForm";

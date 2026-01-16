@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
-import { detectDocumentTypeEnhanced, validateFileType, validateFileSize } from "@/utils/documentDetection"
+import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { detectDocumentTypeEnhanced, validateFileType, validateFileSize } from "@/utils/documents/documentDetection"
 import { BulkUploadResult, DocumentMetadata } from "@/types/document"
 import { getStorage } from "firebase-admin/storage"
 
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
           detectedResult = await detectDocumentTypeEnhanced(file.name, fileBuffer, file.type)
         } else {
           // For non-PDFs, use simple filename detection
-          const { detectDocumentType, detectSpecialty } = await import("@/utils/documentDetection")
+          const { detectDocumentType, detectSpecialty } = await import("@/utils/documents/documentDetection")
           detectedResult = {
             type: detectDocumentType(file.name),
             specialty: detectSpecialty(file.name),

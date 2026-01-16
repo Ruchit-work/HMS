@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { sendOTP, verifyOTP } from "@/utils/metaOTP"
+import { sendOTP, verifyOTP } from "@/utils/campaigns/metaOTP"
 
 interface OTPVerificationModalProps {
   isOpen: boolean

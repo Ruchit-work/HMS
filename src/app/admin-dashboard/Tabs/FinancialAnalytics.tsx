@@ -5,9 +5,9 @@ import { getDocs } from 'firebase/firestore'
 import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
-import { getHospitalCollection } from '@/utils/hospital-queries'
-import LoadingSpinner from '@/components/ui/StatusComponents'
-import { formatDate } from '@/utils/date'
+import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { formatDate } from '@/utils/shared/date'
 
 interface UnifiedBillingRecord {
   id: string

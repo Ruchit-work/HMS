@@ -1,4 +1,4 @@
-import { authenticateRequest } from "@/utils/apiAuth"
+import { authenticateRequest } from "@/utils/firebase/apiAuth"
 
 export async function POST(req) {
   try {

@@ -31,7 +31,7 @@ function generateOTP() {
 export async function POST(request) {
   try {
     // Apply rate limiting
-    const { applyRateLimit } = await import("@/utils/rateLimit");
+    const { applyRateLimit } = await import("@/utils/shared/rateLimit");
     const rateLimitResult = await applyRateLimit(request, "OTP");
     if (rateLimitResult instanceof Response) {
       return rateLimitResult; // Rate limited

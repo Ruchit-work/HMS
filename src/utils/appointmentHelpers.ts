@@ -1,6 +1,6 @@
 import { db } from "@/firebase/config"
 import { doc, updateDoc, getDoc, query, where, getDocs, deleteDoc, deleteField } from "firebase/firestore"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 const SLOT_COLLECTION = "appointmentSlots"
 const getSlotDocId = (doctorId?: string, date?: string, time?: string) => {
   if (!doctorId || !date || !time) return null

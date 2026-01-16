@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 export async function GET(request: Request) {
   const isCronTrigger = request.headers.get("x-vercel-cron") !== null
   
   // Allow cron or admin access
   if (!isCronTrigger) {
-    const { authenticateRequest, createAuthErrorResponse } = await import("@/utils/apiAuth")
+    const { authenticateRequest, createAuthErrorResponse } = await import("@/utils/firebase/apiAuth")
     const auth = await authenticateRequest(request, "admin")
     if (!auth.success) {
       return createAuthErrorResponse(auth)

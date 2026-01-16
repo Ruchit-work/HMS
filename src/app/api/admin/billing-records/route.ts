@@ -1,5 +1,5 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 
 interface UnifiedBillingRecord {
   id: string
@@ -160,47 +160,65 @@ export async function GET(request: Request) {
     let appointmentsDocs: any[] = []
     const seenAppointmentIds = new Set<string>()
     try {
-      // Fetch appointments ordered by createdAt (most recent first)
-      // This doesn't require a composite index
-      const appointmentsSnapshot = await firestore
+      // Optimized: Query appointments that have payments - use Firestore queries instead of client-side filtering
+      // First, try to get paid appointments ordered by paidAt
+      const paidAppointmentsQuery = firestore
         .collection("appointments")
-        .orderBy("createdAt", "desc")
-        .limit(500)
-        .get()
+        .where("paidAt", ">", "")
+        .orderBy("paidAt", "desc")
+        .limit(100)
       
-      // Filter for appointments with payments and sort by paidAt
-      appointmentsDocs = appointmentsSnapshot.docs
-        .filter((doc) => {
-          const data = doc.data()
-          const paymentAmount = Number(data?.paymentAmount || 0)
-          const totalConsultationFee = Number(data?.totalConsultationFee || 0)
-          const isPending =
-            (data?.paymentStatus && data.paymentStatus !== "paid") ||
-            (!data?.paidAt && paymentAmount <= 0)
-          const isCashPending =
-            isPending && totalConsultationFee > 0 && (data?.paymentMethod === "cash" || !data?.paymentMethod)
-          return paymentAmount > 0 || isCashPending
+      const paidSnapshot = await paidAppointmentsQuery.get()
+      appointmentsDocs = paidSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      
+      // Also get pending cash appointments (those with consultation fee but not paid)
+      const pendingCashQuery = firestore
+        .collection("appointments")
+        .where("totalConsultationFee", ">", 0)
+        .where("paymentStatus", "in", ["pending", "unpaid"])
+        .orderBy("totalConsultationFee", "desc")
+        .orderBy("createdAt", "desc")
+        .limit(50)
+      
+      try {
+        const pendingSnapshot = await pendingCashQuery.get()
+        const pendingDocs = pendingSnapshot.docs
+          .filter(doc => {
+            const data = doc.data()
+            return !data.paidAt && (!data.paymentMethod || data.paymentMethod === "cash")
+          })
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+        
+        // Merge and deduplicate
+        const allDocs = [...appointmentsDocs, ...pendingDocs]
+        const uniqueDocs = new Map()
+        allDocs.forEach(doc => {
+          if (!uniqueDocs.has(doc.id)) {
+            uniqueDocs.set(doc.id, doc)
+          }
         })
-        .sort((a, b) => {
-          const aData = a.data()
-          const bData = b.data()
-          // Sort by paidAt if available, otherwise createdAt
-          const aDate = aData?.paidAt || aData?.createdAt || ""
-          const bDate = bData?.paidAt || bData?.createdAt || ""
-          return bDate.localeCompare(aDate)
-        })
-        .slice(0, 100)
+        appointmentsDocs = Array.from(uniqueDocs.values())
+          .sort((a: any, b: any) => {
+            const aDate = a.paidAt || a.createdAt || ""
+            const bDate = b.paidAt || b.createdAt || ""
+            return bDate.localeCompare(aDate)
+          })
+          .slice(0, 100)
+      } catch {
+        // If composite query fails, just use paid appointments
+        appointmentsDocs = appointmentsDocs.slice(0, 100)
+      }
 
       // Track IDs we've already included so we don't duplicate when we add hospital-scoped appointments
       for (const doc of appointmentsDocs) {
         seenAppointmentIds.add(doc.id)
       }
     } catch {
-      // Final fallback: fetch without orderBy
+      // Final fallback: fetch without orderBy (reduced limit)
       try {
         const allAppointmentsSnapshot = await firestore
           .collection("appointments")
-          .limit(500)
+          .limit(100) // Reduced from 500
           .get()
         appointmentsDocs = allAppointmentsSnapshot.docs
           .filter((doc) => {
@@ -237,7 +255,7 @@ export async function GET(request: Request) {
         const hospAppointmentsSnap = await firestore
           .collection(`hospitals/${hospId}/appointments`)
           .orderBy("createdAt", "desc")
-          .limit(200)
+          .limit(50) // Reduced from 200 to 50 for better performance
           .get()
 
         for (const doc of hospAppointmentsSnap.docs) {

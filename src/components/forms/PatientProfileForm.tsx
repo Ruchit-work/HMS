@@ -44,6 +44,7 @@ export default function PatientProfileForm({
   onErrorClear,
 }: PatientProfileFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const [firstName, setFirstName] = useState(initialValues?.firstName ?? '')
   const [lastName, setLastName] = useState(initialValues?.lastName ?? '')
@@ -83,7 +84,61 @@ export default function PatientProfileForm({
 
   const clearErrors = () => {
     setFormError(null)
+    setFieldErrors({})
     onErrorClear?.()
+  }
+
+  // Field-level validation functions
+  const validateField = (fieldName: string, value: string): string | null => {
+    switch (fieldName) {
+      case 'firstName':
+        if (!value.trim()) return 'First name is required'
+        return null
+      case 'lastName':
+        if (!value.trim()) return 'Last name is required'
+        return null
+      case 'email':
+        if (!value.trim()) return 'Email address is required'
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(value.trim())) return 'Please enter a valid email address'
+        return null
+      case 'phone':
+        if (value.trim()) {
+          const normalizedCountryCode = (countryCode || '+91').trim() || '+91'
+          const cleanedCountryCode = normalizedCountryCode.replace(/\D/g, '')
+          const cleanedPhone = value.replace(/\D/g, '')
+          const totalDigits = (cleanedCountryCode + cleanedPhone).length
+          if (totalDigits < 7 || totalDigits > 15) {
+            return 'Phone number should contain 7-15 digits including country code'
+          }
+        }
+        return null
+      case 'dateOfBirth':
+        if (mode === 'public' && !value) return 'Date of birth is required'
+        return null
+      case 'password':
+        if (!value) return 'Password is required'
+        if (!isPasswordValid(value)) return 'Password does not meet requirements'
+        return null
+      case 'confirmPassword':
+        if (value !== password) return 'Passwords do not match'
+        return null
+      default:
+        return null
+    }
+  }
+
+  const handleFieldBlur = (fieldName: string, value: string) => {
+    const error = validateField(fieldName, value)
+    if (error) {
+      setFieldErrors(prev => ({ ...prev, [fieldName]: error }))
+    } else {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[fieldName]
+        return newErrors
+      })
+    }
   }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -197,12 +252,29 @@ export default function PatientProfileForm({
               value={firstName}
               onChange={(e) => {
                 setFirstName(e.target.value)
+                if (fieldErrors.firstName) {
+                  setFieldErrors(prev => {
+                    const newErrors = { ...prev }
+                    delete newErrors.firstName
+                    return newErrors
+                  })
+                }
                 clearErrors()
               }}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+              onBlur={(e) => handleFieldBlur('firstName', e.target.value)}
+              className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
+                fieldErrors.firstName 
+                  ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
+                  : 'border-slate-300 focus:border-slate-500'
+              }`}
               placeholder="John"
               required
             />
+            {fieldErrors.firstName && (
+              <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                <span>⚠</span> {fieldErrors.firstName}
+              </p>
+            )}
           </div>
         </div>
         <div>
@@ -216,12 +288,29 @@ export default function PatientProfileForm({
               value={lastName}
               onChange={(e) => {
                 setLastName(e.target.value)
+                if (fieldErrors.lastName) {
+                  setFieldErrors(prev => {
+                    const newErrors = { ...prev }
+                    delete newErrors.lastName
+                    return newErrors
+                  })
+                }
                 clearErrors()
               }}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+              onBlur={(e) => handleFieldBlur('lastName', e.target.value)}
+              className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
+                fieldErrors.lastName 
+                  ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
+                  : 'border-slate-300 focus:border-slate-500'
+              }`}
               placeholder="Smith"
               required
             />
+            {fieldErrors.lastName && (
+              <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+                <span>⚠</span> {fieldErrors.lastName}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -237,12 +326,29 @@ export default function PatientProfileForm({
             value={email}
             onChange={(e) => {
               setEmail(e.target.value)
+              if (fieldErrors.email) {
+                setFieldErrors(prev => {
+                  const newErrors = { ...prev }
+                  delete newErrors.email
+                  return newErrors
+                })
+              }
               clearErrors()
             }}
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+            onBlur={(e) => handleFieldBlur('email', e.target.value)}
+            className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
+              fieldErrors.email 
+                ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
+                : 'border-slate-300 focus:border-slate-500'
+            }`}
             placeholder="patient@email.com"
             required
           />
+          {fieldErrors.email && (
+            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+              <span>⚠</span> {fieldErrors.email}
+            </p>
+          )}
         </div>
       </div>
 
@@ -437,13 +543,30 @@ export default function PatientProfileForm({
             value={password}
             onChange={(e) => {
               setPassword(e.target.value)
+              if (fieldErrors.password) {
+                setFieldErrors(prev => {
+                  const newErrors = { ...prev }
+                  delete newErrors.password
+                  return newErrors
+                })
+              }
               clearErrors()
             }}
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+            onBlur={(e) => handleFieldBlur('password', e.target.value)}
+            className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
+              fieldErrors.password 
+                ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
+                : 'border-slate-300 focus:border-slate-500'
+            }`}
             placeholder="Enter password"
             minLength={6}
             required
           />
+          {fieldErrors.password && (
+            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+              <span>⚠</span> {fieldErrors.password}
+            </p>
+          )}
         </div>
         <PasswordRequirements password={password} />
       </div>
@@ -459,10 +582,20 @@ export default function PatientProfileForm({
             value={confirmPassword}
             onChange={(e) => {
               setConfirmPassword(e.target.value)
+              if (fieldErrors.confirmPassword) {
+                setFieldErrors(prev => {
+                  const newErrors = { ...prev }
+                  delete newErrors.confirmPassword
+                  return newErrors
+                })
+              }
               clearErrors()
             }}
+            onBlur={(e) => handleFieldBlur('confirmPassword', e.target.value)}
             className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none transition-all duration-200 ${
-              confirmPassword && password !== confirmPassword
+              fieldErrors.confirmPassword
+                ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200'
+                : confirmPassword && password !== confirmPassword
                 ? 'border-red-400 focus:border-red-500'
                 : confirmPassword && password === confirmPassword
                 ? 'border-emerald-400 focus:border-emerald-500'
@@ -472,6 +605,11 @@ export default function PatientProfileForm({
             minLength={6}
             required
           />
+          {fieldErrors.confirmPassword && (
+            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+              <span>⚠</span> {fieldErrors.confirmPassword}
+            </p>
+          )}
         </div>
         {confirmPassword && (
           <p className={`mt-2 text-xs font-semibold ${password === confirmPassword ? 'text-emerald-600' : 'text-red-600'}`}>

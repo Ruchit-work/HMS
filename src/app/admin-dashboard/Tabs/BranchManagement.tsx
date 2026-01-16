@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { auth } from '@/firebase/config'
 import type { Branch, BranchTimings } from '@/types/branch'
-import LoadingSpinner from '@/components/ui/StatusComponents'
-import Notification from '@/components/ui/Notification'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import Notification from '@/components/ui/feedback/Notification'
 
 const DEFAULT_TIMINGS: BranchTimings = {
   monday: { start: '09:00', end: '17:00' },

@@ -6,8 +6,8 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/utils/firebase/serverHospitalQueries"
 
 export async function POST(request: Request) {
   // Authenticate request - requires doctor role

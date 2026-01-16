@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/firebase/serverHospitalQueries"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 
 interface Params {

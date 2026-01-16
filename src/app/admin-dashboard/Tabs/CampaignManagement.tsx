@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/StatusComponents"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import AdminProtected from "@/components/AdminProtected"
-import { Campaign, CampaignAudience, CampaignStatus, createCampaign, slugify, updateCampaign } from "@/utils/campaigns"
+import { Campaign, CampaignAudience, CampaignStatus, createCampaign, slugify, updateCampaign } from "@/utils/campaigns/campaigns"
 import { collection, getDocs, orderBy, query, Timestamp } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
-import { SuccessToast } from "@/components/ui/StatusComponents"
-import { formatDateTime } from "@/utils/date"
-import { sanitizeForInnerHTML } from "@/utils/sanitizeHtml"
+import { SuccessToast } from "@/components/ui/feedback/StatusComponents"
+import { formatDateTime } from "@/utils/shared/date"
+import { sanitizeForInnerHTML } from "@/utils/shared/sanitizeHtml"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 
 export default function CampaignManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {

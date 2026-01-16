@@ -1,20 +1,23 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useDebounce } from '@/hooks/useDebounce'
 import { getDocs, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
 import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
-import { getHospitalCollection } from '@/utils/hospital-queries'
-import LoadingSpinner from '@/components/ui/StatusComponents'
+import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { InlineSpinner } from '@/components/ui/feedback/StatusComponents'
+import EmptyState from '@/components/ui/feedback/EmptyState'
 import AdminProtected from '@/components/AdminProtected'
-import { ViewModal, DeleteModal } from '@/components/ui/Modals'
+import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import { Appointment } from '@/types/patient'
 import { Branch } from '@/types/branch'
-import { SuccessToast } from '@/components/ui/StatusComponents'
-import { formatDate, formatDateTime } from '@/utils/date'
+import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
+import { formatDate, formatDateTime } from '@/utils/shared/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
-import Pagination from '@/components/ui/Pagination'
+import Pagination from '@/components/ui/navigation/Pagination'
 import { useNewItems } from '@/hooks/useNewItems'
 import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
 import DocumentListCompact from '@/components/documents/DocumentListCompact'
@@ -36,6 +39,7 @@ export default function AppoinmentManagement({
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
+    const debouncedSearch = useDebounce(search, 300)
     const { user, loading: authLoading } = useAuth()
     const { activeHospitalId } = useMultiHospital()
     const { isNew } = useNewItems('admin-appointments')
@@ -177,6 +181,18 @@ export default function AppoinmentManagement({
     }
     const handleDeleteConfirm = async () => {
         if (!deleteAppointment) return
+        
+        // Optimistic update: Remove from UI immediately
+        const previousAppointments = [...appointments]
+        const previousFiltered = [...filteredAppointments]
+        const deletedAppointment = deleteAppointment
+        
+        setAppointments(prev => prev.filter(a => a.id !== deleteAppointment.id))
+        setFilteredAppointments(prev => prev.filter(a => a.id !== deleteAppointment.id))
+        setShowViewModal(false)
+        setDeleteModal(false)
+        setDeleteAppointment(null)
+        
         try {
             setLoading(true)
             setError(null)
@@ -185,21 +201,19 @@ export default function AppoinmentManagement({
                 throw new Error('Hospital context not available')
             }
 
-            // Delete from hospital-scoped appointments collection
-            const appointmentRef = doc(getHospitalCollection(activeHospitalId, 'appointments'), deleteAppointment.id)
+            // Perform actual deletion
+            const appointmentRef = doc(getHospitalCollection(activeHospitalId, 'appointments'), deletedAppointment.id)
             await deleteDoc(appointmentRef)
 
-            setAppointments(prev => prev.filter(a => a.id !== deleteAppointment.id))
-            setFilteredAppointments(prev => prev.filter(a => a.id !== deleteAppointment.id))
-            setShowViewModal(false)
-            setDeleteModal(false)
-            setDeleteAppointment(null)
             setSuccessMessage('Appointment deleted successfully!')
             setTimeout(() => {
                 setSuccessMessage(null)
             }, 3000)
         } catch (error) {
-
+            // Rollback on error
+            setAppointments(previousAppointments)
+            setFilteredAppointments(previousFiltered)
+            setDeleteAppointment(deletedAppointment)
             setError((error as Error).message || 'Failed to delete appointment')
         } finally {
             setLoading(false)
@@ -378,14 +392,14 @@ export default function AppoinmentManagement({
 
     useEffect(() => {   
         let filtered = appointments
-        // Text search (by name/email/spec)
-        if (search) {
+        // Text search (by name/email/spec) - using debounced search
+        if (debouncedSearch) {
             filtered = filtered.filter(appointment =>
-                appointment.patientName?.toLowerCase().includes(search.toLowerCase()) ||
-                appointment.doctorName?.toLowerCase().includes(search.toLowerCase()) ||
-                appointment.patientEmail?.toLowerCase().includes(search.toLowerCase()) ||
-                appointment.doctorSpecialization?.toLowerCase().includes(search.toLowerCase()) ||
-                appointment.patientId?.toLowerCase().includes(search.toLowerCase())
+                appointment.patientName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                appointment.doctorName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                appointment.patientEmail?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                appointment.doctorSpecialization?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                appointment.patientId?.toLowerCase().includes(debouncedSearch.toLowerCase())
             )
         }
         // Doctor filter
@@ -479,7 +493,7 @@ export default function AppoinmentManagement({
         })
         
         setFilteredAppointments(filtered)
-    }, [search, appointments, sortField, sortOrder, selectedDoctorId, timeRange, statusFilter])
+    }, [debouncedSearch, appointments, sortField, sortOrder, selectedDoctorId, timeRange, statusFilter])
 
     // Use pagination hook
     const {
@@ -693,11 +707,8 @@ export default function AppoinmentManagement({
                                         <tr>
                                             <td colSpan={7} className="px-3 py-12 text-center">
                                                 <div className="flex flex-col items-center">
-                                                    <svg className="mb-2 h-8 w-8 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
-                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                    </svg>
-                                                    <p className="text-sm text-slate-500">Loading appointments…</p>
+                                                    <InlineSpinner size="md" />
+                                                    <p className="mt-2 text-sm text-slate-500">Loading appointments…</p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -713,14 +724,18 @@ export default function AppoinmentManagement({
                                         </tr>
                                     ) : filteredAppointments.length === 0 ? (
                                         <tr>
-                                            <td colSpan={7} className="px-3 py-12 text-center">
-                                                <svg className="mb-2 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                                <p className="mb-1 text-sm text-slate-500">
-                                                    {search ? 'No appointments found for the current filters' : 'No appointments found'}
-                                                </p>
-                                                {search && <p className="text-xs text-slate-400">Try adjusting your filters or search terms.</p>}
+                                            <td colSpan={7} className="px-3 py-8">
+                                                <EmptyState
+                                                    illustration="appointments"
+                                                    title={search ? 'No appointments found' : 'No appointments yet'}
+                                                    description={search 
+                                                        ? "We couldn't find any appointments matching your search criteria. Try adjusting your filters or search terms."
+                                                        : "There are no appointments in the system yet. Appointments will appear here once they are created."}
+                                                    action={search ? {
+                                                        label: "Clear Filters",
+                                                        onClick: resetFilters
+                                                    } : undefined}
+                                                />
                                             </td>
                                         </tr>
                                     ) : (

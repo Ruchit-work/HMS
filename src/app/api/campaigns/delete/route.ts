@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
 /**

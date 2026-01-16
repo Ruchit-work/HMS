@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import { sanitizeErrorMessage, makeConcise } from '@/utils/messageSanitizer'
+import { sanitizeErrorMessage, makeConcise } from '@/utils/errors/messageSanitizer'
 
 interface NotificationProps {
   type: 'success' | 'error' | 'info'

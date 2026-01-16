@@ -1,30 +1,27 @@
  "use client"
 
-import { useCallback, useEffect, useMemo, useState, useRef, Suspense } from "react"
+import { useCallback, useEffect, useState, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
-import { auth, db } from "@/firebase/config"
-import { doc, getDoc, query, where, getDocs, onSnapshot } from "firebase/firestore"
+import { auth } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
-import { generatePrescriptionPDF } from "@/utils/pdfGenerators"
-import { completeAppointment, getStatusColor } from "@/utils/appointmentHelpers"
-import { calculateAge } from "@/utils/date"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
+import { generatePrescriptionPDF } from "@/utils/documents/pdfGenerators"
+import { completeAppointment } from "@/utils/appointmentHelpers"
+import { calculateAge } from "@/utils/shared/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
-import Pagination from "@/components/ui/Pagination"
+import Pagination from "@/components/ui/navigation/Pagination"
 import { fetchMedicineSuggestions, MedicineSuggestion, recordMedicineSuggestions } from "@/utils/medicineSuggestions"
-import type { Branch } from "@/types/branch"
 import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
 import dynamic from "next/dynamic"
 import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
-import type { AnatomyViewerData } from "@/components/doctor/InlineAnatomyViewer"
+import type { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
 
 // Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
 const InlineAnatomyViewer = dynamic(
-  () => import("@/components/doctor/InlineAnatomyViewer"),
+  () => import("@/components/doctor/anatomy/InlineAnatomyViewer"),
   {
     ssr: false,
     loading: () => (
@@ -37,305 +34,34 @@ const InlineAnatomyViewer = dynamic(
 import { DocumentMetadata } from "@/types/document"
 import { parsePrescription as parsePrescriptionUtil } from "@/utils/appointments/prescriptionParsers"
 import { formatMedicinesAsText as formatMedicinesAsTextUtil } from "@/utils/appointments/prescriptionFormatters"
-import { isToday as isTodayUtil, isTomorrow as isTomorrowUtil, isThisWeek as isThisWeekUtil, isNextWeek as isNextWeekUtil, sortByDateTime as sortByDateTimeUtil, sortByDateTimeDesc as sortByDateTimeDescUtil } from "@/utils/appointments/appointmentFilters"
-import { TabKey, CompletionFormEntry, UserData, hasValidPrescriptionInput } from "@/types/appointments"
-import ConsultationModeModal from "@/components/doctor/appointments/ConsultationModeModal"
-import CompletionForm from "@/components/doctor/appointments/CompletionForm"
-import PatientInfoSection from "@/components/doctor/appointments/PatientInfoSection"
-import LifestyleSection from "@/components/doctor/appointments/LifestyleSection"
-import MedicalInfoSection from "@/components/doctor/appointments/MedicalInfoSection"
-import AIDiagnosisSuggestion from "@/components/doctor/appointments/AIDiagnosisSuggestion"
-import PatientHistorySection from "@/components/doctor/appointments/PatientHistorySection"
-import CombinedCompletionModal from "@/components/doctor/appointments/CombinedCompletionModal"
-import { AdmitDialog } from "@/components/doctor/appointments/AdmitDialog"
-import { ReportModal } from "@/components/doctor/appointments/ReportModal"
-import { HistoryDocumentViewer } from "@/components/doctor/appointments/HistoryDocumentViewer"
-import PageHeader from "@/components/doctor/appointments/PageHeader"
-import StatsBar from "@/components/doctor/appointments/StatsBar"
-import FilterBar from "@/components/doctor/appointments/FilterBar"
-import EmptyState from "@/components/doctor/appointments/EmptyState"
-import HistorySearch from "@/components/doctor/appointments/HistorySearch"
-
-function PatientSummaryBar({
-  appointment,
-}: {
-  appointment: AppointmentType
-}) {
-  const age = appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) : null
-
-  return (
-    <div className="sticky top-0 z-10 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 backdrop-blur-md shadow-xl px-4 py-4 flex items-center justify-between gap-4 animate-slide-up-fade">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-white/20 to-white/10 backdrop-blur-sm flex items-center justify-center text-base font-bold text-white shadow-2xl border-2 border-white/30 transform transition-all duration-300 hover:scale-110 hover:rotate-12 animate-breathe">
-          {appointment.patientName?.charAt(0).toUpperCase() || "P"}
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-bold text-white truncate drop-shadow-md">
-            {appointment.patientName || "Patient"}
-          </div>
-          <div className="mt-0.5 text-xs text-white/90 truncate flex items-center gap-1">
-            {age !== null && (
-              <>
-                <span>{age}y</span>
-                <span className="text-white/60">·</span>
-              </>
-            )}
-            <span>{appointment.patientPhone || appointment.patientGender || "—"}</span>
-          </div>
-        </div>
-      </div>
-      <div className="hidden md:flex flex-col items-end gap-1.5 text-xs">
-        <div className="flex items-center gap-2">
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold shadow-lg border border-white/30 backdrop-blur-sm bg-white/20 text-white animate-badge-pulse`}
-          >
-            {appointment.status === "confirmed"
-              ? "Confirmed"
-              : appointment.status === "completed"
-              ? "Completed"
-              : appointment.status}
-          </span>
-          <span className="text-white/90 font-medium flex items-center gap-1">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            {new Date(appointment.appointmentDate).toLocaleDateString("en-US", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}{" "}
-            <span className="text-white/70">·</span> {appointment.appointmentTime}
-          </span>
-        </div>
-        {appointment.chiefComplaint && (
-          <p className="max-w-md text-[11px] text-white/80 line-clamp-1 flex items-center gap-1">
-            <svg className="w-3 h-3 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            {appointment.chiefComplaint}
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ClinicalSummaryCard({
-  appointment,
-  latestRecommendation,
-  onClick,
-}: {
-  appointment: AppointmentType
-  latestRecommendation: {
-    finalDiagnosis: string[]
-    medicine?: string | null
-    notes?: string | null
-    date?: string
-  } | null
-  onClick?: () => void
-}) {
-  const primaryDiagnosis =
-    latestRecommendation && latestRecommendation.finalDiagnosis.length > 0
-      ? latestRecommendation.finalDiagnosis[0]
-      : null
-
-  return (
-    <div 
-      onClick={onClick}
-      className={`rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-blue-50/30 shadow-sm p-4 transition-all duration-300 hover:shadow-xl hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50/50 hover:-translate-y-1 hover:scale-[1.02] animate-fade-in card-hover ${
-        latestRecommendation && onClick ? "cursor-pointer" : ""
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-sm font-semibold text-slate-900">Last visit details</h3>
-        {latestRecommendation ? (
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-100">
-              {latestRecommendation.date || "Previous visit"}
-            </span>
-            {onClick && (
-              <span className="text-[10px] text-blue-600 font-medium">Click to view</span>
-            )}
-          </div>
-        ) : (
-          <span className="text-[11px] text-slate-400">No previous visit</span>
-        )}
-      </div>
-
-      {latestRecommendation ? (
-        <>
-          {/* Compact summary row (always visible) */}
-          <div className="flex flex-col gap-2 text-xs">
-            {appointment.chiefComplaint && (
-              <div className="rounded-lg bg-white/70 border border-slate-100 px-2.5 py-1.5">
-                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
-                  Chief complaint
-                </p>
-                <p className="mt-0.5 text-slate-900 line-clamp-2">
-                  {appointment.chiefComplaint}
-                </p>
-              </div>
-            )}
-
-            {primaryDiagnosis && (
-              <div className="flex flex-wrap gap-1.5 items-center">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                  Diagnosis
-                </span>
-                <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 border border-blue-100">
-                  {primaryDiagnosis}
-                </span>
-                {latestRecommendation.finalDiagnosis.length > 1 && (
-                  <span className="text-[11px] text-slate-500">
-                    +{latestRecommendation.finalDiagnosis.length - 1} more
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </>
-      ) : null}
-    </div>
-  )
-}
-
-function AppointmentActionsCard({
-  appointment,
-  updating,
-  onStartConsultation,
-  onOpenDocuments,
-  consultationStarted,
-}: {
-  appointment: AppointmentType
-  updating: boolean
-  onStartConsultation: () => void
-  onOpenDocuments: () => void
-  consultationStarted: boolean
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-emerald-50/20 shadow-sm p-4 space-y-4 transition-all duration-300 hover:shadow-md hover:border-emerald-200 animate-fade-in card-hover">
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-          Appointment
-        </p>
-        <p className="mt-1 text-sm font-semibold text-slate-900">
-          {new Date(appointment.appointmentDate).toLocaleDateString("en-US", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}{" "}
-          · {appointment.appointmentTime}
-        </p>
-        <p className="mt-0.5 text-xs text-slate-500">
-          Status:{" "}
-          <span className="font-medium text-slate-900">
-            {appointment.status === "confirmed"
-              ? "Confirmed"
-              : appointment.status === "completed"
-              ? "Completed"
-              : appointment.status}
-          </span>
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <button
-          type="button"
-          onClick={onStartConsultation}
-          disabled={updating || consultationStarted}
-          className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95"
-        >
-          <span>{consultationStarted ? "Consultation in progress" : "Start consultation"}</span>
-        </button>
-        <button
-          type="button"
-          onClick={onOpenDocuments}
-          className="w-full rounded-xl border-2 border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-gradient-to-r hover:from-slate-50 hover:to-blue-50 hover:border-blue-400 flex items-center justify-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95"
-        >
-          <span>Documents &amp; reports</span>
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function AppointmentsListPane({
-  appointments,
-  selectedId,
-  onSelect,
-}: {
-  appointments: AppointmentType[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 shadow-lg overflow-hidden flex flex-col h-full animate-fade-in">
-      <div className="px-4 py-3.5 border-b border-slate-200/50 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-between shadow-md animate-slide-up-fade">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Appointments
-        </h3>
-        <span className="text-[11px] font-bold text-white bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-lg animate-pulse-slow border border-white/30">
-          {appointments.length}
-        </span>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {appointments.map((apt, index) => (
-          <button
-            key={apt.id}
-            type="button"
-            onClick={() => onSelect(apt.id)}
-            className={`w-full px-4 py-3 text-left text-xs border-b border-slate-100 flex flex-col gap-1 transition-all duration-200 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50/50 hover:shadow-sm stagger-item ${
-              selectedId === apt.id 
-                ? "bg-gradient-to-r from-blue-100 to-indigo-100 border-l-4 border-l-blue-500 shadow-md" 
-                : "bg-white"
-            }`}
-            style={{ animationDelay: `${index * 50}ms` }}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-slate-900 truncate">
-                {apt.patientName || "Patient"}
-              </span>
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusColor(
-                  apt.status
-                )}`}
-              >
-                {apt.status === "confirmed"
-                  ? "Confirmed"
-                  : apt.status === "completed"
-                  ? "Completed"
-                  : apt.status}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-slate-500">
-              <span className="truncate">
-                {new Date(apt.appointmentDate).toLocaleDateString("en-US", {
-                  day: "numeric",
-                  month: "short",
-                })}
-                {" · "}
-                {apt.appointmentTime}
-              </span>
-              {apt.chiefComplaint && (
-                <span className="ml-2 truncate max-w-[140px]">
-                  {apt.chiefComplaint}
-                </span>
-              )}
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
+import { TabKey, CompletionFormEntry, hasValidPrescriptionInput } from "@/types/appointments"
+import ConsultationModeModal from "@/components/doctor/appointments/modals/ConsultationModeModal"
+import CompletionForm from "@/components/doctor/appointments/forms/CompletionForm"
+import PatientInfoSection from "@/components/doctor/appointments/sections/PatientInfoSection"
+import LifestyleSection from "@/components/doctor/appointments/sections/LifestyleSection"
+import MedicalInfoSection from "@/components/doctor/appointments/sections/MedicalInfoSection"
+import AIDiagnosisSuggestion from "@/components/doctor/appointments/ai/AIDiagnosisSuggestion"
+import PatientHistorySection from "@/components/doctor/appointments/sections/PatientHistorySection"
+import CombinedCompletionModal from "@/components/doctor/appointments/modals/CombinedCompletionModal"
+import { AdmitDialog } from "@/components/doctor/appointments/modals/AdmitDialog"
+import { ReportModal } from "@/components/doctor/appointments/modals/ReportModal"
+import { HistoryDocumentViewer } from "@/components/doctor/appointments/ui/HistoryDocumentViewer"
+import PageHeader from "@/components/doctor/appointments/ui/PageHeader"
+import StatsBar from "@/components/doctor/appointments/ui/StatsBar"
+import FilterBar from "@/components/doctor/appointments/ui/FilterBar"
+import EmptyState from "@/components/doctor/appointments/ui/EmptyState"
+import HistorySearch from "@/components/doctor/appointments/ui/HistorySearch"
+import PatientSummaryBar from "@/components/doctor/appointments/ui/PatientSummaryBar"
+import ClinicalSummaryCard from "@/components/doctor/appointments/ui/ClinicalSummaryCard"
+import AppointmentActionsCard from "@/components/doctor/appointments/ui/AppointmentActionsCard"
+import AppointmentsListPane from "@/components/doctor/appointments/ui/AppointmentsListPane"
+import { useDoctorAppointments } from "@/hooks/useDoctorAppointments"
+import { useDoctorBranches } from "@/hooks/useDoctorBranches"
+import { usePatientHistory } from "@/hooks/usePatientHistory"
+import { useAppointmentFilters } from "@/hooks/useAppointmentFilters"
 
 function DoctorAppointmentsContent() {
   const searchParams = useSearchParams()
-  const [userData, setUserData] = useState<UserData | null>(null)
-  const [appointments, setAppointments] = useState<AppointmentType[]>([])
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>("today")
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
@@ -353,18 +79,11 @@ function DoctorAppointmentsContent() {
   const [loadingAiPrescription, setLoadingAiPrescription] = useState<{ [key: string]: boolean }>({})
   const [showAiPrescriptionSuggestion, setShowAiPrescriptionSuggestion] = useState<{ [key: string]: boolean }>({})
   const [removedAiMedicines, setRemovedAiMedicines] = useState<{ [appointmentId: string]: number[] }>({})
-  const [patientHistory, setPatientHistory] = useState<AppointmentType[]>([])
-  const [historySearchFilters, setHistorySearchFilters] = useState<{ [key: string]: { text: string; date: string } }>({})
   const [historyTabFilters, setHistoryTabFilters] = useState<{ text: string; date: string }>({ text: "", date: "" })
-  const [historyPage, setHistoryPage] = useState(1)
-  const [historyPageSize, setHistoryPageSize] = useState(10)
-  const [appointmentsPage, setAppointmentsPage] = useState(1)
-  const [appointmentsPageSize, setAppointmentsPageSize] = useState(10)
   const [aiDiagnosis, setAiDiagnosis] = useState<{ [key: string]: string }>({})
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{ [key: string]: boolean }>({})
   const [showHistory, setShowHistory] = useState<{ [key: string]: boolean }>({})
   const [showDocumentUpload, setShowDocumentUpload] = useState<{ [key: string]: boolean }>({})
-  const [historyDocuments, setHistoryDocuments] = useState<{ [appointmentId: string]: DocumentMetadata[] }>({})
   const [selectedHistoryDocument, setSelectedHistoryDocument] = useState<DocumentMetadata | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [admitting, setAdmitting] = useState<{ [key: string]: boolean }>({})
@@ -399,9 +118,6 @@ function DoctorAppointmentsContent() {
     appointmentId: null,
   })
   const [medicineSuggestionsLoading, setMedicineSuggestionsLoading] = useState(false)
-  const [branches, setBranches] = useState<Branch[]>([])
-  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
-  const [loadingBranches, setLoadingBranches] = useState(false)
   const [lastVisitModal, setLastVisitModal] = useState<{
     open: boolean
     appointment: AppointmentType | null
@@ -468,92 +184,19 @@ function DoctorAppointmentsContent() {
   }, [showCombinedCompletionModal])
 
   const { user, loading } = useAuth("doctor")
-  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
-
-  useEffect(() => {
-    const fetchBranches = async () => {
-      if (!activeHospitalId) return
-
-      try {
-        setLoadingBranches(true)
-        const currentUser = auth.currentUser
-        if (!currentUser) {
-          return
-        }
-        const token = await currentUser.getIdToken()
-
-        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        const data = await response.json()
-
-        if (data.success && data.branches) {
-          setBranches(data.branches)
-        }
-      } catch {
-      } finally {
-        setLoadingBranches(false)
-      }
-    }
-
-    fetchBranches()
-  }, [activeHospitalId])
-
-  const setupRealtimeListeners = async (branchId: string | null) => {
-    if (!user || !activeHospitalId) return () => {}
-
-    const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
-    if (doctorDoc.exists()) {
-      const data = doctorDoc.data() as UserData
-      setUserData(data)
-    }
-
-    const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-    let q
-    if (branchId) {
-      q = query(appointmentsRef, where("doctorId", "==", user.uid), where("branchId", "==", branchId))
-    } else {
-      q = query(appointmentsRef, where("doctorId", "==", user.uid))
-    }
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const appointmentsList = snapshot.docs
-          .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as AppointmentType))
-          .filter((appointment) => {
-            const appt = appointment as any
-            return appt.status !== "whatsapp_pending" && !appt.whatsappPending
-          })
-
-        setAppointments(appointmentsList)
-      },
-      () => {}
-    )
-
-    return unsubscribe
-  }
-
-  useEffect(() => {
-    if (!user || hospitalLoading || !activeHospitalId) return
-
-    let unsubscribe: (() => void) | null = null
-
-    const initializeRealtimeData = async () => {
-      unsubscribe = await setupRealtimeListeners(selectedBranchId)
-    }
-
-    initializeRealtimeData()
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeHospitalId, hospitalLoading, selectedBranchId])
+  const { activeHospitalId } = useMultiHospital()
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
+  
+  // Use custom hooks for data fetching
+  const { appointments, userData, setAppointments } = useDoctorAppointments(user, activeHospitalId, selectedBranchId)
+  const { branches, loadingBranches } = useDoctorBranches(activeHospitalId)
+  const {
+    patientHistory,
+    historyDocuments,
+    historySearchFilters,
+    fetchPatientHistory,
+    fetchHistoryDocuments,
+  } = usePatientHistory()
 
   useEffect(() => {
     const expandAppointmentId = sessionStorage.getItem("expandAppointmentId")
@@ -703,7 +346,6 @@ function DoctorAppointmentsContent() {
   const toggleAccordion = async (appointmentId: string) => {
     if (expandedAppointment === appointmentId) {
       setExpandedAppointment(null)
-      setPatientHistory([])
       setShowHistory({})
     } else {
       setExpandedAppointment(appointmentId)
@@ -718,79 +360,17 @@ function DoctorAppointmentsContent() {
           })
         }
       }, 100)
-      setExpandedAppointment(appointmentId)
 
       const appointment = appointments.find((apt) => apt.id === appointmentId)
       if (appointment && appointment.patientId && activeHospitalId) {
-        try {
-          const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-          const patientAppointmentsQuery = query(
-            appointmentsRef,
-            where("patientId", "==", appointment.patientId),
-            where("status", "==", "completed")
+        const history = await fetchPatientHistory(appointment, appointmentId, activeHospitalId)
+        if (history && history.length > 0 && user) {
+          fetchHistoryDocuments(
+            history.map((h) => h.id),
+            appointment.patientUid || appointment.patientId
           )
-
-          const snapshot = await getDocs(patientAppointmentsQuery)
-          const history = snapshot.docs
-            .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as AppointmentType))
-            .filter((apt: AppointmentType) => apt.id !== appointmentId)
-            .sort(
-              (a: AppointmentType, b: AppointmentType) =>
-                new Date(b.appointmentDate).getTime() -
-                new Date(a.appointmentDate).getTime()
-            )
-          setPatientHistory(history)
-          setHistorySearchFilters((prev) => ({
-            ...prev,
-            [appointmentId]: { text: "", date: "" },
-          }))
-
-          if (history.length > 0 && user) {
-            fetchHistoryDocuments(
-              history.map((h) => h.id),
-              appointment.patientUid || appointment.patientId
-            )
-          }
-        } catch (error) {
-          console.error("Error fetching patient history:", error)
         }
       }
-    }
-  }
-
-  const fetchHistoryDocuments = async (appointmentIds: string[], patientUid: string) => {
-    if (!patientUid || !user || appointmentIds.length === 0) return
-
-    try {
-      const currentUser = auth.currentUser
-      if (!currentUser) return
-
-      const token = await currentUser.getIdToken()
-      const params = new URLSearchParams()
-      params.append("patientUid", patientUid)
-      params.append("status", "active")
-
-      const response = await fetch(`/api/documents?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      const data = await response.json()
-      if (response.ok && data.documents) {
-        const documentsByAppointment: { [appointmentId: string]: DocumentMetadata[] } = {}
-        data.documents.forEach((docItem: DocumentMetadata) => {
-          if (docItem.appointmentId && appointmentIds.includes(docItem.appointmentId)) {
-            if (!documentsByAppointment[docItem.appointmentId]) {
-              documentsByAppointment[docItem.appointmentId] = []
-            }
-            documentsByAppointment[docItem.appointmentId].push(docItem)
-          }
-        })
-        setHistoryDocuments((prev) => ({ ...prev, ...documentsByAppointment }))
-      }
-    } catch (error) {
-      console.error("Error fetching history documents:", error)
     }
   }
 
@@ -1743,81 +1323,25 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const isToday = isTodayUtil
-  const isTomorrow = isTomorrowUtil
-  const isThisWeek = isThisWeekUtil
-  const isNextWeek = isNextWeekUtil
-  const sortByDateTime = sortByDateTimeUtil
-  const sortByDateTimeDesc = sortByDateTimeDescUtil
-
-  const confirmedAppointments = appointments.filter(
-    (apt) => apt.status === "confirmed"
-  )
-  const historyAppointments = appointments.filter(
-    (apt) => apt.status === "completed"
-  )
-
-  const todayAppointments = confirmedAppointments.filter((apt) =>
-    isToday(apt.appointmentDate)
-  )
-  const tomorrowAppointments = confirmedAppointments.filter((apt) =>
-    isTomorrow(apt.appointmentDate)
-  )
-  const thisWeekAppointments = confirmedAppointments.filter((apt) =>
-    isThisWeek(apt.appointmentDate)
-  )
-  const nextWeekAppointments = confirmedAppointments.filter((apt) =>
-    isNextWeek(apt.appointmentDate)
-  )
-
-  const filteredHistoryAppointments = useMemo(() => {
-    const normalizedQuery = historyTabFilters.text.trim().toLowerCase()
-    return historyAppointments.filter((apt) => {
-      const matchesText = normalizedQuery
-        ? [
-            apt.patientName,
-            apt.patientId,
-            apt.id,
-            apt.chiefComplaint,
-            apt.associatedSymptoms,
-            apt.medicalHistory,
-            apt.doctorNotes,
-          ].some((field) => (field || "").toLowerCase().includes(normalizedQuery))
-        : true
-
-      const matchesDate = historyTabFilters.date
-        ? new Date(apt.appointmentDate).toISOString().split("T")[0] ===
-          historyTabFilters.date
-        : true
-
-      return matchesText && matchesDate
-    })
-  }, [historyAppointments, historyTabFilters])
-
-  const totalHistoryPages = Math.max(
-    1,
-    Math.ceil(filteredHistoryAppointments.length / historyPageSize)
-  )
-
-  const paginatedHistoryAppointments = useMemo(() => {
-    const sorted = [...filteredHistoryAppointments].sort(sortByDateTimeDesc)
-    const startIndex = (historyPage - 1) * historyPageSize
-    return sorted.slice(startIndex, startIndex + historyPageSize)
-  }, [filteredHistoryAppointments, historyPage, historyPageSize, sortByDateTimeDesc])
-
-  useEffect(() => {
-    if (historyPage > totalHistoryPages) {
-      setHistoryPage(totalHistoryPages)
-    }
-  }, [historyPage, totalHistoryPages])
-
-  useEffect(() => {
-    if (activeTab === "history") {
-      setHistoryPage(1)
-    } else {
-      setAppointmentsPage(1)
-    }
-  }, [historyTabFilters, historyPageSize, activeTab])
+  // Use appointment filters hook
+  const {
+    paginatedAppointments,
+    allNonHistoryAppointments,
+    historyAppointments,
+    stats,
+    tabItems,
+    historyPage,
+    setHistoryPage,
+    historyPageSize,
+    setHistoryPageSize,
+    appointmentsPage,
+    setAppointmentsPage,
+    appointmentsPageSize,
+    setAppointmentsPageSize,
+    totalHistoryPages,
+    totalAppointmentsPages,
+    filteredHistoryAppointments,
+  } = useAppointmentFilters(appointments, activeTab, historyTabFilters)
 
   useEffect(() => {
     appointments.forEach((apt) => {
@@ -1843,46 +1367,6 @@ function DoctorAppointmentsContent() {
     handleGenerateAiPrescription,
   ])
 
-  // Get all appointments for non-history tabs (before pagination)
-  const allNonHistoryAppointments = useMemo(() => {
-    switch (activeTab) {
-      case "today":
-        return [...todayAppointments].sort(sortByDateTime)
-      case "tomorrow":
-        return [...tomorrowAppointments].sort(sortByDateTime)
-      case "thisWeek":
-        return [...thisWeekAppointments].sort(sortByDateTime)
-      case "nextWeek":
-        return [...nextWeekAppointments].sort(sortByDateTime)
-      default:
-        return []
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, todayAppointments, tomorrowAppointments, thisWeekAppointments, nextWeekAppointments])
-
-  // Pagination for non-history tabs
-  const totalAppointmentsPages = useMemo(() => {
-    if (activeTab === "history") return 1
-    return Math.max(1, Math.ceil(allNonHistoryAppointments.length / appointmentsPageSize))
-  }, [allNonHistoryAppointments.length, appointmentsPageSize, activeTab])
-
-  const paginatedAppointments = useMemo(() => {
-    if (activeTab === "history") {
-      return paginatedHistoryAppointments
-    }
-    const startIndex = (appointmentsPage - 1) * appointmentsPageSize
-    return allNonHistoryAppointments.slice(startIndex, startIndex + appointmentsPageSize)
-  }, [activeTab, allNonHistoryAppointments, appointmentsPage, appointmentsPageSize, paginatedHistoryAppointments])
-
-  const displayedAppointments = paginatedAppointments
-
-  // Reset page if it exceeds total pages (must be after totalAppointmentsPages is defined)
-  useEffect(() => {
-    if (appointmentsPage > totalAppointmentsPages && activeTab !== "history") {
-      setAppointmentsPage(totalAppointmentsPages)
-    }
-  }, [appointmentsPage, totalAppointmentsPages, activeTab])
-
   if (loading) {
     return <LoadingSpinner message="Loading appointments..." />
   }
@@ -1893,23 +1377,8 @@ function DoctorAppointmentsContent() {
 
   const selectedAppointment =
     expandedAppointment
-      ? displayedAppointments.find((apt) => apt.id === expandedAppointment) || null
+      ? paginatedAppointments.find((apt) => apt.id === expandedAppointment) || null
       : null
-
-  const tabItems: { key: TabKey; label: string; count: number }[] = [
-    { key: "today", label: "Today", count: todayAppointments.length },
-    { key: "tomorrow", label: "Tomorrow", count: tomorrowAppointments.length },
-    { key: "thisWeek", label: "This Week", count: thisWeekAppointments.length },
-    { key: "nextWeek", label: "Next Week", count: nextWeekAppointments.length },
-    { key: "history", label: "History", count: historyAppointments.length },
-  ]
-
-  const stats = [
-    { label: "Today", value: todayAppointments.length },
-    { label: "Tomorrow", value: tomorrowAppointments.length },
-    { label: "This Week", value: thisWeekAppointments.length },
-    { label: "History", value: historyAppointments.length },
-  ]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-white pt-20">
@@ -1951,7 +1420,7 @@ function DoctorAppointmentsContent() {
             />
           )}
           <main className="px-4 sm:px-6 lg:px-8 py-6">
-        {displayedAppointments.length === 0 ? (
+        {paginatedAppointments.length === 0 ? (
           <EmptyState activeTab={activeTab} />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[320px,minmax(0,1fr)] gap-4 lg:gap-6">
@@ -1959,7 +1428,7 @@ function DoctorAppointmentsContent() {
             <div className="h-full flex flex-col">
               <div className="flex-1">
                 <AppointmentsListPane
-                  appointments={displayedAppointments}
+                  appointments={paginatedAppointments}
                   selectedId={selectedAppointment ? selectedAppointment.id : null}
                   onSelect={(id) => toggleAccordion(id)}
                 />

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 
 function isSequentialPatientId(value?: string | null) {
   if (!value) return false

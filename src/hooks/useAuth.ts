@@ -174,7 +174,7 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
         //   }
         // }
 
-        // If route requires specific role and user has different role
+        // If route requires specific role and user has different role, redirect
         if (requiredRole && requiredRole !== userRoleData.role) {
           const dashboardPath = `/${userRoleData.role}-dashboard`
           router.replace(dashboardPath)

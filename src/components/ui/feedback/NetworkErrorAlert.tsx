@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { getNetworkErrorMessage } from "@/utils/networkErrorHandler"
+import { getNetworkErrorMessage } from "@/utils/shared/networkErrorHandler"
 
 interface NetworkErrorAlertProps {
   error: unknown

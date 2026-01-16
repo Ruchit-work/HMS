@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
-import { authenticateRequest } from '@/utils/apiAuth'
+import { authenticateRequest } from '@/utils/firebase/apiAuth'
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {

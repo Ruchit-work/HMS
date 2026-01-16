@@ -5,7 +5,7 @@ import PasswordRequirements, { isPasswordValid } from '@/components/forms/Passwo
 import { qualifications, specializationCategories, qualificationSpecializationMap } from '@/constants/signup'
 import { VisitingHours } from '@/types/patient'
 import { DEFAULT_VISITING_HOURS } from '@/utils/timeSlots'
-import VisitingHoursEditor from '@/components/doctor/VisitingHoursEditor'
+import VisitingHoursEditor from '@/components/doctor/schedule/VisitingHoursEditor'
 import { Branch } from '@/types/branch'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 

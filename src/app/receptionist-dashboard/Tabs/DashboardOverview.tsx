@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { query, where, getDocs, orderBy, limit, onSnapshot } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 
 interface DashboardStats {
   todayAppointments: number
@@ -383,7 +383,12 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="loading" style={{ width: "48px", height: "48px" }}>
+          <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+            <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
+            <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
+          </svg>
+        </div>
       </div>
     )
   }

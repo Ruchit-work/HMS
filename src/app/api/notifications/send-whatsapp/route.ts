@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { sendTextMessage } from "@/server/metaWhatsApp"
 
 // MIGRATED TO META WHATSAPP - Twilio code kept for rollback reference

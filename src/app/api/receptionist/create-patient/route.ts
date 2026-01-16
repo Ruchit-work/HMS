@@ -1,8 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { applyRateLimit } from "@/utils/rateLimit"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
   const friendlyName = firstName?.trim() || "there"

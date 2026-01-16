@@ -11,10 +11,10 @@ import {
 } from "@/server/healthAwarenessDays"
 import { generateAdvertisements } from "@/server/groqAdvertisementGenerator"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { slugify } from "@/utils/campaigns"
+import { slugify } from "@/utils/campaigns/campaigns"
 import type { Firestore } from "firebase-admin/firestore"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 async function cleanupExpiredAutoCampaigns(db: Firestore) {
   const now = new Date()
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       return createAuthErrorResponse(auth)
     }
     if (auth.user?.uid) {
-      const { getUserActiveHospitalId } = await import("@/utils/serverHospitalQueries")
+      const { getUserActiveHospitalId } = await import("@/utils/firebase/serverHospitalQueries")
       adminHospitalId = await getUserActiveHospitalId(auth.user.uid)
     }
   }

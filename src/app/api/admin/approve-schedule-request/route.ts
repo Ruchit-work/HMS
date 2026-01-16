@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { applyRateLimit } from "@/utils/rateLimit"
-import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 export async function POST(req: NextRequest) {
   // Apply rate limiting first

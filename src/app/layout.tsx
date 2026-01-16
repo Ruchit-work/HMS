@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import GlobalHeader from "@/components/ui/GlobalHeader";
+import GlobalHeader from "@/components/ui/layout/GlobalHeader";
 import { MultiHospitalProvider } from "@/contexts/MultiHospitalContext";
-import ErrorBoundaryWrapper from "@/components/ui/ErrorBoundaryWrapper";
+import ErrorBoundaryWrapper from "@/components/ui/boundaries/ErrorBoundaryWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

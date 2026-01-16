@@ -4,13 +4,13 @@ import { where, query, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/fi
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
-import { getHospitalCollection } from '@/utils/hospital-queries'
-import LoadingSpinner from '@/components/ui/StatusComponents'
+import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import AdminProtected from '@/components/AdminProtected'
-import { ViewModal, DeleteModal } from '@/components/ui/Modals'
+import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import DoctorProfileForm, { DoctorProfileFormValues } from '@/components/forms/DoctorProfileForm'
-import { SuccessToast } from '@/components/ui/StatusComponents'
-import { formatDate, formatDateTime } from '@/utils/date'
+import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
+import { formatDate, formatDateTime } from '@/utils/shared/date'
 
 interface Doctor {
     id: string

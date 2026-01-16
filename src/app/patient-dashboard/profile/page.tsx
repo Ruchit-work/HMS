@@ -7,12 +7,12 @@ import { signOut } from "firebase/auth"
 import { ChangePasswordSection } from "@/components/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
-import PageHeader from "@/components/ui/PageHeader"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
+import PageHeader from "@/components/ui/layout/PageHeader"
 import { UserData, NotificationData } from "@/types/patient"
-import { calculateAge } from "@/utils/date"
-import { ConfirmDialog } from "@/components/ui/Modals"
+import { calculateAge } from "@/utils/shared/date"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 
 export default function PatientProfilePage() {
   const { user, loading: authLoading } = useAuth("patient")
@@ -58,38 +58,44 @@ export default function PatientProfilePage() {
   const handleEditProfile = async (formData: Record<string, unknown>) => {
     if (!user) return
 
-    setUpdating(true)
-    try {
-      // Filter out undefined values and convert to null for numeric fields
-      const updateData: Record<string, unknown> = {
-        updatedAt: new Date().toISOString()
-      }
-      
-      for (const [key, value] of Object.entries(formData)) {
-        // For numeric fields (heightCm, weightKg), convert undefined/empty to null
-        if (key === 'heightCm' || key === 'weightKg') {
-          if (value === undefined || value === null || value === '') {
-            updateData[key] = null
-          } else {
-            updateData[key] = value
-          }
+    // Optimistic update: Show changes immediately
+    const previousUserData = { ...userData }
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date().toISOString()
+    }
+    
+    for (const [key, value] of Object.entries(formData)) {
+      // For numeric fields (heightCm, weightKg), convert undefined/empty to null
+      if (key === 'heightCm' || key === 'weightKg') {
+        if (value === undefined || value === null || value === '') {
+          updateData[key] = null
         } else {
-          // Skip undefined values for other fields - Firestore doesn't accept undefined
-          if (value !== undefined) {
-            updateData[key] = value
-          }
+          updateData[key] = value
+        }
+      } else {
+        // Skip undefined values for other fields - Firestore doesn't accept undefined
+        if (value !== undefined) {
+          updateData[key] = value
         }
       }
+    }
 
+    // Update UI immediately
+    setUserData({ ...userData, ...updateData } as UserData)
+    setIsEditing(false)
+
+    setUpdating(true)
+    try {
       await updateDoc(doc(db, "patients", user.uid), updateData)
 
-      setUserData({ ...userData, ...updateData } as UserData)
-      setIsEditing(false)
       setNotification({ 
         type: "success", 
         message: "Profile updated successfully!" 
       })
     } catch (error: unknown) {
+      // Rollback on error
+      setUserData(previousUserData)
+      setIsEditing(true)
       setNotification({ 
         type: "error", 
         message: (error as Error).message || "Failed to update profile" 

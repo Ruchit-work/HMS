@@ -6,9 +6,9 @@ import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { collection, query, where, onSnapshot } from "firebase/firestore"
 import { useRouter, usePathname } from "next/navigation"
-import { getUserData } from "@/utils/userHelpers"
-import { ConfirmDialog } from "./Modals"
-import NotificationBadge from "./NotificationBadge"
+import { getUserData } from "@/utils/firebase/userHelpers"
+import { ConfirmDialog } from "../overlays/Modals"
+import NotificationBadge from "../feedback/NotificationBadge"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 
 export default function GlobalHeader() {
@@ -33,8 +33,8 @@ export default function GlobalHeader() {
   })
 
   // Routes that don't need the header
-  const noHeaderRoutes = ["/", "/auth/login", "/auth/signup", "/auth/forgot-password"]
-  const shouldShowHeader = !noHeaderRoutes.includes(pathname)
+  const noHeaderRoutes = ["/", "/auth/login", "/auth/signup", "/auth/forgot-password", "/admin-dashboard", "/receptionist-dashboard"]
+  const shouldShowHeader = !noHeaderRoutes.includes(pathname) && !pathname?.startsWith("/admin-dashboard") && !pathname?.startsWith("/receptionist-dashboard")
 
   // Scroll effect for header
   useEffect(() => {
@@ -181,12 +181,28 @@ export default function GlobalHeader() {
     return null
   }
 
-  if (!user || !userData) {
+  if (!user) {
     return null
   }
 
-  const isDoctor = userData.role === "doctor"
-  const isPatient = userData.role === "patient"
+  // Check role from userData
+  const isDoctor = userData?.role === "doctor"
+  const isPatient = userData?.role === "patient"
+  
+  // Don't show navigation links on admin or receptionist dashboards
+  if (pathname?.startsWith("/admin-dashboard") || pathname?.startsWith("/receptionist-dashboard")) {
+    return null
+  }
+  
+  // If no userData, don't show header
+  if (!userData) {
+    return null
+  }
+  
+  // Only show header for doctors and patients
+  if (!isDoctor && !isPatient) {
+    return null
+  }
 
   type NavLink = {
     href: string
@@ -228,6 +244,7 @@ export default function GlobalHeader() {
           {/* Logo - Fixed width to prevent overlap */}
           <Link 
             href={isDoctor ? "/doctor-dashboard" : isPatient ? "/patient-dashboard" : "/"}
+            prefetch={true}
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-all duration-300 cursor-pointer flex-shrink-0"
           >
             <div className={`bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg flex items-center justify-center text-white shadow-md transition-all duration-300 ${
@@ -250,6 +267,7 @@ export default function GlobalHeader() {
               <div key={link.href} className="relative">
                 <Link
                   href={link.href}
+                  prefetch={true}
                   className={`text-sm xl:text-base font-medium transition-colors whitespace-nowrap relative pb-1 px-2 ${
                     pathname === link.href
                       ? "text-slate-800"
@@ -382,6 +400,7 @@ export default function GlobalHeader() {
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch={true}
                 onClick={handleNavClick}
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   pathname === link.href

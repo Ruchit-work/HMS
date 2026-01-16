@@ -4,8 +4,8 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import Notification from "@/components/ui/Notification"
-import Footer from "@/components/ui/Footer"
+import Notification from "@/components/ui/feedback/Notification"
+import Footer from "@/components/ui/layout/Footer"
 
 export default function PatientAboutSupport() {
   const [submitting, setSubmitting] = useState(false)

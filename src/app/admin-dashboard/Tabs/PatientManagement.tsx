@@ -6,16 +6,19 @@ import { getDocs, where, query, doc, deleteDoc, onSnapshot } from 'firebase/fire
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
-import { getHospitalCollection } from '@/utils/hospital-queries'
-import LoadingSpinner from '@/components/ui/StatusComponents'
+import { useDebounce } from '@/hooks/useDebounce'
+import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { InlineSpinner } from '@/components/ui/feedback/StatusComponents'
+import EmptyState from '@/components/ui/feedback/EmptyState'
 import AdminProtected from '@/components/AdminProtected'
-import { ViewModal, DeleteModal } from '@/components/ui/Modals'
+import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import OTPVerificationModal from '@/components/forms/OTPVerificationModal'
 import PatientProfileForm, { PatientProfileFormValues } from '@/components/forms/PatientProfileForm'
-import { calculateAge, formatDate, formatDateTime } from '@/utils/date'
-import { SuccessToast } from '@/components/ui/StatusComponents'
+import { calculateAge, formatDate, formatDateTime } from '@/utils/shared/date'
+import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { useTablePagination } from '@/hooks/useTablePagination'
-import Pagination from '@/components/ui/Pagination'
+import Pagination from '@/components/ui/navigation/Pagination'
 import DocumentListCompact from '@/components/documents/DocumentListCompact'
 // import toast from 'react-hot-toast'
 
@@ -71,6 +74,7 @@ export default function PatientManagement({
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
+    const debouncedSearch = useDebounce(search, 300)
  
     const { user, loading: authLoading } = useAuth()
     const { activeHospitalId, isSuperAdmin } = useMultiHospital()
@@ -103,6 +107,14 @@ export default function PatientManagement({
     const handleDeleteConfirm = async () => {
         if (!canDelete || !deletePatient) return
         
+        // Optimistic update: Remove from UI immediately
+        const previousPatients = [...patients]
+        const deletedPatient = deletePatient
+        
+        setPatients(prev => prev.filter(p => p.id !== deletePatient.id))
+        setDeleteModal(false)
+        setDeletePatient(null)
+        
         try {
             setLoading(true)
             setError(null) // Clear any previous errors
@@ -121,7 +133,7 @@ export default function PatientManagement({
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ uid: deletePatient.id, userType: 'Patient' })
+                    body: JSON.stringify({ uid: deletedPatient.id, userType: 'Patient' })
                 })
                 
                 if (!authDeleteResponse.ok) {
@@ -135,23 +147,16 @@ export default function PatientManagement({
             // Then delete from Firestore: hospital-scoped patients + legacy root collection
             if (activeHospitalId) {
                 try {
-                    const scopedRef = doc(getHospitalCollection(activeHospitalId, 'patients'), deletePatient.id)
+                    const scopedRef = doc(getHospitalCollection(activeHospitalId, 'patients'), deletedPatient.id)
                     await deleteDoc(scopedRef)
                 } catch {
                 }
             }
             try {
-                const legacyRef = doc(db, 'patients', deletePatient.id)
+                const legacyRef = doc(db, 'patients', deletedPatient.id)
                 await deleteDoc(legacyRef)
             } catch {
             }
-            
-            // Update local state (this list comes from hospital-scoped patients)
-            setPatients(prev => prev.filter(p => p.id !== deletePatient.id))
-            
-            // Close modal
-            setDeleteModal(false)
-            setDeletePatient(null)
             
             // Show success message
             setSuccessMessage('Patient deleted successfully from database and authentication!')
@@ -160,6 +165,9 @@ export default function PatientManagement({
             }, 3000)
             
         } catch (error) {
+            // Rollback on error
+            setPatients(previousPatients)
+            setDeletePatient(deletedPatient)
             setError((error as Error).message || 'Failed to delete patient')
         } finally {
             setLoading(false)
@@ -189,32 +197,48 @@ export default function PatientManagement({
                     patientsList = patientsList.filter(p => p.defaultBranchId === selectedBranchId)
                 }
                 
-                // Fetch appointments for each patient (keep this as one-time fetch for now)
+                // Optimized: Only fetch appointment counts per patient instead of all appointments
+                // Use parallel queries for each patient to get counts
                 const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
-                const appointmentsSnapshot = await getDocs(appointmentsRef)
-                const allAppointments = appointmentsSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }))
                 
-                // Group appointments by patient ID
-                const appointmentsByPatient = new Map<string, any[]>()
-                allAppointments.forEach((apt: any) => {
-                    const patientId = apt.patientId || apt.patientUid || ''
-                    if (patientId) {
-                        if (!appointmentsByPatient.has(patientId)) {
-                            appointmentsByPatient.set(patientId, [])
-                        }
-                        appointmentsByPatient.get(patientId)!.push(apt)
+                // Create queries for each patient in parallel (limited to avoid too many queries)
+                const patientIds = patientsList.map(p => p.id)
+                const patientIdStrings = patientsList.map(p => p.patientId).filter(Boolean) as string[]
+                const allPatientIdentifiers = [...new Set([...patientIds, ...patientIdStrings])]
+                
+                // Batch fetch appointment counts - limit to 30 patients at a time to avoid too many queries
+                const appointmentCounts = new Map<string, number>()
+                const batchSize = 30
+                
+                for (let i = 0; i < Math.min(allPatientIdentifiers.length, batchSize); i++) {
+                    const patientId = allPatientIdentifiers[i]
+                    try {
+                        // Query appointments for this patient
+                        const patientAppointmentsQuery = query(
+                            appointmentsRef,
+                            where('patientUid', '==', patientId)
+                        )
+                        const patientAppointmentsSnapshot = await getDocs(patientAppointmentsQuery)
+                        const count1 = patientAppointmentsSnapshot.size
+                        
+                        // Also check by patientId field
+                        const patientIdAppointmentsQuery = query(
+                            appointmentsRef,
+                            where('patientId', '==', patientId)
+                        )
+                        const patientIdAppointmentsSnapshot = await getDocs(patientIdAppointmentsQuery)
+                        const count2 = patientIdAppointmentsSnapshot.size
+                        
+                        appointmentCounts.set(patientId, count1 + count2)
+                    } catch {
+                        // If query fails, set count to 0
+                        appointmentCounts.set(patientId, 0)
                     }
-                })
+                }
                 
-                // Add appointment details to each patient
+                // Add appointment counts to each patient (lazy load full appointments only when needed)
                 const patientsWithAppointments = patientsList.map(patient => {
-                    const patientAppointments = [
-                        ...(appointmentsByPatient.get(patient.id) || []),
-                        ...(patient.patientId ? (appointmentsByPatient.get(patient.patientId) || []) : [])
-                    ]
+                    const patientAppointments: any[] = [] // Empty array - will be loaded on demand if needed
                     
                     // Remove duplicates
                     const uniqueAppointments = Array.from(
@@ -304,8 +328,8 @@ export default function PatientManagement({
     const filteredPatients = useMemo(() => {
         let filtered = [...patients]
 
-        if (search){
-            const searchLower = search.toLowerCase()
+        if (debouncedSearch){
+            const searchLower = debouncedSearch.toLowerCase()
             filtered = filtered.filter(patient =>
                 `${patient.firstName || ""} ${patient.lastName || ""}`.toLowerCase().includes(searchLower) ||
                 (patient.email || "").toLowerCase().includes(searchLower) ||
@@ -351,7 +375,7 @@ export default function PatientManagement({
         }
         
         return filtered
-    }, [patients, search, sortField, sortOrder, statusFilter])
+    }, [patients, debouncedSearch, sortField, sortOrder, statusFilter])
 
     // Use pagination hook
     const {
@@ -917,26 +941,8 @@ export default function PatientManagement({
                         <tr>
                           <td colSpan={6} className="px-3 py-12 text-center">
                             <div className="flex flex-col items-center">
-                              <svg
-                                className="mb-2 h-8 w-8 animate-spin text-blue-600"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                              >
-                                <circle
-                                  className="opacity-25"
-                                  cx="12"
-                                  cy="12"
-                                  r="10"
-                                  stroke="currentColor"
-                                  strokeWidth="4"
-                                />
-                                <path
-                                  className="opacity-75"
-                                  fill="currentColor"
-                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                />
-                              </svg>
-                              <p className="text-sm text-slate-500">
+                              <InlineSpinner size="md" />
+                              <p className="mt-2 text-sm text-slate-500">
                                 Loading patients…
                               </p>
                             </div>
@@ -966,30 +972,31 @@ export default function PatientManagement({
                         </tr>
                       ) : paginatedPatients.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-3 py-12 text-center">
-                            <svg
-                              className="mb-2 h-12 w-12 text-slate-300"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                              />
-                            </svg>
-                            <p className="mb-1 text-sm text-slate-500">
-                              {search
-                                ? "No patients match the current search"
-                                : "No patients found for this view"}
-                            </p>
-                            {search && (
-                              <p className="text-xs text-slate-400">
-                                Try adjusting your filters or search keywords.
-                              </p>
-                            )}
+                          <td colSpan={6} className="px-3 py-8">
+                            <EmptyState
+                              illustration="patients"
+                              title={search ? 'No patients found' : 'No patients yet'}
+                              description={search
+                                ? "We couldn't find any patients matching your search. Try adjusting your filters or search keywords."
+                                : "There are no patients in the system yet. Patients will appear here once they register or are added."}
+                              action={canAdd && !search ? {
+                                label: "Add Patient",
+                                onClick: () => {
+                                  // Trigger add patient modal if available
+                                  const addButton = document.querySelector('[data-add-patient]') as HTMLButtonElement
+                                  if (addButton) addButton.click()
+                                }
+                              } : search ? {
+                                label: "Clear Search",
+                                onClick: () => {
+                                  const searchInput = document.querySelector('input[type="text"][placeholder*="Search"]') as HTMLInputElement
+                                  if (searchInput) {
+                                    searchInput.value = ''
+                                    searchInput.dispatchEvent(new Event('input', { bubbles: true }))
+                                  }
+                                }
+                              } : undefined}
+                            />
                           </td>
                         </tr>
                       ) : (
@@ -1470,6 +1477,12 @@ export default function PatientManagement({
                   </div>
                 ) : (
                   <div className="text-center py-4">
+                    <div className="loading mx-auto mb-2" style={{ width: "32px", height: "32px" }}>
+                      <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+                        <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
+                        <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
+                      </svg>
+                    </div>
                     <p className="text-sm text-gray-500">Loading appointment information...</p>
                   </div>
                 )}

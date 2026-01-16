@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
-import { applyRateLimit } from "@/utils/rateLimit"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
-import { isDateBlocked } from "@/utils/blockedDates"
-import { logApiError, createErrorResponse } from "@/utils/errorLogger"
+import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { isDateBlocked } from "@/utils/analytics/blockedDates"
+import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
 
 const SLOT_COLLECTION = "appointmentSlots"
 

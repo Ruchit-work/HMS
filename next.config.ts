@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   
   // Server-side external packages to handle ES module compatibility
-  serverExternalPackages: ['jsdom', 'parse5', 'isomorphic-dompurify', 'pdf-parse', 'canvas', 'pdfjs-dist'],
+  serverExternalPackages: ['jsdom', 'parse5', 'pdf-parse', 'canvas', 'pdfjs-dist'],
   
   // Webpack configuration to handle jsdom/parse5 ES module compatibility
   webpack: (config, { isServer }) => {

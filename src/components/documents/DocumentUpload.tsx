@@ -2,7 +2,7 @@
 
 import { useState, useRef, DragEvent } from "react"
 import { DocumentType, DocumentMetadata } from "@/types/document"
-import { validateFileType, validateFileSize } from "@/utils/documentDetection"
+import { validateFileType, validateFileSize } from "@/utils/documents/documentDetection"
 import { auth } from "@/firebase/config"
 
 interface DocumentUploadProps {
@@ -40,31 +40,44 @@ export default function DocumentUpload({
   const [selectedFileType, setSelectedFileType] = useState<DocumentType | "">("")
   const [description, setDescription] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounter = useRef(0)
 
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragging(true)
+    dragCounter.current++
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true)
+    }
   }
 
   const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragging(false)
+    dragCounter.current--
+    if (dragCounter.current === 0) {
+      setIsDragging(false)
+    }
   }
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "copy"
+    }
   }
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
+    dragCounter.current = 0
 
     const droppedFiles = Array.from(e.dataTransfer.files)
-    handleFiles(droppedFiles)
+    if (droppedFiles.length > 0) {
+      handleFiles(droppedFiles)
+    }
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -250,43 +263,74 @@ export default function DocumentUpload({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
-          isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50"
+        className={`relative border-2 border-dashed rounded-xl p-8 transition-all duration-200 ${
+          isDragging 
+            ? "border-blue-500 bg-blue-50/80 scale-[1.02] shadow-lg" 
+            : "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100/50"
         }`}
       >
         <div className="text-center">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            stroke="currentColor"
-            fill="none"
-            viewBox="0 0 48 48"
-          >
-            <path
-              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <div className="mt-4">
-            <label
-              htmlFor="file-upload"
-              className="cursor-pointer rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          {isDragging ? (
+            <div className="animate-bounce">
+              <svg
+                className="mx-auto h-16 w-16 text-blue-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                />
+              </svg>
+            </div>
+          ) : (
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400 transition-colors"
+              stroke="currentColor"
+              fill="none"
+              viewBox="0 0 48 48"
             >
-              Select files
-            </label>
-            <input
-              id="file-upload"
-              ref={fileInputRef}
-              type="file"
-              className="sr-only"
-              multiple={allowBulk}
-              accept=".jpg,.jpeg,.png,.pdf,.dcm"
-              onChange={handleFileSelect}
-            />
-            <p className="mt-2 text-xs text-gray-500">
-              or drag and drop files here (2MB - 10MB, JPG, PNG, PDF, DICOM)
-            </p>
+              <path
+                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+          <div className="mt-4">
+            {isDragging ? (
+              <p className="text-lg font-semibold text-blue-600 animate-pulse">
+                Drop files here
+              </p>
+            ) : (
+              <>
+                <label
+                  htmlFor="file-upload"
+                  className="inline-block cursor-pointer rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-200"
+                >
+                  Select files
+                </label>
+                <input
+                  id="file-upload"
+                  ref={fileInputRef}
+                  type="file"
+                  className="sr-only"
+                  multiple={allowBulk}
+                  accept=".jpg,.jpeg,.png,.pdf,.dcm"
+                  onChange={handleFileSelect}
+                />
+                <p className="mt-3 text-sm text-gray-600 font-medium">
+                  or <span className="text-blue-600">drag and drop</span> files here
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Supported: JPG, PNG, PDF, DICOM (2MB - 10MB)
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>

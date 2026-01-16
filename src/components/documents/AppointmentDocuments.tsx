@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata } from "@/types/document"
 import DocumentViewer from "./DocumentViewer"
-import { ConfirmDialog } from "@/components/ui/Modals"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { auth } from "@/firebase/config"
 import { doc, getDoc } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
-import Notification from "@/components/ui/Notification"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import Notification from "@/components/ui/feedback/Notification"
 
 interface AppointmentDocumentsProps {
   appointmentId: string
@@ -193,6 +193,17 @@ export default function AppointmentDocuments({
   const confirmDelete = async () => {
     if (!documentToDelete) return
 
+    // Optimistic update: Remove from UI immediately
+    const previousDocuments = [...documents]
+    const deletedDocId = documentToDelete
+    const deletedDoc = documents.find(doc => doc.id === deletedDocId)
+    const documentName = deletedDoc?.originalFileName || "Document"
+
+    setDocuments((prev) => prev.filter((doc) => doc.id !== deletedDocId))
+    setSelectedDocument(null)
+    setDeleteConfirmOpen(false)
+    setDocumentToDelete(null)
+
     setDeleting(true)
     try {
       // Get Firebase Auth token
@@ -204,7 +215,7 @@ export default function AppointmentDocuments({
       const token = await currentUser.getIdToken()
 
       // Permanently delete document (Firestore + Storage) using DELETE endpoint
-      const response = await fetch(`/api/documents/${documentToDelete}`, {
+      const response = await fetch(`/api/documents/${deletedDocId}`, {
         method: "DELETE",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -216,16 +227,6 @@ export default function AppointmentDocuments({
       if (!response.ok) {
         throw new Error(data.error || "Failed to delete document")
       }
-
-      // Get document name before removing from state
-      const deletedDoc = documents.find(doc => doc.id === documentToDelete)
-      const documentName = deletedDoc?.originalFileName || "Document"
-
-      // Remove from local state so it disappears everywhere in this view
-      setDocuments((prev) => prev.filter((doc) => doc.id !== documentToDelete))
-      setSelectedDocument(null)
-      setDeleteConfirmOpen(false)
-      setDocumentToDelete(null)
       
       // Show success notification
       setNotification({
@@ -235,6 +236,9 @@ export default function AppointmentDocuments({
       // Clear notification after 3 seconds
       setTimeout(() => setNotification(null), 3000)
     } catch (err: any) {
+      // Rollback on error
+      setDocuments(previousDocuments)
+      setDocumentToDelete(deletedDocId)
       setNotification({
         type: "error",
         message: err.message || "Failed to delete document"
@@ -310,7 +314,12 @@ export default function AppointmentDocuments({
       {/* Documents List */}
       {loading ? (
         <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="loading mx-auto" style={{ width: "32px", height: "32px" }}>
+            <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+              <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
+              <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
+            </svg>
+          </div>
           <p className="mt-2 text-sm text-gray-600">Loading documents...</p>
         </div>
       ) : error ? (

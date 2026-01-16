@@ -1,8 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { NextRequest } from "next/server"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   appointmentId: string

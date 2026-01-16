@@ -191,7 +191,12 @@ export default function DocumentViewer({
       <div className="flex-1 px-6 py-4 bg-gray-50 flex items-center justify-center">
         {loading ? (
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="loading mx-auto" style={{ width: "48px", height: "48px" }}>
+              <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+                <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
+                <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
+              </svg>
+            </div>
             <p className="mt-4 text-gray-600">Loading document...</p>
           </div>
         ) : error ? (

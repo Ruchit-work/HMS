@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { getDocs } from 'firebase/firestore'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
-import { getHospitalCollection } from '@/utils/hospital-queries'
-import LoadingSpinner from '@/components/ui/StatusComponents'
-import { formatDate, calculateAge } from '@/utils/date'
+import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { formatDate, calculateAge } from '@/utils/shared/date'
 
 interface Patient {
   id: string

@@ -1,7 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import type { RoomType } from "@/types/patient"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 
 export async function POST(request: Request) {
   // Authenticate request - requires admin role

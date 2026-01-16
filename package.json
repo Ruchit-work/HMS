@@ -17,22 +17,16 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
     "axios": "^1.12.2",
-    "base": "^3.0.0",
     "canvas": "^3.2.0",
-    "dompurify": "^3.3.0",
-    "dotenv": "^17.2.3",
     "exceljs": "^4.4.0",
-    "fire": "^0.46.4",
     "firebase": "^12.3.0",
     "firebase-admin": "^13.5.0",
-    "isomorphic-dompurify": "^2.32.0",
     "jspdf": "^3.0.4",
     "next": "15.5.7",
     "pdf-parse": "^2.4.5",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "three": "^0.182.0",
-    "twilio": "^5.10.4"
+    "three": "^0.182.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

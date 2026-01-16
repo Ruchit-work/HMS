@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { query, where, getDocs } from "firebase/firestore"
-import LoadingSpinner from "@/components/ui/StatusComponents"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import { Appointment } from "@/types/patient"
 import Link from "next/link"
 

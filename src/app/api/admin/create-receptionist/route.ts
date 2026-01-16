@@ -6,8 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
-import { authenticateRequest } from '@/utils/apiAuth'
-import { getUserActiveHospitalId } from '@/utils/serverHospitalQueries'
+import { authenticateRequest } from '@/utils/firebase/apiAuth'
+import { getUserActiveHospitalId } from '@/utils/firebase/serverHospitalQueries'
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {

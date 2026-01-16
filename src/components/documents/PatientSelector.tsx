@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { auth } from "@/firebase/config"
 import { getDocs } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 
 interface Patient {
   id: string

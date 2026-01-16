@@ -469,8 +469,14 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
         )}
 
         {billingLoading && billingRecords.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-sm text-slate-500">
-            Loading billing history…
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12">
+            <div className="loading" style={{ width: "48px", height: "48px" }}>
+              <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+                <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
+                <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
+              </svg>
+            </div>
+            <p className="mt-4 text-sm text-slate-500">Loading billing history…</p>
           </div>
         ) : billingRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">

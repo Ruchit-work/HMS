@@ -1,5 +1,5 @@
 import { ReactNode } from "react"
-import NotificationBadge from "@/components/ui/NotificationBadge"
+import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 
 interface TabButtonProps {
   id: string

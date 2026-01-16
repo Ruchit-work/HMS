@@ -9,7 +9,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { auth } from '@/firebase/config'
-import LoadingSpinner from '@/components/ui/StatusComponents'
+import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import { Hospital } from '@/types/hospital'
 
 function HospitalSelectionContent() {

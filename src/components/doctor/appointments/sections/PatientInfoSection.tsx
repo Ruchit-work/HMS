@@ -1,7 +1,7 @@
 "use client"
 
 import { Appointment as AppointmentType } from "@/types/patient"
-import { calculateAge } from "@/utils/date"
+import { calculateAge } from "@/utils/shared/date"
 
 interface PatientInfoSectionProps {
   appointment: AppointmentType

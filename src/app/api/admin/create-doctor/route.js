@@ -1,6 +1,6 @@
 import admin from 'firebase-admin'
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -23,7 +23,7 @@ if (!admin.apps.length) {
 
 export async function POST(request) {
   // Apply rate limiting first
-  const { applyRateLimit } = await import("@/utils/rateLimit")
+  const { applyRateLimit } = await import("@/utils/shared/rateLimit")
   const rateLimitResult = await applyRateLimit(request, "USER_CREATION")
   if (rateLimitResult instanceof Response) {
     return rateLimitResult // Rate limited

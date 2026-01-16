@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
-import { applyRateLimit } from "@/utils/rateLimit"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
 
 export async function POST(req: Request) {
   // Apply rate limiting first

@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata, DocumentType } from "@/types/document"
 import DocumentUpload from "./DocumentUpload"
 import DocumentViewer from "./DocumentViewer"
-import { ConfirmDialog } from "@/components/ui/Modals"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { auth } from "@/firebase/config"
 import { doc, getDoc, query, where, getDocs, orderBy, limit } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import PatientSelector from "./PatientSelector"
-import Notification from "@/components/ui/Notification"
+import Notification from "@/components/ui/feedback/Notification"
 
 interface DocumentsTabProps {
   patientId?: string
@@ -682,7 +682,12 @@ export default function DocumentsTab({
       {/* Documents List */}
       {loading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="loading mx-auto" style={{ width: "48px", height: "48px" }}>
+            <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+              <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
+              <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
+            </svg>
+          </div>
           <p className="mt-4 text-gray-600">Loading documents...</p>
         </div>
       ) : error ? (

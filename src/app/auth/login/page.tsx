@@ -7,7 +7,7 @@ import { signInWithEmailAndPassword, type User } from "firebase/auth"
 import { getDoc, doc, collection, getDocs, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/StatusComponents"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 
 type DashboardRole = "patient" | "doctor" | "admin" | "receptionist"
 const STAFF_ROLES: DashboardRole[] = ["admin", "doctor", "receptionist"]
@@ -104,7 +104,6 @@ function LoginContent() {
     if (!checking) {
       checkMfaStatus()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking])
 
   // Handle pageshow event (back button) - re-check auth immediately

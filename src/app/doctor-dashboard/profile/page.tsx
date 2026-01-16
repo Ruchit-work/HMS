@@ -7,11 +7,11 @@ import { signOut } from "firebase/auth"
 import { ChangePasswordSection } from "@/components/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
-import PageHeader from "@/components/ui/PageHeader"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
+import PageHeader from "@/components/ui/layout/PageHeader"
 import { NotificationData } from "@/types/patient"
-import { ConfirmDialog } from "@/components/ui/Modals"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 
 interface DoctorData {
   firstName: string

@@ -121,19 +121,9 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
 }
 
 
-interface AuthenticateOptions {
-  skipMfaCheck?: boolean
-}
-
-
-
-// Staff roles that require MFA
-const MFA_REQUIRED_ROLES: UserRole[] = ["admin", "doctor", "receptionist"]
-
 export async function authenticateRequest(
   request: Request,
-  requiredRole?: UserRole,
-  options?: AuthenticateOptions
+  requiredRole?: UserRole
 ): Promise<AuthResult> {
   // Extract token from Authorization header
   const token = extractAuthToken(request)

@@ -5,19 +5,19 @@ import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, addDoc, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
-import { CancelAppointmentModal } from "@/components/patient/AppointmentModals"
-import HeroCarousel from "@/components/patient/HeroCarousel"
-import HealthInformationSection from "@/components/patient/HealthInformationSection"
-import PageHeader from "@/components/ui/PageHeader"
-import Footer from "@/components/ui/Footer"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
+import { CancelAppointmentModal } from "@/components/patient/appointments/AppointmentModals"
+import HeroCarousel from "@/components/patient/ui/HeroCarousel"
+import HealthInformationSection from "@/components/patient/forms/HealthInformationSection"
+import PageHeader from "@/components/ui/layout/PageHeader"
+import Footer from "@/components/ui/layout/Footer"
 import Link from "next/link"
-import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns"
+import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns/campaigns"
 import { UserData, Doctor, Appointment, NotificationData } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
-import CampaignCarousel from "@/components/patient/CampaignCarousel"
+import CampaignCarousel from "@/components/patient/ui/CampaignCarousel"
 
 export default function PatientDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
@@ -37,10 +37,7 @@ export default function PatientDashboard() {
     if (!user || !activeHospitalId) return
 
     const fetchData = async () => {
-      // For patients, we still check the legacy patients collection for user data
-      // but data will be stored in hospital-scoped subcollections
-      const patientDocRef = doc(db, "patients", user.uid)
-      const patientDoc = await getDoc(patientDocRef)
+      const patientDoc = await getDoc(doc(db, "patients", user.uid))
       let patientRecord: UserData | null = null
       if (patientDoc.exists()) {
         patientRecord = patientDoc.data() as UserData
@@ -273,7 +270,8 @@ export default function PatientDashboard() {
           </Link>
           
           <Link 
-            href="/patient-dashboard/appointments" 
+            href="/patient-dashboard/appointments"
+            prefetch={true}
             className="bg-white border-2 border-blue-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
@@ -288,7 +286,8 @@ export default function PatientDashboard() {
           </Link>
           
           <Link 
-            href="/patient-dashboard/doctors" 
+            href="/patient-dashboard/doctors"
+            prefetch={true}
             className="bg-white border-2 border-green-200 rounded-xl p-4 hover:border-green-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
@@ -303,7 +302,8 @@ export default function PatientDashboard() {
           </Link>
           
           <Link 
-            href="/patient-dashboard/services" 
+            href="/patient-dashboard/services"
+            prefetch={true}
             className="bg-white border-2 border-blue-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
@@ -318,7 +318,8 @@ export default function PatientDashboard() {
           </Link>
           
           <Link 
-            href="/patient-dashboard/facilities" 
+            href="/patient-dashboard/facilities"
+            prefetch={true}
             className="bg-white border-2 border-purple-200 rounded-xl p-4 hover:border-purple-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
@@ -360,7 +361,7 @@ export default function PatientDashboard() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <Link href="/patient-dashboard/doctors?specialization=Cardiology" className="block">
+            <Link href="/patient-dashboard/doctors?specialization=Cardiology" prefetch={true} className="block">
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
                 <div className="text-center">
                   <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">❤️</span>
@@ -369,7 +370,7 @@ export default function PatientDashboard() {
               </div>
             </Link>
 
-            <Link href="/patient-dashboard/doctors?specialization=Orthopedics" className="block">
+            <Link href="/patient-dashboard/doctors?specialization=Orthopedics" prefetch={true} className="block">
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
                 <div className="text-center">
                   <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🦴</span>
@@ -378,7 +379,7 @@ export default function PatientDashboard() {
               </div>
             </Link>
 
-            <Link href="/patient-dashboard/doctors?specialization=Pediatrics" className="block">
+            <Link href="/patient-dashboard/doctors?specialization=Pediatrics" prefetch={true} className="block">
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
                 <div className="text-center">
                   <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">👶</span>
@@ -387,7 +388,7 @@ export default function PatientDashboard() {
               </div>
             </Link>
 
-            <Link href="/patient-dashboard/doctors?specialization=Neurology" className="block">
+            <Link href="/patient-dashboard/doctors?specialization=Neurology" prefetch={true} className="block">
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
                 <div className="text-center">
                   <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🧠</span>
@@ -396,7 +397,7 @@ export default function PatientDashboard() {
               </div>
             </Link>
 
-            <Link href="/patient-dashboard/doctors?specialization=Gynecology" className="block">
+            <Link href="/patient-dashboard/doctors?specialization=Gynecology" prefetch={true} className="block">
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
                 <div className="text-center">
                   <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🤰</span>
@@ -447,7 +448,7 @@ export default function PatientDashboard() {
               </div>
             </div>
 
-            <Link href="/patient-dashboard/doctors" className="block">
+            <Link href="/patient-dashboard/doctors" prefetch={true} className="block">
               <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 hover:bg-teal-50 hover:border-teal-300 transition-all cursor-pointer group">
                 <div className="text-center flex flex-col items-center justify-center h-full">
                   <span className="text-2xl block mb-1 group-hover:scale-110 transition-transform">🔍</span>
@@ -482,7 +483,7 @@ export default function PatientDashboard() {
                     <span className="font-semibold">Dr. {apt.doctorName}</span> • {new Date(apt.appointmentDate).toLocaleDateString()} at {apt.appointmentTime}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Link href={{ pathname: "/patient-dashboard/book-appointment", query: { reschedule: '1', aptId: apt.id, doctorId: apt.doctorId } }} className="text-xs px-3 py-1.5 bg-yellow-600 text-white rounded-md hover:bg-yellow-700">
+                    <Link href={`/patient-dashboard/book-appointment?reschedule=1&aptId=${apt.id}&doctorId=${apt.doctorId}`} prefetch={true} className="text-xs px-3 py-1.5 bg-yellow-600 text-white rounded-md hover:bg-yellow-700">
                       Reschedule
                     </Link>
                     {String((apt as any)?.paymentStatus) === 'paid' && !Boolean((apt as any)?.refundRequested) && (
@@ -668,6 +669,7 @@ export default function PatientDashboard() {
 
       {/* Footer */}
       <Footer />
+      
     </div>
     </>
   )

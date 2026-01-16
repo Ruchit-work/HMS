@@ -3,15 +3,15 @@
 import { useEffect, useState, useMemo } from "react"
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
-import NotificationBadge from "@/components/ui/NotificationBadge"
+import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import { ConfirmDialog } from "@/components/ui/Modals"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
-import Notification from "@/components/ui/Notification"
+import Notification from "@/components/ui/feedback/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
 import { Branch } from "@/types/branch"
 import PatientManagement from "./Tabs/PatientManagement"
@@ -37,7 +37,7 @@ import {
   calculateRevenue,
   calculateCommonConditions,
   calculateMostPrescribedMedicines
-} from "@/utils/dashboardCalculations"
+} from "@/utils/analytics/dashboardCalculations"
 
 interface UserData {
   id: string;
@@ -1418,7 +1418,15 @@ export default function AdminDashboard() {
                   <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">{pendingRequests.length} pending</span>
                 </div>
                 {loadingRequests ? (
-                  <div className="text-sm text-gray-500">Loading requests…</div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="loading" style={{ width: "32px", height: "32px" }}>
+                      <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+                        <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
+                        <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
+                      </svg>
+                    </div>
+                    <div className="text-sm text-gray-500">Loading requests…</div>
+                  </div>
                 ) : pendingRequests.length === 0 ? (
                   <div className="text-sm text-gray-500">No pending requests</div>
                 ) : (
@@ -1933,6 +1941,7 @@ export default function AdminDashboard() {
         onCancel={() => setLogoutConfirmOpen(false)}
         confirmLoading={logoutLoading}
       />
+      
       </div>
     </AdminProtected>
   )

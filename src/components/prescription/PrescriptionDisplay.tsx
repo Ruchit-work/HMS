@@ -1,7 +1,7 @@
 "use client"
 
 import { Appointment } from "@/types/patient"
-import { generatePrescriptionPDF } from "@/utils/pdfGenerators"
+import { generatePrescriptionPDF } from "@/utils/documents/pdfGenerators"
 
 // Helper function to parse prescription text
 const parsePrescription = (text: string) => {

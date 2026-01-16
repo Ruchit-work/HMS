@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime } from "@/utils/timeSlots"
-import { applyRateLimit } from "@/utils/rateLimit"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
 
 const SLOT_COLLECTION = "appointmentSlots"
 

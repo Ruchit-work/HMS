@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
-import PageHeader from "@/components/ui/PageHeader"
+import PageHeader from "@/components/ui/layout/PageHeader"
 
 interface Service {
   id: string

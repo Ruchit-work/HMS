@@ -5,19 +5,19 @@ import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/hospital-queries"
-import LoadingSpinner from "@/components/ui/StatusComponents"
-import Notification from "@/components/ui/Notification"
-import { AppointmentsList } from "@/components/patient/AppointmentCard"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
+import { AppointmentsList } from "@/components/patient/appointments/AppointmentCard"
 import DocumentsTab from "@/components/documents/DocumentsTab"
-import { CancelAppointmentModal } from "@/components/patient/AppointmentModals"
+import { CancelAppointmentModal } from "@/components/patient/appointments/AppointmentModals"
 import PaymentMethodSection, {
   PaymentData as PaymentMethodData,
   PaymentMethodOption,
 } from "@/components/payments/PaymentMethodSection"
 import { UserData, Appointment, NotificationData, BillingRecord } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
-import Footer from "@/components/ui/Footer"
+import Footer from "@/components/ui/layout/Footer"
 import Link from "next/link"
 
 export default function PatientAppointments() {
@@ -52,29 +52,34 @@ export default function PatientAppointments() {
 
     const fetchData = async () => {
       try {
-        const patientDocRef = doc(db, "patients", user.uid)
-        const patientDocSnap = await getDoc(patientDocRef)
-
+        const patientDocSnap = await getDoc(doc(db, "patients", user.uid))
         let patientData: UserData | null = null
+        
         if (patientDocSnap.exists()) {
           patientData = patientDocSnap.data() as UserData
           setUserData(patientData)
         }
 
+        // Start appointments query immediately (non-blocking)
         const appointmentsCollection = getHospitalCollection(activeHospitalId, "appointments")
-        const appointmentQueries: Promise<any>[] = [
+        const appointmentQueries: Promise<any>[] = []
+        
+        // Normal patient queries - run in parallel
+        const queries = [
           getDocs(query(appointmentsCollection, where("patientUid", "==", user.uid)))
         ]
-
+        
         if (patientData?.patientId) {
-          appointmentQueries.push(
+          queries.push(
             getDocs(query(appointmentsCollection, where("patientId", "==", patientData.patientId)))
           )
         }
-
-        appointmentQueries.push(
+        
+        queries.push(
           getDocs(query(appointmentsCollection, where("patientId", "==", user.uid)))
         )
+        
+        appointmentQueries.push(...queries)
 
         const appointmentSnapshots = await Promise.all(appointmentQueries)
 
@@ -92,6 +97,7 @@ export default function PatientAppointments() {
 
         let appointmentList = Array.from(appointmentMap.values())
 
+        // Patient billing queries
         const billingSnapshots: any[] = []
         if (patientData?.patientId) {
           billingSnapshots.push(
@@ -302,23 +308,39 @@ export default function PatientAppointments() {
   const handleCancelAppointment = async () => {
     if (!appointmentToCancel) return
 
+    // Optimistic update: Update status immediately
+    const previousAppointments = [...appointments]
+    const cancelledAppointment = appointmentToCancel
+    
+    const optimisticUpdate = {
+      ...cancelledAppointment,
+      status: "cancelled" as const,
+      cancelledAt: new Date().toISOString()
+    }
+    
+    setAppointments(prev => prev.map(apt =>
+      apt.id === cancelledAppointment.id ? optimisticUpdate : apt
+    ))
+    setShowCancelModal(false)
+    setAppointmentToCancel(null)
+
     setCancelling(true)
     try {
-      const result = await cancelAppointment(appointmentToCancel)
+      const result = await cancelAppointment(cancelledAppointment)
 
-      // Update local state
-      setAppointments(appointments.map(apt =>
-        apt.id === appointmentToCancel.id ? result.updatedAppointment : apt
+      // Update with server response (may have additional fields)
+      setAppointments(prev => prev.map(apt =>
+        apt.id === cancelledAppointment.id ? result.updatedAppointment : apt
       ))
 
       setNotification({
         type: "success",
         message: result.message
       })
-
-      setShowCancelModal(false)
-      setAppointmentToCancel(null)
     } catch (error: unknown) {
+      // Rollback on error
+      setAppointments(previousAppointments)
+      setAppointmentToCancel(cancelledAppointment)
       setNotification({
         type: "error",
         message: (error as Error).message || "Failed to cancel appointment"
@@ -358,7 +380,7 @@ export default function PatientAppointments() {
                 </div>
               </div>
               <div className="w-full sm:w-auto">
-                <Link href="/patient-dashboard/book-appointment" className="block">
+                <Link href="/patient-dashboard/book-appointment" prefetch={true} className="block">
                   <button className="btn-modern w-full group inline-flex items-center justify-center gap-3">
                     <svg className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />

@@ -5,8 +5,8 @@
 
 import jsPDF from "jspdf"
 import { Appointment } from "@/types/patient"
-import { calculateAge } from "@/utils/date"
-import { formatDateForPDF } from "@/utils/timezone"
+import { calculateAge } from "@/utils/shared/date"
+import { formatDateForPDF } from "@/utils/shared/timezone"
 
 // ============================================================================
 // Shared Helper Functions

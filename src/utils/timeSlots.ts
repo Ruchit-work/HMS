@@ -5,7 +5,7 @@
 
 import { VisitingHours, DaySchedule, Appointment, Doctor } from "@/types/patient"
 import { BranchTimings } from "@/types/branch"
-import { normalizeBlockedDates } from "@/utils/blockedDates"
+import { normalizeBlockedDates } from "@/utils/analytics/blockedDates"
 
 // Default visiting hours (9 AM - 5 PM with 1-2 PM lunch break)
 export const DEFAULT_VISITING_HOURS: VisitingHours = {

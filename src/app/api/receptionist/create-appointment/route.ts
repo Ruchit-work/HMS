@@ -1,10 +1,10 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/serverHospitalQueries"
+import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
-import { applyRateLimit } from "@/utils/rateLimit"
-import { logApiError, createErrorResponse } from "@/utils/errorLogger"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
 
 const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
   const patientName: string = appointmentData.patientName || "there"
