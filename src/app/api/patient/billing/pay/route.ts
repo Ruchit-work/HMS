@@ -185,15 +185,17 @@ export async function POST(req: Request) {
     // Extract hospitalId from billing data if available
     const hospitalId = (error as { hospitalId?: string }).hospitalId || body?.hospitalId
     
-    // Log error with context (avoid logging sensitive payment details)
+    // Log error with context (avoid logging sensitive payment details, don't await to avoid blocking response)
     logApiError(error, req, auth, {
       action: "billing-pay",
       hospitalId: hospitalId,
       appointmentId: (error as { appointmentId?: string }).appointmentId,
       patientId: auth?.user?.uid,
+    }).catch((err) => {
+      console.error('[Error Logger] Failed to log error:', err)
     })
     
-    return createErrorResponse(error, req, auth, {
+    return await createErrorResponse(error, req, auth, {
       action: "billing-pay",
       hospitalId: hospitalId,
     }, "Failed to process payment. Please try again.")

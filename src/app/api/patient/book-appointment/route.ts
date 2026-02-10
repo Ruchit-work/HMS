@@ -7,6 +7,8 @@ import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
 import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
+import { getString, isRecord, type UnknownRecord } from "@/utils/api/typeGuards"
+import { safeJson, ValidationError, requireString, optionalString } from "@/utils/api/validation"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -41,18 +43,49 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json().catch(() => ({}))
-    const mode = body?.mode || "create"
+    const body = await safeJson(request)
+    const mode = (typeof body.mode === "string" ? body.mode : "create") || "create"
     const firestore = admin.firestore()
 
     if (mode === "create") {
-      const appointmentData = body?.appointmentData
-      if (!appointmentData) {
+      const appointmentDataUnknown = body.appointmentData
+      if (!isRecord(appointmentDataUnknown)) {
         return NextResponse.json({ error: "Missing appointment data" }, { status: 400 })
       }
+
+      // Keep it loose but typed (avoid 'any' while allowing partial payloads)
+      const appointmentData = appointmentDataUnknown as UnknownRecord & {
+        doctorId?: string
+        appointmentDate?: string
+        appointmentTime?: string
+        patientUid?: string
+        branchId?: string
+        branchName?: string
+        hospitalId?: string
+        createdAt?: string
+        updatedAt?: string
+        createdBy?: string
+        patientPhone?: string
+        patientPhoneNumber?: string
+        patientName?: string
+        doctorName?: string
+        doctorSpecialization?: string
+        paymentMethod?: string
+        paymentAmount?: number
+        totalConsultationFee?: number
+        paymentStatus?: string
+        chiefComplaint?: string
+      }
+
       if (!appointmentData.doctorId || !appointmentData.appointmentDate || !appointmentData.appointmentTime) {
         return NextResponse.json({ error: "Missing doctor/time information" }, { status: 400 })
       }
+
+      // Minimal server-side validation (types + basic length checks)
+      appointmentData.doctorId = requireString(appointmentDataUnknown, "doctorId", { minLen: 3, maxLen: 128 })
+      appointmentData.appointmentDate = requireString(appointmentDataUnknown, "appointmentDate", { minLen: 8, maxLen: 32 })
+      appointmentData.appointmentTime = requireString(appointmentDataUnknown, "appointmentTime", { minLen: 3, maxLen: 16 })
+      appointmentData.branchId = optionalString(appointmentDataUnknown, "branchId", { maxLen: 128 })
 
       // Ensure patientUid matches authenticated user
       if (appointmentData.patientUid && appointmentData.patientUid !== auth.user?.uid) {
@@ -71,7 +104,7 @@ export async function POST(request: Request) {
       const doctorDoc = await firestore.collection("doctors").doc(appointmentData.doctorId).get()
       if (doctorDoc.exists) {
         const doctorData = doctorDoc.data()
-        const blockedDates: any[] = Array.isArray(doctorData?.blockedDates) ? doctorData.blockedDates : []
+        const blockedDates: unknown[] = Array.isArray(doctorData?.blockedDates) ? doctorData.blockedDates : []
         if (isDateBlocked(appointmentData.appointmentDate, blockedDates)) {
           return NextResponse.json({ error: "Doctor is not available on the selected date. Please choose another date." }, { status: 400 })
         }
@@ -233,9 +266,9 @@ See you soon! 🏥`
     }
 
     if (mode === "reschedule") {
-      const appointmentId: string | undefined = body?.appointmentId
-      const appointmentDate: string | undefined = body?.appointmentDate
-      const appointmentTime: string | undefined = body?.appointmentTime
+      const appointmentId = getString(body.appointmentId)
+      const appointmentDate = getString(body.appointmentDate)
+      const appointmentTime = getString(body.appointmentTime)
 
       if (!appointmentId || !appointmentDate || !appointmentTime) {
         return NextResponse.json({ error: "Missing reschedule parameters" }, { status: 400 })
@@ -263,7 +296,7 @@ See you soon! 🏥`
         const doctorDoc = await firestore.collection("doctors").doc(appointment.doctorId).get()
         if (doctorDoc.exists) {
           const doctorData = doctorDoc.data()
-          const blockedDates: any[] = Array.isArray(doctorData?.blockedDates) ? doctorData.blockedDates : []
+          const blockedDates: unknown[] = Array.isArray(doctorData?.blockedDates) ? doctorData.blockedDates : []
           if (isDateBlocked(appointmentDate, blockedDates)) {
             return NextResponse.json({ error: "Doctor is not available on the selected date. Please choose another date." }, { status: 400 })
           }
@@ -326,13 +359,19 @@ See you soon! 🏥`
 
     return NextResponse.json({ error: "Invalid mode" }, { status: 400 })
   } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message, field: error.field }, { status: error.status })
+    }
+
     const message = (error as Error).message
     
-    // Log error with context
+    // Log error with context (don't await to avoid blocking response)
     logApiError(error, request, auth, {
       action: "book-appointment",
       hospitalId: (await getAppointmentHospitalId((error as { appointmentId?: string }).appointmentId || "").catch(() => null)) || undefined,
       appointmentId: (error as { appointmentId?: string }).appointmentId,
+    }).catch((err) => {
+      console.error('[Error Logger] Failed to log error:', err)
     })
     
     if (message === "SLOT_ALREADY_BOOKED") {
@@ -344,7 +383,7 @@ See you soon! 🏥`
     if (message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "You cannot modify this appointment" }, { status: 403 })
     }
-    return createErrorResponse(error, request, auth, { action: "book-appointment" })
+    return await createErrorResponse(error, request, auth, { action: "book-appointment" })
   }
 }
 

@@ -5,6 +5,7 @@ import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/fire
 import { detectDocumentTypeEnhanced, validateFileType, validateFileSize } from "@/utils/documents/documentDetection"
 import { BulkUploadResult, DocumentMetadata } from "@/types/document"
 import { getStorage } from "firebase-admin/storage"
+import { ValidationError } from "@/utils/api/validation"
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,8 +58,8 @@ export async function POST(request: NextRequest) {
     const appointmentId = formData.get("appointmentId") as string | null
     const specialty = formData.get("specialty") as string | null
 
-    if (!patientUid) {
-      return NextResponse.json({ error: "Patient UID is required" }, { status: 400 })
+    if (!patientUid || typeof patientUid !== "string" || patientUid.trim().length < 3) {
+      throw new ValidationError("Patient UID is required", { field: "patientUid" })
     }
 
     // Get hospital ID first
@@ -313,10 +314,11 @@ export async function POST(request: NextRequest) {
           id: docRef.id,
           ...documentData,
         })
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
         results.failed.push({
           fileName: file.name,
-          error: error.message || "Upload failed",
+          error: message || "Upload failed",
         })
       }
     }
@@ -330,9 +332,13 @@ export async function POST(request: NextRequest) {
         failed: results.failed.length,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message, field: error.field }, { status: error.status })
+    }
+    const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { error: error.message || "Failed to upload documents" },
+      { error: message || "Failed to upload documents" },
       { status: 500 }
     )
   }

@@ -4,6 +4,68 @@ const nextConfig: NextConfig = {
   /* config options here */
   compress: true,
   
+  // Security Headers - Applied to all responses (including static files)
+  async headers() {
+    return [
+      {
+        // Apply to all routes
+        source: '/:path*',
+        headers: [
+          // Content Security Policy (CSP) - Prevents XSS attacks
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // unsafe-eval needed for Next.js
+              "style-src 'self' 'unsafe-inline'", // unsafe-inline needed for Tailwind
+              "img-src 'self' data: blob: https: http:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://speech.googleapis.com https://*.cognitiveservices.azure.com https://*.stt.speech.microsoft.com https://api.groq.com wss://*.firebaseio.com wss://*.cloudfunctions.net",
+              "frame-src 'self'",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'", // Prevents clickjacking
+              "upgrade-insecure-requests", // Upgrade HTTP to HTTPS
+              "block-all-mixed-content", // Block mixed content
+            ].join('; '),
+          },
+          // Strict Transport Security (HSTS) - Force HTTPS for 1 year
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains; preload',
+          },
+          // X-Frame-Options - Prevent clickjacking
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          // X-Content-Type-Options - Prevent MIME sniffing
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          // X-XSS-Protection - Legacy browser XSS protection
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          // Referrer-Policy - Control referrer information
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          // Permissions-Policy - Control browser features
+          // Allow microphone for voice input feature
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(self), geolocation=(), interest-cohort=()',
+          },
+        ],
+      },
+    ];
+  },
+  
   // Image optimization
   images: {
     formats: ['image/avif', 'image/webp'],

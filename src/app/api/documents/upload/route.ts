@@ -5,6 +5,7 @@ import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/fire
 import { DocumentMetadata } from "@/types/document"
 import { getStorage } from "firebase-admin/storage"
 import { detectDocumentTypeEnhanced, validateFileSize } from "@/utils/documents/documentDetection"
+import { ValidationError } from "@/utils/api/validation"
 
 // File size validation is now handled by validateFileSize() from documentDetection.ts
 // which applies different limits: PDFs (1KB-20MB), Other files (2MB-10MB)
@@ -102,6 +103,9 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!file) {
       return NextResponse.json({ error: "File is required" }, { status: 400 })
+    }
+    if (!patientUid || typeof patientUid !== "string" || patientUid.trim().length < 3) {
+      throw new ValidationError("Patient UID is required", { field: "patientUid" })
     }
 
     // If patientUid is provided but patientId is not, try to get patientId from patient document
@@ -447,10 +451,14 @@ export async function POST(request: NextRequest) {
       success: true,
       document: documentMetadata,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message, field: error.field }, { status: error.status })
+    }
     console.error("[document-upload] Error:", error)
+    const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { error: error.message || "Failed to upload document" },
+      { error: message || "Failed to upload document" },
       { status: 500 }
     )
   }

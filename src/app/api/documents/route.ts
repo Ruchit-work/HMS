@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
     // Build query
     // IMPORTANT: When viewing an appointment, show ALL patient documents, not just appointment-linked ones
     // This allows doctors to see all patient history even if documents weren't linked to the appointment
-    let query = db.collection(getHospitalCollectionPath(hospitalId, "documents")) as any
+    let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> =
+      db.collection(getHospitalCollectionPath(hospitalId, "documents"))
 
     // Apply filters - prioritize patientUid as it's more reliable
     // If both are provided, use patientUid (it's the unique identifier)
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest) {
           const lastDocRef = db.collection(getHospitalCollectionPath(hospitalId, "documents")).doc(lastDocId)
           const lastDoc = await lastDocRef.get()
           if (lastDoc.exists) {
-            finalQuery = finalQuery.startAfter(lastDoc) as any
+            finalQuery = finalQuery.startAfter(lastDoc)
           }
         } catch {
           // Continue without cursor if it fails
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
       
       // Always apply limit (default 50, or custom if specified)
       if (limit > 0) {
-        finalQuery = finalQuery.limit(limit) as any
+        finalQuery = finalQuery.limit(limit)
       }
       
       snapshot = await finalQuery.get()
@@ -120,7 +121,8 @@ export async function GET(request: NextRequest) {
       // If orderBy fails (likely missing index), fetch without ordering
       try {
         // Remove orderBy and try again
-        let fallbackQuery = db.collection(getHospitalCollectionPath(hospitalId, "documents")) as any
+        let fallbackQuery: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> =
+          db.collection(getHospitalCollectionPath(hospitalId, "documents"))
         
         // Use same logic as main query - prioritize patientUid, don't filter by appointmentId
         if (patientUid) {
@@ -141,7 +143,7 @@ export async function GET(request: NextRequest) {
         
         // Apply limit (default 50)
         if (limit > 0) {
-          fallbackQuery = fallbackQuery.limit(limit) as any
+          fallbackQuery = fallbackQuery.limit(limit)
         }
         
         snapshot = await fallbackQuery.get()

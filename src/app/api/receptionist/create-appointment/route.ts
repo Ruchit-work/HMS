@@ -5,16 +5,24 @@ import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/a
 import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
+import { getString, isRecord, type UnknownRecord } from "@/utils/api/typeGuards"
 
-const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => {
-  const patientName: string = appointmentData.patientName || "there"
+const sendAppointmentWhatsApp = async (appointmentData: UnknownRecord) => {
+  const patientName = getString(appointmentData.patientName) || "there"
   const fullName = patientName.trim() || "Patient"
-  const doctorName: string = appointmentData.doctorName || "our doctor"
-  const doctorSpecialization: string = appointmentData.doctorSpecialization || ""
-  const appointmentId = appointmentData.appointmentId || appointmentData.id || "N/A"
-  const paymentMethod = appointmentData.paymentMethod || appointmentData.paymentOption || "Cash"
-  const paymentAmount = appointmentData.paymentAmount || appointmentData.totalConsultationFee || 0
-  const paymentStatus = appointmentData.paymentStatus || "paid" // Default to paid for receptionist bookings
+  const doctorName = getString(appointmentData.doctorName) || "our doctor"
+  const doctorSpecialization = getString(appointmentData.doctorSpecialization) || ""
+  const appointmentId =
+    getString(appointmentData.appointmentId) || getString(appointmentData.id) || "N/A"
+  const paymentMethod =
+    getString(appointmentData.paymentMethod) ||
+    getString(appointmentData.paymentOption) ||
+    "Cash"
+  const paymentAmount =
+    (typeof appointmentData.paymentAmount === "number" ? appointmentData.paymentAmount : undefined) ||
+    (typeof appointmentData.totalConsultationFee === "number" ? appointmentData.totalConsultationFee : undefined) ||
+    0
+  const paymentStatus = getString(appointmentData.paymentStatus) || "paid" // Default to paid for receptionist bookings
   
   const dateDisplay = new Date(appointmentData.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
     weekday: "long",
@@ -23,7 +31,7 @@ const sendAppointmentWhatsApp = async (appointmentData: Record<string, any>) => 
     day: "numeric",
   })
   
-  const timeStr = appointmentData.appointmentTime || ""
+  const timeStr = getString(appointmentData.appointmentTime) || ""
   const [h, m] = timeStr.split(":").map(Number)
   const timeDisplay = !isNaN(h) && !isNaN(m) 
     ? new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
@@ -59,11 +67,11 @@ See you soon! 🏥`
 
   // Try multiple phone number fields
   const phoneCandidates = [
-    appointmentData.patientPhone,
-    appointmentData.patientPhoneNumber,
-    appointmentData.patientContact,
-    appointmentData.phone,
-  ].filter(Boolean)
+    getString(appointmentData.patientPhone),
+    getString(appointmentData.patientPhoneNumber),
+    getString(appointmentData.patientContact),
+    getString(appointmentData.phone),
+  ].filter((v): v is string => Boolean(v))
 
   if (phoneCandidates.length === 0) {
     return
@@ -105,7 +113,7 @@ export async function POST(request: Request) {
   }
 
   // Declare variables outside try block for catch block access
-  let appointmentData: any = null
+  let appointmentData: UnknownRecord | null = null
   let appointmentId: string | null = null
 
   try {
@@ -114,8 +122,10 @@ export async function POST(request: Request) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
 
-    const body = await request.json().catch(() => ({}))
-    appointmentData = body?.appointmentData
+    const bodyUnknown: unknown = await request.json().catch(() => ({}))
+    const body = isRecord(bodyUnknown) ? bodyUnknown : {}
+    const maybeAppointmentData = body.appointmentData
+    appointmentData = isRecord(maybeAppointmentData) ? maybeAppointmentData : null
     if (!appointmentData) {
       return Response.json({ error: "Missing appointmentData" }, { status: 400 })
     }
@@ -129,9 +139,12 @@ export async function POST(request: Request) {
 
     const nowIso = new Date().toISOString()
     
-    // Helper function to ensure no undefined values
-    const safeValue = (val: any, defaultValue: any = "") => {
-      return val !== undefined && val !== null ? val : defaultValue
+    // Helper function to ensure no undefined values (avoid `any`)
+    const safeValue = (val: unknown, defaultValue: string = ""): string => {
+      if (val === undefined || val === null) return defaultValue
+      if (typeof val === "string") return val
+      if (typeof val === "number" || typeof val === "boolean") return String(val)
+      return defaultValue
     }
     
     // Normalize appointment time to 24-hour format (HH:MM) for consistent storage
@@ -161,12 +174,13 @@ export async function POST(request: Request) {
     }
 
     // If branchId provided in appointmentData, validate it
-    if (appointmentData.branchId) {
-      const branchDoc = await admin.firestore().collection("branches").doc(appointmentData.branchId).get()
+    const requestedBranchId = getString(appointmentData.branchId)
+    if (requestedBranchId) {
+      const branchDoc = await admin.firestore().collection("branches").doc(requestedBranchId).get()
       if (branchDoc.exists) {
         const branchData = branchDoc.data()
         if (branchData?.hospitalId === doctorHospitalId && branchData?.status === "active") {
-          branchId = appointmentData.branchId
+          branchId = requestedBranchId
           branchName = branchData?.name || null
         }
       }
@@ -174,12 +188,15 @@ export async function POST(request: Request) {
     
     // Calculate total including additional fees (before creating docData object)
     const additionalFeesArray = Array.isArray(appointmentData.additionalFees) ? appointmentData.additionalFees : []
-    const totalAdditionalFees = additionalFeesArray.reduce((sum: number, fee: any) => sum + (Number(fee.amount) || 0), 0)
+    const totalAdditionalFees = additionalFeesArray.reduce((sum: number, fee: unknown) => {
+      const amount = isRecord(fee) ? Number(fee.amount) || 0 : 0
+      return sum + amount
+    }, 0)
     const totalPaymentAmount = typeof appointmentData.paymentAmount === 'number' 
       ? appointmentData.paymentAmount 
       : consultationFee + totalAdditionalFees
 
-    const docData: any = {
+    const docData: Record<string, unknown> = {
       patientId: String(appointmentData.patientId),
       patientName: String(appointmentData.patientName),
       patientEmail: safeValue(appointmentData.patientEmail, ""),
@@ -195,10 +212,15 @@ export async function POST(request: Request) {
       paymentAmount: totalPaymentAmount,
       totalConsultationFee: consultationFee,
       // Store additional fees if provided
-      additionalFees: additionalFeesArray.length > 0 ? additionalFeesArray.map((fee: any) => ({
-        description: safeValue(fee.description, ""),
-        amount: Number(fee.amount) || 0,
-      })) : undefined,
+      additionalFees: additionalFeesArray.length > 0
+        ? additionalFeesArray.map((fee: unknown) => {
+            const feeRec = isRecord(fee) ? fee : {}
+            return {
+              description: safeValue(feeRec.description, ""),
+              amount: Number(feeRec.amount) || 0,
+            }
+          })
+        : undefined,
       paymentMethod: safeValue(appointmentData.paymentMethod, "cash"),
       paymentType: safeValue(appointmentData.paymentType, "full"),
       paymentStatus: "paid", // Mark as paid since receptionist completed payment
@@ -277,13 +299,24 @@ export async function POST(request: Request) {
     })
 
     // If patient phone is missing, try to fetch it from the patient record
-    let patientPhone = docData.patientPhone || appointmentData.patientPhone
+    let patientPhone =
+      (typeof docData.patientPhone === "string" ? docData.patientPhone : "") ||
+      getString(appointmentData.patientPhone) ||
+      ""
     if (!patientPhone || patientPhone.trim() === "") {
       try {
-        const patientDoc = await admin.firestore().collection("patients").doc(appointmentData.patientId).get()
-        if (patientDoc.exists) {
-          const patientData = patientDoc.data()
-          patientPhone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || patientData?.mobile || ""
+        const patientIdForLookup = getString(appointmentData.patientId)
+        if (patientIdForLookup) {
+          const patientDoc = await admin.firestore().collection("patients").doc(patientIdForLookup).get()
+          if (patientDoc.exists) {
+            const patientData = patientDoc.data()
+            patientPhone =
+              patientData?.phone ||
+              patientData?.phoneNumber ||
+              patientData?.contact ||
+              patientData?.mobile ||
+              ""
+          }
         }
       } catch {
       }
@@ -310,22 +343,24 @@ export async function POST(request: Request) {
     }
 
     return Response.json({ success: true, id: appointmentId })
-  } catch (error: any) {
-    // Log error with context
+  } catch (error: unknown) {
+    // Log error with context (don't await to avoid blocking response)
     const hospitalId = await getDoctorHospitalId(String(appointmentData?.doctorId || "")).catch(() => null)
     logApiError(error, request, auth, {
       action: "create-appointment",
       hospitalId: hospitalId || undefined,
       appointmentId: appointmentId || undefined,
-      patientId: appointmentData?.patientId,
-      doctorId: appointmentData?.doctorId,
+      patientId: appointmentData ? getString(appointmentData.patientId) : undefined,
+      doctorId: appointmentData ? getString(appointmentData.doctorId) : undefined,
       receptionistId: auth?.user?.uid,
+    }).catch((err) => {
+      console.error('[Error Logger] Failed to log error:', err)
     })
     
-    if (error?.message === "SLOT_ALREADY_BOOKED") {
+    if (error instanceof Error && error.message === "SLOT_ALREADY_BOOKED") {
       return Response.json({ error: "This time slot has already been booked. Please select another slot." }, { status: 409 })
     }
-    return createErrorResponse(error, request, auth, {
+    return await createErrorResponse(error, request, auth, {
       action: "create-appointment",
       hospitalId: hospitalId || undefined,
       appointmentId: appointmentId || undefined,

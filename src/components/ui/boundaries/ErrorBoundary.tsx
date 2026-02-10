@@ -49,11 +49,41 @@ class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     })
 
-    // TODO: In production, send error to error tracking service (e.g., Sentry)
-    // Example:
-    // if (process.env.NODE_ENV === "production") {
-    //   Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } })
-    // }
+    // Send error to Firestore in production
+    if (process.env.NODE_ENV === "production") {
+      // Use dynamic import to avoid bundling issues
+      import('firebase/firestore')
+        .then(({ collection, addDoc, serverTimestamp }) => {
+          import('@/firebase/config')
+            .then(({ db }) => {
+              // Store error in Firestore
+              addDoc(collection(db, 'errorLogs'), {
+                error: {
+                  message: error.message,
+                  name: error.name,
+                  stack: error.stack,
+                },
+                context: {
+                  errorBoundary: true,
+                  componentStack: errorInfo.componentStack?.substring(0, 1000) || null, // Limit length
+                },
+                timestamp: serverTimestamp(),
+                environment: process.env.NODE_ENV,
+                severity: 'error',
+                resolved: false,
+                source: 'ErrorBoundary',
+              }).catch((firestoreError) => {
+                console.error("[Firestore Error] Failed to log error to Firestore:", firestoreError)
+              })
+            })
+            .catch((importError) => {
+              console.error("[Firestore Error] Failed to import Firestore config:", importError)
+            })
+        })
+        .catch((importError) => {
+          console.error("[Firestore Error] Failed to import firebase/firestore:", importError)
+        })
+    }
   }
 
   handleReset = () => {

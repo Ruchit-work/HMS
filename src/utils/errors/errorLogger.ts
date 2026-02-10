@@ -125,11 +125,11 @@ function extractSafeErrorInfo(error: unknown): {
  * @param context - Context information (user id, hospital id, etc.)
  * @param additionalData - Any additional data to log (will be sanitized)
  */
-export function logError(
+export async function logError(
   error: unknown,
   context: ErrorLogContext = {},
   additionalData?: Record<string, unknown>
-): void {
+): Promise<void> {
   const safeError = extractSafeErrorInfo(error)
   const sanitizedContext = sanitizeObject(context as Record<string, unknown>)
   const sanitizedAdditional = additionalData ? sanitizeObject(additionalData) : undefined
@@ -149,18 +149,46 @@ export function logError(
   // Log to console (in production, this should go to a logging service)
   console.error('[API Error]', JSON.stringify(logEntry, null, 2))
   
-  // TODO: In production, send to logging service (e.g., Sentry, LogRocket, CloudWatch)
-  // Example:
-  // if (process.env.NODE_ENV === 'production') {
-  //   Sentry.captureException(error, {
-  //     tags: {
-  //       userId: context.userId,
-  //       hospitalId: context.hospitalId,
-  //       appointmentId: context.appointmentId,
-  //     },
-  //     extra: sanitizedContext,
-  //   })
-  // }
+  // Send to Firestore in production (fire and forget, don't block)
+  if (process.env.NODE_ENV === 'production') {
+    // Use dynamic import to avoid bundling issues
+    import('firebase/firestore')
+      .then(({ collection, addDoc, serverTimestamp }) => {
+        import('@/firebase/config')
+          .then(({ db }) => {
+            // Store error in Firestore
+            addDoc(collection(db, 'errorLogs'), {
+              error: {
+                message: safeError.message,
+                name: safeError.name,
+                code: safeError.code,
+                stack: safeError.stack,
+              },
+              context: sanitizedContext,
+              ...(sanitizedAdditional && { additional: sanitizedAdditional }),
+              timestamp: serverTimestamp(),
+              environment: process.env.NODE_ENV,
+              severity: 'error',
+              resolved: false,
+              // Add fields for easy querying
+              userId: context.userId || null,
+              hospitalId: context.hospitalId || null,
+              appointmentId: context.appointmentId || null,
+              endpoint: context.endpoint || null,
+              action: context.action || null,
+            }).catch((firestoreError) => {
+              // If Firestore fails, just log to console (don't break the app)
+              console.error('[Firestore Error] Failed to log error to Firestore:', firestoreError)
+            })
+          })
+          .catch((importError) => {
+            console.error('[Firestore Error] Failed to import Firestore:', importError)
+          })
+      })
+      .catch((importError) => {
+        console.error('[Firestore Error] Failed to import firebase/firestore:', importError)
+      })
+  }
 }
 
 /**
@@ -171,12 +199,12 @@ export function logError(
  * @param auth - Auth result (for extracting user info)
  * @param context - Additional context
  */
-export function logApiError(
+export async function logApiError(
   error: unknown,
   request?: Request,
   auth?: { user?: { uid?: string; role?: string } },
   context?: Partial<ErrorLogContext>
-): void {
+): Promise<void> {
   const endpoint = request?.url ? new URL(request.url).pathname : undefined
   const method = request?.method
   
@@ -194,22 +222,24 @@ export function logApiError(
     branchId: context?.branchId,
   }
   
-  logError(error, logContext)
+  await logError(error, logContext)
 }
 
 /**
  * Creates a safe error response for API routes
  * Logs the error internally but returns a user-friendly message
  */
-export function createErrorResponse(
+export async function createErrorResponse(
   error: unknown,
   request?: Request,
   auth?: { user?: { uid?: string; role?: string } },
   context?: Partial<ErrorLogContext>,
   userMessage?: string
-): Response {
-  // Log the full error with context
-  logApiError(error, request, auth, context)
+): Promise<Response> {
+  // Log the full error with context (don't await to avoid blocking response)
+  logApiError(error, request, auth, context).catch((err) => {
+    console.error('[Error Logger] Failed to log error:', err)
+  })
   
   // Return user-friendly message
   const message = userMessage || getErrorMessage(error)

@@ -1,19 +1,24 @@
 "use client"
 
 import { QuestionConfig } from "@/constants/questions"
+import VoiceInput from "@/components/ui/VoiceInput"
 
 interface QuestionRendererProps {
   question: QuestionConfig
   value: string | string[] | boolean | number | undefined
   onChange: (key: string, value: string | string[] | boolean | number) => void
   onToggleMulti?: (key: string, option: string) => void
+  enableVoiceInput?: boolean // Enable voice input for text fields
+  useGoogleCloud?: boolean // Use Google Cloud Speech-to-Text for better Indian accent support
 }
 
 export function QuestionRenderer({
   question,
   value,
   onChange,
-  onToggleMulti
+  onToggleMulti,
+  enableVoiceInput = false,
+  useGoogleCloud = false
 }: QuestionRendererProps) {
   const colorClasses = {
     red: {
@@ -175,10 +180,20 @@ export function QuestionRenderer({
     case 'text':
       return (
         <div>
-          <label className={`block ${labelSize} font-medium text-slate-700 mb-1`}>
-            {question.label}
-            {question.required && <span className="text-red-500"> *</span>}
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className={`block ${labelSize} font-medium text-slate-700`}>
+              {question.label}
+              {question.required && <span className="text-red-500"> *</span>}
+            </label>
+            {enableVoiceInput && (
+              <VoiceInput
+                onTranscript={(text) => onChange(question.key, text)}
+                useGoogleCloud={useGoogleCloud}
+                language="en-IN"
+                className="ml-2"
+              />
+            )}
+          </div>
           <input
             type="text"
             value={(value as string) || ''}
@@ -192,10 +207,23 @@ export function QuestionRenderer({
     case 'textarea':
       return (
         <div>
-          <label className={`block ${labelSize} font-medium text-slate-700 mb-2`}>
-            {question.label}
-            {question.required && <span className="text-red-500"> *</span>}
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className={`block ${labelSize} font-medium text-slate-700`}>
+              {question.label}
+              {question.required && <span className="text-red-500"> *</span>}
+            </label>
+            {enableVoiceInput && (
+              <VoiceInput
+                onTranscript={(text) => {
+                  const currentValue = (value as string) || ''
+                  onChange(question.key, currentValue ? `${currentValue} ${text}` : text)
+                }}
+                useGoogleCloud={useGoogleCloud}
+                language="en-IN"
+                className="ml-2"
+              />
+            )}
+          </div>
           <textarea
             value={(value as string) || ''}
             onChange={(e) => onChange(question.key, e.target.value)}

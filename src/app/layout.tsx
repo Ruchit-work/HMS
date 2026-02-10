@@ -4,6 +4,7 @@ import "./globals.css";
 import GlobalHeader from "@/components/ui/layout/GlobalHeader";
 import { MultiHospitalProvider } from "@/contexts/MultiHospitalContext";
 import ErrorBoundaryWrapper from "@/components/ui/boundaries/ErrorBoundaryWrapper";
+import SpeechRecognitionProvider from "@/components/ui/SpeechRecognitionProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,10 +33,12 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ErrorBoundaryWrapper>
-          <GlobalHeader />
-          <MultiHospitalProvider>
-            {children}
-          </MultiHospitalProvider>
+          <SpeechRecognitionProvider>
+            <GlobalHeader />
+            <MultiHospitalProvider>
+              {children}
+            </MultiHospitalProvider>
+          </SpeechRecognitionProvider>
         </ErrorBoundaryWrapper>
       </body>
     </html>
