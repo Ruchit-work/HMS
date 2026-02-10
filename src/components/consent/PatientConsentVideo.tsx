@@ -29,34 +29,16 @@ export default function PatientConsentVideo({
   const [uploading, setUploading] = useState(false)
   const [recording, setRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{ blob: Blob; url: string } | null>(null)
+  const [pendingRecording, setPendingRecording] = useState<Blob | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const previewVideoRef = useRef<HTMLVideoElement>(null)
 
-  // Revoke blob URL when preview is cleared
-  useEffect(() => {
-    return () => {
-      if (preview?.url) URL.revokeObjectURL(preview.url)
-    }
-  }, [preview?.url])
-
-  // Force video to load blob URL after DOM is ready (fixes black preview in modals)
-  useEffect(() => {
-    if (!preview?.url) return
-    const url = preview.url
-    const id = setTimeout(() => {
-      const video = previewVideoRef.current
-      if (video) {
-        video.src = url
-        video.load()
-      }
-    }, 120)
-    return () => clearTimeout(id)
-  }, [preview?.url])
-
+  // ---------------------------------------------------------------------------
+  // Load existing consents
+  // ---------------------------------------------------------------------------
   const fetchConsents = async () => {
     setLoading(true)
     setError(null)
@@ -69,6 +51,7 @@ export default function PatientConsentVideo({
       const token = await user.getIdToken()
       const params = new URLSearchParams({ patientId: patientUid })
       if (appointmentId) params.set("appointmentId", appointmentId)
+
       const res = await fetch(`/api/patient-consent?${params}`, {
         credentials: "include",
         headers: { Authorization: `Bearer ${token}` },
@@ -91,6 +74,9 @@ export default function PatientConsentVideo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientUid, appointmentId])
 
+  // ---------------------------------------------------------------------------
+  // Upload helpers
+  // ---------------------------------------------------------------------------
   const uploadVideo = async (file: File | Blob, source: "recorded" | "uploaded", fileName?: string) => {
     setUploading(true)
     setError(null)
@@ -102,7 +88,8 @@ export default function PatientConsentVideo({
       }
       const token = await user.getIdToken()
       const formData = new FormData()
-      const f = file instanceof File ? file : new File([file], fileName || "consent.webm", { type: file.type || "video/webm" })
+      const f = file instanceof File ? file : new File([file], fileName || "consent.webm", { type: "video/webm" })
+
       formData.append("video", f)
       formData.append("patientId", patientId)
       formData.append("patientUid", patientUid)
@@ -118,6 +105,7 @@ export default function PatientConsentVideo({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Upload failed")
+
       setConsents((prev) => [data.consent, ...prev])
       onUploadSuccess?.()
     } catch (e) {
@@ -127,6 +115,9 @@ export default function PatientConsentVideo({
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Recording
+  // ---------------------------------------------------------------------------
   const startRecording = async () => {
     setError(null)
     try {
@@ -136,21 +127,26 @@ export default function PatientConsentVideo({
       }
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm"
-      const recorder = new MediaRecorder(stream)
+      const recorder = new MediaRecorder(stream, { mimeType: mime })
       mediaRecorderRef.current = recorder
       chunksRef.current = []
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
+
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop())
-        const chunks = [...chunksRef.current]
-        if (chunks.length === 0) return
-        const blob = new Blob(chunks, { type: "video/webm" })
-        const url = URL.createObjectURL(blob)
-        setPreview({ blob, url })
+        // Defer slightly so the last chunk is definitely pushed
+        setTimeout(() => {
+          const chunks = [...chunksRef.current]
+          if (chunks.length === 0) return
+          const blob = new Blob(chunks, { type: "video/webm" })
+          setPendingRecording(blob)
+          chunksRef.current = []
+        }, 150)
       }
+
       recorder.start(1000)
       setRecording(true)
     } catch (e: unknown) {
@@ -168,7 +164,6 @@ export default function PatientConsentVideo({
   const stopRecording = () => {
     const recorder = mediaRecorderRef.current
     if (recorder && recorder.state !== "inactive") {
-      // Flush any buffered data so the final blob has all chunks
       if (recorder.state === "recording") recorder.requestData()
       recorder.stop()
     }
@@ -185,19 +180,24 @@ export default function PatientConsentVideo({
     e.target.value = ""
   }
 
-  const confirmAddRecording = () => {
-    if (!preview?.blob) return
-    uploadVideo(preview.blob, "recorded", "consent.webm")
-    if (preview.url) URL.revokeObjectURL(preview.url)
-    setPreview(null)
+  const handleAddRecording = () => {
+    if (!pendingRecording) return
+    uploadVideo(pendingRecording, "recorded", "consent.webm")
+    setPendingRecording(null)
   }
 
-  const retakeRecording = () => {
-    if (preview?.url) URL.revokeObjectURL(preview.url)
-    setPreview(null)
+  const handleRetake = () => {
+    setPendingRecording(null)
     setError(null)
   }
 
+  const handleClosePending = () => {
+    setPendingRecording(null)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Delete existing consent
+  // ---------------------------------------------------------------------------
   const deleteConsent = async (consentId: string) => {
     setDeletingId(consentId)
     setError(null)
@@ -243,12 +243,12 @@ export default function PatientConsentVideo({
             <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600" />
           </span>
           <span className="text-sm font-medium text-red-800">Recording in progress…</span>
-          <span className="text-xs text-red-600">Click &quot;Stop recording&quot; when done.</span>
+          <span className="text-xs text-red-600">Click "Stop recording" when done.</span>
         </div>
       )}
 
       <div className="flex flex-wrap gap-2">
-        {preview ? null : !recording ? (
+        {!recording ? (
           <button
             type="button"
             onClick={startRecording}
@@ -268,32 +268,27 @@ export default function PatientConsentVideo({
             Stop recording
           </button>
         )}
-        {!preview && (
-          <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
-            <input type="file" accept="video/webm,video/mp4,video/quicktime" className="hidden" onChange={onFileSelect} disabled={uploading || recording} />
-            Upload video
-          </label>
-        )}
+        <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
+          <input
+            type="file"
+            accept="video/webm,video/mp4,video/quicktime"
+            className="hidden"
+            onChange={onFileSelect}
+            disabled={uploading || recording}
+          />
+          Upload video
+        </label>
       </div>
 
-      {preview && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
-          <p className="text-xs font-medium text-slate-600">Preview — verify then add</p>
-          {preview.url ? (
-            <video
-              ref={previewVideoRef}
-              key={preview.url}
-              src={preview.url}
-              controls
-              className="w-full max-h-48 rounded border border-slate-200 bg-black"
-              playsInline
-              preload="auto"
-            />
-          ) : null}
-          <div className="flex flex-wrap gap-2">
+      {pendingRecording && (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+          <p className="text-xs font-medium text-slate-600">
+            Recording captured. You can Add it, Retake, or Close without saving.
+          </p>
+          <div className="flex flex-wrap gap-2 justify-end">
             <button
               type="button"
-              onClick={retakeRecording}
+              onClick={handleRetake}
               disabled={uploading}
               className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
@@ -301,17 +296,25 @@ export default function PatientConsentVideo({
             </button>
             <button
               type="button"
-              onClick={confirmAddRecording}
+              onClick={handleAddRecording}
               disabled={uploading}
               className="inline-flex items-center rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
             >
               {uploading ? "Adding…" : "Add"}
             </button>
+            <button
+              type="button"
+              onClick={handleClosePending}
+              disabled={uploading}
+              className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
 
-      {uploading && !preview && <p className="text-xs text-slate-500">Uploading…</p>}
+      {uploading && <p className="text-xs text-slate-500">Uploading…</p>}
       {loading ? (
         <p className="text-xs text-slate-500">Loading list…</p>
       ) : consents.length > 0 ? (
@@ -362,3 +365,4 @@ export default function PatientConsentVideo({
     </div>
   )
 }
+
