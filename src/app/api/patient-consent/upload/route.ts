@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
           },
         },
       })
-      await fileRef.makePublic()
-      downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
+      // No public ACL; playback will go through authenticated API route
+      downloadUrl = "" // will be populated later as internal API URL
       uploadSuccess = true
     } catch (storageErr: unknown) {
       const err = storageErr as { message?: string; code?: number }
@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
                 },
               },
             })
-            await fileRef.makePublic()
-            downloadUrl = `https://storage.googleapis.com/${alternativeBucketName}/${storagePath}`
+            // No public ACL; playback will go through authenticated API route
+            downloadUrl = ""
             uploadSuccess = true
           } catch (altErr) {
             console.error("[patient-consent] Alternative bucket also failed:", altErr)
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
       patientUid,
       hospitalId,
       storagePath,
-      downloadUrl,
+      downloadUrl: `/api/patient-consent/file?id=${consentRef.id}`,
       fileName: videoFile.name,
       mimeType: videoFile.type,
       fileSize: videoFile.size,
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       appointmentId: appointmentId?.trim() || undefined,
       hospitalId,
       storagePath,
-      downloadUrl,
+      downloadUrl: `/api/patient-consent/file?id=${consentRef.id}`,
       fileName: videoFile.name,
       mimeType: videoFile.type,
       fileSize: videoFile.size,

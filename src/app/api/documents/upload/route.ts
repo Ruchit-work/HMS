@@ -262,9 +262,8 @@ export async function POST(request: NextRequest) {
       
       console.log("[document-upload] ✅ File uploaded successfully")
       
-      // Make file publicly readable
-      await fileRef.makePublic()
-      downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
+      // No public ACL; use internal API route for download/viewing
+      downloadUrl = "" // will be filled after document record is created
       
       console.log("[document-upload] 🔗 Download URL:", downloadUrl)
       uploadSuccess = true
@@ -300,10 +299,8 @@ export async function POST(request: NextRequest) {
             })
             
             console.log("[document-upload] ✅ File uploaded successfully to alternative bucket")
-
-            // Make file publicly readable
-            await fileRef.makePublic()
-            downloadUrl = `https://storage.googleapis.com/${alternativeBucketName}/${storagePath}`
+            // No public ACL; will be served via internal API route
+            downloadUrl = ""
             
             console.log("[document-upload] 🔗 Download URL:", downloadUrl)
             uploadSuccess = true

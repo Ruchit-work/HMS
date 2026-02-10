@@ -239,9 +239,8 @@ export async function POST(request: NextRequest) {
             },
           },
         })
-
-        await fileRef.makePublic()
-        const downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
+        // No public ACL; download will go through internal API route
+        const downloadUrl = ""
 
         // Create document metadata
         const now = new Date().toISOString()
