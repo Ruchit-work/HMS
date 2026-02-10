@@ -59,13 +59,17 @@ export async function GET(request: NextRequest) {
     }
 
     const [buffer] = await file.download()
-    return new NextResponse(buffer, {
+    // Convert Node Buffer to Uint8Array so it matches the runtime's BodyInit types
+    const body = new Uint8Array(buffer)
+    const contentType = mimeType || "application/octet-stream"
+
+    return new NextResponse(body, {
       status: 200,
       headers: {
-        "Content-Type": mimeType,
-        "Content-Length": String(buffer.length),
+        "Content-Type": contentType,
+        "Content-Length": String(body.byteLength),
         "Cache-Control": "private, max-age=0, no-store",
-      },
+      } as Record<string, string>,
     })
   } catch (err) {
     console.error("[patient-consent-file] Error:", err)
