@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata, DocumentType } from "@/types/document"
 import DocumentUpload from "./DocumentUpload"
 import DocumentViewer from "./DocumentViewer"
+import ConsentVideosPanel from "./ConsentVideosPanel"
 import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { auth } from "@/firebase/config"
 import { doc, getDoc, query, where, getDocs, orderBy, limit } from "firebase/firestore"
@@ -63,6 +64,7 @@ export default function DocumentsTab({
   const [searchQuery, setSearchQuery] = useState("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [panelTab, setPanelTab] = useState<"documents" | "consent-videos">("documents")
 
   // Update patientId and patientUid when patient is selected
   useEffect(() => {
@@ -531,25 +533,7 @@ export default function DocumentsTab({
         />
       )}
 
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Documents & Reports</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            {documents.length} document{documents.length !== 1 ? "s" : ""} found
-          </p>
-        </div>
-        {canUpload && (patientUid || initialPatientUid || selectedPatient) && (
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-          >
-            {showUpload ? "Cancel Upload" : "Upload Document"}
-          </button>
-        )}
-      </div>
-
-      {/* Patient Selector */}
+      {/* Global Search Patient — one search for both Documents and Consent videos tabs */}
       {showPatientSelector && (
         <div className="mb-6 bg-white rounded-lg shadow p-6">
           <PatientSelector
@@ -567,6 +551,70 @@ export default function DocumentsTab({
           />
         </div>
       )}
+
+      {/* Panel tabs: Documents & reports | Consent videos */}
+      <div className="mb-4 flex gap-2 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => setPanelTab("documents")}
+          className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors ${
+            panelTab === "documents"
+              ? "border-blue-600 text-blue-600 bg-white"
+              : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+          }`}
+        >
+          Documents &amp; reports
+        </button>
+        <button
+          type="button"
+          onClick={() => setPanelTab("consent-videos")}
+          className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors ${
+            panelTab === "consent-videos"
+              ? "border-blue-600 text-blue-600 bg-white"
+              : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+          }`}
+        >
+          Consent videos
+        </button>
+      </div>
+
+      {panelTab === "consent-videos" ? (
+        <ConsentVideosPanel
+          patientId={patientId || initialPatientId}
+          patientUid={patientUid || initialPatientUid}
+          showPatientSelector={false}
+          selectedPatient={selectedPatient}
+          onPatientSelect={(p) => {
+            setSelectedPatient(p)
+            if (p) {
+              setPatientId(p.patientId)
+              setPatientUid(p.uid)
+            } else {
+              setPatientId("")
+              setPatientUid("")
+            }
+          }}
+          canDelete={canDelete}
+        />
+      ) : (
+        <>
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Documents &amp; Reports</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {documents.length} document{documents.length !== 1 ? "s" : ""} found
+          </p>
+        </div>
+        {canUpload && (patientUid || initialPatientUid || selectedPatient) && (
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+          >
+            {showUpload ? "Cancel Upload" : "Upload Document"}
+          </button>
+        )}
+      </div>
 
       {/* Upload Section */}
       {showUpload && canUpload && (patientUid || initialPatientUid || selectedPatient) && (
@@ -812,6 +860,8 @@ export default function DocumentsTab({
         confirmLoading={deleting}
         loadingText="Deleting..."
       />
+        </>
+      )}
     </div>
   )
 }

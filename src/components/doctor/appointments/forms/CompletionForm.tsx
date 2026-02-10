@@ -10,6 +10,7 @@ import MedicineForm from "@/components/doctor/appointments/forms/MedicineForm"
 import DocumentUpload from "@/components/documents/DocumentUpload"
 import { parseAiPrescription } from "@/utils/appointments/prescriptionParsers"
 import { hasValidPrescriptionInput } from "@/types/appointments"
+import VoiceInput from "@/components/ui/VoiceInput"
 
 interface CompletionFormProps {
   appointment: AppointmentType
@@ -190,14 +191,26 @@ export default function CompletionForm({
 
       {/* Notes Section */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          Doctor&apos;s Notes <span className="text-gray-400 text-xs">(Optional)</span>
-        </label>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <label className="block text-xs font-medium text-gray-700">
+            Doctor&apos;s Notes <span className="text-gray-400 text-xs">(Optional)</span>
+          </label>
+          <VoiceInput
+            onTranscript={(text) => {
+              const current = completionData.notes || ""
+              handleNotesChange(current ? `${current} ${text}` : text)
+            }}
+            language="en-IN"
+            useGoogleCloud={true}
+            useMedicalModel={true}
+            className="shrink-0"
+          />
+        </div>
         <textarea
           value={completionData.notes || ""}
           onChange={(e) => handleNotesChange(e.target.value)}
           rows={2}
-          placeholder="Enter observations, diagnosis, recommendations..."
+          placeholder="Enter observations, diagnosis, recommendations... or use voice input"
           className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
         />
       </div>

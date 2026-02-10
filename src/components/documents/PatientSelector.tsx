@@ -5,6 +5,7 @@ import { auth } from "@/firebase/config"
 import { getDocs } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import VoiceInput from "@/components/ui/VoiceInput"
 
 interface Patient {
   id: string
@@ -134,51 +135,60 @@ export default function PatientSelector({
       <label className="block text-sm font-medium text-gray-700 mb-2">
         Search Patient
       </label>
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onFocus={() => {
-            if (patients.length > 0) {
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => {
+              if (patients.length > 0) {
+                setShowSuggestions(true)
+              }
+            }}
+            onBlur={(e) => {
+              const relatedTarget = e.relatedTarget as HTMLElement
+              if (suggestionsRef.current && suggestionsRef.current.contains(relatedTarget)) {
+                return
+              }
+              setTimeout(() => {
+                if (!suggestionsRef.current?.contains(document.activeElement)) {
+                  setShowSuggestions(false)
+                }
+              }, 150)
+            }}
+            placeholder="Search by name, email, phone, or patient ID"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          {selectedPatient && (
+            <button
+              onClick={handleClear}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              type="button"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+          {loading && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            </div>
+          )}
+        </div>
+        <VoiceInput
+          onTranscript={(text) => {
+            setSearchQuery(text)
+            if (text.trim().length >= 2) {
               setShowSuggestions(true)
             }
           }}
-          onBlur={(e) => {
-            // Check if the blur is caused by clicking on a suggestion
-            // If the related target is inside the suggestions container, don't close
-            const relatedTarget = e.relatedTarget as HTMLElement
-            if (suggestionsRef.current && suggestionsRef.current.contains(relatedTarget)) {
-              return
-            }
-            // Delay to allow click on suggestion
-            setTimeout(() => {
-              // Double-check that we're not clicking on a suggestion
-              if (!suggestionsRef.current?.contains(document.activeElement)) {
-                setShowSuggestions(false)
-              }
-            }, 150)
-          }}
-          placeholder="Search by name, email, phone, or patient ID"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          language="en-IN"
+          useMedicalModel={false}
+          className="shrink-0"
         />
-        {selectedPatient && (
-          <button
-            onClick={handleClear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            type="button"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-        {loading && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-          </div>
-        )}
       </div>
 
       {showSuggestions && patients.length > 0 && (

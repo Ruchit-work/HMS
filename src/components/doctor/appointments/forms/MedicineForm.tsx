@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { MedicineSuggestion, sanitizeMedicineName } from "@/utils/medicineSuggestions"
+import VoiceInput from "@/components/ui/VoiceInput"
 import { CompletionFormEntry } from "@/types/appointments"
 
 interface MedicineFormProps {
@@ -213,9 +214,21 @@ export default function MedicineForm({
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-0.5">
-                      Name <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <label className="block text-xs font-medium text-gray-700">
+                        Name <span className="text-red-500">*</span>
+                      </label>
+                      <VoiceInput
+                        onTranscript={(text) => {
+                          updateMedicine(index, "name", text)
+                          updateInlineSuggestion(index, text)
+                        }}
+                        language="en-IN"
+                        useGoogleCloud={true}
+                        useMedicalModel={true}
+                        className="shrink-0"
+                      />
+                    </div>
                     <div className="relative">
                       <input
                         type="text"

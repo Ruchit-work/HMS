@@ -17,6 +17,7 @@ import { fetchMedicineSuggestions, MedicineSuggestion, recordMedicineSuggestions
 import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
 import dynamic from "next/dynamic"
 import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
+import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
 import type { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
 
 // Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
@@ -103,6 +104,13 @@ function DoctorAppointmentsContent() {
     note: "",
   })
   const [documentsModal, setDocumentsModal] = useState<{
+    open: boolean
+    appointment: AppointmentType | null
+  }>({
+    open: false,
+    appointment: null,
+  })
+  const [consentModal, setConsentModal] = useState<{
     open: boolean
     appointment: AppointmentType | null
   }>({
@@ -1488,6 +1496,9 @@ function DoctorAppointmentsContent() {
                           onOpenDocuments={() =>
                             setDocumentsModal({ open: true, appointment: selectedAppointment })
                           }
+                          onOpenConsentVideo={() =>
+                            setConsentModal({ open: true, appointment: selectedAppointment })
+                          }
                           consultationStarted={
                             !!consultationMode[selectedAppointment.id] ||
                             !!showCompletionForm[selectedAppointment.id]
@@ -2234,6 +2245,39 @@ function DoctorAppointmentsContent() {
                 canUpload={true}
                 canEdit={true}
                 canDelete={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {consentModal.open && consentModal.appointment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Patient consent video</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {consentModal.appointment.patientName} · Record or upload consent for serious procedures
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConsentModal({ open: false, appointment: null })}
+                className="rounded-full p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                aria-label="Close consent video"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto px-6 py-4">
+              <PatientConsentVideo
+                patientId={consentModal.appointment.patientId}
+                patientUid={consentModal.appointment.patientUid || consentModal.appointment.patientId || ""}
+                patientName={consentModal.appointment.patientName || ""}
+                appointmentId={consentModal.appointment.id}
+                optional={false}
               />
             </div>
           </div>

@@ -57,25 +57,24 @@ export async function POST(req: NextRequest) {
      *   - alternativeLanguageCodes
      *   - useEnhanced
      */
-    const config: any = {
+    const config: Record<string, unknown> = {
       encoding: 'WEBM_OPUS',
       sampleRateHertz: 48000,
+      audioChannelCount: 1,
       languageCode: effectiveLanguage,
       enableAutomaticPunctuation: true,
       enableSpokenPunctuation: true,
-      enableSpokenEmojis: false
+      enableSpokenEmojis: false,
+      maxAlternatives: 2
     }
 
     if (useMedicalModel) {
-      // ✅ Medical-safe config
       config.model = 'medical_dictation'
     } else {
-      // ✅ General speech (Indian accent + Hinglish)
       config.model = 'latest_long'
       config.useEnhanced = true
-
       if (language === 'en-IN') {
-        config.alternativeLanguageCodes = ['hi-IN']
+        config.alternativeLanguageCodes = ['en-US', 'hi-IN']
       }
     }
 
@@ -114,7 +113,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const bestResult = data.results[0].alternatives[0]
+    const alternatives = (data.results[0].alternatives || []) as Array<{ transcript: string; confidence?: number }>
+    const bestResult =
+      alternatives.length > 1
+        ? alternatives.reduce(
+            (best, a) => ((a.confidence ?? 0) > (best.confidence ?? 0) ? a : best),
+            alternatives[0]
+          )
+        : alternatives[0]
 
     return NextResponse.json({
       text: bestResult.transcript,

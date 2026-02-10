@@ -17,6 +17,8 @@ import { bloodGroups } from "@/constants/signup"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/symptoms/SymptomSelector"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, normalizeTime } from "@/utils/timeSlots"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
+import VoiceInput from "@/components/ui/VoiceInput"
+import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
 
 interface BookAppointmentPanelProps {
   patientMode: "existing" | "new"
@@ -1020,12 +1022,23 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
             <div className="mt-6 space-y-5">
               {patientMode === "existing" ? (
                 <div className="space-y-4">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Search patient</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Search patient</label>
+                    <VoiceInput
+                      onTranscript={(text) => {
+                        handleExistingPatientSearch(text)
+                        setShowPatientSuggestions(true)
+                      }}
+                      language="en-IN"
+                      useMedicalModel={false}
+                      className="shrink-0"
+                    />
+                  </div>
                   <div className="relative">
                     <input
                       value={searchPatient}
                       onChange={(e) => handleExistingPatientSearch(e.target.value)}
-                      placeholder="Search by name, email, phone, or patient ID"
+                      placeholder="Search by name, email, phone, or patient ID — or use voice"
                       className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                     />
                     {showPatientSuggestions && searchPatient.trim().length > 0 && (
@@ -1133,6 +1146,16 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                               )}
                             </div>
                           )}
+
+                          <div className="pt-4 border-t border-slate-200">
+                            <PatientConsentVideo
+                              patientId={selectedPatientInfo.patientId || selectedPatientId}
+                              patientUid={selectedPatientId}
+                              patientName={`${selectedPatientInfo.firstName || ""} ${selectedPatientInfo.lastName || ""}`.trim()}
+                              optional={true}
+                              compact={true}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>

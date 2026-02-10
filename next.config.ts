@@ -56,10 +56,10 @@ const nextConfig: NextConfig = {
             value: 'strict-origin-when-cross-origin',
           },
           // Permissions-Policy - Control browser features
-          // Allow microphone for voice input feature
+          // Allow camera and microphone for voice input + patient consent video recording
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(self), geolocation=(), interest-cohort=()',
+            value: 'camera=(self), microphone=(self), geolocation=(), interest-cohort=()',
           },
         ],
       },

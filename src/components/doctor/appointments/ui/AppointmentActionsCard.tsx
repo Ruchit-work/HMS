@@ -7,6 +7,7 @@ interface AppointmentActionsCardProps {
   updating: boolean
   onStartConsultation: () => void
   onOpenDocuments: () => void
+  onOpenConsentVideo?: () => void
   consultationStarted: boolean
 }
 
@@ -15,6 +16,7 @@ export default function AppointmentActionsCard({
   updating,
   onStartConsultation,
   onOpenDocuments,
+  onOpenConsentVideo,
   consultationStarted,
 }: AppointmentActionsCardProps) {
   return (
@@ -59,6 +61,15 @@ export default function AppointmentActionsCard({
         >
           <span>Documents &amp; reports</span>
         </button>
+        {onOpenConsentVideo && (
+          <button
+            type="button"
+            onClick={onOpenConsentVideo}
+            className="w-full rounded-xl border-2 border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 hover:border-amber-400 flex items-center justify-center gap-2 transform transition-all duration-300 hover:scale-105 active:scale-95"
+          >
+            <span>Consent video</span>
+          </button>
+        )}
       </div>
     </div>
   )
