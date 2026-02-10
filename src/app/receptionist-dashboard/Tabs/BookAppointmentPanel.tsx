@@ -1022,25 +1022,29 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
             <div className="mt-6 space-y-5">
               {patientMode === "existing" ? (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Search patient</label>
-                    <VoiceInput
-                      onTranscript={(text) => {
-                        handleExistingPatientSearch(text)
-                        setShowPatientSuggestions(true)
-                      }}
-                      language="en-IN"
-                      useMedicalModel={false}
-                      className="shrink-0"
-                    />
-                  </div>
-                  <div className="relative">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Search patient</label>
+                  <div className="relative flex items-center">
                     <input
                       value={searchPatient}
                       onChange={(e) => handleExistingPatientSearch(e.target.value)}
                       placeholder="Search by name, email, phone, or patient ID — or use voice"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="w-full rounded-xl border border-slate-200 bg-white pl-4 pr-12 py-2.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                     />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
+                      <div className="pointer-events-auto">
+                        <VoiceInput
+                          onTranscript={(text) => {
+                            handleExistingPatientSearch(text)
+                            setShowPatientSuggestions(true)
+                          }}
+                          language="en-IN"
+                          useMedicalModel={false}
+                          variant="inline"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative w-full">
                     {showPatientSuggestions && searchPatient.trim().length > 0 && (
                       <div
                         className="absolute z-10 mt-2 max-h-64 w-full overflow-auto rounded-2xl border border-slate-200 bg-white/90 shadow-lg backdrop-blur-sm"

@@ -180,57 +180,65 @@ export function QuestionRenderer({
     case 'text':
       return (
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className={`block ${labelSize} font-medium text-slate-700`}>
-              {question.label}
-              {question.required && <span className="text-red-500"> *</span>}
-            </label>
+          <label className={`block ${labelSize} font-medium text-slate-700 mb-1`}>
+            {question.label}
+            {question.required && <span className="text-red-500"> *</span>}
+          </label>
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              value={(value as string) || ''}
+              onChange={(e) => onChange(question.key, e.target.value)}
+              placeholder={question.placeholder}
+              className={`w-full pl-4 pr-12 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 ${colors.focus}`}
+            />
             {enableVoiceInput && (
-              <VoiceInput
-                onTranscript={(text) => onChange(question.key, text)}
-                useGoogleCloud={useGoogleCloud}
-                language="en-IN"
-                className="ml-2"
-              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
+                <div className="pointer-events-auto">
+                  <VoiceInput
+                    onTranscript={(text) => onChange(question.key, text)}
+                    useGoogleCloud={useGoogleCloud}
+                    language="en-IN"
+                    variant="inline"
+                  />
+                </div>
+              </div>
             )}
           </div>
-          <input
-            type="text"
-            value={(value as string) || ''}
-            onChange={(e) => onChange(question.key, e.target.value)}
-            placeholder={question.placeholder}
-            className={`w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 ${colors.focus}`}
-          />
         </div>
       )
 
     case 'textarea':
       return (
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className={`block ${labelSize} font-medium text-slate-700`}>
-              {question.label}
-              {question.required && <span className="text-red-500"> *</span>}
-            </label>
+          <label className={`block ${labelSize} font-medium text-slate-700 mb-2`}>
+            {question.label}
+            {question.required && <span className="text-red-500"> *</span>}
+          </label>
+          <div className="relative flex items-center">
+            <textarea
+              value={(value as string) || ''}
+              onChange={(e) => onChange(question.key, e.target.value)}
+              rows={question.rows || 3}
+              placeholder={question.placeholder}
+              className={`w-full pl-4 pr-12 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 ${colors.focus} ${textSize}`}
+            />
             {enableVoiceInput && (
-              <VoiceInput
-                onTranscript={(text) => {
-                  const currentValue = (value as string) || ''
-                  onChange(question.key, currentValue ? `${currentValue} ${text}` : text)
-                }}
-                useGoogleCloud={useGoogleCloud}
-                language="en-IN"
-                className="ml-2"
-              />
+              <div className="absolute right-2 top-3 pointer-events-none flex items-start justify-end">
+                <div className="pointer-events-auto">
+                  <VoiceInput
+                    onTranscript={(text) => {
+                      const currentValue = (value as string) || ''
+                      onChange(question.key, currentValue ? `${currentValue} ${text}` : text)
+                    }}
+                    useGoogleCloud={useGoogleCloud}
+                    language="en-IN"
+                    variant="inline"
+                  />
+                </div>
+              </div>
             )}
           </div>
-          <textarea
-            value={(value as string) || ''}
-            onChange={(e) => onChange(question.key, e.target.value)}
-            rows={question.rows || 3}
-            placeholder={question.placeholder}
-            className={`w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 ${colors.focus} ${textSize}`}
-          />
         </div>
       )
 

@@ -191,28 +191,32 @@ export default function CompletionForm({
 
       {/* Notes Section */}
       <div>
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <label className="block text-xs font-medium text-gray-700">
-            Doctor&apos;s Notes <span className="text-gray-400 text-xs">(Optional)</span>
-          </label>
-          <VoiceInput
-            onTranscript={(text) => {
-              const current = completionData.notes || ""
-              handleNotesChange(current ? `${current} ${text}` : text)
-            }}
-            language="en-IN"
-            useGoogleCloud={true}
-            useMedicalModel={true}
-            className="shrink-0"
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          Doctor&apos;s Notes <span className="text-gray-400 text-xs">(Optional)</span>
+        </label>
+        <div className="relative flex items-center">
+          <textarea
+            value={completionData.notes || ""}
+            onChange={(e) => handleNotesChange(e.target.value)}
+            rows={2}
+            placeholder="Enter observations, diagnosis, recommendations... or use voice input"
+            className="w-full pl-2 pr-10 py-1 pt-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
           />
+          <div className="absolute right-2 top-2 pointer-events-none flex items-end justify-end">
+            <div className="pointer-events-auto">
+              <VoiceInput
+                onTranscript={(text) => {
+                  const current = completionData.notes || ""
+                  handleNotesChange(current ? `${current} ${text}` : text)
+                }}
+                language="en-IN"
+                useGoogleCloud={false}
+                useMedicalModel={false}
+                variant="inline"
+              />
+            </div>
+          </div>
         </div>
-        <textarea
-          value={completionData.notes || ""}
-          onChange={(e) => handleNotesChange(e.target.value)}
-          rows={2}
-          placeholder="Enter observations, diagnosis, recommendations... or use voice input"
-          className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
-        />
       </div>
 
       {/* Recheckup Section + 3D Model / Documents actions */}

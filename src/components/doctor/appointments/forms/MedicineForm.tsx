@@ -214,22 +214,10 @@ export default function MedicineForm({
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <label className="block text-xs font-medium text-gray-700">
-                        Name <span className="text-red-500">*</span>
-                      </label>
-                      <VoiceInput
-                        onTranscript={(text) => {
-                          updateMedicine(index, "name", text)
-                          updateInlineSuggestion(index, text)
-                        }}
-                        language="en-IN"
-                        useGoogleCloud={true}
-                        useMedicalModel={true}
-                        className="shrink-0"
-                      />
-                    </div>
-                    <div className="relative">
+                    <label className="block text-xs font-medium text-gray-700 mb-0.5">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative flex items-center">
                       <input
                         type="text"
                         id={`name-${appointmentId}-${index}`}
@@ -281,14 +269,29 @@ export default function MedicineForm({
                           }
                         }}
                         placeholder="e.g., Paracetamol"
-                        className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
+                        className="w-full pl-2 pr-9 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs"
                         required
                       />
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
+                        <div className="pointer-events-auto">
+                          <VoiceInput
+                            onTranscript={(text) => {
+                              updateMedicine(index, "name", text)
+                              updateInlineSuggestion(index, text)
+                              setActiveNameSuggestion({ appointmentId, index })
+                            }}
+                            language="en-IN"
+                            useGoogleCloud={false}
+                            useMedicalModel={false}
+                            variant="inline"
+                          />
+                        </div>
+                      </div>
                       {inlineSuggestion?.appointmentId === appointmentId &&
                       inlineSuggestion?.index === index &&
                       inlineSuggestion?.suggestion &&
                       inlineSuggestion.suggestion.toLowerCase().startsWith((medicine.name || "").toLowerCase()) ? (
-                        <div className="pointer-events-none absolute inset-0 flex items-center px-2 text-xs text-gray-400 select-none">
+                        <div className="pointer-events-none absolute inset-0 flex items-center pl-2 pr-9 text-xs text-gray-400 select-none">
                           <span className="opacity-0">
                             {(medicine.name || "").split("").map(() => "•").join("")}
                           </span>
