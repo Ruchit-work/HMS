@@ -1,9 +1,34 @@
 "use client"
 
-import React, { useRef, useState, Suspense } from 'react'
+import React, { useRef, useState, Suspense, useEffect } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
+
+// Suppress GLTFLoader blob texture errors (e.g. blob URL no longer valid); model still renders
+function useSuppressBlobTextureErrors() {
+  useEffect(() => {
+    const manager = THREE.DefaultLoadingManager
+    const prevOnError = manager.onError
+    manager.onError = (url: string) => {
+      if (typeof url === 'string' && url.startsWith('blob:')) {
+        return
+      }
+      if (typeof prevOnError === 'function') prevOnError(url)
+    }
+    const prevConsoleError = console.error
+    console.error = (...args: unknown[]) => {
+      if (args[0] === "THREE.GLTFLoader: Couldn't load texture" && typeof args[1] === 'string' && args[1].startsWith('blob:')) {
+        return
+      }
+      prevConsoleError.apply(console, args)
+    }
+    return () => {
+      manager.onError = prevOnError
+      console.error = prevConsoleError
+    }
+  }, [])
+}
 
 // ENT anatomy part descriptions - focused on ear anatomy (fallback for known parts)
 const entPartDescriptions: Record<string, { name: string; description: string }> = {
@@ -1201,6 +1226,7 @@ export default function ENTAnatomyViewer({
   selectedPart 
 }: ENTAnatomyViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  useSuppressBlobTextureErrors()
 
   return (
     <div 

@@ -213,7 +213,7 @@ export default function MedicineForm({
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-0.5">
                       Name <span className="text-red-500">*</span>
                     </label>
@@ -304,68 +304,68 @@ export default function MedicineForm({
                           </span>
                         </div>
                       ) : null}
-                      {showNameSuggestions && (
-                        <div className="absolute z-20 mt-1 w-full max-h-40 overflow-auto bg-white border border-gray-200 rounded shadow-lg">
-                          {medicineSuggestionsLoading ? (
-                            <div className="px-3 py-2 text-[11px] text-gray-500">Loading suggestions...</div>
-                          ) : (
-                            nameSuggestions.map((suggestion, suggestionIndex) => (
-                              <button
-                                type="button"
-                                key={suggestion.id}
-                                id={`suggestion-btn-${appointmentId}-${index}-${suggestionIndex}`}
-                                className="w-full px-3 py-1.5 text-left hover:bg-green-50 transition text-[11px]"
-                                onMouseDown={(e) => {
+                    </div>
+                    {showNameSuggestions && (
+                      <div className="mt-1 w-full max-h-40 overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                        {medicineSuggestionsLoading ? (
+                          <div className="px-3 py-2 text-[11px] text-gray-500">Loading suggestions...</div>
+                        ) : (
+                          nameSuggestions.map((suggestion, suggestionIndex) => (
+                            <button
+                              type="button"
+                              key={suggestion.id}
+                              id={`suggestion-btn-${appointmentId}-${index}-${suggestionIndex}`}
+                              className="w-full px-3 py-1.5 text-left hover:bg-green-50 transition text-[11px] first:rounded-t-lg last:rounded-b-lg"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                handleSelectMedicineSuggestion(index, suggestion, { setFocusNext: true })
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
                                   e.preventDefault()
                                   handleSelectMedicineSuggestion(index, suggestion, { setFocusNext: true })
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
+                                } else if (e.key === "ArrowDown") {
+                                  const nextButton = document.querySelector<HTMLButtonElement>(
+                                    `#suggestion-btn-${appointmentId}-${index}-${suggestionIndex + 1}`
+                                  )
+                                  if (nextButton) {
                                     e.preventDefault()
-                                    handleSelectMedicineSuggestion(index, suggestion, { setFocusNext: true })
-                                  } else if (e.key === "ArrowDown") {
-                                    const nextButton = document.querySelector<HTMLButtonElement>(
-                                      `#suggestion-btn-${appointmentId}-${index}-${suggestionIndex + 1}`
+                                    nextButton.focus()
+                                  }
+                                } else if (e.key === "ArrowUp") {
+                                  if (suggestionIndex === 0) {
+                                    e.preventDefault()
+                                    const input = document.querySelector<HTMLInputElement>(
+                                      `#name-${appointmentId}-${index}`
                                     )
-                                    if (nextButton) {
+                                    input?.focus()
+                                  } else {
+                                    const prevButton = document.querySelector<HTMLButtonElement>(
+                                      `#suggestion-btn-${appointmentId}-${index}-${suggestionIndex - 1}`
+                                    )
+                                    if (prevButton) {
                                       e.preventDefault()
-                                      nextButton.focus()
-                                    }
-                                  } else if (e.key === "ArrowUp") {
-                                    if (suggestionIndex === 0) {
-                                      e.preventDefault()
-                                      const input = document.querySelector<HTMLInputElement>(
-                                        `#name-${appointmentId}-${index}`
-                                      )
-                                      input?.focus()
-                                    } else {
-                                      const prevButton = document.querySelector<HTMLButtonElement>(
-                                        `#suggestion-btn-${appointmentId}-${index}-${suggestionIndex - 1}`
-                                      )
-                                      if (prevButton) {
-                                        e.preventDefault()
-                                        prevButton.focus()
-                                      }
+                                      prevButton.focus()
                                     }
                                   }
-                                }}
-                              >
-                                <div className="text-gray-800 font-semibold text-xs">
-                                  {suggestion.name}
+                                }
+                              }}
+                            >
+                              <div className="text-gray-800 font-semibold text-xs">
+                                {suggestion.name}
+                              </div>
+                              {suggestion.dosageOptions?.length ? (
+                                <div className="text-[10px] text-gray-500">
+                                  Common dosage: {suggestion.dosageOptions[0].value}
                                 </div>
-                                {suggestion.dosageOptions?.length ? (
-                                  <div className="text-[10px] text-gray-500">
-                                    Common dosage: {suggestion.dosageOptions[0].value}
-                                  </div>
-                                ) : null}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
+                              ) : null}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-0.5">
                       Dosage

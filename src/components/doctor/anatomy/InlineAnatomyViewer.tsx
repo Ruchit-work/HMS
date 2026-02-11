@@ -17,6 +17,7 @@ import { ENT_DIAGNOSES, CUSTOM_DIAGNOSIS_OPTION } from '@/constants/entDiagnoses
 import { doc, getDoc } from 'firebase/firestore'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
 import DiagnosisSelector from '@/components/doctor/DiagnosisSelector'
+import VoiceInput from '@/components/ui/VoiceInput'
 import { fetchMedicineSuggestions, MedicineSuggestion, sanitizeMedicineName, recordMedicineSuggestions } from '@/utils/medicineSuggestions'
 
 const DynamicENTAnatomyViewer = dynamic(
@@ -1127,7 +1128,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                           </button>
                         </div>
                         <div className="space-y-1.5">
-                            <div className="relative">
+                            <div className="relative flex items-center">
                               <input
                                 type="text"
                                 value={medicine.name}
@@ -1175,13 +1176,32 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                                   }
                                 }}
                                 placeholder="Medicine name *"
-                                className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                className="w-full pl-2 pr-9 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
                               />
+                              <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
+                                <div className="pointer-events-auto">
+                                  <VoiceInput
+                                    onTranscript={(text) => {
+                                      if (currentSection === '3d') {
+                                        updateMedicine(idx, "name", text)
+                                      } else {
+                                        updateMedicine2D(idx, "name", text)
+                                      }
+                                      updateInlineSuggestion(currentSection, idx, text)
+                                      setActiveNameSuggestion({ section: currentSection, index: idx })
+                                    }}
+                                    language="en-IN"
+                                    useGoogleCloud={false}
+                                    useMedicalModel={false}
+                                    variant="inline"
+                                  />
+                                </div>
+                              </div>
                               {inlineSuggestion?.section === currentSection &&
                               inlineSuggestion?.index === idx &&
                               inlineSuggestion?.suggestion &&
                               inlineSuggestion.suggestion.toLowerCase().startsWith((medicine.name || "").toLowerCase()) && (
-                                <div className="pointer-events-none absolute inset-0 flex items-center px-2 text-xs text-gray-400 select-none">
+                                <div className="pointer-events-none absolute inset-0 flex items-center pl-2 pr-9 text-xs text-gray-400 select-none">
                                   <span className="opacity-0">
                                     {(medicine.name || "").split("").map(() => "•").join("")}
                                   </span>
@@ -1275,13 +1295,29 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
               <label className="block font-semibold text-slate-800 mb-1.5 text-sm">
                 Examination Notes
               </label>
-              <textarea
-                value={activeView === '3d' ? notes : notes2D}
-                onChange={(e) => activeView === '3d' ? setNotes(e.target.value) : setNotes2D(e.target.value)}
-                placeholder={`Document your findings from the ${activeView === '3d' ? '3D model' : '2D diagram'} examination...`}
-                className="w-full p-2 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                rows={3}
-              />
+              <div className="relative flex items-center">
+                <textarea
+                  value={activeView === '3d' ? notes : notes2D}
+                  onChange={(e) => activeView === '3d' ? setNotes(e.target.value) : setNotes2D(e.target.value)}
+                  placeholder={`Document your findings from the ${activeView === '3d' ? '3D model' : '2D diagram'} examination... or use voice input`}
+                  className="w-full p-2 pl-2 pr-10 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  rows={3}
+                />
+                <div className="absolute right-2 top-2 pointer-events-none flex items-end justify-end">
+                  <div className="pointer-events-auto">
+                    <VoiceInput
+                      onTranscript={(text) => {
+                        if (activeView === '3d') setNotes(text)
+                        else setNotes2D(text)
+                      }}
+                      language="en-IN"
+                      useGoogleCloud={false}
+                      useMedicalModel={false}
+                      variant="inline"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Diagnosis Selector */}

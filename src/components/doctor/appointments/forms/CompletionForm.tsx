@@ -206,8 +206,7 @@ export default function CompletionForm({
             <div className="pointer-events-auto">
               <VoiceInput
                 onTranscript={(text) => {
-                  const current = completionData.notes || ""
-                  handleNotesChange(current ? `${current} ${text}` : text)
+                  handleNotesChange(text)
                 }}
                 language="en-IN"
                 useGoogleCloud={false}
