@@ -45,10 +45,10 @@ export async function POST(request: Request) {
     return createAuthErrorResponse(auth)
   }
   
-  // Allow receptionists and regular admins (but not super admins)
-  if (!auth.user || (auth.user.role !== "receptionist" && auth.user.role !== "admin")) {
+  // Allow receptionists, admins, and doctors (e.g. when doctor books for new patient)
+  if (!auth.user || (auth.user.role !== "receptionist" && auth.user.role !== "admin" && auth.user.role !== "doctor")) {
     return Response.json(
-      { error: "Access denied. Only receptionists and admins can create patients." },
+      { error: "Access denied. Only receptionists, admins, and doctors can create patients." },
       { status: 403 }
     )
   }

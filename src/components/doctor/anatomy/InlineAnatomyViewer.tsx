@@ -1131,6 +1131,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                             <div className="relative flex items-center">
                               <input
                                 type="text"
+                                id={`name-anatomy-${currentSection}-${idx}`}
                                 value={medicine.name}
                                 onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "name", e.target.value) : updateMedicine2D(idx, "name", e.target.value)}
                                 onFocus={() => {
@@ -1214,42 +1215,52 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                                   </span>
                                 </div>
                               )}
-                              {showNameSuggestions && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-purple-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                                  {nameSuggestions.map((suggestion, sugIdx) => (
-                                    <button
-                                      key={suggestion.name}
-                                      type="button"
-                                      id={`suggestion-btn-${currentSection}-${idx}-${sugIdx}`}
-                                      onClick={() => handleSelectMedicineSuggestion(currentSection, idx, suggestion)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "ArrowDown") {
-                                          e.preventDefault()
-                                          const next = document.querySelector<HTMLButtonElement>(
-                                            `#suggestion-btn-${currentSection}-${idx}-${sugIdx + 1}`
-                                          )
-                                          next?.focus()
-                                        } else if (e.key === "ArrowUp") {
-                                          e.preventDefault()
-                                          if (sugIdx === 0) {
-                                            const input = e.currentTarget.closest('.relative')?.querySelector('input')
-                                            input?.focus()
-                                          } else {
-                                            const prev = document.querySelector<HTMLButtonElement>(
-                                              `#suggestion-btn-${currentSection}-${idx}-${sugIdx - 1}`
-                                            )
-                                            prev?.focus()
-                                          }
-                                        }
-                                      }}
-                                      className="w-full text-left px-3 py-2 hover:bg-purple-50 text-xs text-purple-900 border-b border-purple-100 last:border-b-0"
-                                    >
-                                      {suggestion.name}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
                             </div>
+                            {showNameSuggestions && (
+                              <div className="mt-1 w-full max-h-40 overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                                {nameSuggestions.map((suggestion, sugIdx) => (
+                                  <button
+                                    key={suggestion.name}
+                                    type="button"
+                                    id={`suggestion-btn-${currentSection}-${idx}-${sugIdx}`}
+                                    className="w-full px-3 py-1.5 text-left hover:bg-green-50 transition text-[11px] first:rounded-t-lg last:rounded-b-lg text-gray-800"
+                                    onClick={() => handleSelectMedicineSuggestion(currentSection, idx, suggestion)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault()
+                                        handleSelectMedicineSuggestion(currentSection, idx, suggestion)
+                                      } else if (e.key === "ArrowDown") {
+                                        e.preventDefault()
+                                        const next = document.querySelector<HTMLButtonElement>(
+                                          `#suggestion-btn-${currentSection}-${idx}-${sugIdx + 1}`
+                                        )
+                                        next?.focus()
+                                      } else if (e.key === "ArrowUp") {
+                                        e.preventDefault()
+                                        if (sugIdx === 0) {
+                                          const input = document.querySelector<HTMLInputElement>(
+                                            `#name-anatomy-${currentSection}-${idx}`
+                                          )
+                                          input?.focus()
+                                        } else {
+                                          const prev = document.querySelector<HTMLButtonElement>(
+                                            `#suggestion-btn-${currentSection}-${idx}-${sugIdx - 1}`
+                                          )
+                                          prev?.focus()
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <div className="font-semibold text-xs">{suggestion.name}</div>
+                                    {suggestion.dosageOptions?.length ? (
+                                      <div className="text-[10px] text-gray-500">
+                                        Common dosage: {suggestion.dosageOptions[0].value}
+                                      </div>
+                                    ) : null}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           <div className="grid grid-cols-3 gap-1.5">
                             <input
                               type="text"

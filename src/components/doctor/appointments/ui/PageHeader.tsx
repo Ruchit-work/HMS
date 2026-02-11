@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import Link from "next/link"
 
 interface PageHeaderProps {
   onGenerateReport: () => void
@@ -12,8 +13,8 @@ export default function PageHeader({ onGenerateReport, onRefresh, refreshing }: 
   return (
     <header className="text-white">
       <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-7">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center shadow-inner">
               <span className="text-xl">📋</span>
             </div>
@@ -25,7 +26,22 @@ export default function PageHeader({ onGenerateReport, onRefresh, refreshing }: 
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link
+              href="/doctor-dashboard/book-appointment"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 transition-colors"
+              aria-label="Book appointment"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                />
+              </svg>
+              Book Appointment
+            </Link>
             <button
               onClick={onGenerateReport}
               className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-slate-50 border border-white/20 hover:bg-white/15 transition-colors"
