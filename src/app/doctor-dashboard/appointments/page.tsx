@@ -1389,20 +1389,25 @@ function DoctorAppointmentsContent() {
       : null
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-white pt-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 animate-fade-in">
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-95" />
-          <div className="relative">
+    <div className="min-h-screen bg-blue-50/40 pt-20 pb-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Page header block */}
+        <header className="mb-6 rounded-xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 sm:px-6 py-4">
             <PageHeader
+              variant="dark"
               onGenerateReport={() => setShowReportModal(true)}
               onRefresh={handleRefresh}
               refreshing={refreshing}
             />
+          </div>
+          <div className="px-4 sm:px-6 py-4 bg-white">
             <StatsBar stats={stats} />
           </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mt-4 overflow-hidden">
+        </header>
+
+        {/* Main content card */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <FilterBar
             activeTab={activeTab}
             tabs={tabItems}
@@ -1427,11 +1432,11 @@ function DoctorAppointmentsContent() {
               totalCount={historyAppointments.length}
             />
           )}
-          <main className="px-4 sm:px-6 lg:px-8 py-6">
+          <main className="p-4 sm:p-6">
         {paginatedAppointments.length === 0 ? (
           <EmptyState activeTab={activeTab} />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[320px,minmax(0,1fr)] gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,340px),minmax(0,1fr)] gap-6">
             {/* Left: list */}
             <div className="h-full flex flex-col">
               <div className="flex-1">
@@ -1471,14 +1476,14 @@ function DoctorAppointmentsContent() {
               )}
             </div>
 
-            <div 
+            <div
               ref={appointmentDetailsRef}
-              className="h-full rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-blue-50/20 to-indigo-50/10 shadow-lg overflow-hidden flex flex-col animate-fade-in"
+              className="h-full rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col border-l-4 border-l-blue-500"
             >
               {selectedAppointment ? (
                 <>
                   <PatientSummaryBar appointment={selectedAppointment} />
-                  <div className="flex-1 px-4 py-4 space-y-4 animate-fade-in">
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-slate-50/50">
                     {/* Dashboard grid */}
                     <div
                       className={`grid grid-cols-1 ${
@@ -1508,9 +1513,9 @@ function DoctorAppointmentsContent() {
                     </div>
 
                     {/* Deep details card */}
-                    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/50 shadow-md transition-all duration-300 hover:shadow-lg animate-fade-in card-hover">
-                      <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50/30 px-4 py-2 flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-900">
+                    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                      <div className="border-b border-slate-200 bg-blue-50/80 px-4 py-3 flex items-center justify-between">
+                        <span className="font-semibold text-blue-900">
                           {activeTab === "history"
                             ? "Previous checkup details"
                             : "Clinical details"}
@@ -1519,7 +1524,7 @@ function DoctorAppointmentsContent() {
                           <button
                             type="button"
                             onClick={() => handleDownloadVisitPdf(selectedAppointment)}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-md hover:shadow-lg hover:from-blue-700 hover:to-indigo-700 transform transition-all duration-300 hover:scale-105 active:scale-95"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
                           >
                             <svg
                               className="w-3.5 h-3.5"

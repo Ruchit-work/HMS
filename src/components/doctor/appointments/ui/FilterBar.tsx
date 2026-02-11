@@ -1,8 +1,8 @@
 "use client"
 
-import React from 'react'
-import { TabKey } from '@/types/appointments'
-import type { Branch } from '@/types/branch'
+import React from "react"
+import { TabKey } from "@/types/appointments"
+import type { Branch } from "@/types/branch"
 
 interface TabItem {
   key: TabKey
@@ -30,49 +30,48 @@ export default function FilterBar({
   loadingBranches,
 }: FilterBarProps) {
   return (
-    <div className="border-b border-gray-200">
-      <div className="px-4 sm:px-6 lg:px-8 py-4">
+    <div className="border-b border-slate-200 bg-blue-50/60">
+      <div className="px-4 sm:px-6 py-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          {/* Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto">
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => onTabChange(tab.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                className={`px-4 py-2.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                   activeTab === tab.key
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/90 border border-slate-200/80"
                 }`}
-                aria-current={activeTab === tab.key ? 'page' : undefined}
+                aria-current={activeTab === tab.key ? "page" : undefined}
               >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-                    activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
-                  }`}>
+                <span className="mr-2">{tab.label}</span>
+                {tab.count >= 0 && (
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 text-xs font-semibold rounded-full ${
+                      activeTab === tab.key ? "bg-white/25 text-white" : "bg-slate-200/80 text-slate-600"
+                    }`}
+                  >
                     {tab.count}
                   </span>
                 )}
               </button>
             ))}
           </div>
-
-          {/* Branch Selector */}
           {branches.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label htmlFor="branch-select" className="text-sm text-gray-600">
-                Branch:
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <label htmlFor="branch-select" className="text-sm font-medium text-slate-600">
+                Branch
               </label>
               <select
                 id="branch-select"
-                value={selectedBranchId || ''}
+                value={selectedBranchId || ""}
                 onChange={(e) => onBranchChange(e.target.value || null)}
                 disabled={loadingBranches}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
                 aria-label="Select branch"
               >
-                <option value="">All Branches</option>
+                <option value="">All branches</option>
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}
@@ -86,4 +85,3 @@ export default function FilterBar({
     </div>
   )
 }
-

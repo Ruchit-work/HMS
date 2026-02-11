@@ -24,34 +24,33 @@ export default function ClinicalSummaryCard({
       : null
 
   return (
-    <div 
+    <div
       onClick={onClick}
-      className={`rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-blue-50/30 shadow-sm p-4 transition-all duration-300 hover:shadow-xl hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50/50 hover:-translate-y-1 hover:scale-[1.02] animate-fade-in card-hover ${
-        latestRecommendation && onClick ? "cursor-pointer" : ""
+      className={`rounded-xl border border-slate-200 bg-white p-4 transition-colors ${
+        latestRecommendation && onClick ? "cursor-pointer hover:bg-slate-50" : ""
       }`}
     >
       <div className="flex items-center justify-between gap-2 mb-2">
         <h3 className="text-sm font-semibold text-slate-900">Last visit details</h3>
         {latestRecommendation ? (
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-100">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
               {latestRecommendation.date || "Previous visit"}
             </span>
             {onClick && (
-              <span className="text-[10px] text-blue-600 font-medium">Click to view</span>
+              <span className="text-xs text-blue-600 font-medium">View</span>
             )}
           </div>
         ) : (
-          <span className="text-[11px] text-slate-400">No previous visit</span>
+          <span className="text-xs text-slate-400">No previous visit</span>
         )}
       </div>
 
       {latestRecommendation ? (
         <>
-          {/* Compact summary row (always visible) */}
           <div className="flex flex-col gap-2 text-xs">
             {appointment.chiefComplaint && (
-              <div className="rounded-lg bg-white/70 border border-slate-100 px-2.5 py-1.5">
+              <div className="rounded-lg bg-slate-50 border border-slate-100 px-2.5 py-1.5">
                 <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
                   Chief complaint
                 </p>
@@ -60,17 +59,16 @@ export default function ClinicalSummaryCard({
                 </p>
               </div>
             )}
-
             {primaryDiagnosis && (
               <div className="flex flex-wrap gap-1.5 items-center">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                   Diagnosis
                 </span>
-                <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 border border-blue-100">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                   {primaryDiagnosis}
                 </span>
                 {latestRecommendation.finalDiagnosis.length > 1 && (
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-xs text-slate-500">
                     +{latestRecommendation.finalDiagnosis.length - 1} more
                   </span>
                 )}
@@ -82,4 +80,3 @@ export default function ClinicalSummaryCard({
     </div>
   )
 }
-
