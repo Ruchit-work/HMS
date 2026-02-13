@@ -551,6 +551,7 @@ function DoctorAppointmentsContent() {
           medicines: initialMedicines.length > 0 ? initialMedicines : [],
           notes: initialNotes,
           recheckupRequired: false,
+          recheckupDays: 7,
           finalDiagnosis: [],
           customDiagnosis: "",
         },
@@ -981,10 +982,10 @@ function DoctorAppointmentsContent() {
       return
     }
 
-    if (!formData.finalDiagnosis || formData.finalDiagnosis.length === 0) {
+    if (!formData.notes || !String(formData.notes).trim()) {
       setNotification({
         type: "error",
-        message: "Please select at least one diagnosis before completing the consultation.",
+        message: "Please enter Doctor's notes before completing the consultation.",
       })
       return
     }
@@ -992,17 +993,13 @@ function DoctorAppointmentsContent() {
     const appointmentSnapshot = appointments.find((apt) => apt.id === appointmentId)
     const medicineText = formatMedicinesAsText(formData.medicines, formData.notes || "")
 
-    const diagnoses = formData.finalDiagnosis.filter(
-      (d) => d !== CUSTOM_DIAGNOSIS_OPTION
-    )
-
     const result = await completeAppointment(
       appointmentId,
       medicineText,
-      formData.notes || "", // Ensure notes is never undefined
+      formData.notes || "",
       activeHospitalId,
-      diagnoses,
-      formData.customDiagnosis || "",
+      [], // diagnosis removed — using doctor's notes only
+      "",
       user?.uid,
       "doctor"
     )
@@ -1090,6 +1087,47 @@ function DoctorAppointmentsContent() {
         }
       } catch {
       }
+
+      // Auto-book recheckup appointment (after N days, skip Sunday)
+      const recheckupDays = formData.recheckupDays ?? 7
+      const start = new Date()
+      let d = new Date(start)
+      d.setDate(d.getDate() + recheckupDays)
+      while (d.getDay() === 0) d.setDate(d.getDate() + 1)
+      const recheckupDateStr = d.toISOString().slice(0, 10)
+      try {
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : null
+        if (token && appointmentSnapshot) {
+          const res = await fetch("/api/doctor/create-appointment", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              appointmentData: {
+                patientId: appointmentSnapshot.patientId,
+                patientName: appointmentSnapshot.patientName || "Patient",
+                patientEmail: (appointmentSnapshot as any).patientEmail || "",
+                patientPhone: appointmentSnapshot.patientPhone || "",
+                appointmentDate: recheckupDateStr,
+                appointmentTime: appointmentSnapshot.appointmentTime || "10:00",
+                chiefComplaint: "Re-checkup" + (formData.recheckupNote ? ` — ${formData.recheckupNote}` : ""),
+                medicalHistory: "",
+                status: "confirmed",
+                paymentAmount: 0,
+                paymentMethod: "cash",
+                paymentType: "full",
+              },
+            }),
+          })
+          if (res.ok) {
+            // Realtime listener will add the new appointment to the list
+          }
+        }
+      } catch {
+        // Recheckup auto-book failed; user can book manually
+      }
     }
 
     if (options?.showToast !== false) {
@@ -1141,6 +1179,7 @@ function DoctorAppointmentsContent() {
       medicines: [],
       notes: "",
       recheckupRequired: false,
+      recheckupDays: 7,
       finalDiagnosis: [],
       customDiagnosis: "",
     }
@@ -1153,10 +1192,10 @@ function DoctorAppointmentsContent() {
       return
     }
 
-    if (!currentData.finalDiagnosis || currentData.finalDiagnosis.length === 0) {
+    if (!currentData.notes || !String(currentData.notes).trim()) {
       setNotification({
         type: "error",
-        message: "Please select at least one diagnosis before completing the consultation.",
+        message: "Please enter Doctor's notes before completing the consultation.",
       })
       return
     }

@@ -5,6 +5,8 @@ export type CompletionFormEntry = {
   notes: string
   recheckupRequired: boolean
   recheckupNote?: string
+  /** Days after which to auto-book recheckup (calendar days; Sundays are skipped when computing date). */
+  recheckupDays?: number
   finalDiagnosis?: string[]
   customDiagnosis?: string
 }

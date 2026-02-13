@@ -87,9 +87,9 @@ export const completeAppointment = async (
     throw new Error("Hospital ID is required")
   }
 
-  // Validate diagnosis requirement
-  if (!finalDiagnosis || finalDiagnosis.length === 0) {
-    throw new Error("At least one diagnosis is required to complete the consultation")
+  // Require doctor notes (diagnosis field removed in favor of notes-only)
+  if (!notes || !String(notes).trim()) {
+    throw new Error("Doctor's notes are required to complete the consultation")
   }
 
   // Load appointment to validate rules - use hospital-scoped collection
@@ -131,40 +131,36 @@ export const completeAppointment = async (
     throw new Error("Please complete earlier appointments first")
   }
 
-  // Prepare diagnosis history entry for audit
-  const diagnosisHistoryEntry: any = {
-    diagnoses: finalDiagnosis,
-    updatedBy: updatedBy || doctorId,
-    updatedAt: new Date().toISOString(),
-    updatedByRole: updatedByRole
-  }
-  
-  // Only include customDiagnosis if it has a value
-  if (customDiagnosis && customDiagnosis.trim()) {
-    diagnosisHistoryEntry.customDiagnosis = customDiagnosis.trim()
-  }
-
-  // Get existing diagnosis history or initialize
+  // Preserve existing diagnosis history; append notes-based entry if we have legacy diagnosis
   const existingHistory = apt.diagnosisHistory || []
-  const updatedHistory = [...existingHistory, diagnosisHistoryEntry]
+  const updatedHistory =
+    finalDiagnosis && finalDiagnosis.length > 0
+      ? [
+          ...existingHistory,
+          {
+            diagnoses: finalDiagnosis,
+            updatedBy: updatedBy || doctorId,
+            updatedAt: new Date().toISOString(),
+            updatedByRole: updatedByRole,
+            ...(customDiagnosis?.trim() && { customDiagnosis: customDiagnosis.trim() }),
+          },
+        ]
+      : existingHistory
 
-  // Build update object - only include customDiagnosis if it has a value
-  // Ensure notes and medicine are never undefined (Firestore doesn't allow undefined values)
   const updateData: any = {
     status: "completed",
     medicine: medicine || "",
     doctorNotes: notes || "",
-    finalDiagnosis: finalDiagnosis,
     diagnosisHistory: updatedHistory,
     completedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   }
-
-  // Only include customDiagnosis if it has a value, otherwise remove it if it exists
-  if (customDiagnosis && customDiagnosis.trim()) {
+  if (finalDiagnosis && finalDiagnosis.length > 0) {
+    updateData.finalDiagnosis = finalDiagnosis
+  }
+  if (customDiagnosis?.trim()) {
     updateData.customDiagnosis = customDiagnosis.trim()
   } else if (apt.customDiagnosis !== undefined) {
-    // Remove the field if it exists but new value is empty
     updateData.customDiagnosis = deleteField()
   }
 

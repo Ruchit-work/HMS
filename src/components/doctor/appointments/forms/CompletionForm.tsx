@@ -4,7 +4,6 @@ import { Appointment as AppointmentType } from "@/types/patient"
 import { CompletionFormEntry } from "@/types/appointments"
 import { DocumentMetadata } from "@/types/document"
 import { MedicineSuggestion } from "@/utils/medicineSuggestions"
-import DiagnosisSelector from "@/components/doctor/DiagnosisSelector"
 import AIPrescriptionSuggestion from "@/components/doctor/appointments/ai/AIPrescriptionSuggestion"
 import MedicineForm from "@/components/doctor/appointments/forms/MedicineForm"
 import DocumentUpload from "@/components/documents/DocumentUpload"
@@ -65,20 +64,6 @@ export default function CompletionForm({
   onSubmit,
   onAdmitClick,
 }: CompletionFormProps) {
-  const handleDiagnosesChange = (diagnoses: string[]) => {
-    onCompletionDataChange({
-      ...completionData,
-      finalDiagnosis: diagnoses,
-    })
-  }
-
-  const handleCustomDiagnosisChange = (customDiagnosis: string) => {
-    onCompletionDataChange({
-      ...completionData,
-      customDiagnosis,
-    })
-  }
-
   const handleMedicinesChange = (medicines: CompletionFormEntry["medicines"]) => {
     onCompletionDataChange({
       ...completionData,
@@ -107,6 +92,13 @@ export default function CompletionForm({
     })
   }
 
+  const handleRecheckupDaysChange = (recheckupDays: number) => {
+    onCompletionDataChange({
+      ...completionData,
+      recheckupDays,
+    })
+  }
+
   const handleAiPrescriptionRemove = (originalIndex: number) => {
     onAiPrescriptionRemove(originalIndex)
     // If this was the last visible medicine, hide the suggestion
@@ -127,20 +119,32 @@ export default function CompletionForm({
 
   return (
     <form onSubmit={onSubmit} className="p-3 space-y-4">
-      {/* Final Diagnosis Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <DiagnosisSelector
-          selectedDiagnoses={completionData.finalDiagnosis || []}
-          customDiagnosis={completionData.customDiagnosis || ""}
-          onDiagnosesChange={handleDiagnosesChange}
-          onCustomDiagnosisChange={handleCustomDiagnosisChange}
-          showPatientComplaints={appointment.chiefComplaint || undefined}
-          error={
-            completionData.finalDiagnosis?.length === 0
-              ? "At least one diagnosis is required"
-              : undefined
-          }
-        />
+      {/* Doctor's Notes Section — primary clinical field */}
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          Doctor&apos;s Notes <span className="text-red-500">*</span>
+        </label>
+        <div className="relative flex items-center">
+          <textarea
+            value={completionData.notes || ""}
+            onChange={(e) => handleNotesChange(e.target.value)}
+            rows={3}
+            placeholder="Enter observations, diagnosis, recommendations..."
+            className="w-full pl-2 pr-10 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
+            required
+          />
+          <div className="absolute right-2 top-2 pointer-events-none flex items-end justify-end">
+            <div className="pointer-events-auto">
+              <VoiceInput
+                onTranscript={(text) => handleNotesChange(text)}
+                language="en-IN"
+                useGoogleCloud={false}
+                useMedicalModel={false}
+                variant="inline"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Prescription Section */}
@@ -187,35 +191,6 @@ export default function CompletionForm({
           medicineSuggestionsLoading={medicineSuggestionsLoading}
           onMedicinesChange={handleMedicinesChange}
         />
-      </div>
-
-      {/* Notes Section */}
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          Doctor&apos;s Notes <span className="text-gray-400 text-xs">(Optional)</span>
-        </label>
-        <div className="relative flex items-center">
-          <textarea
-            value={completionData.notes || ""}
-            onChange={(e) => handleNotesChange(e.target.value)}
-            rows={2}
-            placeholder="Enter observations, diagnosis, recommendations... or use voice input"
-            className="w-full pl-2 pr-10 py-1 pt-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
-          />
-          <div className="absolute right-2 top-2 pointer-events-none flex items-end justify-end">
-            <div className="pointer-events-auto">
-              <VoiceInput
-                onTranscript={(text) => {
-                  handleNotesChange(text)
-                }}
-                language="en-IN"
-                useGoogleCloud={false}
-                useMedicalModel={false}
-                variant="inline"
-              />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Recheckup Section + 3D Model / Documents actions */}
@@ -282,18 +257,65 @@ export default function CompletionForm({
           </div>
         </div>
         {completionData.recheckupRequired && (
-          <div className="mt-2">
-            <label htmlFor={`recheckupNote-${appointment.id}`} className="block text-xs font-medium text-gray-700 mb-1">
-              Re-checkup Note (Optional)
-            </label>
-            <textarea
-              id={`recheckupNote-${appointment.id}`}
-              value={completionData.recheckupNote || ""}
-              onChange={(e) => handleRecheckupNoteChange(e.target.value)}
-              rows={2}
-              placeholder="Enter note for re-checkup (e.g., 'Follow-up required in 2 weeks', 'Monitor blood pressure')"
-              className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs resize-none"
-            />
+          <div className="mt-2 space-y-2">
+            <div>
+              <label htmlFor={`recheckupDays-${appointment.id}`} className="block text-xs font-medium text-gray-700 mb-1">
+                Re-checkup after (days) — Sundays skipped
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  id={`recheckupDays-${appointment.id}`}
+                  value={
+                    [3, 5, 7, 10, 14, 21, 28].includes(completionData.recheckupDays ?? 7)
+                      ? String(completionData.recheckupDays ?? 7)
+                      : "custom"
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (v === "custom") {
+                      const current = completionData.recheckupDays ?? 7
+                      handleRecheckupDaysChange(Number.isNaN(current) ? 7 : current)
+                    } else {
+                      handleRecheckupDaysChange(Number(v))
+                    }
+                  }}
+                  className="w-full max-w-[120px] px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                >
+                  <option value={3}>3 days</option>
+                  <option value={5}>5 days</option>
+                  <option value={7}>7 days</option>
+                  <option value={10}>10 days</option>
+                  <option value={14}>14 days</option>
+                  <option value={21}>21 days</option>
+                  <option value={28}>28 days</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {![3, 5, 7, 10, 14, 21, 28].includes(completionData.recheckupDays ?? 7) && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={completionData.recheckupDays ?? 7}
+                    onChange={(e) => handleRecheckupDaysChange(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-16 px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                    placeholder="Days"
+                  />
+                )}
+              </div>
+            </div>
+            <div>
+              <label htmlFor={`recheckupNote-${appointment.id}`} className="block text-xs font-medium text-gray-700 mb-1">
+                Re-checkup Note (Optional)
+              </label>
+              <textarea
+                id={`recheckupNote-${appointment.id}`}
+                value={completionData.recheckupNote || ""}
+                onChange={(e) => handleRecheckupNoteChange(e.target.value)}
+                rows={2}
+                placeholder="e.g., Follow-up for blood pressure"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs resize-none"
+              />
+            </div>
           </div>
         )}
       </div>

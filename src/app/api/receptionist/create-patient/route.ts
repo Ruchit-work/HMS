@@ -93,32 +93,38 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const patientData = body?.patientData
-    const password: string | undefined = body?.password
+    let password: string | undefined = body?.password
     if (!patientData) {
       return Response.json({ error: "Missing patientData" }, { status: 400 })
     }
 
-    const { firstName, lastName, email } = patientData
-    if (!firstName || !lastName || !email) {
-      return Response.json({ error: "firstName, lastName, and email are required" }, { status: 400 })
-    }
-    if (!password || password.length < 6) {
-      return Response.json({ error: "Password must be at least 6 characters" }, { status: 400 })
+    const { firstName, lastName, email: providedEmail } = patientData
+    if (!firstName || !lastName) {
+      return Response.json({ error: "firstName and lastName are required" }, { status: 400 })
     }
 
-    // Create Auth user with provided password
+    // When doctor books without email/password, use generated values for Firebase Auth
+    const usePlaceholder = !providedEmail?.trim() || !password || password.length < 6
+    const placeholderId = `p${Date.now()}${Math.random().toString(36).slice(2, 9)}`
+    const email = usePlaceholder ? `${placeholderId}@nologin.local` : String(providedEmail).trim().toLowerCase()
+    if (usePlaceholder) {
+      password = `Pw${Math.random().toString(36).slice(2, 14)}!`
+    }
+
+    // Create Auth user with email and password
     let authUid: string
     try {
-      const existing = await admin.auth().getUserByEmail(String(email).trim().toLowerCase())
-      // If exists, update password
+      const existing = await admin.auth().getUserByEmail(email)
       authUid = existing.uid
-      await admin.auth().updateUser(authUid, { password })
+      if (!usePlaceholder) {
+        await admin.auth().updateUser(authUid, { password })
+      }
     } catch {
       const created = await admin.auth().createUser({
-        email: String(email).trim().toLowerCase(),
+        email,
         emailVerified: false,
         disabled: false,
-        password
+        password,
       })
       authUid = created.uid
     }
@@ -174,7 +180,7 @@ export async function POST(request: Request) {
       status: patientData.status || "active",
       firstName: String(firstName).trim(),
       lastName: String(lastName).trim(),
-      email: String(email).trim().toLowerCase(),
+      email: usePlaceholder ? "" : String(email).trim().toLowerCase(),
       phone: patientData.phone || "",
       gender: patientData.gender || "",
       bloodGroup: patientData.bloodGroup || "",
@@ -215,7 +221,7 @@ export async function POST(request: Request) {
       // Create new user document
       await userDocRef.set({
         uid: authUid,
-        email: String(email).trim().toLowerCase(),
+        email: usePlaceholder ? "" : String(email).trim().toLowerCase(),
         role: "patient",
         hospitals: [userHospitalId],
         activeHospital: userHospitalId,

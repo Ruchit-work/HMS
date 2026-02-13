@@ -18,14 +18,12 @@ type PatientMode = "existing" | "new"
 interface NewPatientForm {
   firstName: string
   lastName: string
-  email: string
   phone: string
 }
 
 const initialNewPatient: NewPatientForm = {
   firstName: "",
   lastName: "",
-  email: "",
   phone: "",
 }
 
@@ -46,11 +44,12 @@ export default function DoctorBookAppointmentPage() {
   const [showPatientSuggestions, setShowPatientSuggestions] = useState(false)
   const [selectedPatientId, setSelectedPatientId] = useState("")
   const [newPatient, setNewPatient] = useState<NewPatientForm>(initialNewPatient)
-  const [newPatientPassword, setNewPatientPassword] = useState("")
   const [appointmentDate, setAppointmentDate] = useState("")
   const [appointmentTime, setAppointmentTime] = useState("")
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const [chiefComplaint, setChiefComplaint] = useState("")
+  const [paymentAmount, setPaymentAmount] = useState(0)
+  const [durationMinutes, setDurationMinutes] = useState(15)
   const [bookLoading, setBookLoading] = useState(false)
 
   useEffect(() => {
@@ -59,11 +58,13 @@ export default function DoctorBookAppointmentPage() {
       const doctorSnap = await getDoc(doc(db, "doctors", user.uid))
       if (doctorSnap.exists()) {
         const d = doctorSnap.data()
+        const fee = d?.consultationFee ?? 0
         setDoctorProfile({
           visitingHours: d?.visitingHours,
           blockedDates: d?.blockedDates || [],
-          consultationFee: d?.consultationFee ?? 0,
+          consultationFee: fee,
         })
+        setPaymentAmount((prev) => (prev === 0 ? fee : prev))
       } else {
         setDoctorProfile({})
       }
@@ -168,10 +169,11 @@ export default function DoctorBookAppointmentPage() {
       body: JSON.stringify({
         patientData: {
           ...newPatient,
+          email: "",
           status: "active",
           createdBy: "doctor",
         },
-        password: newPatientPassword,
+        password: "",
       }),
     })
     if (!res.ok) {
@@ -179,7 +181,7 @@ export default function DoctorBookAppointmentPage() {
       throw new Error(data?.error || "Failed to create patient")
     }
     return res.json()
-  }, [newPatient, newPatientPassword])
+  }, [newPatient])
 
   const createAppointment = useCallback(
     async (patientId: string, payload: { firstName?: string; lastName?: string; email?: string; phone?: string }) => {
@@ -201,9 +203,10 @@ export default function DoctorBookAppointmentPage() {
             chiefComplaint: chiefComplaint || "General consultation",
             medicalHistory: "",
             status: "confirmed",
-            paymentAmount: doctorProfile?.consultationFee ?? 0,
+            paymentAmount: paymentAmount ?? doctorProfile?.consultationFee ?? 0,
             paymentMethod: "cash",
             paymentType: "full",
+            durationMinutes: durationMinutes || 15,
           },
         }),
       })
@@ -213,7 +216,7 @@ export default function DoctorBookAppointmentPage() {
       }
       return res.json()
     },
-    [appointmentDate, appointmentTime, chiefComplaint, doctorProfile?.consultationFee]
+    [appointmentDate, appointmentTime, chiefComplaint, doctorProfile?.consultationFee, paymentAmount, durationMinutes]
   )
 
   const handleBook = async () => {
@@ -228,13 +231,11 @@ export default function DoctorBookAppointmentPage() {
       let payload: any
 
       if (patientMode === "new") {
-        if (!newPatient.firstName?.trim() || !newPatient.lastName?.trim() || !newPatient.email?.trim())
-          throw new Error("Enter first name, last name, and email for new patient")
-        if (!newPatientPassword || newPatientPassword.length < 6)
-          throw new Error("Password must be at least 6 characters")
+        if (!newPatient.firstName?.trim() || !newPatient.lastName?.trim())
+          throw new Error("Enter first name and last name for new patient")
         const created = await createPatient()
         patientId = created.id
-        payload = newPatient
+        payload = { ...newPatient, email: "" }
       } else {
         if (!selectedPatientId) throw new Error("Select a patient")
         const p = patients.find((x: any) => x.id === selectedPatientId)
@@ -259,7 +260,6 @@ export default function DoctorBookAppointmentPage() {
       setSelectedPatientId("")
       setSearchPatient("")
       setNewPatient(initialNewPatient)
-      setNewPatientPassword("")
       setAppointmentDate("")
       setAppointmentTime("")
       setChiefComplaint("")
@@ -281,6 +281,7 @@ export default function DoctorBookAppointmentPage() {
   const IconCalendar = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
   const IconClock = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
   const IconHeart = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+  const IconCurrency = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-white pt-20 pb-10 px-4 sm:px-6">
@@ -464,19 +465,6 @@ export default function DoctorBookAppointmentPage() {
                 </div>
               </div>
               <div className="relative sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
-                <div className="relative h-11">
-                <span className={iconWrapper}><IconUser /></span>
-                <input
-                  type="email"
-                  value={newPatient.email}
-                  onChange={(e) => setNewPatient((p) => ({ ...p, email: e.target.value }))}
-                  className={inputBase}
-                  placeholder="patient@example.com"
-                />
-                </div>
-              </div>
-              <div className="relative sm:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
                 <div className="relative h-11">
                 <span className={iconWrapper}><IconPhone /></span>
@@ -486,19 +474,6 @@ export default function DoctorBookAppointmentPage() {
                   onChange={(e) => setNewPatient((p) => ({ ...p, phone: e.target.value }))}
                   className={inputBase}
                   placeholder="Phone number"
-                />
-                </div>
-              </div>
-              <div className="relative sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Password for patient login *</label>
-                <div className="relative h-11">
-                <span className={iconWrapper}><IconUser /></span>
-                <input
-                  type="password"
-                  value={newPatientPassword}
-                  onChange={(e) => setNewPatientPassword(e.target.value)}
-                  className={inputBase}
-                  placeholder="Min 6 characters"
                 />
                 </div>
               </div>
@@ -526,6 +501,24 @@ export default function DoctorBookAppointmentPage() {
             )}
           </div>
 
+          {/* Duration */}
+          <div className="relative">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Duration</label>
+            <div className="relative h-11">
+            <span className={iconWrapper}><IconClock /></span>
+            <select
+              value={durationMinutes}
+              onChange={(e) => setDurationMinutes(Number(e.target.value))}
+              className={`${inputBase} cursor-pointer pr-10`}
+            >
+              <option value={15}>15 min</option>
+              <option value={30}>30 min</option>
+              <option value={45}>45 min</option>
+              <option value={60}>60 min</option>
+            </select>
+            </div>
+          </div>
+
           {/* Time */}
           <div className="relative">
             <label className="block text-sm font-medium text-slate-700 mb-1">Time *</label>
@@ -540,7 +533,7 @@ export default function DoctorBookAppointmentPage() {
               <option value="">Select time</option>
               {availableSlots.map((slot) => (
                 <option key={slot} value={slot}>
-                  {slot}
+                  {slot} ({durationMinutes} min)
                 </option>
               ))}
             </select>
@@ -548,6 +541,23 @@ export default function DoctorBookAppointmentPage() {
             {appointmentDate && availableSlots.length === 0 && !isSelectedDateBlocked && (
               <p className="text-xs text-slate-500 mt-1.5">No slots available on this date.</p>
             )}
+          </div>
+
+          {/* Payment */}
+          <div className="relative">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Payment (₹)</label>
+            <div className="relative h-11">
+            <span className={iconWrapper}><IconCurrency /></span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={paymentAmount || ""}
+              onChange={(e) => setPaymentAmount(Number(e.target.value) || 0)}
+              className={inputBase}
+              placeholder={String(doctorProfile?.consultationFee ?? 0)}
+            />
+            </div>
           </div>
 
           {/* Reason (optional) */}

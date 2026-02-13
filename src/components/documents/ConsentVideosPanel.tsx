@@ -38,6 +38,8 @@ export default function ConsentVideosPanel({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
+  const [playVideoUrl, setPlayVideoUrl] = useState<string | null>(null)
+  const [playVideoLoading, setPlayVideoLoading] = useState(false)
 
   useEffect(() => {
     if (selectedPatient) {
@@ -112,6 +114,41 @@ export default function ConsentVideosPanel({
     },
     [searchQuery, dateFrom, dateTo]
   )
+
+  const handlePlayConsent = async (consentId: string) => {
+    const user = auth.currentUser
+    if (!user) {
+      setError("Please sign in to play the video.")
+      return
+    }
+    setPlayVideoLoading(true)
+    setError(null)
+    try {
+      const token = await user.getIdToken()
+      const res = await fetch(`/api/patient-consent/file?id=${encodeURIComponent(consentId)}`, {
+        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to load video")
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      setPlayVideoUrl(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load video")
+    } finally {
+      setPlayVideoLoading(false)
+    }
+  }
+
+  const closePlayModal = () => {
+    if (playVideoUrl) {
+      URL.revokeObjectURL(playVideoUrl)
+      setPlayVideoUrl(null)
+    }
+  }
 
   // Only fetch consent videos when a patient is selected (never show "last uploaded" by default)
   useEffect(() => {
@@ -265,14 +302,14 @@ export default function ConsentVideosPanel({
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <a
-                  href={c.downloadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                <button
+                  type="button"
+                  onClick={() => handlePlayConsent(c.id)}
+                  disabled={playVideoLoading}
+                  className="inline-flex items-center px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
-                  Play
-                </a>
+                  {playVideoLoading ? "Loading…" : "Play"}
+                </button>
                 {canDelete && (
                   <button
                     type="button"
@@ -299,6 +336,24 @@ export default function ConsentVideosPanel({
         onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)}
         onCancel={() => setConfirmDeleteId(null)}
       />
+
+      {playVideoUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
+          <div className="bg-slate-900 rounded-lg overflow-hidden shadow-xl max-w-2xl w-full">
+            <div className="flex justify-end p-2">
+              <button
+                type="button"
+                onClick={closePlayModal}
+                className="text-white hover:bg-white/10 rounded p-1.5"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <video src={playVideoUrl} controls autoPlay className="w-full" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

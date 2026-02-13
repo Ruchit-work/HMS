@@ -32,6 +32,8 @@ export default function PatientConsentVideo({
   const [pendingRecording, setPendingRecording] = useState<Blob | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [playVideoUrl, setPlayVideoUrl] = useState<string | null>(null)
+  const [playVideoLoading, setPlayVideoLoading] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -73,6 +75,44 @@ export default function PatientConsentVideo({
     if (patientUid) fetchConsents()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientUid, appointmentId])
+
+  // ---------------------------------------------------------------------------
+  // Play consent video (fetch with auth so any doctor can view)
+  // ---------------------------------------------------------------------------
+  const handlePlayConsent = async (consentId: string) => {
+    const user = auth.currentUser
+    if (!user) {
+      setError("Please sign in to play the video.")
+      return
+    }
+    setPlayVideoLoading(true)
+    setError(null)
+    try {
+      const token = await user.getIdToken()
+      const res = await fetch(`/api/patient-consent/file?id=${encodeURIComponent(consentId)}`, {
+        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to load video")
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      setPlayVideoUrl(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load video")
+    } finally {
+      setPlayVideoLoading(false)
+    }
+  }
+
+  const closePlayModal = () => {
+    if (playVideoUrl) {
+      URL.revokeObjectURL(playVideoUrl)
+      setPlayVideoUrl(null)
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Upload helpers
@@ -327,14 +367,14 @@ export default function PatientConsentVideo({
                   {new Date(c.uploadedAt).toLocaleString()} · {c.source} · {c.uploadedBy.name}
                 </span>
                 <span className="flex items-center gap-1 shrink-0">
-                  <a
-                    href={c.downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
+                  <button
+                    type="button"
+                    onClick={() => handlePlayConsent(c.id)}
+                    disabled={playVideoLoading}
+                    className="text-blue-600 hover:underline disabled:opacity-50"
                   >
-                    Play
-                  </a>
+                    {playVideoLoading ? "Loading…" : "Play"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteId(c.id)}
@@ -362,6 +402,24 @@ export default function PatientConsentVideo({
         onConfirm={() => confirmDeleteId && deleteConsent(confirmDeleteId)}
         onCancel={() => setConfirmDeleteId(null)}
       />
+
+      {playVideoUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
+          <div className="bg-slate-900 rounded-lg overflow-hidden shadow-xl max-w-2xl w-full">
+            <div className="flex justify-end p-2">
+              <button
+                type="button"
+                onClick={closePlayModal}
+                className="text-white hover:bg-white/10 rounded p-1.5"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <video src={playVideoUrl} controls autoPlay className="w-full" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

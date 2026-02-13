@@ -156,6 +156,7 @@ export async function POST(request: Request) {
           : undefined,
       paymentMethod: safeValue(appointmentData.paymentMethod, "cash"),
       paymentType: safeValue(appointmentData.paymentType, "full"),
+      durationMinutes: typeof appointmentData.durationMinutes === "number" ? appointmentData.durationMinutes : 15,
       paymentStatus: "paid",
       remainingAmount: 0,
       paidAt: nowIso,
