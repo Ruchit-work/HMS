@@ -26,16 +26,45 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}))
     const { appointmentId, patientId, patientPhone, patientName, hospitalId } = body
 
+    const getPdfBaseUrl = () => {
+      let u =
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+        "https://hospitalmanagementsystem-hazel.vercel.app"
+      try {
+        return new URL(u).origin
+      } catch {
+        return String(u).replace(/\/+$/, "").replace(/\/[^/]*$/, "") || u
+      }
+    }
+
     if (!appointmentId || !patientId) {
       return NextResponse.json({ error: "Missing appointmentId or patientId" }, { status: 400 })
     }
 
     const db = admin.firestore()
 
-    // Get hospitalId - try from request body first, then from appointment
+    // Get hospitalId - try from request body first, then from appointment, then search hospitals
     let appointmentHospitalId = hospitalId
     if (!appointmentHospitalId) {
       appointmentHospitalId = await getAppointmentHospitalId(appointmentId)
+    }
+    if (!appointmentHospitalId) {
+      try {
+        const hospitalsSnap = await db.collection("hospitals").get()
+        for (const h of hospitalsSnap.docs) {
+          const aptDoc = await db
+            .collection(`hospitals/${h.id}/appointments`)
+            .doc(appointmentId)
+            .get()
+          if (aptDoc.exists) {
+            appointmentHospitalId = h.id
+            break
+          }
+        }
+      } catch {
+        // ignore
+      }
     }
 
     // Fetch full appointment (for PDF generation and phone/name)
@@ -91,13 +120,19 @@ export async function POST(request: Request) {
 
     // Generate prescription PDF and store for WhatsApp document (fees + medicine)
     let pdfStored = false
-    if (fullAppointment && fullAppointment.status === "completed") {
+    const hasCompletionData =
+      fullAppointment &&
+      (fullAppointment.status === "completed" ||
+        fullAppointment.medicine ||
+        fullAppointment.doctorNotes)
+    if (hasCompletionData && fullAppointment) {
+      const apt = fullAppointment
       try {
         const appointmentForPdf = {
-          ...fullAppointment,
+          ...apt,
           id: appointmentId,
-          patientId: fullAppointment.patientId || patientId,
-          patientName: fullAppointment.patientName || name,
+          patientId: apt.patientId || patientId,
+          patientName: apt.patientName || name,
           patientPhone: phone,
         } as Parameters<typeof getPrescriptionPDFBuffer>[0]
         const pdfBuffer = getPrescriptionPDFBuffer(appointmentForPdf)
@@ -108,7 +143,7 @@ export async function POST(request: Request) {
           pdfBase64,
           expiresAt: expiresAt.toISOString(),
           patientName: name,
-          appointmentDate: fullAppointment.appointmentDate || "",
+          appointmentDate: apt.appointmentDate || "",
           createdAt: new Date().toISOString(),
         })
         pdfStored = true
@@ -138,6 +173,13 @@ export async function POST(request: Request) {
     
     messageText += `Thank you for choosing Harmony Medical Services! 🏥`
 
+    // Add PDF download link if we have it (fallback if document send fails)
+    let pdfDownloadUrl = ""
+    if (pdfStored) {
+      pdfDownloadUrl = `${getPdfBaseUrl()}/api/appointments/${appointmentId}/prescription-pdf`
+      messageText += `\n\n📄 *Download your prescription & invoice:*\n${pdfDownloadUrl}`
+    }
+
     // Send WhatsApp thank you message
     const result = await sendWhatsAppNotification({
       to: phone,
@@ -154,11 +196,7 @@ export async function POST(request: Request) {
     // Send prescription PDF as document (fees + medicine)
     if (pdfStored) {
       try {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_BASE_URL ||
-          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-          "https://hospitalmanagementsystem-hazel.vercel.app"
-        const pdfUrl = `${baseUrl}/api/appointments/${appointmentId}/prescription-pdf`
+        const pdfUrl = `${getPdfBaseUrl()}/api/appointments/${appointmentId}/prescription-pdf`
         const dateStr = fullAppointment?.appointmentDate
           ? new Date(String(fullAppointment.appointmentDate)).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0]
