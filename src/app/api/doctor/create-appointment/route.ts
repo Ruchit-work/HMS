@@ -7,7 +7,10 @@ import { applyRateLimit } from "@/utils/shared/rateLimit"
 import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
 import { getString, isRecord, type UnknownRecord } from "@/utils/api/typeGuards"
 
-const sendDoctorBookingWhatsApp = async (appointmentData: UnknownRecord) => {
+const sendDoctorBookingWhatsApp = async (
+  appointmentData: UnknownRecord,
+  options?: { payAtReception?: boolean; amountDue?: number }
+) => {
   const patientName = getString(appointmentData.patientName) || "there"
   const fullName = patientName.trim() || "Patient"
   const doctorName = getString(appointmentData.doctorName) || "your doctor"
@@ -30,20 +33,40 @@ const sendDoctorBookingWhatsApp = async (appointmentData: UnknownRecord) => {
       })
     : timeStr
 
-  const message = `🎉 *Appointment Booked!*
+  const chiefComplaint = getString(appointmentData.chiefComplaint) || ""
+  const isRecheckup = /^Re-checkup/i.test(chiefComplaint)
+  const payAtReception = options?.payAtReception === true
+  const amountDue = options?.amountDue ?? 0
+
+  const header = isRecheckup ? "🔄 *Re-checkup Appointment Booked!*" : "🎉 *Appointment Booked!*"
+  let intro: string
+  let footer: string
+  if (payAtReception) {
+    intro =
+      "Doctor has recommended a re-checkup. Please visit the hospital and complete payment at reception before consultation."
+    footer = amountDue > 0
+      ? `\n\n💳 *Payment:* Please pay ₹${amountDue} at reception before your consultation.\n\nSee you at the clinic! 🏥`
+      : "\n\n💳 *Payment:* Please complete payment at reception before your consultation.\n\nSee you at the clinic! 🏥"
+  } else {
+    intro = isRecheckup
+      ? "Your re-checkup (follow-up) appointment has been confirmed by the doctor."
+      : "Your appointment has been confirmed by the doctor."
+    footer = "\n\nSee you at the clinic! 🏥"
+  }
+
+  const message = `${header}
 
 Hi ${fullName},
 
-Your appointment has been confirmed by the doctor.
+${intro}
 
 📋 *Details:*
 • 👨‍⚕️ Doctor: ${doctorName}${doctorSpecialization ? ` (${doctorSpecialization})` : ""}
 • 📅 Date: ${dateDisplay}
 • 🕒 Time: ${timeDisplay}
 • 📋 ID: ${appointmentId}
-${appointmentData.chiefComplaint ? `• 📝 Reason: ${appointmentData.chiefComplaint}` : ""}
-
-See you at the clinic! 🏥`
+${chiefComplaint ? `• 📝 Reason: ${chiefComplaint}` : ""}
+${footer}`
 
   const phoneCandidates = [
     getString(appointmentData.patientPhone),
@@ -92,6 +115,8 @@ export async function POST(request: Request) {
     if (!appointmentData) {
       return Response.json({ error: "Missing appointmentData" }, { status: 400 })
     }
+    const isEmergency = body.isEmergency === true
+    const isRecheck = body.isRecheck === true
 
     const doctorId = auth.user.uid
     const required = ["patientId", "patientName", "appointmentDate", "appointmentTime"]
@@ -127,9 +152,16 @@ export async function POST(request: Request) {
       return sum + amount
     }, 0)
     const totalPaymentAmount =
-      typeof appointmentData.paymentAmount === "number"
-        ? appointmentData.paymentAmount
-        : consultationFee + totalAdditionalFees
+      isRecheck
+        ? Number(consultationFee) || 0
+        : typeof appointmentData.paymentAmount === "number"
+          ? appointmentData.paymentAmount
+          : consultationFee + totalAdditionalFees
+
+    const paymentStatus = isRecheck ? "unpaid" : "paid"
+    const remainingAmount = isRecheck ? totalPaymentAmount : 0
+    const paidAt = isRecheck ? "" : nowIso
+    const slotOverbooking = isEmergency || isRecheck
 
     const docData: Record<string, unknown> = {
       patientId: String(appointmentData.patientId),
@@ -157,9 +189,9 @@ export async function POST(request: Request) {
       paymentMethod: safeValue(appointmentData.paymentMethod, "cash"),
       paymentType: safeValue(appointmentData.paymentType, "full"),
       durationMinutes: typeof appointmentData.durationMinutes === "number" ? appointmentData.durationMinutes : 15,
-      paymentStatus: "paid",
-      remainingAmount: 0,
-      paidAt: nowIso,
+      paymentStatus,
+      remainingAmount,
+      paidAt,
       transactionId: `DOC${Date.now()}`,
       createdAt: safeValue(appointmentData.createdAt, nowIso),
       updatedAt: nowIso,
@@ -190,21 +222,23 @@ export async function POST(request: Request) {
     await firestore.runTransaction(async (transaction) => {
       const slotRef = firestore.collection("appointmentSlots").doc(slotDocId)
       const slotSnap = await transaction.get(slotRef)
-      if (slotSnap.exists) throw new Error("SLOT_ALREADY_BOOKED")
+      if (!slotOverbooking && slotSnap.exists) throw new Error("SLOT_ALREADY_BOOKED")
 
       const appointmentRef = firestore
         .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
         .doc()
       appointmentId = appointmentRef.id
       transaction.set(appointmentRef, docData)
-      transaction.set(slotRef, {
-        appointmentId,
-        doctorId: docData.doctorId,
-        appointmentDate: docData.appointmentDate,
-        appointmentTime: normalizedAppointmentTime,
-        createdAt: nowIso,
-        hospitalId: doctorHospitalId,
-      })
+      if (!slotOverbooking || !slotSnap.exists) {
+        transaction.set(slotRef, {
+          appointmentId,
+          doctorId: docData.doctorId,
+          appointmentDate: docData.appointmentDate,
+          appointmentTime: normalizedAppointmentTime,
+          createdAt: nowIso,
+          hospitalId: doctorHospitalId,
+        })
+      }
     })
 
     let patientPhone =
@@ -233,18 +267,24 @@ export async function POST(request: Request) {
 
     if (patientPhone && patientPhone.trim() !== "") {
       try {
-        await sendDoctorBookingWhatsApp({
-          ...appointmentData,
-          ...docData,
-          appointmentId,
-          id: appointmentId,
-          patientPhone,
-          patientName: docData.patientName,
-          doctorName: docData.doctorName,
-          doctorSpecialization: docData.doctorSpecialization,
-          appointmentDate: docData.appointmentDate,
-          appointmentTime: docData.appointmentTime,
-        })
+        await sendDoctorBookingWhatsApp(
+          {
+            ...appointmentData,
+            ...docData,
+            appointmentId,
+            id: appointmentId,
+            patientPhone,
+            patientName: docData.patientName,
+            doctorName: docData.doctorName,
+            doctorSpecialization: docData.doctorSpecialization,
+            appointmentDate: docData.appointmentDate,
+            appointmentTime: docData.appointmentTime,
+            chiefComplaint: docData.chiefComplaint,
+          },
+          isRecheck
+            ? { payAtReception: true, amountDue: totalPaymentAmount }
+            : undefined
+        )
       } catch {
         // ignore
       }

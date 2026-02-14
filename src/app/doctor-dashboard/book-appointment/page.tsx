@@ -7,7 +7,7 @@ import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import { getAvailableTimeSlots, isSlotInPast, normalizeTime } from "@/utils/timeSlots"
+import { getAvailableTimeSlots, getDayName, generateTimeSlots, isSlotInPast, normalizeTime, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import Notification from "@/components/ui/feedback/Notification"
@@ -49,8 +49,9 @@ export default function DoctorBookAppointmentPage() {
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const [chiefComplaint, setChiefComplaint] = useState("")
   const [paymentAmount, setPaymentAmount] = useState(0)
-  const [durationMinutes, setDurationMinutes] = useState(15)
   const [bookLoading, setBookLoading] = useState(false)
+
+  const IMMEDIATELY_VALUE = "__IMMEDIATELY__"
 
   useEffect(() => {
     if (!user?.uid || !activeHospitalId) return
@@ -184,11 +185,17 @@ export default function DoctorBookAppointmentPage() {
   }, [newPatient])
 
   const createAppointment = useCallback(
-    async (patientId: string, payload: { firstName?: string; lastName?: string; email?: string; phone?: string }) => {
+    async (
+      patientId: string,
+      payload: { firstName?: string; lastName?: string; email?: string; phone?: string },
+      timeOverride?: string,
+      isEmergency?: boolean
+    ) => {
       const token = await auth.currentUser?.getIdToken()
       if (!token) throw new Error("Not logged in")
       const patientName = `${payload.firstName || ""} ${payload.lastName || ""}`.trim()
       const phone = (payload as any).phone || (payload as any).phoneNumber || ""
+      const timeToUse = timeOverride ?? appointmentTime
       const res = await fetch("/api/doctor/create-appointment", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -199,15 +206,15 @@ export default function DoctorBookAppointmentPage() {
             patientEmail: payload.email || "",
             patientPhone: phone,
             appointmentDate,
-            appointmentTime,
+            appointmentTime: timeToUse,
             chiefComplaint: chiefComplaint || "General consultation",
             medicalHistory: "",
             status: "confirmed",
             paymentAmount: paymentAmount ?? doctorProfile?.consultationFee ?? 0,
             paymentMethod: "cash",
             paymentType: "full",
-            durationMinutes: durationMinutes || 15,
           },
+          isEmergency: !!isEmergency,
         }),
       })
       if (!res.ok) {
@@ -216,7 +223,7 @@ export default function DoctorBookAppointmentPage() {
       }
       return res.json()
     },
-    [appointmentDate, appointmentTime, chiefComplaint, doctorProfile?.consultationFee, paymentAmount, durationMinutes]
+    [appointmentDate, appointmentTime, chiefComplaint, doctorProfile?.consultationFee, paymentAmount]
   )
 
   const handleBook = async () => {
@@ -224,7 +231,27 @@ export default function DoctorBookAppointmentPage() {
       setBookLoading(true)
       setNotification(null)
       if (!appointmentDate || !appointmentTime) throw new Error("Select date and time")
-      if (!availableSlots.includes(appointmentTime)) throw new Error("Selected time is not available")
+      const isEmergency = appointmentTime === IMMEDIATELY_VALUE
+      let actualTime: string
+      if (isEmergency) {
+        actualTime =
+          availableSlots.length > 0
+            ? availableSlots[0]
+            : (() => {
+                const dateObj = new Date(appointmentDate + "T00:00:00")
+                const dayName = getDayName(dateObj)
+                const schedule =
+                  (doctorProfile?.visitingHours as any)?.[dayName] || DEFAULT_VISITING_HOURS[dayName]
+                const allSlots = generateTimeSlots(schedule)
+                const firstNonPast = allSlots.find((s) => !isSlotInPast(s, appointmentDate))
+                if (!firstNonPast) throw new Error("No slots today for emergency booking")
+                return firstNonPast
+              })()
+      } else {
+        actualTime = appointmentTime
+        if (!availableSlots.includes(appointmentTime))
+          throw new Error("Selected time is not available")
+      }
       if (isSelectedDateBlocked) throw new Error("You are not available on this date")
 
       let patientId: string
@@ -249,13 +276,15 @@ export default function DoctorBookAppointmentPage() {
         }
       }
 
-      const slotCheck = await fetch(
-        `/api/appointments/check-slot?doctorId=${user!.uid}&date=${appointmentDate}&time=${appointmentTime}`
-      )
-      const slotData = await slotCheck.json().catch(() => ({}))
-      if (!slotData?.available) throw new Error(slotData?.error || "Slot no longer available")
+      if (!isEmergency) {
+        const slotCheck = await fetch(
+          `/api/appointments/check-slot?doctorId=${user!.uid}&date=${appointmentDate}&time=${actualTime}`
+        )
+        const slotData = await slotCheck.json().catch(() => ({}))
+        if (!slotData?.available) throw new Error(slotData?.error || "Slot no longer available")
+      }
 
-      await createAppointment(patientId, payload)
+      await createAppointment(patientId, payload, actualTime, isEmergency)
       setNotification({ type: "success", message: "Appointment booked successfully." })
       setSelectedPatientId("")
       setSearchPatient("")
@@ -501,24 +530,6 @@ export default function DoctorBookAppointmentPage() {
             )}
           </div>
 
-          {/* Duration */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Duration</label>
-            <div className="relative h-11">
-            <span className={iconWrapper}><IconClock /></span>
-            <select
-              value={durationMinutes}
-              onChange={(e) => setDurationMinutes(Number(e.target.value))}
-              className={`${inputBase} cursor-pointer pr-10`}
-            >
-              <option value={15}>15 min</option>
-              <option value={30}>30 min</option>
-              <option value={45}>45 min</option>
-              <option value={60}>60 min</option>
-            </select>
-            </div>
-          </div>
-
           {/* Time */}
           <div className="relative">
             <label className="block text-sm font-medium text-slate-700 mb-1">Time *</label>
@@ -528,12 +539,15 @@ export default function DoctorBookAppointmentPage() {
               value={appointmentTime}
               onChange={(e) => setAppointmentTime(e.target.value)}
               className={`${inputBase} cursor-pointer pr-10`}
-              disabled={!appointmentDate || availableSlots.length === 0}
+              disabled={!appointmentDate || (availableSlots.length === 0 && !doctorProfile?.visitingHours)}
             >
               <option value="">Select time</option>
+              {appointmentDate && doctorProfile?.visitingHours && (
+                <option value={IMMEDIATELY_VALUE}>Immediately / Now (emergency slot)</option>
+              )}
               {availableSlots.map((slot) => (
                 <option key={slot} value={slot}>
-                  {slot} ({durationMinutes} min)
+                  {slot}
                 </option>
               ))}
             </select>

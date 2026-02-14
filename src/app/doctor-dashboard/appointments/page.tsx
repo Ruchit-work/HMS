@@ -8,7 +8,7 @@ import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import Notification from "@/components/ui/feedback/Notification"
 import { generatePrescriptionPDF } from "@/utils/documents/pdfGenerators"
-import { completeAppointment } from "@/utils/appointmentHelpers"
+import { completeAppointment, markAppointmentSkipped } from "@/utils/appointmentHelpers"
 import { calculateAge } from "@/utils/shared/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
@@ -140,6 +140,7 @@ function DoctorAppointmentsContent() {
     appointment: null,
     recommendation: null,
   })
+  const [skippingId, setSkippingId] = useState<string | null>(null)
 
   const refreshMedicineSuggestions = useCallback(async () => {
     try {
@@ -487,6 +488,31 @@ function DoctorAppointmentsContent() {
   const handleAddAnotherAnatomy = (appointmentId: string) => {
     setShowConsultationModeModal({ open: true, appointmentId })
   }
+
+  const handleSkip = useCallback(
+    async (appointmentId: string) => {
+      if (!activeHospitalId) {
+        setNotification({ type: "error", message: "Hospital not selected" })
+        return
+      }
+      setSkippingId(appointmentId)
+      setNotification(null)
+      try {
+        await markAppointmentSkipped(appointmentId, activeHospitalId)
+        setAppointments((prev) =>
+          prev.map((apt) =>
+            apt.id === appointmentId ? { ...apt, status: "no_show" as const } : apt
+          )
+        )
+        setNotification({ type: "success", message: "Appointment skipped. You can take the next patient." })
+      } catch (e) {
+        setNotification({ type: "error", message: (e as Error).message })
+      } finally {
+        setSkippingId(null)
+      }
+    },
+    [activeHospitalId, setAppointments]
+  )
 
   const toggleCompletionForm = (appointmentId: string) => {
     const appointment = appointments.find((apt) => apt.id === appointmentId)
@@ -1091,6 +1117,7 @@ function DoctorAppointmentsContent() {
                 paymentMethod: "cash",
                 paymentType: "full",
               },
+              isRecheck: true,
             }),
           })
           if (res.ok) {
@@ -1455,6 +1482,8 @@ function DoctorAppointmentsContent() {
                   appointments={paginatedAppointments}
                   selectedId={selectedAppointment ? selectedAppointment.id : null}
                   onSelect={(id) => toggleAccordion(id)}
+                  onSkip={handleSkip}
+                  skippingId={skippingId}
                 />
               </div>
               {/* Pagination for history tab */}

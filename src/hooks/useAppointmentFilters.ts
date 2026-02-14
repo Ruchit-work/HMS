@@ -19,7 +19,7 @@ export function useAppointmentFilters(
   )
 
   const historyAppointments = useMemo(
-    () => appointments.filter((apt) => apt.status === "completed"),
+    () => appointments.filter((apt) => apt.status === "completed" || apt.status === "no_show"),
     [appointments]
   )
 

@@ -181,12 +181,45 @@ export const completeAppointment = async (
   }
 }
 
+/**
+ * Mark appointment as skipped (patient did not come).
+ * Doctor can then proceed to the next appointment.
+ */
+export const markAppointmentSkipped = async (
+  appointmentId: string,
+  hospitalId: string
+) => {
+  if (!hospitalId) throw new Error("Hospital ID is required")
+
+  const appointmentsRef = getHospitalCollection(hospitalId, "appointments")
+  const aptRef = doc(appointmentsRef, appointmentId)
+  const aptSnap = await getDoc(aptRef)
+  if (!aptSnap.exists()) throw new Error("Appointment not found")
+
+  const apt = aptSnap.data() as any
+  if (apt.status !== "confirmed") {
+    throw new Error("Only confirmed appointments can be marked as skipped")
+  }
+
+  await updateDoc(aptRef, {
+    status: "no_show",
+    noShowAt: new Date().toISOString(),
+    doctorNotes: "Patient did not come (skipped).",
+    updatedAt: new Date().toISOString(),
+  })
+
+  await releaseAppointmentSlot(apt.doctorId, apt.appointmentDate, apt.appointmentTime)
+
+  return { success: true, message: "Appointment skipped. You can take the next patient." }
+}
+
 // Get status color for badges
 export const getStatusColor = (status: string) => {
   switch(status) {
     case "confirmed": return "bg-blue-100 text-blue-800 border-blue-200"
     case "completed": return "bg-green-100 text-green-800 border-green-200"
     case "cancelled": return "bg-red-100 text-red-800 border-red-200"
+    case "no_show": return "bg-amber-100 text-amber-800 border-amber-200"
     default: return "bg-gray-100 text-gray-800 border-gray-200"
   }
 }
