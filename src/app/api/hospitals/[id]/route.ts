@@ -73,7 +73,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, code, address, phone, email, status } = body
+    const { name, code, address, phone, email, status, multipleBranchesEnabled, enableAnalytics } = body
 
     // Verify hospital exists
     const hospitalRef = db.collection('hospitals').doc(hospitalId)
@@ -111,6 +111,8 @@ export async function PUT(
     if (phone) updateData.phone = phone
     if (email) updateData.email = email
     if (status) updateData.status = status
+    if (typeof multipleBranchesEnabled === 'boolean') updateData.multipleBranchesEnabled = multipleBranchesEnabled
+    if (typeof enableAnalytics === 'boolean') updateData.enableAnalytics = enableAnalytics
 
     await hospitalRef.update(updateData)
 

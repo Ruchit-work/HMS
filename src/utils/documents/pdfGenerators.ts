@@ -401,6 +401,26 @@ function sanitizeForPdf(text: string) {
     .trim()
 }
 
+/** Convert legacy frequency (Once, Twice) to Morning/Afternoon/Evening with Before/After meal */
+function formatFrequencyForPdf(freq: string): string {
+  const f = (freq || "").trim()
+  if (!f) return ""
+  // Already in Morning/Afternoon/Evening with meal format - use as-is
+  if (/morning|afternoon|evening|night/i.test(f) && /meal/i.test(f)) {
+    return f
+  }
+  // Convert legacy format to new format
+  const lower = f.toLowerCase()
+  if (lower.includes("once")) return "Morning - After meal"
+  if (lower.includes("twice")) return "Morning - After meal, Evening - After meal"
+  if (lower.includes("three times") || lower.includes("3 times"))
+    return "Morning - After meal, Afternoon - After meal, Evening - After meal"
+  if (lower.includes("four times") || lower.includes("4 times"))
+    return "Morning - Before meal, Afternoon - After meal, Evening - After meal, Night - After meal"
+  if (lower.includes("daily")) return "Morning - After meal"
+  return f
+}
+
 function parsePrescriptionText(text: string | undefined | null): ParsedPrescription | null {
   if (!text) return null
 
@@ -654,27 +674,19 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
   if (structuredPrescription && structuredPrescription.medicines.length > 0) {
     structuredPrescription.medicines.forEach((med) => {
       let medDesc = sanitizeForPdf(med.name)
-      // Format: "MedicineName a day (dosage) - Frequency"
-      medDesc += ' a day'
+      // Avoid "a day a day" if name already contains it
+      if (!/\b a day\b$/i.test(medDesc)) {
+        medDesc += " a day"
+      }
       if (med.dosage) {
         medDesc += ` (${sanitizeForPdf(med.dosage)})`
       }
       if (med.frequency) {
-        // Format frequency nicely
-        const freq = sanitizeForPdf(med.frequency)
-        if (freq.toLowerCase().includes('once')) {
-          medDesc += ' - Once'
-        } else if (freq.toLowerCase().includes('twice')) {
-          medDesc += ' - Twice'
-        } else if (freq.toLowerCase().includes('three times') || freq.toLowerCase().includes('3 times')) {
-          medDesc += ' - Three times'
-        } else if (freq.toLowerCase().includes('four times') || freq.toLowerCase().includes('4 times')) {
-          medDesc += ' - Four times'
-        } else {
+        const freq = formatFrequencyForPdf(sanitizeForPdf(med.frequency))
+        if (freq) {
           medDesc += ` - ${freq}`
         }
       }
-      // Duration is typically not shown in the main description, but can be added if needed
       medicines.push({
         desc: medDesc
       })

@@ -155,7 +155,9 @@ export default function AdminDashboard() {
 
   // Protect route - only allow admins
   const { user, loading: authLoading } = useAuth("admin")
-  const { activeHospitalId, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
+  const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
+
+  const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
 
   // Fetch branches on mount
   useEffect(() => {
@@ -194,6 +196,15 @@ export default function AdminDashboard() {
 
     fetchBranches()
   }, [activeHospitalId])
+
+  // Reset analytics sub-tabs and tab when analytics is disabled for hospital
+  useEffect(() => {
+    if (!analyticsEnabled) {
+      if (patientSubTab === "analytics") setPatientSubTab("all")
+      if (billingSubTab === "analytics") setBillingSubTab("all")
+      if (activeTab === "analytics") setActiveTab("overview")
+    }
+  }, [analyticsEnabled])
 
   const fetchDashboardData = async () => {
     if (!user || !activeHospitalId) return
@@ -682,17 +693,19 @@ export default function AdminDashboard() {
               badgeProps={{ size: "sm", color: "red", animate: true }}
             />
 
-            <TabButton
-              id="analytics"
-              activeTab={activeTab}
-              onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }}
-              icon={
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              }
-              label="Analytics Hub"
-            />
+            {analyticsEnabled && (
+              <TabButton
+                id="analytics"
+                activeTab={activeTab}
+                onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }}
+                icon={
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                }
+                label="Analytics Hub"
+              />
+            )}
 
             {isSuperAdmin && (
               <>
@@ -731,17 +744,19 @@ export default function AdminDashboard() {
                 <div className="px-3 py-1">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
                 </div>
-                <TabButton
-                  id="branches"
-                  activeTab={activeTab}
-                  onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
-                  icon={
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm12 0h4a2 2 0 012 2v10h-6V9a2 2 0 012-2z" />
-                    </svg>
-                  }
-                  label="Branches"
-                />
+                {(activeHospital as any)?.multipleBranchesEnabled !== false && (
+                  <TabButton
+                    id="branches"
+                    activeTab={activeTab}
+                    onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
+                    icon={
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm12 0h4a2 2 0 012 2v10h-6V9a2 2 0 012-2z" />
+                      </svg>
+                    }
+                    label="Branches"
+                  />
+                )}
                 <TabButton
                   id="receptionists"
                   activeTab={activeTab}
@@ -855,8 +870,8 @@ export default function AdminDashboard() {
                 </div>
               )}
               
-              {/* Branch Filter - Visible on all tabs */}
-              {branches.length > 0 && (
+              {/* Branch Filter - Visible only when hospital has multiple branches */}
+              {branches.length > 0 && (activeHospital as any)?.multipleBranchesEnabled !== false && (
                 <div className="flex items-center gap-3">
                   <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
                     <span>🏥</span>
@@ -1493,7 +1508,13 @@ export default function AdminDashboard() {
             </div>
           )}
           {activeTab === "branches" && (
-            <BranchManagement />
+            (activeHospital as any)?.multipleBranchesEnabled !== false ? (
+              <BranchManagement />
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
+                <p className="text-slate-600">This hospital has single-branch mode. Contact Super Admin to enable multiple branches.</p>
+              </div>
+            )
           )}
 
           {activeTab === "patients" && (
@@ -1501,14 +1522,14 @@ export default function AdminDashboard() {
               <SubTabNavigation
                 tabs={[
                   { id: "all", label: "All Patients" },
-                  { id: "analytics", label: "Analytics & Insights" }
+                  ...(analyticsEnabled ? [{ id: "analytics" as const, label: "Analytics & Insights" }] : [])
                 ]}
                 activeTab={patientSubTab}
                 onTabChange={setPatientSubTab}
               />
               <div className="p-6">
                 {patientSubTab === "all" && <PatientManagement selectedBranchId={selectedBranchId} />}
-                {patientSubTab === "analytics" && <PatientAnalytics selectedBranchId={selectedBranchId} />}
+                {patientSubTab === "analytics" && analyticsEnabled && <PatientAnalytics selectedBranchId={selectedBranchId} />}
               </div>
             </div>
           )}
@@ -1536,14 +1557,14 @@ export default function AdminDashboard() {
               <SubTabNavigation
                 tabs={[
                   { id: "all", label: "All Records" },
-                  { id: "analytics", label: "Financial Analytics" }
+                  ...(analyticsEnabled ? [{ id: "analytics" as const, label: "Financial Analytics" }] : [])
                 ]}
                 activeTab={billingSubTab}
                 onTabChange={setBillingSubTab}
               />
               <div className="p-6">
                 {billingSubTab === "all" && <BillingManagement selectedBranchId={selectedBranchId} />}
-                {billingSubTab === "analytics" && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
+                {billingSubTab === "analytics" && analyticsEnabled && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
               </div>
             </div>
           )}

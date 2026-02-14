@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
@@ -15,11 +16,13 @@ interface HospitalFormData {
   address: string
   phone: string
   email: string
+  multipleBranchesEnabled: boolean
+  enableAnalytics: boolean
 }
 
 export default function HospitalManagement() {
   const { user, loading: authLoading } = useAuth()
-  const { isSuperAdmin } = useMultiHospital()
+  const { isSuperAdmin, refreshHospitals: refreshContextHospitals } = useMultiHospital()
   const [hospitals, setHospitals] = useState<Hospital[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +35,9 @@ export default function HospitalManagement() {
     code: '',
     address: '',
     phone: '',
-    email: ''
+    email: '',
+    multipleBranchesEnabled: false,
+    enableAnalytics: true
   })
 
   useEffect(() => {
@@ -86,7 +91,11 @@ export default function HospitalManagement() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          multipleBranchesEnabled: formData.multipleBranchesEnabled,
+          enableAnalytics: formData.enableAnalytics
+        })
       })
 
       const result = await response.json()
@@ -98,8 +107,9 @@ export default function HospitalManagement() {
       setSuccess(editingHospital ? 'Hospital updated successfully!' : 'Hospital created successfully!')
       setShowAddModal(false)
       setEditingHospital(null)
-      setFormData({ name: '', code: '', address: '', phone: '', email: '' })
+      setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true })
       await loadHospitals()
+      await refreshContextHospitals()
     } catch (err: any) {
       setError(err.message || 'Failed to save hospital. Please try again.')
     } finally {
@@ -114,7 +124,9 @@ export default function HospitalManagement() {
       code: hospital.code,
       address: hospital.address,
       phone: hospital.phone,
-      email: hospital.email || ''
+      email: hospital.email || '',
+      multipleBranchesEnabled: (hospital as any).multipleBranchesEnabled === true,
+      enableAnalytics: (hospital as any).enableAnalytics !== false
     })
     setShowAddModal(true)
   }
@@ -158,7 +170,7 @@ export default function HospitalManagement() {
   const handleCancel = () => {
     setShowAddModal(false)
     setEditingHospital(null)
-    setFormData({ name: '', code: '', address: '', phone: '', email: '' })
+    setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true })
     setError(null)
     setSuccess(null)
   }
@@ -203,7 +215,7 @@ export default function HospitalManagement() {
         <button
           onClick={() => {
             setEditingHospital(null)
-            setFormData({ name: '', code: '', address: '', phone: '', email: '' })
+            setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false })
             setShowAddModal(true)
           }}
           className="btn-modern btn-modern-sm"
@@ -281,9 +293,9 @@ export default function HospitalManagement() {
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      {/* Add/Edit Modal - rendered in portal for proper viewport centering */}
+      {showAddModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-black/50 p-4 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h3 className="text-2xl font-bold text-slate-800 mb-4">
@@ -337,6 +349,42 @@ export default function HospitalManagement() {
                   />
                 </div>
 
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Enable multiple branches</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      When off, hospital has single location. Super admin can enable later when they need more branches.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.multipleBranchesEnabled}
+                      onChange={(e) => setFormData({ ...formData, multipleBranchesEnabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Enable analytics</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Show or hide advanced analytics (Analytics Hub, revenue & patient analytics). Super admin can enable later.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.enableAnalytics}
+                      onChange={(e) => setFormData({ ...formData, enableAnalytics: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                  </label>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -387,7 +435,8 @@ export default function HospitalManagement() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

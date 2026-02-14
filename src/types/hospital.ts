@@ -13,6 +13,10 @@ export interface Hospital {
   phone: string
   email: string
   status: "active" | "inactive" | "suspended"
+  /** When false, hospital has single location - no branch creation/filter. Super admin can enable later. */
+  multipleBranchesEnabled?: boolean
+  /** When false, hide advanced analytics (Analytics Hub, analytics sub-tabs). Super admin can enable later. */
+  enableAnalytics?: boolean
   createdAt: Timestamp | string
   updatedAt: Timestamp | string
 }

@@ -128,12 +128,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verify hospital exists
+    // Verify hospital exists and allows multiple branches
     const hospitalDoc = await db.collection('hospitals').doc(hospitalId).get()
     if (!hospitalDoc.exists) {
       return NextResponse.json(
         { success: false, error: 'Hospital not found' },
         { status: 404 }
+      )
+    }
+    const hospitalData = hospitalDoc.data()
+    if (hospitalData?.multipleBranchesEnabled === false) {
+      return NextResponse.json(
+        { success: false, error: 'This hospital has single-branch mode. Contact Super Admin to enable multiple branches.' },
+        { status: 403 }
       )
     }
 

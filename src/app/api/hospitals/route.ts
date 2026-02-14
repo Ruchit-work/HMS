@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, code, address, phone, email } = body
+    const { name, code, address, phone, email, multipleBranchesEnabled, enableAnalytics } = body
 
     // Validate required fields
     if (!name || !code || !address || !phone || !email) {
@@ -133,6 +133,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const enableMultipleBranches = multipleBranchesEnabled === true
+    const enableAnalyticsValue = enableAnalytics !== false // default true
+
     // Create hospital
     const hospitalRef = db.collection('hospitals').doc()
     await hospitalRef.set({
@@ -142,20 +145,48 @@ export async function POST(request: NextRequest) {
       phone,
       email,
       status: 'active',
+      multipleBranchesEnabled: enableMultipleBranches,
+      enableAnalytics: enableAnalyticsValue,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     })
 
+    const hospitalId = hospitalRef.id
+
+    // Single-branch hospital: auto-create one default "Main" branch
+    if (!enableMultipleBranches) {
+      const defaultTimings = {
+        monday: { start: '09:00', end: '17:00' },
+        tuesday: { start: '09:00', end: '17:00' },
+        wednesday: { start: '09:00', end: '17:00' },
+        thursday: { start: '09:00', end: '17:00' },
+        friday: { start: '09:00', end: '17:00' },
+        saturday: null,
+        sunday: null
+      }
+      await db.collection('branches').add({
+        name: 'Main',
+        location: address,
+        hospitalId,
+        timings: defaultTimings,
+        status: 'active',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      })
+    }
+
     return NextResponse.json({
       success: true,
       hospital: {
-        id: hospitalRef.id,
+        id: hospitalId,
         name,
         code,
         address,
         phone,
         email,
-        status: 'active'
+        status: 'active',
+        multipleBranchesEnabled: enableMultipleBranches,
+        enableAnalytics: enableAnalyticsValue
       }
     })
   } catch (error: any) {
