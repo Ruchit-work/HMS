@@ -215,7 +215,7 @@ export default function HospitalManagement() {
         <button
           onClick={() => {
             setEditingHospital(null)
-            setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false })
+            setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true })
             setShowAddModal(true)
           }}
           className="btn-modern btn-modern-sm"
