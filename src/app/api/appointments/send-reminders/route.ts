@@ -3,8 +3,19 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
+function isCronTriggerRequest(request: Request): boolean {
+  if (request.headers.get("x-vercel-cron") !== null) return true
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) return false
+  const authHeader = request.headers.get("authorization")
+  if (authHeader?.startsWith("Bearer ") && authHeader.slice(7).trim() === cronSecret) return true
+  const secretHeader = request.headers.get("x-cron-secret")
+  if (secretHeader === cronSecret) return true
+  return false
+}
+
 export async function GET(request: Request) {
-  const isCronTrigger = request.headers.get("x-vercel-cron") !== null
+  const isCronTrigger = isCronTriggerRequest(request)
   
   // Allow cron or admin access
   if (!isCronTrigger) {
