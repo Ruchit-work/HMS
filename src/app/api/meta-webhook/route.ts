@@ -16,7 +16,6 @@ const BUTTON_HANDLERS: Record<string, (from: string) => Promise<void>> = {
   register_yes: (from) => handleRegistrationPrompt(from),
   booking_confirm: (from) => handleConfirmationButtonClick(from, "confirm"),
   booking_cancel: (from) => handleConfirmationButtonClick(from, "cancel"),
-  recheckup_pick_date: (from) => handleRecheckupPickDate(from),
 }
 
 // Language helper
@@ -2074,37 +2073,6 @@ async function handleListSelection(phone: string, selectedId: string) {
     return
   }
 
-}
-
-// Handler for re-checkup pick date button
-async function handleRecheckupPickDate(phone: string) {
-  const db = admin.firestore()
-  const normalizedPhone = formatPhoneNumber(phone)
-  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-  const sessionDoc = await sessionRef.get()
-  const session = sessionDoc.exists ? (sessionDoc.data() as BookingSession) : undefined
-  const patient = await findPatientByPhone(db, normalizedPhone)
-
-  if (!sessionDoc.exists) {
-    // Create a new session for re-checkup
-    await sessionRef.set({
-      state: "selecting_date",
-      isRecheckup: true,
-      language: "english",
-      needsRegistration: false,
-      patientUid: patient?.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    })
-  } else if (!session?.patientUid && patient) {
-    await sessionRef.update({
-      patientUid: patient.id,
-      updatedAt: new Date().toISOString(),
-    })
-  }
-
-  // Show date picker (for re-checkup, no doctor ID needed)
-  await sendDatePicker(phone, undefined, "english")
 }
 
 // Handler for date button clicks (Today, Tomorrow, See All)

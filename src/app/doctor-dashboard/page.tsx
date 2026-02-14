@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, query, where, onSnapshot, collection, deleteDoc } from "firebase/firestore"
+import { doc, getDoc, query, where, onSnapshot, collection } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
@@ -41,9 +41,6 @@ export default function DoctorDashboard() {
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
   const [blockedDrafts, setBlockedDrafts] = useState<BlockedDate[]>([])
   const [savingSchedule, setSavingSchedule] = useState(false)
-  const [pendingRequests, setPendingRequests] = useState<any[]>([])
-  const [rejectedRequests, setRejectedRequests] = useState<any[]>([])
-  const [dismissedRequestIds] = useState<string[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
   const [loadingBranches, setLoadingBranches] = useState(false)
@@ -131,7 +128,6 @@ export default function DoctorDashboard() {
     if (!user || !activeHospitalId) return
 
     let unsubscribeAppointments: (() => void) | null = null
-    let unsubscribeScheduleRequests: (() => void) | null = null
 
     const fetchData = async () => {
       try {
@@ -147,26 +143,6 @@ export default function DoctorDashboard() {
           // Set up real-time appointments listener with branch filter
           unsubscribeAppointments = setupAppointmentsListener(user.uid, selectedBranchId)
           
-          // Set up real-time listener for schedule requests (pending and rejected)
-          const scheduleRequestsQuery = query(
-            collection(db, 'doctor_schedule_requests'),
-            where('doctorId', '==', user.uid),
-            where('status', 'in', ['pending', 'rejected'])
-          )
-          
-          unsubscribeScheduleRequests = onSnapshot(scheduleRequestsQuery, (snapshot) => {
-            const requests = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }))
-            
-            const pending = requests.filter((r: any) => r.status === 'pending')
-            const rejected = requests.filter((r: any) => r.status === 'rejected')
-            
-            setPendingRequests(pending)
-            setRejectedRequests(rejected)
-          }, () => {
-          })
         }
       } finally {
       }
@@ -179,9 +155,6 @@ export default function DoctorDashboard() {
       if (unsubscribeAppointments) {
         unsubscribeAppointments()
       }
-      if (unsubscribeScheduleRequests) {
-        unsubscribeScheduleRequests()
-      }
     }
   }, [user, activeHospitalId, selectedBranchId, setupAppointmentsListener])
 
@@ -193,7 +166,7 @@ export default function DoctorDashboard() {
     }
   }
 
-  // Save visiting hours and blocked dates -> submit for admin approval
+  // Save visiting hours and blocked dates directly (no admin approval)
   const handleSaveSchedule = async () => {
     if (!user?.uid) return
 
@@ -201,89 +174,37 @@ export default function DoctorDashboard() {
     try {
       const currentUser = auth.currentUser
       if (!currentUser) {
-        throw new Error("You must be logged in to submit schedule requests")
+        throw new Error("You must be logged in to save schedule")
       }
       const token = await currentUser.getIdToken()
 
-      const res = await fetch('/api/doctor/schedule-request', { 
-        method: 'POST',
+      const mergedBlockedDates = [
+        ...blockedDates,
+        ...blockedDrafts,
+      ]
+
+      const res = await fetch('/api/doctor/schedule', {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          doctorId: user.uid,
-          requestType: 'both',
           visitingHours,
-          blockedDates: blockedDrafts,
-        })
+          blockedDates: mergedBlockedDates,
+        }),
       })
       if (!res.ok) {
-        const j = await res.json().catch(()=>({}))
-        throw new Error(j?.error || 'Failed to submit request')
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error || 'Failed to save schedule')
       }
-      setNotification({ type: 'success', message: 'Sent to admin for approval. Changes will apply after approval.' })
+      setNotification({ type: 'success', message: 'Schedule saved successfully.' })
+      setBlockedDates(mergedBlockedDates)
       setBlockedDrafts([])
     } catch (error: unknown) {
-      setNotification({ type: 'error', message: (error as Error).message || 'Failed to submit request' })
+      setNotification({ type: 'error', message: (error as Error).message || 'Failed to save schedule' })
     } finally {
       setSavingSchedule(false)
-    }
-  }
-
-  // Submit only blocked date drafts for approval
-  const handleSubmitBlockedDrafts = async () => {
-    if (!user?.uid || blockedDrafts.length === 0) return
-
-    setSavingSchedule(true)
-    try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to submit schedule requests")
-      }
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch('/api/doctor/schedule-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          doctorId: user.uid,
-          requestType: 'blockedDates',
-          blockedDates: blockedDrafts,
-        })
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(()=>({}))
-        throw new Error(j?.error || 'Failed to submit request')
-      }
-      setNotification({ type: 'success', message: 'Blocked dates sent to admin for approval.' })
-      setBlockedDrafts([])
-    } catch (e: any) {
-      setNotification({ type: 'error', message: e?.message || 'Failed to submit request' })
-    } finally {
-      setSavingSchedule(false)
-    }
-  }
-
-  // Delete rejected leave request from database
-  const handleDeleteRejectedRequest = async (requestId: string) => {
-    if (!requestId) return
-
-    try {
-      // Delete from Firestore
-      const requestRef = doc(db, 'doctor_schedule_requests', requestId)
-      await deleteDoc(requestRef)
-      
-      // The real-time listener will automatically update the UI
-      setNotification({ type: 'success', message: 'Rejected request removed successfully.' })
-    } catch (error: unknown) {
-      setNotification({ 
-        type: 'error', 
-        message: (error as Error).message || 'Failed to delete request' 
-      })
     }
   }
 
@@ -650,75 +571,16 @@ export default function DoctorDashboard() {
                   </p>
                 </div>
                 {blockedDrafts.length > 0 && (
-                  <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <p className="text-sm font-medium text-yellow-800">Pending Approval</p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      {blockedDrafts.length} requests waiting
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <p className="text-sm font-medium text-amber-800">Unsaved</p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      {blockedDrafts.length} date(s) to save
                     </p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Leave Request Status */}
-            {(pendingRequests.length > 0 || rejectedRequests.length > 0) && (
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Leave Request Status</h3>
-                <div className="space-y-3">
-                  {/* Pending Requests */}
-                  {pendingRequests.map((req: any) => {
-                    const blockedDates = Array.isArray(req.blockedDates) ? req.blockedDates : []
-                    const dateStrings = blockedDates.map((bd: any) => {
-                      return typeof bd === 'string' ? bd : bd?.date || ''
-                    }).filter(Boolean)
-                    const reasons = blockedDates.map((bd: any) => {
-                      return typeof bd === 'object' && bd?.reason ? bd.reason : ''
-                    }).filter(Boolean)
-                    const uniqueReasons = [...new Set(reasons)]
-                    
-                    return (
-                      <div key={req.id} className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <p className="text-sm text-yellow-800">
-                          Your leave {dateStrings.length > 0 && (
-                            <>
-                              <span className="font-semibold">{dateStrings.join(', ')}</span>
-                            </>
-                          )} {uniqueReasons.length > 0 && `(${uniqueReasons.join(', ')})`} is still pending
-                        </p>
-                      </div>
-                    )
-                  })}
-
-                  {/* Rejected Requests */}
-                  {rejectedRequests
-                    .filter((req: any) => !dismissedRequestIds.includes(req.id))
-                    .map((req: any) => {
-                      const blockedDates = Array.isArray(req.blockedDates) ? req.blockedDates : []
-                      const dateStrings = blockedDates.map((bd: any) => {
-                        return typeof bd === 'string' ? bd : bd?.date || ''
-                      }).filter(Boolean)
-                      
-                      return (
-                        <div key={req.id} className="p-3 bg-red-50 rounded-lg border border-red-200 flex items-center justify-between">
-                          <p className="text-sm text-red-800">
-                            Your request for leave {dateStrings.length > 0 && (
-                              <span className="font-semibold">{dateStrings.join(', ')}</span>
-                            )} is rejected
-                          </p>
-                          <button
-                            onClick={() => {
-                              handleDeleteRejectedRequest(req.id)
-                            }}
-                            className="ml-3 px-2 py-1 text-xs font-medium text-red-700 hover:text-red-900 hover:bg-red-100 rounded transition-colors"
-                          >
-                            Close
-                          </button>
-                        </div>
-                      )
-                    })}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -803,18 +665,18 @@ export default function DoctorDashboard() {
             />
 
             {blockedDrafts.length > 0 && (
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-yellow-800">Pending Approval</p>
-                    <p className="text-xs text-yellow-700">{blockedDrafts.length} date(s) waiting</p>
+                    <p className="text-sm font-medium text-amber-800">Unsaved changes</p>
+                    <p className="text-xs text-amber-700">{blockedDrafts.length} date(s) to save</p>
                   </div>
                   <button
-                    onClick={handleSubmitBlockedDrafts}
+                    onClick={handleSaveSchedule}
                     disabled={savingSchedule}
-                    className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-xs font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Submit for Approval
+                    {savingSchedule ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
               </div>

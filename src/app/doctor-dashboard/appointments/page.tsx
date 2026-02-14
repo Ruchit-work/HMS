@@ -1060,34 +1060,6 @@ function DoctorAppointmentsContent() {
     }
 
     if (formData.recheckupRequired && appointmentSnapshot) {
-      try {
-        const currentUser = auth.currentUser
-        if (!currentUser) {
-          throw new Error("You must be logged in to send re-checkup messages")
-        }
-        const token = await currentUser.getIdToken()
-
-        const response = await fetch("/api/doctor/send-recheckup-whatsapp", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            appointmentId,
-            patientId: appointmentSnapshot.patientId,
-            patientPhone: appointmentSnapshot.patientPhone,
-            doctorName: appointmentSnapshot.doctorName || userData?.name || "Doctor",
-            appointmentDate: appointmentSnapshot.appointmentDate,
-            recheckupNote: formData.recheckupNote || "",
-          }),
-        })
-
-        if (!response.ok) {
-        }
-      } catch {
-      }
-
       // Auto-book recheckup appointment (after N days, skip Sunday)
       const recheckupDays = formData.recheckupDays ?? 7
       const start = new Date()
@@ -1136,7 +1108,7 @@ function DoctorAppointmentsContent() {
         message:
           result.message +
           (formData.recheckupRequired
-            ? " Re-checkup message sent to patient."
+            ? " Re-checkup appointment booked."
             : ""),
       })
     }

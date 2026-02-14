@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where, onSnapshot } from "firebase/firestore"
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 import { auth, db } from "@/firebase/config"
@@ -118,9 +118,6 @@ export default function AdminDashboard() {
   const [analyticsSubTab, setAnalyticsSubTab] = useState<"overview" | "patients" | "financial" | "doctors" | "receptionists">("overview")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [pendingRequests, setPendingRequests] = useState<any[]>([])
-  const [loadingRequests, setLoadingRequests] = useState(false)
-  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null)
   const [processingRefundId, setProcessingRefundId] = useState<string | null>(null)
   const [pendingRefunds, setPendingRefunds] = useState<any[]>([])
   const [newAppointmentsCount, setNewAppointmentsCount] = useState(0)
@@ -135,7 +132,7 @@ export default function AdminDashboard() {
   // Notification badge hooks - automatically clear when panels are viewed
   const overviewBadge = useNotificationBadge({ 
     badgeKey: 'admin-overview', 
-    rawCount: pendingRequests.length + pendingRefunds.length, 
+    rawCount: pendingRefunds.length, 
     activeTab 
   })
   const patientsBadge = useNotificationBadge({ 
@@ -286,29 +283,6 @@ export default function AdminDashboard() {
       })
 
       setRecentAppointments(recent)
-
-      // Load pending doctor schedule requests (initial load)
-      setLoadingRequests(true)
-      const reqQuery = query(
-        collection(db, 'doctor_schedule_requests'),
-        where('status', '==', 'pending'),
-        limit(20)
-      )
-      const reqSnap = await getDocs(reqQuery)
-      const reqsRaw = reqSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[]
-      // Enrich with doctor name for easier verification
-      const reqs = await Promise.all(reqsRaw.map(async (r) => {
-        try {
-          const dref = await getDoc(doc(db, 'doctors', String(r.doctorId)))
-          const ddata = dref.exists() ? dref.data() as any : null
-          return { ...r, doctorName: ddata ? `${ddata.firstName || ''} ${ddata.lastName || ''}`.trim() : r.doctorId }
-        } catch {
-          return { ...r, doctorName: r.doctorId }
-        }
-      }))
-      setPendingRequests(reqs)
-      setLoadingRequests(false)
-
 
     } catch {
 
@@ -462,41 +436,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Real-time listener for doctor schedule requests
-  useEffect(() => {
-    if (!user) return
-
-    const reqQuery = query(
-      collection(db, 'doctor_schedule_requests'),
-      where('status', '==', 'pending'),
-      limit(20)
-    )
-    
-    const unsubscribeRequests = onSnapshot(reqQuery, async (snapshot) => {
-      const reqsRaw = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[]
-      
-      // Enrich with doctor name for easier verification
-      const reqs = await Promise.all(reqsRaw.map(async (r) => {
-        try {
-          const dref = await getDoc(doc(db, 'doctors', String(r.doctorId)))
-          const ddata = dref.exists() ? dref.data() as any : null
-          return { ...r, doctorName: ddata ? `${ddata.firstName || ''} ${ddata.lastName || ''}`.trim() : r.doctorId }
-        } catch {
-          return { ...r, doctorName: r.doctorId }
-        }
-      }))
-      
-      setPendingRequests(reqs)
-    }, () => {
-
-    })
-
-    // Cleanup function
-    return () => {
-      unsubscribeRequests()
-    }
-  }, [user])
-
   // Real-time listener for refund requests
   useEffect(() => {
     if (!user) return
@@ -548,56 +487,6 @@ export default function AdminDashboard() {
       setActiveTab("overview")
     }
   }, [isSuperAdmin, activeTab])
-
-  const approveRequest = async (request: any) => {
-    setProcessingRequestId(request.id)
-    try {
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to approve requests")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch('/api/admin/approve-schedule-request', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ requestId: request.id })
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(()=>({}))
-        throw new Error(j?.error || 'Approval failed')
-      }
-      const data = await res.json()
-      setPendingRequests(prev => prev.filter(r => r.id !== request.id))
-      setNotification({ type: 'success', message: `Approved. Conflicts: ${data.conflicts}, awaiting: ${data.awaitingCount}, cancelled: ${data.cancelledCount}` })
-    } catch (e: any) {
-      setNotification({ type: 'error', message: e?.message || 'Failed to approve request' })
-    } finally {
-      setProcessingRequestId(null)
-    }
-  }
-
-  const rejectRequest = async (request: any) => {
-    setProcessingRequestId(request.id)
-    try {
-      await updateDoc(doc(db, 'doctor_schedule_requests', request.id), {
-        status: 'rejected',
-        rejectedAt: new Date().toISOString(),
-        rejectedBy: user?.uid || null,
-      })
-      setPendingRequests(prev => prev.filter(r => r.id !== request.id))
-      setNotification({ type: 'success', message: 'Request rejected.' })
-    } catch (e: any) {
-      setNotification({ type: 'error', message: e?.message || 'Failed to reject request' })
-    } finally {
-      setProcessingRequestId(null)
-    }
-  }
 
   const approveRefund = async (refund: any) => {
     setProcessingRefundId(refund.id)
@@ -995,8 +884,8 @@ export default function AdminDashboard() {
         <main className="p-6">
           {activeTab === "overview" && (
             <div className="space-y-6">
-              {/* Pending Requests Notification */}
-              {(pendingRequests.length > 0 || pendingRefunds.length > 0) && (
+              {/* Pending Refund Requests Notification */}
+              {pendingRefunds.length > 0 && (
                 <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-4">
                   <div className="flex items-start gap-3">
                     <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -1007,12 +896,7 @@ export default function AdminDashboard() {
                     <div className="flex-1">
                       <h4 className="font-semibold text-orange-900 mb-1">Pending Requests Require Attention</h4>
                       <div className="text-sm text-orange-800 space-y-1">
-                        {pendingRequests.length > 0 && (
-                          <p>• <span className="font-medium">{pendingRequests.length}</span> doctor leave request{pendingRequests.length !== 1 ? 's' : ''} awaiting approval</p>
-                        )}
-                        {pendingRefunds.length > 0 && (
-                          <p>• <span className="font-medium">{pendingRefunds.length}</span> refund request{pendingRefunds.length !== 1 ? 's' : ''} awaiting approval</p>
-                        )}
+                        <p>• <span className="font-medium">{pendingRefunds.length}</span> refund request{pendingRefunds.length !== 1 ? 's' : ''} awaiting approval</p>
                       </div>
                       <p className="text-xs text-orange-700 mt-2">Scroll down to review and approve/reject these requests.</p>
                     </div>
@@ -1409,98 +1293,6 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Doctor Schedule Requests (Approval) */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">Doctor Leave Requests</h3>
-                  <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">{pendingRequests.length} pending</span>
-                </div>
-                {loadingRequests ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="loading" style={{ width: "32px", height: "32px" }}>
-                      <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
-                        <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
-                        <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
-                      </svg>
-                    </div>
-                    <div className="text-sm text-gray-500">Loading requests…</div>
-                  </div>
-                ) : pendingRequests.length === 0 ? (
-                  <div className="text-sm text-gray-500">No pending requests</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[700px] text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Doctor</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Submitted at</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Date(s)</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Reason(s)</th>
-                          <th className="px-3 py-2" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {pendingRequests.map((req) => (
-                          <tr key={req.id} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-sm">
-                              <div className="font-semibold text-gray-900">{req.doctorName || 'Unknown'}</div>
-                              <div className="text-xs text-gray-500 font-mono">{req.doctorId}</div>
-                            </td>
-                            <td className="px-3 py-2 capitalize">{req.requestType}</td>
-                            <td className="px-3 py-2 text-xs text-gray-600">{new Date(req.createdAt).toLocaleString()}</td>
-                            <td className="px-3 py-2 align-top">
-                              {Array.isArray(req.blockedDates) && req.blockedDates.length > 0 ? (
-                                <div className="space-y-1">
-                                  {req.blockedDates.map((bd: any, idx: number) => (
-                                    <div key={idx} className="text-xs text-gray-800">
-                                      {(bd?.date || '').toString()}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 align-top">
-                              {Array.isArray(req.blockedDates) && req.blockedDates.length > 0 ? (
-                                <div className="space-y-1">
-                                  {req.blockedDates.map((bd: any, idx: number) => (
-                                    <div key={idx} className="text-xs text-gray-800">
-                                      {(bd?.reason || '').toString() || '—'}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => approveRequest(req)}
-                                  disabled={processingRequestId === req.id}
-                                  className="btn-modern btn-modern-success btn-modern-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => rejectRequest(req)}
-                                  disabled={processingRequestId === req.id}
-                                  className="px-3 py-1.5 bg-red-600 text-white rounded-md text-xs hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                  Reject
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
 
               {/* Refund Requests (Approval) */}
