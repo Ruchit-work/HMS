@@ -163,6 +163,40 @@ export async function POST(request: Request) {
     const paidAt = isRecheck ? "" : nowIso
     const slotOverbooking = isEmergency || isRecheck
 
+    // Derive branchId/branchName when missing (doctor-booked or recheck from doctor-booked)
+    let effectiveBranchId =
+      appointmentData.branchId !== undefined && appointmentData.branchId !== null && String(appointmentData.branchId || "").trim()
+        ? String(appointmentData.branchId).trim()
+        : null
+    let effectiveBranchName =
+      appointmentData.branchName !== undefined && appointmentData.branchName !== null && String(appointmentData.branchName || "").trim()
+        ? String(appointmentData.branchName).trim()
+        : null
+    if (!effectiveBranchId) {
+      const doctorBranchIds = Array.isArray(doctorData?.branchIds) ? doctorData.branchIds : []
+      if (doctorBranchIds.length > 0) {
+        effectiveBranchId = String(doctorBranchIds[0])
+        const branchDoc = await admin.firestore().collection("branches").doc(effectiveBranchId).get()
+        if (branchDoc.exists) {
+          effectiveBranchName = (branchDoc.data() as { name?: string })?.name || null
+        }
+      }
+      if (!effectiveBranchId) {
+        const branchesSnap = await admin
+          .firestore()
+          .collection("branches")
+          .where("hospitalId", "==", doctorHospitalId)
+          .where("status", "==", "active")
+          .limit(1)
+          .get()
+        if (!branchesSnap.empty) {
+          const firstBranch = branchesSnap.docs[0]
+          effectiveBranchId = firstBranch.id
+          effectiveBranchName = (firstBranch.data() as { name?: string })?.name || null
+        }
+      }
+    }
+
     const docData: Record<string, unknown> = {
       patientId: String(appointmentData.patientId),
       patientName: String(appointmentData.patientName),
@@ -197,8 +231,8 @@ export async function POST(request: Request) {
       updatedAt: nowIso,
       createdBy: "doctor",
       hospitalId: doctorHospitalId,
-      branchId: null,
-      branchName: null,
+      branchId: effectiveBranchId,
+      branchName: effectiveBranchName,
     }
 
     if (appointmentData.patientGender !== undefined) docData.patientGender = safeValue(appointmentData.patientGender, "")

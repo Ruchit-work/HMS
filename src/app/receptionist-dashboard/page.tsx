@@ -165,19 +165,19 @@ export default function ReceptionistDashboard() {
       setNewPatientsCount(snapshot.size)
     })
 
-    // Listen for pending billing (unpaid appointments)
+    // Listen for pending billing (unpaid appointments: completed + recheck/confirmed)
     let billingQuery
     if (receptionistBranchId) {
       billingQuery = query(
         getHospitalCollection(activeHospitalId, "appointments"),
-        where("status", "==", "completed"),
+        where("status", "in", ["completed", "confirmed"]),
         where("paymentStatus", "in", ["pending", "unpaid"]),
         where("branchId", "==", receptionistBranchId)
       )
     } else {
       billingQuery = query(
         getHospitalCollection(activeHospitalId, "appointments"),
-        where("status", "==", "completed"),
+        where("status", "in", ["completed", "confirmed"]),
         where("paymentStatus", "in", ["pending", "unpaid"])
       )
     }

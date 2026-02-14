@@ -841,6 +841,15 @@ export function generatePrescriptionPDF(appointment: Appointment) {
   createPrescriptionDocument(appointment, { forPreview: false })
 }
 
+/**
+ * Generate prescription PDF as Buffer for server-side use (e.g. WhatsApp document, API response)
+ */
+export function getPrescriptionPDFBuffer(appointment: Appointment): Buffer {
+  const doc = createPrescriptionDocument(appointment, { forPreview: true })
+  const output = doc.output("arraybuffer")
+  return Buffer.from(output as ArrayBuffer)
+}
+
 export function previewPrescriptionPDF(appointment: Appointment) {
   const doc = createPrescriptionDocument(appointment, { forPreview: true })
   const pdfBlob = doc.output('blob')

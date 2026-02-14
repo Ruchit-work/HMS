@@ -84,12 +84,13 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
           return data.whatsappPending === true || data.status === "whatsapp_pending"
         })
 
-        // Pending billing (appointments with remaining amount > 0 OR unpaid status)
+        // Pending billing (unpaid: completed + recheck/confirmed)
         const pendingBilling = allAppointments.filter(doc => {
           const data = doc as any
           const hasRemainingAmount = (data.remainingAmount || 0) > 0
-          const isUnpaid = data.paymentStatus !== "paid" && !data.paidAt && (data.paymentAmount || 0) <= 0
-          return (hasRemainingAmount || isUnpaid) && data.status === "confirmed"
+          const isUnpaid = (data.paymentStatus === "unpaid" || data.paymentStatus === "pending") && !data.paidAt
+          const isRelevantStatus = data.status === "confirmed" || data.status === "completed"
+          return (hasRemainingAmount || isUnpaid) && isRelevantStatus
         })
 
         // Completed appointments today
@@ -247,11 +248,14 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
     )
     const whatsappSnapshot = await getDocs(whatsappQuery)
 
-    // Pending billing (appointments with remaining amount > 0)
+    // Pending billing (unpaid: completed + recheck/confirmed)
     const allAppointments = await getDocs(appointmentsRef)
     const pendingBilling = allAppointments.docs.filter(doc => {
       const data = doc.data()
-      return (data.remainingAmount || 0) > 0 && data.status === "confirmed"
+      const hasRemaining = (data.remainingAmount || 0) > 0
+      const isUnpaid = (data.paymentStatus === "unpaid" || data.paymentStatus === "pending") && !data.paidAt
+      const isRelevantStatus = data.status === "confirmed" || data.status === "completed"
+      return (hasRemaining || isUnpaid) && isRelevantStatus
     })
 
     // Completed appointments today

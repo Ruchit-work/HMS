@@ -1,11 +1,13 @@
 /**
  * API endpoint to send checkup completion WhatsApp message to patient with Google Review link
- * Called automatically when doctor completes a checkup
+ * and prescription PDF (fees + medicine). Called automatically when doctor completes a checkup.
  */
 
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { sendDocumentMessage } from "@/server/metaWhatsApp"
+import { getPrescriptionPDFBuffer } from "@/utils/documents/pdfGenerators"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/utils/firebase/serverHospitalQueries"
 
@@ -36,59 +38,29 @@ export async function POST(request: Request) {
       appointmentHospitalId = await getAppointmentHospitalId(appointmentId)
     }
 
-    // Get patient data to find phone number and name
-    let phone = patientPhone
-    let name = patientName || "Patient"
-    
-    // First, try to get data from appointment document (it might have patientPhone and patientName)
-    if ((!phone || phone.trim() === "") || (!name || name.trim() === "" || name === "Patient")) {
-      try {
-        // Try hospital-scoped collection first
-        if (appointmentHospitalId) {
-          const hospitalAppointmentPath = getHospitalCollectionPath(appointmentHospitalId, "appointments")
-          const appointmentDoc = await db.collection(hospitalAppointmentPath).doc(appointmentId).get()
-          
-          if (appointmentDoc.exists) {
-            const appointmentData = appointmentDoc.data()
-            if ((!phone || phone.trim() === "") && appointmentData?.patientPhone) {
-              phone = appointmentData.patientPhone
-            }
-            if ((!name || name.trim() === "" || name === "Patient") && appointmentData?.patientName) {
-              name = appointmentData.patientName
-            }
-          } else {
-            // Fallback to global collection
-            const appointmentDocGlobal = await db.collection("appointments").doc(appointmentId).get()
-            if (appointmentDocGlobal.exists) {
-              const appointmentData = appointmentDocGlobal.data()
-              if ((!phone || phone.trim() === "") && appointmentData?.patientPhone) {
-                phone = appointmentData.patientPhone
-              }
-              if ((!name || name.trim() === "" || name === "Patient") && appointmentData?.patientName) {
-                name = appointmentData.patientName
-              }
-            }
-          }
-        } else {
-          // No hospitalId - try global collection as fallback
-          const appointmentDoc = await db.collection("appointments").doc(appointmentId).get()
-          
-          if (appointmentDoc.exists) {
-            const appointmentData = appointmentDoc.data()
-            if ((!phone || phone.trim() === "") && appointmentData?.patientPhone) {
-              phone = appointmentData.patientPhone
-            }
-            if ((!name || name.trim() === "" || name === "Patient") && appointmentData?.patientName) {
-              name = appointmentData.patientName
-            }
-          } else {
-          }
+    // Fetch full appointment (for PDF generation and phone/name)
+    let fullAppointment: Record<string, unknown> | null = null
+    try {
+      if (appointmentHospitalId) {
+        const hospitalAppointmentPath = getHospitalCollectionPath(appointmentHospitalId, "appointments")
+        const appointmentDoc = await db.collection(hospitalAppointmentPath).doc(appointmentId).get()
+        if (appointmentDoc.exists) {
+          fullAppointment = { id: appointmentId, ...appointmentDoc.data() } as Record<string, unknown>
         }
-      } catch {
       }
+      if (!fullAppointment) {
+        const legacyDoc = await db.collection("appointments").doc(appointmentId).get()
+        if (legacyDoc.exists) {
+          fullAppointment = { id: appointmentId, ...legacyDoc.data() } as Record<string, unknown>
+        }
+      }
+    } catch {
+      // continue without full appointment
     }
-    
-    // If still missing, try to get from patient document
+
+    // Get phone and name
+    let phone = patientPhone || (fullAppointment?.patientPhone as string) || ""
+    let name = (patientName || fullAppointment?.patientName || "Patient") as string
     if ((!phone || phone.trim() === "") || (!name || name.trim() === "" || name === "Patient")) {
       try {
         const patientDoc = await db.collection("patients").doc(patientId).get()
@@ -98,23 +70,52 @@ export async function POST(request: Request) {
             phone = patientData?.phone || patientData?.phoneNumber || patientData?.contact || ""
           }
           if (!name || name.trim() === "" || name === "Patient") {
-            name = `${patientData?.firstName || ""} ${patientData?.lastName || ""}`.trim() || 
-                   patientData?.name || 
-                   patientData?.fullName || 
-                   "Patient"
+            name = `${patientData?.firstName || ""} ${patientData?.lastName || ""}`.trim() ||
+              (patientData?.name as string) ||
+              (patientData?.fullName as string) ||
+              "Patient"
           }
-        } else {
         }
       } catch {
+        // ignore
       }
     }
 
     if (!phone || phone.trim() === "") {
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
         error: "Patient phone number not found",
         message: "Checkup completed but WhatsApp message not sent (no phone number)"
-      }, { status: 200 }) // Return 200 so completion doesn't fail
+      }, { status: 200 })
+    }
+
+    // Generate prescription PDF and store for WhatsApp document (fees + medicine)
+    let pdfStored = false
+    if (fullAppointment && fullAppointment.status === "completed") {
+      try {
+        const appointmentForPdf = {
+          ...fullAppointment,
+          id: appointmentId,
+          patientId: fullAppointment.patientId || patientId,
+          patientName: fullAppointment.patientName || name,
+          patientPhone: phone,
+        } as Parameters<typeof getPrescriptionPDFBuffer>[0]
+        const pdfBuffer = getPrescriptionPDFBuffer(appointmentForPdf)
+        const pdfBase64 = pdfBuffer.toString("base64")
+        const expiresAt = new Date()
+        expiresAt.setDate(expiresAt.getDate() + 7)
+        await db.collection("prescriptionPDFs").doc(appointmentId).set({
+          pdfBase64,
+          expiresAt: expiresAt.toISOString(),
+          patientName: name,
+          appointmentDate: fullAppointment.appointmentDate || "",
+          createdAt: new Date().toISOString(),
+        })
+        pdfStored = true
+      } catch (pdfErr) {
+        // Don't fail completion if PDF fails - log and continue
+        console.error("[send-completion-whatsapp] Prescription PDF generation failed:", pdfErr)
+      }
     }
 
     // Get Google Review link from environment variable
@@ -137,18 +138,43 @@ export async function POST(request: Request) {
     
     messageText += `Thank you for choosing Harmony Medical Services! 🏥`
 
-    // Send WhatsApp message
+    // Send WhatsApp thank you message
     const result = await sendWhatsAppNotification({
       to: phone,
       message: messageText,
     })
     if (!result.success) {
-      // Don't fail the completion if WhatsApp fails - just log it
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: false,
         error: result.error || "Failed to send WhatsApp message",
         message: "Checkup completed but WhatsApp message failed to send"
-      }, { status: 200 }) // Return 200 so completion doesn't fail
+      }, { status: 200 })
+    }
+
+    // Send prescription PDF as document (fees + medicine)
+    if (pdfStored) {
+      try {
+        const baseUrl =
+          process.env.NEXT_PUBLIC_BASE_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+          "https://hospitalmanagementsystem-hazel.vercel.app"
+        const pdfUrl = `${baseUrl}/api/appointments/${appointmentId}/prescription-pdf`
+        const dateStr = fullAppointment?.appointmentDate
+          ? new Date(String(fullAppointment.appointmentDate)).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0]
+        const filename = `Prescription_${String(name).replace(/\s+/g, "_")}_${dateStr}.pdf`
+        const docResult = await sendDocumentMessage(
+          phone,
+          pdfUrl,
+          filename,
+          "Your prescription and invoice from today's visit. Thank you for choosing us! 🏥"
+        )
+        if (!docResult.success) {
+          console.error("[send-completion-whatsapp] Prescription PDF send failed:", docResult.error)
+        }
+      } catch (docErr) {
+        console.error("[send-completion-whatsapp] Prescription PDF send error:", docErr)
+      }
     }
 
     // Store completion message in Firestore for tracking

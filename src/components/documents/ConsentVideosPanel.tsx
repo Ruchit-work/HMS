@@ -39,6 +39,7 @@ export default function ConsentVideosPanel({
   const [deleting, setDeleting] = useState(false)
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [playVideoUrl, setPlayVideoUrl] = useState<string | null>(null)
+  const [playVideoMimeType, setPlayVideoMimeType] = useState<string>("video/mp4")
   const [playVideoLoading, setPlayVideoLoading] = useState(false)
 
   useEffect(() => {
@@ -133,9 +134,11 @@ export default function ConsentVideosPanel({
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || "Failed to load video")
       }
+      const contentType = res.headers.get("Content-Type") || "video/mp4"
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       setPlayVideoUrl(url)
+      setPlayVideoMimeType(contentType.split(";")[0].trim() || "video/mp4")
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load video")
     } finally {
@@ -147,6 +150,7 @@ export default function ConsentVideosPanel({
     if (playVideoUrl) {
       URL.revokeObjectURL(playVideoUrl)
       setPlayVideoUrl(null)
+      setPlayVideoMimeType("video/mp4")
     }
   }
 
@@ -350,7 +354,9 @@ export default function ConsentVideosPanel({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <video src={playVideoUrl} controls autoPlay className="w-full" />
+            <video controls autoPlay className="w-full" playsInline>
+              <source src={playVideoUrl} type={playVideoMimeType} />
+            </video>
           </div>
         </div>
       )}

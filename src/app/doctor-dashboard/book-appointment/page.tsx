@@ -7,11 +7,13 @@ import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { useDoctorBranches } from "@/hooks/useDoctorBranches"
 import { getAvailableTimeSlots, getDayName, generateTimeSlots, isSlotInPast, normalizeTime, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import Notification from "@/components/ui/feedback/Notification"
 import VoiceInput from "@/components/ui/VoiceInput"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 
 type PatientMode = "existing" | "new"
 
@@ -27,10 +29,13 @@ const initialNewPatient: NewPatientForm = {
   phone: "",
 }
 
+const BRANCH_STORAGE_KEY_PREFIX = "doctor-book-appointment-branch"
+
 export default function DoctorBookAppointmentPage() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth("doctor")
   const { activeHospitalId } = useMultiHospital()
+  const { branches, loadingBranches } = useDoctorBranches(activeHospitalId)
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
   const [doctorProfile, setDoctorProfile] = useState<{
@@ -50,8 +55,54 @@ export default function DoctorBookAppointmentPage() {
   const [chiefComplaint, setChiefComplaint] = useState("")
   const [paymentAmount, setPaymentAmount] = useState(0)
   const [bookLoading, setBookLoading] = useState(false)
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("")
+  const [branchChangeModal, setBranchChangeModal] = useState<{ open: boolean; pendingBranchId: string }>({
+    open: false,
+    pendingBranchId: "",
+  })
 
   const IMMEDIATELY_VALUE = "__IMMEDIATELY__"
+
+  // Initialize from localStorage or first branch; persist survives tab close/reopen
+  useEffect(() => {
+    if (branches.length === 0 || !activeHospitalId) return
+    const storageKey = `${BRANCH_STORAGE_KEY_PREFIX}-${activeHospitalId}`
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null
+      const savedBranchId = saved?.trim() || ""
+      const isValidSaved = savedBranchId && branches.some((b) => b.id === savedBranchId)
+      const branchIdToUse = isValidSaved ? savedBranchId : branches[0].id
+      setSelectedBranchId(branchIdToUse)
+      if (!isValidSaved && typeof window !== "undefined") {
+        localStorage.setItem(storageKey, branchIdToUse)
+      }
+    } catch {
+      setSelectedBranchId(branches[0].id)
+    }
+  }, [branches, activeHospitalId])
+
+  const handleBranchChange = useCallback((newBranchId: string) => {
+    if (newBranchId === selectedBranchId) return
+    setBranchChangeModal({ open: true, pendingBranchId: newBranchId })
+  }, [selectedBranchId])
+
+  const confirmBranchChange = useCallback(() => {
+    const { pendingBranchId } = branchChangeModal
+    if (!pendingBranchId) return
+    setSelectedBranchId(pendingBranchId)
+    if (activeHospitalId && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`${BRANCH_STORAGE_KEY_PREFIX}-${activeHospitalId}`, pendingBranchId)
+      } catch {
+        // ignore
+      }
+    }
+    setBranchChangeModal({ open: false, pendingBranchId: "" })
+  }, [branchChangeModal, activeHospitalId])
+
+  const cancelBranchChange = useCallback(() => {
+    setBranchChangeModal({ open: false, pendingBranchId: "" })
+  }, [])
 
   useEffect(() => {
     if (!user?.uid || !activeHospitalId) return
@@ -213,6 +264,8 @@ export default function DoctorBookAppointmentPage() {
             paymentAmount: paymentAmount ?? doctorProfile?.consultationFee ?? 0,
             paymentMethod: "cash",
             paymentType: "full",
+            branchId: selectedBranchId || undefined,
+            branchName: selectedBranchId ? branches.find((b) => b.id === selectedBranchId)?.name : undefined,
           },
           isEmergency: !!isEmergency,
         }),
@@ -223,7 +276,7 @@ export default function DoctorBookAppointmentPage() {
       }
       return res.json()
     },
-    [appointmentDate, appointmentTime, chiefComplaint, doctorProfile?.consultationFee, paymentAmount]
+    [appointmentDate, appointmentTime, chiefComplaint, doctorProfile?.consultationFee, paymentAmount, selectedBranchId, branches]
   )
 
   const handleBook = async () => {
@@ -311,6 +364,7 @@ export default function DoctorBookAppointmentPage() {
   const IconClock = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
   const IconHeart = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
   const IconCurrency = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+  const IconBranch = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-white pt-20 pb-10 px-4 sm:px-6">
@@ -365,6 +419,30 @@ export default function DoctorBookAppointmentPage() {
             )}
 
             <div className="bg-white rounded-xl border border-slate-200/80 shadow-md shadow-slate-200/40 p-5 sm:p-6 space-y-5 transition-all duration-300">
+          {/* Branch selection - at top so doctor can choose which branch */}
+          {branches.length > 0 && (
+            <div className="relative">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
+              <div className="relative h-11">
+                <span className={iconWrapper}><IconBranch /></span>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => handleBranchChange(e.target.value)}
+                  disabled={loadingBranches}
+                  className={`${inputBase} cursor-pointer pr-10`}
+                  aria-label="Select branch"
+                >
+                  <option value="">Select branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Patient mode */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Patient</label>
@@ -601,6 +679,16 @@ export default function DoctorBookAppointmentPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={branchChangeModal.open}
+        title="Change branch?"
+        message="Are you sure you want to change the branch? New appointments will be booked for the selected branch."
+        confirmText="Yes, change"
+        cancelText="Cancel"
+        onConfirm={confirmBranchChange}
+        onCancel={cancelBranchChange}
+      />
     </div>
   )
 }

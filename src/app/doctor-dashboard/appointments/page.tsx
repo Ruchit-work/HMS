@@ -1116,6 +1116,8 @@ function DoctorAppointmentsContent() {
                 paymentAmount: 0,
                 paymentMethod: "cash",
                 paymentType: "full",
+                branchId: (appointmentSnapshot as any).branchId ?? null,
+                branchName: (appointmentSnapshot as any).branchName ?? null,
               },
               isRecheck: true,
             }),
