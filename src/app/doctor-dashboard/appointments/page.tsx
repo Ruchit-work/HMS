@@ -19,6 +19,7 @@ import dynamic from "next/dynamic"
 import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
 import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
 import type { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
+import { getAnatomyModelDetails } from "@/utils/anatomyModelMapping"
 
 // Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
 const InlineAnatomyViewer = dynamic(
@@ -69,7 +70,8 @@ function DoctorAppointmentsContent() {
   const [updating, setUpdating] = useState<{ [key: string]: boolean }>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{ [key: string]: boolean }>({})
   const [consultationMode, setConsultationMode] = useState<{ [key: string]: "normal" | "anatomy" | null }>({})
-  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "throat" | "dental")[] }>({})
+  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney")[] }>({})
+  const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" }>({})
   const [anatomyViewerData, setAnatomyViewerData] = useState<{ [key: string]: { [anatomyType: string]: AnatomyViewerData | null } }>({})
   const [showCombinedCompletionModal, setShowCombinedCompletionModal] = useState<{ [key: string]: boolean }>({})
   const appointmentCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -443,7 +445,7 @@ function DoctorAppointmentsContent() {
 
   const handleConsultationModeSelect = (
     mode: "normal" | "anatomy",
-    anatomyType?: "ear" | "throat" | "dental"
+    anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney"
   ) => {
     const appointmentId = showConsultationModeModal.appointmentId
     if (!appointmentId) return
@@ -456,6 +458,7 @@ function DoctorAppointmentsContent() {
     }))
 
     if (mode === "anatomy" && anatomyType) {
+      setActiveAnatomyTab((prev) => ({ ...prev, [appointmentId]: anatomyType }))
       setSelectedAnatomyTypes((prev) => {
         const current = prev[appointmentId] || []
         if (!current.includes(anatomyType)) {
@@ -563,7 +566,7 @@ function DoctorAppointmentsContent() {
             notesParts.push(`Prescriptions: ${anatomyData.prescriptions.join(", ")}`)
           }
           if (anatomyData.notes) {
-            notesParts.push(`Examination Notes: ${anatomyData.notes}`)
+            notesParts.push(`Doctor Notes: ${anatomyData.notes}`)
           }
           initialNotes = notesParts.join("\n")
 
@@ -1948,67 +1951,147 @@ function DoctorAppointmentsContent() {
                       </div>
 
                       {consultationMode[selectedAppointment.id] === "anatomy" ? (
-                        <div className="space-y-6 p-6">
-                          {selectedAnatomyTypes[selectedAppointment.id]?.map(
-                            (anatomyType, index) => (
-                              <div
-                                key={`${anatomyType}-${index}`}
-                                className="border-2 border-purple-200 rounded-xl p-4 bg-purple-50"
-                              >
-                                <div className="flex items-center justify-between mb-4">
-                                  <h3 className="text-lg font-bold text-purple-900 capitalize">
-                                    {anatomyType} Anatomy
-                                  </h3>
-                                  {selectedAnatomyTypes[selectedAppointment.id] &&
-                                    selectedAnatomyTypes[selectedAppointment.id]
-                                      .length > 1 && (
-                                      <button
-                                        onClick={() => {
-                                          setSelectedAnatomyTypes((prev) => {
-                                            const current =
-                                              prev[selectedAppointment.id] || []
-                                            return {
-                                              ...prev,
-                                              [selectedAppointment.id]:
-                                                current.filter(
-                                                  (_: any, i: number) =>
-                                                    i !== index
-                                                ),
-                                            }
-                                          })
-                                        }}
-                                        className="text-red-600 hover:text-red-800 text-sm"
+                        <div className="p-6">
+                          <div className="w-full bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                            <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 border-b border-slate-200 overflow-x-auto">
+                              {(selectedAnatomyTypes[selectedAppointment.id] || []).map((tab) => {
+                                const details = getAnatomyModelDetails(tab)
+                                const isActive =
+                                  (activeAnatomyTab[selectedAppointment.id] ?? (selectedAnatomyTypes[selectedAppointment.id]?.[0] ?? "ear")) === tab
+                                return (
+                                  <button
+                                    key={tab}
+                                    type="button"
+                                    onClick={() =>
+                                      setActiveAnatomyTab((prev) => ({
+                                        ...prev,
+                                        [selectedAppointment.id]: tab,
+                                      }))
+                                    }
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all shrink-0 ${
+                                      isActive
+                                        ? "bg-blue-600 text-white shadow-md"
+                                        : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                                    }`}
+                                  >
+                                    <span className="text-base">{details?.icon ?? "🔬"}</span>
+                                    <span>
+                                      {tab === "ear"
+                                        ? "Ear"
+                                        : tab === "nose"
+                                          ? "Nose"
+                                          : tab === "throat"
+                                            ? "Throat"
+                                            : tab === "dental"
+                                              ? "Dental"
+                                              : tab === "lungs"
+                                                ? "Lungs"
+                                                : "Kidney"}
+                                    </span>
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const newTabs = (
+                                          selectedAnatomyTypes[selectedAppointment.id] || []
+                                        ).filter((t) => t !== tab)
+                                        setSelectedAnatomyTypes((prev) => ({
+                                          ...prev,
+                                          [selectedAppointment.id]: newTabs,
+                                        }))
+                                        const current = activeAnatomyTab[selectedAppointment.id]
+                                        if (current === tab) {
+                                          setActiveAnatomyTab((prev) => ({
+                                            ...prev,
+                                            [selectedAppointment.id]:
+                                              newTabs[0] ?? "ear",
+                                          }))
+                                        }
+                                      }}
+                                      className={`ml-1 p-0.5 rounded-md cursor-pointer ${
+                                        isActive
+                                          ? "hover:bg-blue-500 text-white"
+                                          : "hover:bg-slate-200 text-slate-500"
+                                      }`}
+                                    >
+                                      <svg
+                                        className="w-4 h-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth={2}
+                                        viewBox="0 0 24 24"
                                       >
-                                        Remove
-                                      </button>
-                                    )}
-                                </div>
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          d="M6 18L18 6M6 6l18 18"
+                                        />
+                                      </svg>
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAddAnotherAnatomy(selectedAppointment.id)
+                                }
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm bg-white border-2 border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M12 4v16m8-8H4"
+                                  />
+                                </svg>
+                                Add Anatomy
+                              </button>
+                            </div>
+                            <div className="p-4" style={{ minHeight: "680px" }}>
+                              {(selectedAnatomyTypes[selectedAppointment.id] || []).length >
+                              0 ? (
                                 <InlineAnatomyViewer
+                                  key={
+                                    activeAnatomyTab[selectedAppointment.id] ??
+                                    selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
+                                    "ear"
+                                  }
                                   appointmentId={selectedAppointment.id}
                                   patientName={
                                     selectedAppointment.patientName || "Patient"
                                   }
-                                  anatomyType={anatomyType}
+                                  anatomyType={
+                                    activeAnatomyTab[selectedAppointment.id] ??
+                                    selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
+                                    "ear"
+                                  }
+                                  initialData={
+                                    anatomyViewerData[selectedAppointment.id]?.[
+                                      activeAnatomyTab[selectedAppointment.id] ??
+                                        selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
+                                        "ear"
+                                    ] ?? undefined
+                                  }
                                   onDataChange={(data) => {
-                                    setAnatomyViewerData((prev) => {
-                                      const currentData =
-                                        prev[selectedAppointment.id]?.[
-                                          anatomyType
-                                        ]
-                                      if (
-                                        JSON.stringify(currentData) ===
-                                        JSON.stringify(data)
-                                      ) {
-                                        return prev
-                                      }
-                                      return {
-                                        ...prev,
-                                        [selectedAppointment.id]: {
-                                          ...(prev[selectedAppointment.id] || {}),
-                                          [anatomyType]: data,
-                                        },
-                                      }
-                                    })
+                                    const t =
+                                      activeAnatomyTab[selectedAppointment.id] ??
+                                      selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
+                                      "ear"
+                                    setAnatomyViewerData((prev) => ({
+                                      ...prev,
+                                      [selectedAppointment.id]: {
+                                        ...(prev[selectedAppointment.id] || {}),
+                                        [t]: data,
+                                      },
+                                    }))
                                   }}
                                   onComplete={() => {
                                     setShowCombinedCompletionModal((prev) => ({
@@ -2017,18 +2100,19 @@ function DoctorAppointmentsContent() {
                                     }))
                                   }}
                                 />
-                              </div>
-                            )
-                          )}
-
-                          <button
-                            onClick={() =>
-                              handleAddAnotherAnatomy(selectedAppointment.id)
-                            }
-                            className="w-full p-4 border-2 border-dashed border-purple-300 rounded-xl hover:border-purple-400 hover:bg-purple-50 transition-all text-center text-purple-700 font-medium"
-                          >
-                            + Add another anatomy
-                          </button>
+                              ) : (
+                                <div
+                                  className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50"
+                                  style={{ height: "600px" }}
+                                >
+                                  <p className="text-slate-500 font-medium">
+                                    No anatomy selected. Click &quot;Add
+                                    Anatomy&quot; to begin.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
 
                           <CombinedCompletionModal
                             appointment={selectedAppointment}
@@ -2178,6 +2262,12 @@ function DoctorAppointmentsContent() {
                             handleCompleteAppointment(e, selectedAppointment.id)
                           }
                           onAdmitClick={() => openAdmitDialog(selectedAppointment)}
+                          onAddAnatomy={() =>
+                            setShowConsultationModeModal({
+                              open: true,
+                              appointmentId: selectedAppointment.id,
+                            })
+                          }
                         />
                       )}
                         </div>

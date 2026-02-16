@@ -555,7 +555,7 @@ function ENTAnatomyPageContent() {
       }
       
       if (finalNotes && finalNotes.trim()) {
-        notesParts.push(`Examination Notes: ${finalNotes}`)
+        notesParts.push(`Doctor Notes: ${finalNotes}`)
       }
       
       const comprehensiveNotes = notesParts.join('\n\n')
@@ -707,7 +707,7 @@ function ENTAnatomyPageContent() {
       }
       
       if (notes2D && notes2D.trim()) {
-        notesParts.push(`Examination Notes: ${notes2D}`)
+        notesParts.push(`Doctor Notes: ${notes2D}`)
       }
       
       const comprehensiveNotes = notesParts.join('\n\n')
@@ -1198,7 +1198,7 @@ function ENTAnatomyPageContent() {
               {/* Notes Section */}
               <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl p-3">
                 <label className="block font-semibold text-slate-800 mb-1.5 text-sm">
-                  Examination Notes
+                  Doctor Notes
                 </label>
                 <textarea
                   value={activeView === '3d' ? notes : notes2D}
@@ -1709,7 +1709,7 @@ function ENTAnatomyPageContent() {
               {/* Notes Section */}
               <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl p-3">
                 <label className="block font-semibold text-slate-800 mb-1.5 text-sm">
-                  Examination Notes
+                  Doctor Notes
                 </label>
                 <textarea
                   value={activeView === '3d' ? notes : notes2D}

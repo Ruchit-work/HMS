@@ -3,7 +3,7 @@
  * Maps doctor specializations to relevant anatomy models
  */
 
-export type AnatomyType = 'ear' | 'throat' | 'dental'
+export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney'
 
 export interface AnatomyModel {
   type: AnatomyType
@@ -20,6 +20,12 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
     description: 'Ear anatomy and related conditions'
   },
   {
+    type: 'nose',
+    label: 'Nose',
+    icon: '👃',
+    description: 'Nose anatomy and related conditions'
+  },
+  {
     type: 'throat',
     label: 'Throat',
     icon: '👄',
@@ -30,6 +36,18 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
     label: 'Dental & Oral',
     icon: '🦷',
     description: 'Dental and oral anatomy'
+  },
+  {
+    type: 'lungs',
+    label: 'Lungs & Heart',
+    icon: '🫁',
+    description: 'Lungs and heart anatomy'
+  },
+  {
+    type: 'kidney',
+    label: 'Kidney',
+    icon: '🫘',
+    description: 'Kidney anatomy and urinary system'
   }
 ]
 
@@ -41,7 +59,7 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
 export function getAnatomyModelsForSpecialization(specialization: string | null | undefined): AnatomyType[] {
   if (!specialization) {
     // If no specialization, show all models (for flexibility)
-    return ['ear', 'throat', 'dental']
+    return ['ear', 'nose', 'throat', 'dental', 'lungs', 'kidney']
   }
 
   const lowerSpecialization = specialization.toLowerCase()
@@ -56,7 +74,7 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     return ['dental']
   }
 
-  // ENT specializations → ear and throat
+  // ENT specializations → ear, nose, and throat
   if (
     lowerSpecialization.includes('ent') ||
     lowerSpecialization.includes('otorhinolaryngologist') ||
@@ -64,22 +82,46 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     lowerSpecialization.includes('nose') ||
     lowerSpecialization.includes('throat')
   ) {
-    return ['ear', 'throat']
+    return ['ear', 'nose', 'throat']
   }
 
-  // Family Medicine / General Physician → ENT related (ear, throat) as they commonly see these
+  // Nephrologist / Urology → kidney
+  if (
+    lowerSpecialization.includes('nephrologist') ||
+    lowerSpecialization.includes('nephrology') ||
+    lowerSpecialization.includes('urologist') ||
+    lowerSpecialization.includes('urology')
+  ) {
+    return ['kidney']
+  }
+
+  // Pulmonologist / Respiratory → lungs
+  if (
+    lowerSpecialization.includes('pulmonologist') ||
+    lowerSpecialization.includes('pulmonology') ||
+    lowerSpecialization.includes('respiratory')
+  ) {
+    return ['lungs']
+  }
+
+  // Cardiologist → lungs (heart)
+  if (lowerSpecialization.includes('cardiologist') || lowerSpecialization.includes('cardiology')) {
+    return ['lungs']
+  }
+
+  // Family Medicine / General Physician → ENT, lungs, kidney
   if (
     lowerSpecialization.includes('family medicine') ||
     lowerSpecialization.includes('family physician') ||
     lowerSpecialization.includes('general physician') ||
     lowerSpecialization.includes('primary care')
   ) {
-    return ['ear', 'throat']
+    return ['ear', 'nose', 'throat', 'lungs', 'kidney']
   }
 
-  // Pediatrician → ear, throat (common in children)
+  // Pediatrician → ear, nose, throat, lungs (common in children)
   if (lowerSpecialization.includes('pediatrician') || lowerSpecialization.includes('pediatric')) {
-    return ['ear', 'throat']
+    return ['ear', 'nose', 'throat', 'lungs', 'kidney']
   }
 
   // Ophthalmologist → none (eye is different system, no models yet)

@@ -4,11 +4,17 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import ENTAnatomyViewer from '@/components/doctor/anatomy/ENTAnatomyViewer'
 import InteractiveEarSVG from '@/components/doctor/anatomy/svg/InteractiveEarSVG'
+import InteractiveNoseSVG from '@/components/doctor/anatomy/svg/InteractiveNoseSVG'
 import InteractiveThroatSVG from '@/components/doctor/anatomy/svg/InteractiveThroatSVG'
+import InteractiveLungsSVG from '@/components/doctor/anatomy/svg/InteractiveLungsSVG'
 import InteractiveMouthSVG from '@/components/doctor/anatomy/svg/InteractiveMouthSVG'
+// import InteractiveKidneySVG from '@/components/doctor/anatomy/svg/InteractiveKidneySVG' // Commented out: module not found
 import { earPartsData, type Disease } from '@/constants/earDiseases'
+import { nosePartsData } from '@/constants/noseDiseases'
 import { throatPartsData } from '@/constants/throatDiseases'
 import { dentalPartsData } from '@/constants/dentalDiseases'
+import { lungsPartsData } from '@/constants/lungsDiseases'
+import { kidneyPartsData } from '@/constants/kidneyDiseases'
 import { completeAppointment } from '@/utils/appointmentHelpers'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useAuth } from '@/hooks/useAuth'
@@ -16,9 +22,9 @@ import { auth } from '@/firebase/config'
 import { ENT_DIAGNOSES, CUSTOM_DIAGNOSIS_OPTION } from '@/constants/entDiagnoses'
 import { doc, getDoc } from 'firebase/firestore'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
-import DiagnosisSelector from '@/components/doctor/DiagnosisSelector'
 import VoiceInput from '@/components/ui/VoiceInput'
 import { fetchMedicineSuggestions, MedicineSuggestion, sanitizeMedicineName, recordMedicineSuggestions } from '@/utils/medicineSuggestions'
+import InteractiveKidneySVG from './svg/InteractiveKidneySVG'
 
 const DynamicENTAnatomyViewer = dynamic(
   () => Promise.resolve(ENTAnatomyViewer),
@@ -33,7 +39,7 @@ const DynamicENTAnatomyViewer = dynamic(
 )
 
 export interface AnatomyViewerData {
-  anatomyType: 'ear' | 'throat' | 'dental'
+  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney'
   selectedPart?: string
   selectedPartInfo?: any
   selectedDisease?: Disease | null
@@ -46,12 +52,13 @@ export interface AnatomyViewerData {
 interface InlineAnatomyViewerProps {
   appointmentId: string
   patientName: string
-  anatomyType?: 'ear' | 'throat' | 'dental'
+  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney'
+  initialData?: AnatomyViewerData | null
   onComplete?: () => void
   onDataChange?: (data: AnatomyViewerData | null) => void
 }
 
-export default function InlineAnatomyViewer({ appointmentId, patientName, anatomyType = 'ear', onComplete, onDataChange }: InlineAnatomyViewerProps) {
+export default function InlineAnatomyViewer({ appointmentId, patientName, anatomyType = 'ear', initialData, onComplete, onDataChange }: InlineAnatomyViewerProps) {
   const { activeHospitalId } = useMultiHospital()
   const { user } = useAuth("doctor")
   const [completing, setCompleting] = useState(false)
@@ -88,6 +95,25 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
     duration: string
   }>>([])
 
+  // Hydrate state from initialData when provided (for tab switching)
+  useEffect(() => {
+    if (!initialData || initialData.anatomyType !== anatomyType) return
+    const meds = initialData.medicines || []
+    const medsFiltered = meds.filter((m) => m?.name?.trim())
+    setSelectedPart(initialData.selectedPart ?? null)
+    setSelectedPartInfo(initialData.selectedPartInfo ?? null)
+    setSelectedDisease(initialData.selectedDisease ?? null)
+    setNotes(initialData.notes ?? '')
+    setSelectedMedicines(medsFiltered)
+    setSelectedPart2D(initialData.selectedPart ?? null)
+    setSelectedPartInfo2D(initialData.selectedPartInfo ?? null)
+    setSelectedDisease2D(initialData.selectedDisease ?? null)
+    setNotes2D(initialData.notes ?? '')
+    setSelectedMedicines2D(medsFiltered)
+    setFinalDiagnosis(initialData.diagnoses ?? [])
+    setCustomDiagnosis(initialData.customDiagnosis ?? '')
+  }, [initialData, anatomyType])
+
   // Get parts data based on anatomy type
   const getPartsData = () => {
     switch (anatomyType) {
@@ -95,6 +121,12 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return throatPartsData
       case 'dental':
         return dentalPartsData
+      case 'nose':
+        return nosePartsData
+      case 'lungs':
+        return lungsPartsData
+      case 'kidney':
+        return kidneyPartsData
       case 'ear':
       default:
         return earPartsData
@@ -108,6 +140,12 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return '/models/thorat/anatomy_of_the_larynx.glb'
       case 'dental':
         return '/models/mouth/mandible.glb'
+      case 'nose':
+        return '/models/nose/anatomi_hidung_nose_anatomy.glb'
+      case 'lungs':
+        return '/models/lungs/healthy_heart_and_lungs.glb'
+      case 'kidney':
+        return '/models/kidney/kidney.glb'
       case 'ear':
       default:
         return '/models/ear/ear-anatomy.glb'
@@ -135,6 +173,24 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       'Oral_Mucosa': 'Oral_Mucosa', 'Mucosa': 'Oral_Mucosa', 'Lips': 'Oral_Mucosa',
       'Salivary_Glands': 'Salivary_Glands', 'Salivary_Gland': 'Salivary_Glands',
       'Wisdom_Teeth': 'Wisdom_Teeth', 'Third_Molars': 'Wisdom_Teeth',
+    },
+    nose: {
+      'Nostrils': 'Nostrils', 'Nasal_Vestibule': 'Nostrils',
+      'Nasal_Cavity': 'Nasal_Cavity',
+      'Nasal_Septum': 'Nasal_Septum', 'Septum': 'Nasal_Septum',
+      'Turbinates': 'Turbinates', 'Nasal_Conchae': 'Turbinates',
+      'Sinuses': 'Sinuses', 'Paranasal_Sinuses': 'Sinuses',
+    },
+    lungs: {
+      'Trachea': 'Trachea', 'Windpipe': 'Trachea',
+      'Bronchi': 'Bronchi', 'Bronchus': 'Bronchi',
+      'Lungs': 'Lungs', 'Lung': 'Lungs',
+      'Heart': 'Heart',
+    },
+    kidney: {
+      'Kidney': 'Kidney', 'Left_Kidney': 'Kidney', 'Right_Kidney': 'Kidney',
+      'Renal_Pelvis': 'Renal_Pelvis', 'Ureter': 'Ureter',
+      'Cortex': 'Cortex', 'Medulla': 'Medulla',
     },
     ear: {}
   }
@@ -176,6 +232,15 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         ear: {
           1: 'Outer_Ear', 2: 'Ear_Canal', 3: 'Eardrum', 4: 'Ossicles',
           5: 'Cochlea', 6: 'Semicircular_Canals', 7: 'Auditory_Nerve',
+        },
+        nose: {
+          1: 'Nostrils', 2: 'Nasal_Cavity', 3: 'Nasal_Septum', 4: 'Turbinates', 5: 'Sinuses',
+        },
+        lungs: {
+          1: 'Trachea', 2: 'Bronchi', 3: 'Lungs', 4: 'Heart',
+        },
+        kidney: {
+          1: 'Kidney', 2: 'Renal_Pelvis', 3: 'Ureter', 4: 'Cortex', 5: 'Medulla',
         },
         throat: {
           1: 'Pharynx', 2: 'Larynx', 3: 'Epiglottis', 4: 'Trachea', 5: 'Vocal_Cords',
@@ -222,6 +287,40 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return 'Salivary_Glands'
       } else if (lowerName.includes('wisdom') || lowerName.includes('third molar')) {
         return 'Wisdom_Teeth'
+      }
+    } else if (anatomyType === 'nose') {
+      if (lowerName.includes('nostril') || lowerName.includes('vestibule')) {
+        return 'Nostrils'
+      } else if (lowerName.includes('nasal cavity') || lowerName.includes('nasal_cavity')) {
+        return 'Nasal_Cavity'
+      } else if (lowerName.includes('septum')) {
+        return 'Nasal_Septum'
+      } else if (lowerName.includes('turbinate') || lowerName.includes('conchae')) {
+        return 'Turbinates'
+      } else if (lowerName.includes('sinus')) {
+        return 'Sinuses'
+      }
+    } else if (anatomyType === 'lungs') {
+      if (lowerName.includes('trachea') || lowerName.includes('windpipe')) {
+        return 'Trachea'
+      } else if (lowerName.includes('bronch')) {
+        return 'Bronchi'
+      } else if (lowerName.includes('lung')) {
+        return 'Lungs'
+      } else if (lowerName.includes('heart')) {
+        return 'Heart'
+      }
+    } else if (anatomyType === 'kidney') {
+      if (lowerName.includes('kidney') || lowerName.includes('renal') && !lowerName.includes('pelvis') && !lowerName.includes('cortex') && !lowerName.includes('medulla')) {
+        return 'Kidney'
+      } else if (lowerName.includes('pelvis')) {
+        return 'Renal_Pelvis'
+      } else if (lowerName.includes('ureter')) {
+        return 'Ureter'
+      } else if (lowerName.includes('cortex')) {
+        return 'Cortex'
+      } else if (lowerName.includes('medulla')) {
+        return 'Medulla'
       }
     }
     
@@ -632,7 +731,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       }
       
       if (finalNotes && finalNotes.trim()) {
-        notesParts.push(`Examination Notes: ${finalNotes}`)
+        notesParts.push(`Doctor Notes: ${finalNotes}`)
       }
       
       const comprehensiveNotes = notesParts.join('\n\n')
@@ -782,7 +881,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       }
       
       if (notes2D && notes2D.trim()) {
-        notesParts.push(`Examination Notes: ${notes2D}`)
+        notesParts.push(`Doctor Notes: ${notes2D}`)
       }
       
       const comprehensiveNotes = notesParts.join('\n\n')
@@ -929,7 +1028,22 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
               </div>
             ) : (
               <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200" style={{ height: '600px', minHeight: '600px' }}>
-                {anatomyType === 'throat' ? (
+                {anatomyType === 'nose' ? (
+                  <InteractiveNoseSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'lungs' ? (
+                  <InteractiveLungsSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'kidney' ? (
+                  <InteractiveKidneySVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'throat' ? (
                   <InteractiveThroatSVG
                     onPartSelect={handlePartSelect2D}
                     selectedPart={selectedPart2D}
@@ -992,7 +1106,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 <svg className="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                 </svg>
-                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : 'ear'} model</p>
+                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : 'ear'} model</p>
                 <p className="text-xs text-slate-500 mt-1">to see its name and description here</p>
               </div>
             )}
@@ -1304,7 +1418,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
             {/* Notes Section */}
             <div className="bg-white border border-slate-200 rounded-xl p-3">
               <label className="block font-semibold text-slate-800 mb-1.5 text-sm">
-                Examination Notes
+                Doctor Notes
               </label>
               <div className="relative flex items-center">
                 <textarea
@@ -1329,20 +1443,6 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Diagnosis Selector */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <label className="block font-semibold text-blue-900 mb-2">
-                Final Diagnosis <span className="text-red-500">*</span>
-              </label>
-              <DiagnosisSelector
-                selectedDiagnoses={finalDiagnosis}
-                customDiagnosis={customDiagnosis}
-                onDiagnosesChange={setFinalDiagnosis}
-                onCustomDiagnosisChange={setCustomDiagnosis}
-                readOnly={false}
-              />
             </div>
 
             {/* Complete Checkup Button */}
@@ -1438,7 +1538,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
             {/* Notes */}
             {((activeView === '3d' ? notes : notes2D)) && (
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <h4 className="font-semibold text-slate-900 mb-2">Examination Notes</h4>
+                <h4 className="font-semibold text-slate-900 mb-2">Doctor Notes</h4>
                 <p className="text-slate-700 whitespace-pre-wrap">{(activeView === '3d' ? notes : notes2D)}</p>
               </div>
             )}

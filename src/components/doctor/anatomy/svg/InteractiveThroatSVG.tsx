@@ -260,7 +260,8 @@ export default function InteractiveThroatSVG({ onPartSelect, selectedPart }: Int
   }, [svgContent, selectedPart, hoveredPart, onPartSelect])
 
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === containerRef.current || (e.target as Element).tagName === 'svg') {
+    const target = e.target as Element
+    if (target === containerRef.current || target.tagName === 'svg' || target === e.currentTarget) {
       onPartSelect(null)
     }
   }
@@ -274,13 +275,17 @@ export default function InteractiveThroatSVG({ onPartSelect, selectedPart }: Int
   }
 
   return (
-    <div 
-      ref={containerRef}
-      className="w-full h-full bg-white rounded-lg overflow-auto"
+    <div
+      className="w-full h-full flex items-center justify-center overflow-hidden bg-white rounded-lg p-4"
       onClick={handleContainerClick}
       style={{ minHeight: '600px' }}
-      dangerouslySetInnerHTML={{ __html: svgContent }}
-    />
+    >
+      <div
+        ref={containerRef}
+        className="w-full h-full flex items-center justify-center min-w-0 min-h-0 [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:object-contain"
+        dangerouslySetInnerHTML={{ __html: svgContent }}
+      />
+    </div>
   )
 }
 
