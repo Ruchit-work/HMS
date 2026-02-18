@@ -302,7 +302,7 @@ export default function ReceptionistDashboard() {
               </svg>
             </div>
             <div>
-              <h1 className="text-white text-lg font-bold">HMS Receptionist</h1>
+              <h1 className="text-white text-lg font-bold">HMS Reception</h1>
               <p className="text-white/80 text-xs font-medium">Front Desk Portal</p>
             </div>
           </div>
@@ -662,8 +662,8 @@ export default function ReceptionistDashboard() {
               <AdmitRequestsPanel
                 onNotification={(payload) => setNotification(payload)}
               />
-                  </div>
-                )}
+            </div>
+          )}
           {activeTab === "billing" && (
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
               <BillingHistoryPanel onNotification={(payload) => setNotification(payload)} />
@@ -717,7 +717,6 @@ export default function ReceptionistDashboard() {
         onCancel={() => setLogoutConfirmOpen(false)}
         confirmLoading={logoutLoading}
       />
-      
-              </div>
-    )
+    </div>
+  )
 }
