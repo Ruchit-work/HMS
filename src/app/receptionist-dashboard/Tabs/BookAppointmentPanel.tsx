@@ -10,9 +10,7 @@ import PaymentMethodSection, {
   PaymentData as BookingPaymentData,
   PaymentMethodOption as BookingPaymentMethod,
 } from "@/components/payments/PaymentMethodSection"
-import PasswordRequirements, { isPasswordValid } from "@/components/forms/PasswordComponents"
 import { AppointmentSuccessModal } from "@/components/patient/appointments/AppointmentModals"
-import OTPVerificationModal from "@/components/forms/OTPVerificationModal"
 import { bloodGroups } from "@/constants/signup"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/symptoms/SymptomSelector"
 import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, normalizeTime } from "@/utils/timeSlots"
@@ -72,8 +70,9 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   const [patientInfoError, setPatientInfoError] = useState<string | null>(null)
 
   const [newPatient, setNewPatient] = useState<NewPatientForm>(initialNewPatient)
-  const [newPatientPassword, setNewPatientPassword] = useState("")
-  const [newPatientPasswordConfirm, setNewPatientPasswordConfirm] = useState("")
+  const RECEPTIONIST_DEFAULT_PASSWORD = "123456"
+  const [newPatientPassword, setNewPatientPassword] = useState(RECEPTIONIST_DEFAULT_PASSWORD)
+  const [newPatientPasswordConfirm, setNewPatientPasswordConfirm] = useState(RECEPTIONIST_DEFAULT_PASSWORD)
 
   const [selectedDoctorId, setSelectedDoctorId] = useState("")
   const [selectedDoctorFee, setSelectedDoctorFee] = useState<number | null>(null)
@@ -99,7 +98,6 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   }
   const [additionalFees, setAdditionalFees] = useState<AdditionalFee[]>([])
 
-  const [otpModalOpen, setOtpModalOpen] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [successData, setSuccessData] = useState<any>(null)
   const [pendingDoctorId, setPendingDoctorId] = useState<string | null>(null)
@@ -448,8 +446,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   useEffect(() => {
     if (patientMode === "new") {
       setNewPatient(initialNewPatient)
-      setNewPatientPassword("")
-      setNewPatientPasswordConfirm("")
+      setNewPatientPassword(RECEPTIONIST_DEFAULT_PASSWORD)
+      setNewPatientPasswordConfirm(RECEPTIONIST_DEFAULT_PASSWORD)
     } else {
       setSearchPatient("")
       setSelectedPatientId("")
@@ -640,8 +638,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     setSelectedPatientId("")
     setSelectedPatientInfo(null)
     setNewPatient(initialNewPatient)
-    setNewPatientPassword("")
-    setNewPatientPasswordConfirm("")
+    setNewPatientPassword(RECEPTIONIST_DEFAULT_PASSWORD)
+    setNewPatientPasswordConfirm(RECEPTIONIST_DEFAULT_PASSWORD)
     setSelectedDoctorId("")
     setSelectedDoctorFee(null)
     setAppointmentDate("")
@@ -836,17 +834,13 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         if (!newPatient.firstName || !newPatient.lastName || !newPatient.email) {
           throw new Error("Fill first name, last name, email")
         }
-        if (!isPasswordValid(newPatientPassword)) {
-          throw new Error("Password does not meet requirements")
+        if (newPatientPassword.length < 6) {
+          throw new Error("Password must be at least 6 characters")
         }
         if (newPatientPassword !== newPatientPasswordConfirm) {
           throw new Error("Passwords do not match")
         }
-        if ((newPatient.phone || "").trim()) {
-          // Slot already checked above, safe to proceed to OTP
-          setOtpModalOpen(true)
-          return
-        }
+        // Create patient directly without OTP verification (receptionist flow)
         const result = await createPatientForBooking()
         patientId = result.id
         patientPayload = { ...newPatient, patientId: result.patientId }
@@ -884,58 +878,9 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     }
   }
 
-  const handleOtpVerified = async () => {
-    try {
-      setBookLoading(true)
-      setBookError(null)
-
-      // Check slot availability FIRST (before patient creation - prevents wasting time/money)
-      const slotCheckResponse = await fetch(
-        `/api/appointments/check-slot?doctorId=${selectedDoctorId}&date=${appointmentDate}&time=${appointmentTime}`
-      )
-      if (!slotCheckResponse.ok) {
-        const slotData = await slotCheckResponse.json().catch(() => ({}))
-        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
-      }
-      const slotData = await slotCheckResponse.json().catch(() => ({}))
-      if (!slotData?.available) {
-        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
-      }
-
-      const result = await createPatientForBooking()
-      const patientId = result.id
-      const patientPayload: any = { ...newPatient, patientId: result.patientId }
-
-      await preventDuplicateAppointment(patientId)
-      const appointmentData = await createAppointment(patientId, patientPayload)
-
-      const txnId = `RCPT${Date.now()}`
-      setSuccessData({
-        doctorName: appointmentData.doctorName,
-        doctorSpecialization: appointmentData.doctorSpecialization,
-        appointmentDate,
-        appointmentTime,
-        transactionId: txnId,
-        paymentAmount: appointmentData.paymentAmount,
-        paymentType: "full",
-        patientName: appointmentData.patientName,
-      })
-      setSuccessOpen(true)
-      setOtpModalOpen(false)
-      resetBookingForm()
-      notify({ type: "success", message: "Appointment booked successfully." })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to book appointment"
-      setBookError(message)
-      notify({ type: "error", message })
-    } finally {
-      setBookLoading(false)
-    }
-  }
-
   return (
-    <div className="space-y-8">
-      <section className="relative overflow-visible rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-6 py-8 shadow-sm">
+    <div className="space-y-8 min-w-0 overflow-x-hidden">
+      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-6 py-8 shadow-sm">
         <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-emerald-100 opacity-30" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-sky-200 opacity-20" />
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -1007,8 +952,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         </div>
       )}
 
-      <section className="grid gap-8 xl:grid-cols-[1.35fr_1fr]">
-        <div className="space-y-6">
+      <section className="grid gap-8 xl:grid-cols-[1.35fr_1fr] min-w-0">
+        <div className="space-y-6 min-w-0">
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -1201,7 +1146,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                         value={newPatientPassword}
                         onChange={(e) => setNewPatientPassword(e.target.value)}
                       />
-                      <PasswordRequirements password={newPatientPassword} />
+                      <p className="text-xs text-slate-500">Default: 123456 (min 6 characters). Patient can change later from dashboard.</p>
                     </div>
                     <input
                       placeholder="Confirm password"
@@ -1292,8 +1237,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
 
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur overflow-visible">
+        <div className="space-y-6 min-w-0">
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur overflow-hidden">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Visit Setup</h3>
@@ -1811,16 +1756,6 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
             </div>
           </div>
         </div>
-      )}
-
-      {otpModalOpen && (
-        <OTPVerificationModal
-          isOpen={otpModalOpen}
-          onClose={() => setOtpModalOpen(false)}
-          phone={newPatient.phone || ""}
-          onChangePhone={() => setOtpModalOpen(false)}
-          onVerified={handleOtpVerified}
-        />
       )}
     </div>
   )

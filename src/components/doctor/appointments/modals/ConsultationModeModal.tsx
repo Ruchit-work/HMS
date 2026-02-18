@@ -4,15 +4,15 @@ import { useState, useEffect } from "react"
 import { type AnatomyModel } from "@/utils/anatomyModelMapping"
 import { getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
 
-type SelectedMode = "normal" | "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | null
+type SelectedMode = "normal" | "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | null
 
 interface ConsultationModeModalProps {
   isOpen: boolean
   appointmentId: string | null
   doctorSpecialization?: string
-  alreadySelectedTypes: ('ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney')[]
+  alreadySelectedTypes: ('ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton')[]
   onSelectNormal: () => void
-  onSelectAnatomy: (anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney') => void
+  onSelectAnatomy: (anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton') => void
   onClose: () => void
 }
 
@@ -43,6 +43,7 @@ export default function ConsultationModeModal({
     dental: { from: 'from-teal-50', to: 'to-cyan-50', border: 'border-slate-200', selectedBorder: 'border-teal-400', bg: 'bg-teal-500' },
     lungs: { from: 'from-amber-50', to: 'to-orange-50', border: 'border-slate-200', selectedBorder: 'border-amber-400', bg: 'bg-amber-500' },
     kidney: { from: 'from-amber-50', to: 'to-orange-50', border: 'border-slate-200', selectedBorder: 'border-amber-400', bg: 'bg-amber-500' },
+    skeleton: { from: 'from-stone-50', to: 'to-slate-100', border: 'border-slate-200', selectedBorder: 'border-stone-400', bg: 'bg-stone-500' },
   }
 
   const handleContinue = () => {

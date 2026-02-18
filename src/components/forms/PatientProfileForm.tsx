@@ -29,7 +29,11 @@ interface PatientProfileFormProps {
   enableCountryCode?: boolean
   externalError?: string | null
   onErrorClear?: () => void
+  /** When true (receptionist add-patient): default password 123456, min 6 chars only, no OTP */
+  receptionistMode?: boolean
 }
+
+const RECEPTIONIST_DEFAULT_PASSWORD = '123456'
 
 export default function PatientProfileForm({
   mode,
@@ -42,6 +46,7 @@ export default function PatientProfileForm({
   enableCountryCode = mode === 'public',
   externalError,
   onErrorClear,
+  receptionistMode = false,
 }: PatientProfileFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -59,8 +64,8 @@ export default function PatientProfileForm({
     showStatusField ? initialValues?.status ?? 'active' : 'active'
   )
 
-  const [password, setPassword] = useState(initialValues?.password ?? '')
-  const [confirmPassword, setConfirmPassword] = useState(initialValues?.password ?? '')
+  const [password, setPassword] = useState(initialValues?.password ?? (receptionistMode ? RECEPTIONIST_DEFAULT_PASSWORD : ''))
+  const [confirmPassword, setConfirmPassword] = useState(initialValues?.password ?? (receptionistMode ? RECEPTIONIST_DEFAULT_PASSWORD : ''))
   const [showBloodGroupDropdown, setShowBloodGroupDropdown] = useState(false)
 
   const today = useMemo(() => new Date().toISOString().split('T')[0], [])
@@ -182,7 +187,9 @@ export default function PatientProfileForm({
       return setFormError('Please provide a password')
     }
 
-    if (!isPasswordValid(password)) {
+    if (receptionistMode) {
+      if (password.length < 6) return setFormError('Password must be at least 6 characters')
+    } else if (!isPasswordValid(password)) {
       return setFormError('Password does not meet requirements')
     }
 
@@ -568,7 +575,11 @@ export default function PatientProfileForm({
             </p>
           )}
         </div>
-        <PasswordRequirements password={password} />
+        {receptionistMode ? (
+          <p className="text-xs text-slate-500 mt-1">Default: 123456 (min 6 characters). Patient can change later from dashboard.</p>
+        ) : (
+          <PasswordRequirements password={password} />
+        )}
       </div>
 
       <div>

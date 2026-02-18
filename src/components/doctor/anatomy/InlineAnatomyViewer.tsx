@@ -15,6 +15,7 @@ import { throatPartsData } from '@/constants/throatDiseases'
 import { dentalPartsData } from '@/constants/dentalDiseases'
 import { lungsPartsData } from '@/constants/lungsDiseases'
 import { kidneyPartsData } from '@/constants/kidneyDiseases'
+import { skeletonPartsData } from '@/constants/skeletonDiseases'
 import { completeAppointment } from '@/utils/appointmentHelpers'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useAuth } from '@/hooks/useAuth'
@@ -25,6 +26,7 @@ import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
 import VoiceInput from '@/components/ui/VoiceInput'
 import { fetchMedicineSuggestions, MedicineSuggestion, sanitizeMedicineName, recordMedicineSuggestions } from '@/utils/medicineSuggestions'
 import InteractiveKidneySVG from './svg/InteractiveKidneySVG'
+import InteractiveSkeletonSVG from './svg/InteractiveSkeletonSVG'
 
 const DynamicENTAnatomyViewer = dynamic(
   () => Promise.resolve(ENTAnatomyViewer),
@@ -39,7 +41,7 @@ const DynamicENTAnatomyViewer = dynamic(
 )
 
 export interface AnatomyViewerData {
-  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney'
+  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton'
   selectedPart?: string
   selectedPartInfo?: any
   selectedDisease?: Disease | null
@@ -52,7 +54,7 @@ export interface AnatomyViewerData {
 interface InlineAnatomyViewerProps {
   appointmentId: string
   patientName: string
-  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney'
+  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton'
   initialData?: AnatomyViewerData | null
   onComplete?: () => void
   onDataChange?: (data: AnatomyViewerData | null) => void
@@ -127,6 +129,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return lungsPartsData
       case 'kidney':
         return kidneyPartsData
+      case 'skeleton':
+        return skeletonPartsData
       case 'ear':
       default:
         return earPartsData
@@ -146,6 +150,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return '/models/lungs/healthy_heart_and_lungs.glb'
       case 'kidney':
         return '/models/kidney/kidney.glb'
+      case 'skeleton':
+        return '/models/skeleton/free_pack_-_human_skeleton.glb'
       case 'ear':
       default:
         return '/models/ear/ear-anatomy.glb'
@@ -191,6 +197,11 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       'Kidney': 'Kidney', 'Left_Kidney': 'Kidney', 'Right_Kidney': 'Kidney',
       'Renal_Pelvis': 'Renal_Pelvis', 'Ureter': 'Ureter',
       'Cortex': 'Cortex', 'Medulla': 'Medulla',
+    },
+    skeleton: {
+      'Skull': 'Skull', 'Cranium': 'Skull', 'Spine': 'Spine', 'Ribcage': 'Ribcage', 'Sternum': 'Sternum',
+      'Pelvis': 'Pelvis', 'Humerus': 'Humerus', 'Radius': 'Radius', 'Ulna': 'Ulna',
+      'Femur': 'Femur', 'Tibia': 'Tibia', 'Fibula': 'Fibula', 'Clavicle': 'Clavicle', 'Scapula': 'Scapula', 'Patella': 'Patella',
     },
     ear: {}
   }
@@ -248,7 +259,11 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         dental: {
           1: 'Teeth', 2: 'Gums', 3: 'Tongue', 4: 'Mandible', 5: 'Palate',
           6: 'Oral_Mucosa', 7: 'Salivary_Glands', 8: 'Wisdom_Teeth',
-        }
+        },
+        skeleton: {
+          1: 'Skull', 2: 'Spine', 3: 'Ribcage', 4: 'Pelvis', 5: 'Humerus', 6: 'Radius', 7: 'Ulna',
+          8: 'Femur', 9: 'Tibia', 10: 'Fibula', 11: 'Clavicle', 12: 'Scapula', 13: 'Sternum', 14: 'Patella',
+        },
       }
       if (partMappings[anatomyType] && partMappings[anatomyType][objectNumber]) {
         return partMappings[anatomyType][objectNumber]
@@ -330,11 +345,14 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
 
   const handlePartSelect = (partName: string | null, partInfo?: { name: string; description: string }) => {
     const realPartName = mapToRealPartName(partName)
-    setSelectedPart(realPartName)
-    
+    setSelectedPart(realPartName ?? partName)
+
     const partsData = getPartsData()
-    
-    if (realPartName && partsData[realPartName]) {
+
+    // For skeleton, prefer the partInfo from the 3D viewer so "Selected Part Information" shows the resolved part name/description per mesh
+    if (anatomyType === 'skeleton' && partInfo?.name) {
+      setSelectedPartInfo({ name: partInfo.name, description: partInfo.description ?? '' })
+    } else if (realPartName && partsData[realPartName]) {
       setSelectedPartInfo({
         name: partsData[realPartName].partName,
         description: partsData[realPartName].description
@@ -342,7 +360,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
     } else {
       setSelectedPartInfo(partInfo || null)
     }
-    
+
     setSelectedDisease(null)
     setSelectedMedicines([])
   }
@@ -1028,7 +1046,12 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
               </div>
             ) : (
               <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200" style={{ height: '600px', minHeight: '600px' }}>
-                {anatomyType === 'nose' ? (
+                {anatomyType === 'skeleton' ? (
+                  <InteractiveSkeletonSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'nose' ? (
                   <InteractiveNoseSVG
                     onPartSelect={handlePartSelect2D}
                     selectedPart={selectedPart2D}
@@ -1106,7 +1129,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 <svg className="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                 </svg>
-                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : 'ear'} model</p>
+                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : anatomyType === 'skeleton' ? 'skeleton' : 'ear'} model</p>
                 <p className="text-xs text-slate-500 mt-1">to see its name and description here</p>
               </div>
             )}

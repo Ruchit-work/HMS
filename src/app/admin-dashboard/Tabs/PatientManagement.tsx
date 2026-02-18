@@ -465,6 +465,11 @@ export default function PatientManagement({
 
     const handleCreatePatient = async (values: PatientProfileFormValues) => {
         if (!allowAdd) return
+        // Receptionist portal: create patient directly without OTP
+        if (receptionistBranchId != null) {
+            await finalizePatientCreation(values)
+            return
+        }
         const phoneValue = values.phone.trim()
         if (!phoneValue) {
             setError('Phone number is required for OTP verification.')
@@ -1688,7 +1693,9 @@ export default function PatientManagement({
                   onSubmit={handleCreatePatient}
                   onCancel={closeAddPatientModal}
                   enableCountryCode={false}
-                  submitLabel={loading ? "Adding Patient..." : "Send OTP"}
+                  receptionistMode={receptionistBranchId != null}
+                  initialValues={receptionistBranchId != null ? { password: '123456' } : undefined}
+                  submitLabel={loading ? "Adding Patient..." : (receptionistBranchId != null ? "Create Patient" : "Send OTP")}
                 />
               </div>
             </div>

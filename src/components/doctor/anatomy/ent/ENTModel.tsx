@@ -4,9 +4,10 @@ import React, { useRef, useState } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import { findPartName } from './findPartName'
+import { findPartName, getSkeletonMeshNumber } from './findPartName'
 import { getPartDescription } from './entPartDescriptions'
 import { getAnatomyTypeFromPath } from './entAnatomyMappings'
+import { getAnatomyFromMeshName, getSkeletonPartFromMeshNameOnly, getMeshNameFromChain } from './skeletonAnatomyData'
 
 interface ENTModelProps {
   onPartSelect?: (partName: string | null, partInfo?: { name: string; description: string }) => void
@@ -29,6 +30,9 @@ export function ENTModel({
   const isDraggingRef = useRef(false)
   const pointerDownRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const initializedRef = useRef(false)
+  const selectedSkeletonMeshNumberRef = useRef<number | null>(null)
+  /** For skeleton: highlight only the exact mesh that was clicked (by object reference), not by name/number */
+  const selectedSkeletonMeshRef = useRef<THREE.Object3D | null>(null)
 
   React.useEffect(() => {
     if (externalSelectedPart !== undefined) setSelectedPart(externalSelectedPart)
@@ -55,7 +59,7 @@ export function ENTModel({
     clonedScene.position.z = -center.z
 
     const anatomyType = getAnatomyTypeFromPath(modelPath)
-    const scaleFactor = (anatomyType === 'nose' || anatomyType === 'throat') ? 2.2 : 3.5
+    const scaleFactor = anatomyType === 'skeleton' ? 2.0 : (anatomyType === 'nose' || anatomyType === 'throat') ? 2.2 : 3.5
     const scale = scaleFactor / maxDim
     clonedScene.scale.set(scale, scale, scale)
 
@@ -89,18 +93,35 @@ export function ENTModel({
     camera.updateProjectionMatrix()
     camera.updateMatrixWorld()
 
+    // Clone materials per mesh so shared materials (e.g. free_pack skeleton) don't all change when one part is highlighted
     clonedScene.traverse((child: THREE.Object3D) => {
       if (child instanceof THREE.Mesh && child.material) {
-        const material = Array.isArray(child.material) ? child.material[0] : child.material
-        if (material instanceof THREE.MeshStandardMaterial) {
-          child.userData.originalColor = material.color.clone()
-          child.userData.originalEmissive = material.emissive.clone()
-          child.castShadow = true
-          child.receiveShadow = true
+        const mesh = child as THREE.Mesh
+        if (Array.isArray(mesh.material)) {
+          mesh.material = mesh.material.map((mat) => mat.clone())
+        } else {
+          mesh.material = mesh.material.clone()
         }
-        child.userData.isInteractive = true
+        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+        if (material instanceof THREE.MeshStandardMaterial) {
+          mesh.userData.originalColor = material.color.clone()
+          mesh.userData.originalEmissive = material.emissive.clone()
+        }
+        mesh.castShadow = true
+        mesh.receiveShadow = true
+        mesh.userData.isInteractive = true
       }
     })
+
+    // Skeleton: assign global mesh index so each mesh gets a distinct part (avoids all showing "Radius & Ulna" when names are missing)
+    if (anatomyType === 'skeleton') {
+      let skeletonMeshIndex = 0
+      clonedScene.traverse((child: THREE.Object3D) => {
+        if (child instanceof THREE.Mesh) {
+          ;(child as THREE.Mesh).userData.skeletonMeshIndex = skeletonMeshIndex++
+        }
+      })
+    }
 
     initializedRef.current = true
     setModelReady(true)
@@ -181,6 +202,23 @@ export function ENTModel({
     }
   }, [gl])
 
+  const isSkeleton = getAnatomyTypeFromPath(modelPath) === 'skeleton'
+
+  const shouldHighlightMesh = React.useCallback(
+    (child: THREE.Object3D, partName: string | null, meshNumber: number | null) => {
+      if (isSkeleton && selectedSkeletonMeshRef.current != null) {
+        return child === selectedSkeletonMeshRef.current
+      }
+      if (isSkeleton && meshNumber != null) {
+        const childNum = getSkeletonMeshNumber(child, modelPath)
+        return childNum === meshNumber
+      }
+      const childPartName = findPartName(child, modelPath)
+      return childPartName === partName
+    },
+    [isSkeleton, modelPath]
+  )
+
   const handlePointerUp = React.useCallback((event: any) => {
     if (event.button !== 0 || !pointerDownRef.current) {
       pointerDownRef.current = null
@@ -212,14 +250,31 @@ export function ENTModel({
 
       if (intersects.length > 0) {
         const clickedObject = intersects[0].object as THREE.Mesh
-        const partName = findPartName(clickedObject, modelPath)
+        let partName: string | null
+        let partInfo: { name: string; description: string } | undefined
+        if (isSkeleton) {
+          // Try name first (SM_HumanSkeleton_01..20, Bone_18, etc.); fall back to full resolver so panel always shows something
+          let skeletonResult = getSkeletonPartFromMeshNameOnly(clickedObject)
+          if (!skeletonResult) skeletonResult = getAnatomyFromMeshName(clickedObject, modelPath)
+          partName = skeletonResult ? skeletonResult.partKey : null
+          partInfo = skeletonResult ? { name: skeletonResult.name, description: skeletonResult.description } : undefined
+          // Log so you can see which mesh was hit and what part it resolved to (for changing part name/description)
+          const hitMeshName = getMeshNameFromChain(clickedObject) || clickedObject.name || '(no name)'
+          console.log('Raycast hit mesh:', hitMeshName, '| Resolved part:', partName ?? '(none)')
+        } else {
+          partName = findPartName(clickedObject, modelPath)
+          partInfo = partName ? getPartDescription(partName) : undefined
+        }
+        const clickedSkeletonNum = isSkeleton ? getSkeletonMeshNumber(clickedObject, modelPath) : null
 
-        if (partName && !partName.startsWith('Part_') && modelRef.current) {
-          if (selectedPart) {
+        const hasPartForPanel = partName != null && !partName.startsWith('Part_')
+        const shouldHighlight = modelRef.current && (hasPartForPanel || isSkeleton)
+
+        if (shouldHighlight) {
+          if (selectedPart || selectedSkeletonMeshRef.current) {
             modelRef.current.traverse((child) => {
               if (child instanceof THREE.Mesh) {
-                const childPartName = findPartName(child, modelPath)
-                if (childPartName === selectedPart) {
+                if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
                   const material = Array.isArray(child.material) ? child.material[0] : child.material
                   if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
                     material.color.copy(child.userData.originalColor)
@@ -231,14 +286,17 @@ export function ENTModel({
             })
           }
 
-          const newSelectedPart = selectedPart === partName ? null : partName
-          setSelectedPart(newSelectedPart)
+          const newSelectedPart = isSkeleton ? partName : (selectedPart === partName ? null : partName)
+          setSelectedPart(newSelectedPart ?? null)
+          selectedSkeletonMeshNumberRef.current = newSelectedPart && clickedSkeletonNum != null ? clickedSkeletonNum : null
+          selectedSkeletonMeshRef.current = isSkeleton && (newSelectedPart != null || partName === null) ? clickedObject : null
 
-          if (newSelectedPart) {
+          if (newSelectedPart || isSkeleton) {
             modelRef.current.traverse((child) => {
               if (child instanceof THREE.Mesh) {
-                const childPartName = findPartName(child, modelPath)
-                if (childPartName === newSelectedPart) {
+                const isTarget =
+                  isSkeleton ? child === clickedObject : shouldHighlightMesh(child, newSelectedPart, selectedSkeletonMeshNumberRef.current)
+                if (isTarget) {
                   const material = Array.isArray(child.material) ? child.material[0] : child.material
                   if (material instanceof THREE.MeshStandardMaterial) {
                     material.color.setHex(0x4ade80)
@@ -250,17 +308,17 @@ export function ENTModel({
             })
           }
 
-          if (newSelectedPart && !newSelectedPart.startsWith('Part_')) {
-            const partInfo = getPartDescription(newSelectedPart)
-            onPartSelect?.(newSelectedPart, partInfo)
+          if (hasPartForPanel) {
+            onPartSelect?.(partName!, partInfo)
+          } else if (isSkeleton) {
+            onPartSelect?.(null, undefined)
           }
         }
       } else {
         if (selectedPart && modelRef.current) {
           modelRef.current.traverse((child) => {
             if (child instanceof THREE.Mesh) {
-              const childPartName = findPartName(child, modelPath)
-              if (childPartName === selectedPart) {
+              if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
                 const material = Array.isArray(child.material) ? child.material[0] : child.material
                 if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
                   material.color.copy(child.userData.originalColor)
@@ -270,6 +328,8 @@ export function ENTModel({
               }
             }
           })
+          selectedSkeletonMeshNumberRef.current = null
+          selectedSkeletonMeshRef.current = null
           setSelectedPart(null)
           onPartSelect?.(null, undefined)
         }
@@ -278,7 +338,7 @@ export function ENTModel({
 
     pointerDownRef.current = null
     isDraggingRef.current = false
-  }, [selectedPart, camera, raycaster, onPartSelect, gl, modelPath])
+  }, [selectedPart, camera, raycaster, onPartSelect, gl, modelPath, isSkeleton, shouldHighlightMesh])
 
   const handleClick = React.useCallback((event: any) => {
     if (!groupRef.current || !modelRef.current) return
@@ -298,14 +358,29 @@ export function ENTModel({
 
     if (intersects.length > 0) {
       const clickedObject = intersects[0].object as THREE.Mesh
-      const partName = findPartName(clickedObject, modelPath)
+      let partName: string | null
+      let partInfo: { name: string; description: string } | undefined
+      if (isSkeleton) {
+        let skeletonResult = getSkeletonPartFromMeshNameOnly(clickedObject)
+        if (!skeletonResult) skeletonResult = getAnatomyFromMeshName(clickedObject, modelPath)
+        partName = skeletonResult ? skeletonResult.partKey : null
+        partInfo = skeletonResult ? { name: skeletonResult.name, description: skeletonResult.description } : undefined
+        const hitMeshName = getMeshNameFromChain(clickedObject) || clickedObject.name || '(no name)'
+        console.log('Raycast hit mesh:', hitMeshName, '| Resolved part:', partName ?? '(none)')
+      } else {
+        partName = findPartName(clickedObject, modelPath)
+        partInfo = partName ? getPartDescription(partName) : undefined
+      }
+      const clickedSkeletonNum = isSkeleton ? getSkeletonMeshNumber(clickedObject, modelPath) : null
 
-      if (partName && !partName.startsWith('Part_') && modelRef.current) {
-        if (selectedPart) {
+      const hasPartForPanel = partName != null && !partName.startsWith('Part_')
+      const shouldHighlight = modelRef.current && (hasPartForPanel || isSkeleton)
+
+      if (shouldHighlight) {
+        if (selectedPart || selectedSkeletonMeshRef.current) {
           modelRef.current.traverse((child) => {
             if (child instanceof THREE.Mesh) {
-              const childPartName = findPartName(child, modelPath)
-              if (childPartName === selectedPart) {
+              if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
                 const material = Array.isArray(child.material) ? child.material[0] : child.material
                 if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
                   material.color.copy(child.userData.originalColor)
@@ -317,14 +392,17 @@ export function ENTModel({
           })
         }
 
-        const newSelectedPart = selectedPart === partName ? null : partName
-        setSelectedPart(newSelectedPart)
+        const newSelectedPart = isSkeleton ? partName : (selectedPart === partName ? null : partName)
+        setSelectedPart(newSelectedPart ?? null)
+        selectedSkeletonMeshNumberRef.current = newSelectedPart && clickedSkeletonNum != null ? clickedSkeletonNum : null
+        selectedSkeletonMeshRef.current = isSkeleton && (newSelectedPart != null || partName === null) ? clickedObject : null
 
-        if (newSelectedPart) {
+        if (newSelectedPart || isSkeleton) {
           modelRef.current.traverse((child) => {
             if (child instanceof THREE.Mesh) {
-              const childPartName = findPartName(child, modelPath)
-              if (childPartName === newSelectedPart) {
+              const isTarget =
+                isSkeleton ? child === clickedObject : shouldHighlightMesh(child, newSelectedPart, selectedSkeletonMeshNumberRef.current)
+              if (isTarget) {
                 const material = Array.isArray(child.material) ? child.material[0] : child.material
                 if (material instanceof THREE.MeshStandardMaterial) {
                   material.color.setHex(0x4ade80)
@@ -336,17 +414,17 @@ export function ENTModel({
           })
         }
 
-        if (newSelectedPart && !newSelectedPart.startsWith('Part_')) {
-          const partInfo = getPartDescription(newSelectedPart)
-          onPartSelect?.(newSelectedPart, partInfo)
+        if (hasPartForPanel) {
+          onPartSelect?.(partName!, partInfo)
+        } else if (isSkeleton) {
+          onPartSelect?.(null, undefined)
         }
       }
     } else {
       if (selectedPart && modelRef.current) {
         modelRef.current.traverse((child) => {
           if (child instanceof THREE.Mesh) {
-            const childPartName = findPartName(child, modelPath)
-            if (childPartName === selectedPart) {
+            if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
               const material = Array.isArray(child.material) ? child.material[0] : child.material
               if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
                 material.color.copy(child.userData.originalColor)
@@ -356,11 +434,13 @@ export function ENTModel({
             }
           }
         })
+        selectedSkeletonMeshNumberRef.current = null
+        selectedSkeletonMeshRef.current = null
         setSelectedPart(null)
         onPartSelect?.(null, undefined)
       }
     }
-  }, [selectedPart, camera, raycaster, onPartSelect, gl, modelPath])
+  }, [selectedPart, camera, raycaster, onPartSelect, gl, modelPath, isSkeleton, shouldHighlightMesh])
 
   if (!scene || !modelReady || !modelRef.current) return null
 

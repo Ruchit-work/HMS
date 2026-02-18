@@ -3,7 +3,7 @@
  * Maps doctor specializations to relevant anatomy models
  */
 
-export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney'
+export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton'
 
 export interface AnatomyModel {
   type: AnatomyType
@@ -48,6 +48,12 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
     label: 'Kidney',
     icon: '🫘',
     description: 'Kidney anatomy and urinary system'
+  },
+  {
+    type: 'skeleton',
+    label: 'Skeleton',
+    icon: '🦴',
+    description: 'Bones and musculoskeletal anatomy'
   }
 ]
 
@@ -59,7 +65,7 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
 export function getAnatomyModelsForSpecialization(specialization: string | null | undefined): AnatomyType[] {
   if (!specialization) {
     // If no specialization, show all models (for flexibility)
-    return ['ear', 'nose', 'throat', 'dental', 'lungs', 'kidney']
+    return ['ear', 'nose', 'throat', 'dental', 'lungs', 'kidney', 'skeleton']
   }
 
   const lowerSpecialization = specialization.toLowerCase()
@@ -109,19 +115,32 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     return ['lungs']
   }
 
-  // Family Medicine / General Physician → ENT, lungs, kidney
+  // Orthopedics / Rheumatology / Physiotherapy → skeleton
+  if (
+    lowerSpecialization.includes('orthoped') ||
+    lowerSpecialization.includes('orthopaedic') ||
+    lowerSpecialization.includes('rheumatolog') ||
+    lowerSpecialization.includes('physiotherap') ||
+    lowerSpecialization.includes('sports medicine') ||
+    lowerSpecialization.includes('bone') ||
+    lowerSpecialization.includes('skeleton')
+  ) {
+    return ['skeleton']
+  }
+
+  // Family Medicine / General Physician → ENT, lungs, kidney, skeleton
   if (
     lowerSpecialization.includes('family medicine') ||
     lowerSpecialization.includes('family physician') ||
     lowerSpecialization.includes('general physician') ||
     lowerSpecialization.includes('primary care')
   ) {
-    return ['ear', 'nose', 'throat', 'lungs', 'kidney']
+    return ['ear', 'nose', 'throat', 'lungs', 'kidney', 'skeleton']
   }
 
-  // Pediatrician → ear, nose, throat, lungs (common in children)
+  // Pediatrician → ear, nose, throat, lungs, kidney, skeleton (common in children)
   if (lowerSpecialization.includes('pediatrician') || lowerSpecialization.includes('pediatric')) {
-    return ['ear', 'nose', 'throat', 'lungs', 'kidney']
+    return ['ear', 'nose', 'throat', 'lungs', 'kidney', 'skeleton']
   }
 
   // Ophthalmologist → none (eye is different system, no models yet)

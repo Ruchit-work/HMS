@@ -556,7 +556,7 @@ export default function ReceptionistDashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="lg:ml-72">
+      <div className="lg:ml-72 min-w-0 overflow-x-hidden">
         <header className="bg-white/80 backdrop-blur-xl shadow-sm border-b border-slate-200/50">
           <div className={`py-6 px-6 sm:px-8 lg:px-6 ${!sidebarOpen ? 'pl-16 sm:pl-20 lg:pl-6' : ''}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
@@ -598,7 +598,7 @@ export default function ReceptionistDashboard() {
           </div>
         </header>
 
-        <main className="p-6 sm:p-8 space-y-6">
+        <main className="p-6 sm:p-8 space-y-6 min-w-0 overflow-x-hidden">
           {activeTab === "dashboard" && (
             <DashboardOverview onTabChange={(tab) => setActiveTab(tab)} receptionistBranchId={receptionistBranchId} />
           )}

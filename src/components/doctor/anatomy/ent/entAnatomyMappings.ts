@@ -2,7 +2,7 @@
  * ENT anatomy mappings - object names, anatomical names, helpers
  */
 
-export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney'
+export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton'
 
 export const objectNameToPartMap: Record<string, string> = {
   'Object 1': 'Outer_Ear', 'Object 2': 'Ear_Canal', 'Object 3': 'Eardrum', 'Object 4': 'Ossicles', 'Object 5': 'Cochlea', 'Object 6': 'Semicircular_Canals', 'Object 7': 'Auditory_Nerve',
@@ -16,6 +16,7 @@ export const objectNameToPartMap: Record<string, string> = {
 }
 
 export function getAnatomyTypeFromPath(modelPath: string): AnatomyType {
+  if (modelPath.includes('skeleton') || modelPath.includes('bone') || modelPath.includes('skelton')) return 'skeleton'
   if (modelPath.includes('thorat') || modelPath.includes('throat') || modelPath.includes('larynx')) return 'throat'
   if (modelPath.includes('mouth') || modelPath.includes('mandible') || modelPath.includes('dental')) return 'dental'
   if (modelPath.includes('nose') || modelPath.includes('hidung')) return 'nose'
@@ -32,6 +33,7 @@ export function getObjectNumberMapping(anatomyType: AnatomyType): Record<number,
     dental: { 1: 'Teeth', 2: 'Gums', 3: 'Tongue', 4: 'Mandible', 5: 'Palate', 6: 'Oral_Mucosa', 7: 'Salivary_Glands', 8: 'Wisdom_Teeth' },
     kidney: { 1: 'Kidney', 2: 'Renal_Pelvis', 3: 'Ureter', 4: 'Cortex', 5: 'Medulla' },
     ear: { 1: 'Outer_Ear', 2: 'Ear_Canal', 3: 'Eardrum', 4: 'Ossicles', 5: 'Cochlea', 6: 'Semicircular_Canals', 7: 'Auditory_Nerve', 10: 'Outer_Ear', 11: 'Ear_Canal', 12: 'Eardrum', 13: 'Ossicles', 14: 'Cochlea', 15: 'Semicircular_Canals', 16: 'Auditory_Nerve' },
+    skeleton: { 1: 'Skull', 2: 'Spine', 3: 'Ribcage', 4: 'Pelvis', 5: 'Humerus', 6: 'Radius', 7: 'Ulna', 8: 'Femur', 9: 'Tibia', 10: 'Fibula', 11: 'Clavicle', 12: 'Scapula', 13: 'Sternum', 14: 'Patella' },
   }
   return mappings[anatomyType] ?? mappings.ear
 }
@@ -70,4 +72,12 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Turbinates: 'Turbinates', Turbinate: 'Turbinates', Nasal_Conchae: 'Turbinates', Sinuses: 'Sinuses', Sinus: 'Sinuses', Paranasal_Sinuses: 'Sinuses',
   },
   ear: {},
+  skeleton: {
+    Skull: 'Skull', Cranium: 'Skull', Mandible: 'Skull', Jaw: 'Skull',
+    Spine: 'Spine', Vertebrae: 'Spine', Cervical_Spine: 'Spine', Thoracic_Spine: 'Spine', Lumbar_Spine: 'Spine', Sacrum: 'Spine', Coccyx: 'Spine',
+    Ribcage: 'Ribcage', Ribs: 'Ribcage', Rib: 'Ribcage', Sternum: 'Sternum',
+    Pelvis: 'Pelvis', Hip: 'Pelvis', Ilium: 'Pelvis', Ischium: 'Pelvis', Pubis: 'Pelvis',
+    Humerus: 'Humerus', Radius: 'Radius', Ulna: 'Ulna', Femur: 'Femur', Tibia: 'Tibia', Fibula: 'Fibula',
+    Clavicle: 'Clavicle', Scapula: 'Scapula', Patella: 'Patella', Knee_Cap: 'Patella',
+  },
 }

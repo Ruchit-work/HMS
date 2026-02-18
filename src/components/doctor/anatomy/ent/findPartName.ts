@@ -10,6 +10,7 @@ import {
   objectNameToPartMap,
 } from './entAnatomyMappings'
 import { entPartDescriptions } from './entPartDescriptions'
+import { getAnatomyFromMeshName, getSkeletonMeshNumberFromObject, getSkeletonPartKeyFromMeshNumber } from './skeletonAnatomyData'
 
 export function findPartName(
   object: THREE.Object3D,
@@ -19,8 +20,17 @@ export function findPartName(
   const objectNumberMapping = getObjectNumberMapping(anatomyType)
   let partName: string | null = null
 
-  if (object.name && object.name.trim() !== '') {
-    const objectName = object.name.trim()
+  // Skeleton: use skeletonAnatomyData (mesh-name mapping + anatomical fallbacks)
+  if (anatomyType === 'skeleton') {
+    const result = getAnatomyFromMeshName(object, modelPath)
+    return result ? result.partKey : null
+  }
+
+  // Resolve name from object or parent chain (some GLBs put name on parent group)
+  const effectiveName = getObjectOrParentName(object)
+
+  if (effectiveName) {
+    const objectName = effectiveName.trim()
 
     // Anatomical name (exact)
     if (anatomicalNameToPartMap[anatomyType]?.[objectName]) {
@@ -69,6 +79,26 @@ export function findPartName(
   if (!partName) partName = matchFromParent(object, anatomyType)
 
   return partName
+}
+
+/** For skeleton: get mesh number (1–20) from object/parent chain. Export so ENTModel can highlight only the clicked bone by number. */
+export function getSkeletonMeshNumber(object: THREE.Object3D, modelPath: string): number | null {
+  if (getAnatomyTypeFromPath(modelPath) !== 'skeleton') return null
+  return getSkeletonMeshNumberFromObject(object)
+}
+
+/** Get first non-empty name from object or its parents (for raycast-hit mesh whose name may be on parent) */
+function getObjectOrParentName(object: THREE.Object3D): string | null {
+  let current: THREE.Object3D | null = object
+  let depth = 0
+  while (current && depth < 6) {
+    if (current.name && typeof current.name === 'string' && current.name.trim() !== '') {
+      return current.name.trim()
+    }
+    current = current.parent
+    depth++
+  }
+  return null
 }
 
 function matchByNamePattern(anatomyType: string, objectName: string): string | null {
@@ -134,6 +164,22 @@ function matchByNamePattern(anatomyType: string, objectName: string): string | n
     if (/ear/.test(lowerName)) return 'Outer_Ear'
   }
 
+  if (anatomyType === 'skeleton') {
+    if (/skull|cranium|mandible|jaw|maxilla/.test(lowerName)) return 'Skull'
+    if (/spine|vertebra|vertebrae|cervical|thoracic|lumbar|sacrum|coccyx/.test(lowerName)) return 'Spine'
+    if (/rib|sternum|ribcage|chest/.test(lowerName)) return lowerName.includes('sternum') ? 'Sternum' : 'Ribcage'
+    if (/pelvis|hip|ilium|ischium|pubis/.test(lowerName)) return 'Pelvis'
+    if (/humerus|upper arm/.test(lowerName)) return 'Humerus'
+    if (/radius/.test(lowerName)) return 'Radius'
+    if (/ulna/.test(lowerName)) return 'Ulna'
+    if (/femur|thigh/.test(lowerName)) return 'Femur'
+    if (/tibia|shin/.test(lowerName)) return 'Tibia'
+    if (/fibula/.test(lowerName)) return 'Fibula'
+    if (/clavicle|collarbone/.test(lowerName)) return 'Clavicle'
+    if (/scapula|shoulder blade/.test(lowerName)) return 'Scapula'
+    if (/patella|knee cap/.test(lowerName)) return 'Patella'
+  }
+
   return null
 }
 
@@ -171,6 +217,15 @@ function matchFromParent(object: THREE.Object3D, anatomyType: string): string | 
       }
       if (anatomyType === 'ear') {
         const r = m(/outer|pinna|auricle/, 'Outer_Ear') || m(/canal.*ear|ear.*canal/, 'Ear_Canal') || m(/drum|tympanic/, 'Eardrum') || m(/ossicle/, 'Ossicles') || m(/cochlea/, 'Cochlea') || m(/semicircular/, 'Semicircular_Canals') || m(/nerve|auditory/, 'Auditory_Nerve')
+        if (r) return r
+      }
+      if (anatomyType === 'skeleton') {
+        const skMatch = parentName.match(/^SM_HumanSkeleton[_\-]?(\d+)$/i)
+        if (skMatch) {
+          const part = getSkeletonPartKeyFromMeshNumber(parseInt(skMatch[1], 10))
+          if (part) return part
+        }
+        const r = m(/skull|cranium|mandible|jaw/, 'Skull') || m(/spine|vertebra|sacrum|coccyx/, 'Spine') || m(/rib|sternum|ribcage/, 'Ribcage') || m(/pelvis|hip|ilium|ischium|pubis/, 'Pelvis') || m(/humerus/, 'Humerus') || m(/radius/, 'Radius') || m(/ulna/, 'Ulna') || m(/femur/, 'Femur') || m(/tibia/, 'Tibia') || m(/fibula/, 'Fibula') || m(/clavicle/, 'Clavicle') || m(/scapula/, 'Scapula') || m(/patella/, 'Patella')
         if (r) return r
       }
     }

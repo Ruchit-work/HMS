@@ -70,8 +70,8 @@ function DoctorAppointmentsContent() {
   const [updating, setUpdating] = useState<{ [key: string]: boolean }>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{ [key: string]: boolean }>({})
   const [consultationMode, setConsultationMode] = useState<{ [key: string]: "normal" | "anatomy" | null }>({})
-  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney")[] }>({})
-  const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" }>({})
+  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton")[] }>({})
+  const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" }>({})
   const [anatomyViewerData, setAnatomyViewerData] = useState<{ [key: string]: { [anatomyType: string]: AnatomyViewerData | null } }>({})
   const [showCombinedCompletionModal, setShowCombinedCompletionModal] = useState<{ [key: string]: boolean }>({})
   const appointmentCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -445,7 +445,7 @@ function DoctorAppointmentsContent() {
 
   const handleConsultationModeSelect = (
     mode: "normal" | "anatomy",
-    anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney"
+    anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton"
   ) => {
     const appointmentId = showConsultationModeModal.appointmentId
     if (!appointmentId) return
@@ -1975,19 +1975,7 @@ function DoctorAppointmentsContent() {
                                     }`}
                                   >
                                     <span className="text-base">{details?.icon ?? "🔬"}</span>
-                                    <span>
-                                      {tab === "ear"
-                                        ? "Ear"
-                                        : tab === "nose"
-                                          ? "Nose"
-                                          : tab === "throat"
-                                            ? "Throat"
-                                            : tab === "dental"
-                                              ? "Dental"
-                                              : tab === "lungs"
-                                                ? "Lungs"
-                                                : "Kidney"}
-                                    </span>
+                                    <span>{details?.label ?? tab}</span>
                                     <span
                                       role="button"
                                       tabIndex={0}
@@ -2009,24 +1997,23 @@ function DoctorAppointmentsContent() {
                                           }))
                                         }
                                       }}
-                                      className={`ml-1 p-0.5 rounded-md cursor-pointer ${
+                                      className={`ml-1.5 flex items-center justify-center w-6 h-6 rounded-full cursor-pointer transition-colors ${
                                         isActive
-                                          ? "hover:bg-blue-500 text-white"
+                                          ? "hover:bg-blue-500/80 text-white"
                                           : "hover:bg-slate-200 text-slate-500"
                                       }`}
+                                      aria-label={`Remove ${details?.label ?? tab}`}
                                     >
                                       <svg
-                                        className="w-4 h-4"
+                                        className="w-3.5 h-3.5 shrink-0"
                                         fill="none"
                                         stroke="currentColor"
-                                        strokeWidth={2}
+                                        strokeWidth={2.5}
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
                                         viewBox="0 0 24 24"
                                       >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          d="M6 18L18 6M6 6l18 18"
-                                        />
+                                        <path d="M18 6L6 18M6 6l12 12" />
                                       </svg>
                                     </span>
                                   </button>
