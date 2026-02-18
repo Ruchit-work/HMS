@@ -1,0 +1,649 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { db } from "@/firebase/config"
+import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
+import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import Notification from "@/components/ui/feedback/Notification"
+import { AppointmentsList } from "@/components/patient/appointments/AppointmentCard"
+import DocumentsTab from "@/components/documents/DocumentsTab"
+import { CancelAppointmentModal } from "@/components/patient/appointments/AppointmentModals"
+import PaymentMethodSection, {
+  PaymentData as PaymentMethodData,
+  PaymentMethodOption,
+} from "@/components/payments/PaymentMethodSection"
+import { UserData, Appointment, NotificationData, BillingRecord } from "@/types/patient"
+import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
+import Footer from "@/components/ui/layout/Footer"
+import Link from "next/link"
+
+export default function PatientAppointments() {
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [notification, setNotification] = useState<NotificationData | null>(null)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+  const [activeTab, setActiveTab] = useState<"confirmed" | "completed" | "cancelled">("confirmed")
+  const [billingPaymentModalOpen, setBillingPaymentModalOpen] = useState(false)
+  const [selectedBilling, setSelectedBilling] = useState<{ appointment: Appointment; billing: BillingRecord } | null>(null)
+  const [billingPaymentMethod, setBillingPaymentMethod] = useState<PaymentMethodOption>("card")
+  const [billingPaymentData, setBillingPaymentData] = useState<PaymentMethodData>({
+    cardNumber: "",
+    cardName: "",
+    expiryDate: "",
+    cvv: "",
+    upiId: "",
+  })
+  const [payingBill, setPayingBill] = useState(false)
+  const [viewMode, setViewMode] = useState<"appointments" | "documents">("appointments")
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 5
+
+  // Protect route - only allow patients
+  const { user, loading } = useAuth("patient")
+  const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+
+  useEffect(() => {
+    if (!user || !activeHospitalId) return
+
+    const fetchData = async () => {
+      try {
+        const patientDocSnap = await getDoc(doc(db, "patients", user.uid))
+        let patientData: UserData | null = null
+        
+        if (patientDocSnap.exists()) {
+          patientData = patientDocSnap.data() as UserData
+          setUserData(patientData)
+        }
+
+        // Start appointments query immediately (non-blocking)
+        const appointmentsCollection = getHospitalCollection(activeHospitalId, "appointments")
+        const appointmentQueries: Promise<any>[] = []
+        
+        // Normal patient queries - run in parallel
+        const queries = [
+          getDocs(query(appointmentsCollection, where("patientUid", "==", user.uid)))
+        ]
+        
+        if (patientData?.patientId) {
+          queries.push(
+            getDocs(query(appointmentsCollection, where("patientId", "==", patientData.patientId)))
+          )
+        }
+        
+        queries.push(
+          getDocs(query(appointmentsCollection, where("patientId", "==", user.uid)))
+        )
+        
+        appointmentQueries.push(...queries)
+
+        const appointmentSnapshots = await Promise.all(appointmentQueries)
+
+        const appointmentMap = new Map<string, Appointment>()
+        appointmentSnapshots.forEach((snapshot) => {
+          if (!snapshot) return
+          snapshot.docs.forEach((docSnap: any) => {
+            const data = docSnap.data()
+            appointmentMap.set(
+              docSnap.id,
+              { id: docSnap.id, ...data } as Appointment
+            )
+          })
+        })
+
+        let appointmentList = Array.from(appointmentMap.values())
+
+        // Patient billing queries
+        const billingSnapshots: any[] = []
+        if (patientData?.patientId) {
+          billingSnapshots.push(
+            getDocs(query(getHospitalCollection(activeHospitalId, "billing_records"), where("patientId", "==", patientData.patientId)))
+          )
+        }
+        billingSnapshots.push(
+          getDocs(query(getHospitalCollection(activeHospitalId, "billing_records"), where("patientId", "==", user.uid)))
+        )
+
+        const resolvedBillingSnapshots = await Promise.all(billingSnapshots)
+
+        const billingByAppointment = new Map<string, BillingRecord>()
+        const billingByAdmission = new Map<string, BillingRecord>()
+
+        resolvedBillingSnapshots.forEach((snapshot) => {
+          snapshot?.docs.forEach((docSnap: any) => {
+            const data = docSnap.data()
+            const record: BillingRecord = {
+              id: docSnap.id,
+              admissionId: String(data.admissionId || ""),
+              appointmentId: data.appointmentId ? String(data.appointmentId) : undefined,
+              patientId: String(data.patientId || ""),
+              patientUid: data.patientUid || null,
+              patientName: data.patientName || null,
+              doctorId: String(data.doctorId || ""),
+              doctorName: data.doctorName || null,
+              doctorFee: data.doctorFee !== undefined ? Number(data.doctorFee) : undefined,
+              otherServices: Array.isArray(data.otherServices) ? data.otherServices : [],
+              roomCharges: Number(data.roomCharges || 0),
+              totalAmount: Number(data.totalAmount || 0),
+              generatedAt: data.generatedAt || new Date().toISOString(),
+              status: data.status || "pending",
+              paymentMethod: data.paymentMethod || undefined,
+              paidAt: data.paidAt || null,
+              paymentReference: data.paymentReference || null,
+              paidAtFrontDesk: data.paidAtFrontDesk ?? false,
+              handledBy: data.handledBy || null,
+              settlementMode: data.settlementMode || null
+            }
+            if (record.appointmentId) {
+              billingByAppointment.set(record.appointmentId, record)
+            }
+            if (record.admissionId) {
+              billingByAdmission.set(record.admissionId, record)
+            }
+          })
+        })
+
+        appointmentList = appointmentList.map((appointment) => {
+          const billingRecord =
+            (appointment.id && billingByAppointment.get(appointment.id)) ||
+            (appointment.admissionId && billingByAdmission.get(appointment.admissionId))
+
+          return billingRecord ? { ...appointment, billingRecord } : appointment
+        })
+
+        setAppointments(appointmentList)
+      } catch {
+        setNotification({
+          type: "error",
+          message: "Failed to load appointments. Please try again."
+        })
+      }
+    }
+
+    fetchData()
+  }, [user, activeHospitalId])
+
+  // Reset pagination when tab or view changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeTab, viewMode])
+
+  if (loading || hospitalLoading) {
+    return <LoadingSpinner message="Loading appointments..." />
+  }
+
+  if (!activeHospitalId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-600 mb-4">No hospital selected. Please select a hospital to continue.</p>
+          <Link href="/hospital-selection" className="btn-modern btn-modern-sm inline-block">
+            Select Hospital
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user || !userData) {
+    return null
+  }
+
+  const TAB_STATUS_MAP: Record<typeof activeTab, string[]> = {
+    confirmed: ["confirmed", "resrescheduled", "awaiting_reschedule", "awaiting_admission", "admitted"],
+    completed: ["completed"],
+    cancelled: ["cancelled", "doctor_cancelled", "refund_requested"]
+  }
+
+  const filterAppointmentsByTab = (tab: typeof activeTab) => {
+    const allowed = TAB_STATUS_MAP[tab]
+    return appointments.filter((apt) => allowed.includes(String(apt.status || "").toLowerCase()))
+  }
+
+  const confirmedAppointments = filterAppointmentsByTab("confirmed")
+  const completedAppointments = filterAppointmentsByTab("completed")
+  const cancelledAppointments = filterAppointmentsByTab("cancelled")
+
+  const handleOpenBillingPayment = (appointment: Appointment) => {
+    if (!appointment.billingRecord || appointment.billingRecord.status === "paid") return
+    setSelectedBilling({ appointment, billing: appointment.billingRecord })
+    setBillingPaymentMethod(
+      appointment.billingRecord.paymentMethod && appointment.billingRecord.paymentMethod !== "cash"
+        ? (appointment.billingRecord.paymentMethod as PaymentMethodOption)
+        : "card"
+    )
+    setBillingPaymentData({
+      cardNumber: "",
+      cardName: "",
+      expiryDate: "",
+      cvv: "",
+      upiId: "",
+    })
+    setBillingPaymentModalOpen(true)
+  }
+
+  const handleCloseBillingPayment = () => {
+    setBillingPaymentModalOpen(false)
+    setSelectedBilling(null)
+    setBillingPaymentMethod("card")
+    setBillingPaymentData({
+      cardNumber: "",
+      cardName: "",
+      expiryDate: "",
+      cvv: "",
+      upiId: "",
+    })
+  }
+
+  const sortedAppointmentsForActiveTab = filterAppointmentsByTab(activeTab).sort((a, b) => {
+    const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
+    const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
+    return dateB - dateA // Latest appointments first
+  })
+
+  const totalAppointmentsForTab = sortedAppointmentsForActiveTab.length
+  const totalPages = totalAppointmentsForTab > 0 ? Math.ceil(totalAppointmentsForTab / PAGE_SIZE) : 1
+  const startIndex = totalAppointmentsForTab === 0 ? 0 : (currentPage - 1) * PAGE_SIZE
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalAppointmentsForTab)
+  const pagedAppointments = sortedAppointmentsForActiveTab.slice(startIndex, endIndex)
+
+  const handleConfirmBillingPayment = async () => {
+    if (!selectedBilling) return
+    setPayingBill(true)
+    try {
+      const res = await fetch("/api/patient/billing/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          billingId: selectedBilling.billing.id,
+          paymentMethod: billingPaymentMethod
+        })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Failed to process payment")
+      }
+      const data = await res.json().catch(() => ({}))
+      setAppointments(prev =>
+        prev.map((apt) => {
+          if (apt.id !== selectedBilling.appointment.id || !apt.billingRecord) return apt
+          return {
+            ...apt,
+            billingRecord: {
+              ...apt.billingRecord,
+              status: "paid",
+              paymentMethod: data?.paymentMethod || billingPaymentMethod,
+              paidAt: data?.paidAt || new Date().toISOString(),
+              paymentReference: data?.paymentReference || apt.billingRecord.paymentReference || null
+            }
+          }
+        })
+      )
+      setNotification({
+        type: "success",
+        message: "Payment successful. Thank you!"
+      })
+      handleCloseBillingPayment()
+    } catch (error: any) {
+      setNotification({
+        type: "error",
+        message: error?.message || "Failed to pay bill. Please try again."
+      })
+    } finally {
+      setPayingBill(false)
+    }
+  }
+
+  // Open cancel confirmation modal
+  const openCancelModal = (appointment: Appointment) => {
+    setAppointmentToCancel(appointment)
+    setShowCancelModal(true)
+  }
+
+  // Handle appointment cancellation
+  const handleCancelAppointment = async () => {
+    if (!appointmentToCancel) return
+
+    // Optimistic update: Update status immediately
+    const previousAppointments = [...appointments]
+    const cancelledAppointment = appointmentToCancel
+    
+    const optimisticUpdate = {
+      ...cancelledAppointment,
+      status: "cancelled" as const,
+      cancelledAt: new Date().toISOString()
+    }
+    
+    setAppointments(prev => prev.map(apt =>
+      apt.id === cancelledAppointment.id ? optimisticUpdate : apt
+    ))
+    setShowCancelModal(false)
+    setAppointmentToCancel(null)
+
+    setCancelling(true)
+    try {
+      const result = await cancelAppointment(cancelledAppointment)
+
+      // Update with server response (may have additional fields)
+      setAppointments(prev => prev.map(apt =>
+        apt.id === cancelledAppointment.id ? result.updatedAppointment : apt
+      ))
+
+      setNotification({
+        type: "success",
+        message: result.message
+      })
+    } catch (error: unknown) {
+      // Rollback on error
+      setAppointments(previousAppointments)
+      setAppointmentToCancel(cancelledAppointment)
+      setNotification({
+        type: "error",
+        message: (error as Error).message || "Failed to cancel appointment"
+      })
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  return (
+    <>
+      <div 
+        className="min-h-screen relative pt-20"
+        style={{
+          backgroundImage: 'url(/images/1.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'repeat',
+          backgroundAttachment: 'fixed',
+        }}
+      >
+        {/* Overlay for better readability */}
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px]"></div>
+        
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 min-h-screen">
+
+          {/* Page Header */}
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-4xl">
+                  📋
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold">My Appointments</h1>
+                  <p className="text-indigo-100 text-sm mt-1">View and manage all your appointments</p>
+                </div>
+              </div>
+              <div className="w-full sm:w-auto">
+                <Link href="/patient-dashboard/book-appointment" prefetch={true} className="block">
+                  <button className="btn-modern w-full group inline-flex items-center justify-center gap-3">
+                    <svg className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span className="text-sm sm:text-base">Book New Appointment</span>
+                  </button>
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600 mb-1">Confirmed</p>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {confirmedAppointments.length}
+                  </p>
+                </div>
+                <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <span className="text-3xl">📅</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600 mb-1">Completed</p>
+                  <p className="text-3xl font-bold text-green-600">
+                    {completedAppointments.length}
+                  </p>
+                </div>
+                <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center">
+                  <span className="text-3xl">✅</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600 mb-1">Cancelled</p>
+                  <p className="text-3xl font-bold text-red-600">
+                    {cancelledAppointments.length}
+                  </p>
+                </div>
+                <div className="w-14 h-14 bg-red-100 rounded-xl flex items-center justify-center">
+                  <span className="text-3xl">❌</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* View mode toggle */}
+          <div className="flex justify-between items-center mb-4">
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-xs sm:text-sm">
+              <button
+                onClick={() => setViewMode("appointments")}
+                className={`px-4 py-1.5 rounded-full font-medium transition-all ${
+                  viewMode === "appointments"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Appointments
+              </button>
+              <button
+                onClick={() => setViewMode("documents")}
+                className={`px-4 py-1.5 rounded-full font-medium transition-all ${
+                  viewMode === "documents"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Documents &amp; Reports
+              </button>
+            </div>
+          </div>
+
+          {viewMode === "appointments" ? (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-4 lg:p-5">
+              {/* Tabs */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden mb-4 sm:mb-6">
+                <div className="flex flex-col sm:flex-row border-b border-slate-200">
+                  <button
+                    onClick={() => setActiveTab("confirmed")}
+                    className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 font-semibold transition-all text-sm sm:text-base ${
+                      activeTab === "confirmed"
+                        ? "bg-blue-50 text-blue-600 border-b-2 border-blue-600"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    📅 Confirmed ({confirmedAppointments.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("completed")}
+                    className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 font-semibold transition-all text-sm sm:text-base ${
+                      activeTab === "completed"
+                        ? "bg-green-50 text-green-600 border-b-2 border-green-600"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    ✅ Completed ({completedAppointments.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("cancelled")}
+                    className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 font-semibold transition-all text-sm sm:text-base ${
+                      activeTab === "cancelled"
+                        ? "bg-red-50 text-red-600 border-b-2 border-red-600"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    ❌ Cancelled ({cancelledAppointments.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Appointments List with pagination */}
+              <AppointmentsList
+                appointments={pagedAppointments}
+                onCancelAppointment={openCancelModal}
+                onPayBill={handleOpenBillingPayment}
+              />
+
+              {totalAppointmentsForTab > 0 && (
+                <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-slate-600">
+                  <span>
+                    Showing {startIndex + 1}-{endIndex} of {totalAppointmentsForTab} appointments
+                  </span>
+                  <div className="inline-flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-2 text-slate-700">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+                <DocumentsTab
+                  patientId={userData.patientId}
+                  patientUid={user.uid}
+                  canUpload={false}
+                  canEdit={false}
+                  canDelete={false}
+                  showPatientSelector={false}
+                  className="space-y-4"
+                />
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Cancellation Confirmation Modal */}
+        <CancelAppointmentModal
+          appointment={appointmentToCancel}
+          isOpen={showCancelModal}
+          onClose={() => {
+            setShowCancelModal(false)
+            setAppointmentToCancel(null)
+          }}
+          onConfirm={handleCancelAppointment}
+          cancelling={cancelling}
+          getHoursUntilAppointment={getHoursUntilAppointment}
+        />
+
+        {/* Notification Toast */}
+        {notification && (
+          <Notification
+            type={notification.type}
+            message={notification.message}
+            onClose={() => setNotification(null)}
+          />
+        )}
+        {billingPaymentModalOpen && selectedBilling && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg">
+              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900">Settle Hospital Bill</h3>
+                  <p className="text-sm text-slate-500">
+                    Appointment with Dr. {selectedBilling.appointment.doctorName}
+                  </p>
+                </div>
+                <button
+                  onClick={handleCloseBillingPayment}
+                  className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="px-6 py-5 space-y-5">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-xs uppercase text-slate-500 font-semibold tracking-wide mb-2">
+                    Bill Summary
+                  </p>
+                  <div className="flex items-center justify-between text-slate-800">
+                    <span className="text-sm">Total amount due</span>
+                    <span className="text-2xl font-bold text-slate-900">
+                      ₹{selectedBilling.billing.totalAmount}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Generated on{" "}
+                    {selectedBilling.billing.generatedAt
+                      ? new Date(selectedBilling.billing.generatedAt).toLocaleString()
+                      : "N/A"}
+                  </p>
+                </div>
+
+                <PaymentMethodSection
+                  title="Choose payment method"
+                  paymentMethod={billingPaymentMethod}
+                  setPaymentMethod={(method) => setBillingPaymentMethod(method)}
+                  paymentData={billingPaymentData}
+                  setPaymentData={setBillingPaymentData}
+                  amountToPay={selectedBilling.billing.totalAmount}
+                  methods={["card", "upi"]}
+                />
+              </div>
+              <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button
+                  onClick={handleCloseBillingPayment}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all"
+                  disabled={payingBill}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmBillingPayment}
+                  disabled={
+                    payingBill ||
+                    Number(selectedBilling.billing.totalAmount || 0) <= 0
+                  }
+                  className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-60"
+                >
+                  {payingBill ? "Processing..." : `Pay ₹${selectedBilling.billing.totalAmount}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      <Footer />
+    </>
+  )
+}
+

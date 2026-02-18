@@ -1,0 +1,85 @@
+/**
+ * ENT anatomy part descriptions - ear, throat, dental, nose, lungs, kidney
+ */
+
+export const entPartDescriptions: Record<string, { name: string; description: string }> = {
+  // Ear
+  Outer_Ear: { name: 'Outer Ear (Pinna/Auricle)', description: 'The visible external portion of the ear that collects sound waves and directs them into the ear canal. Common conditions: otitis externa, cauliflower ear, perichondritis.' },
+  outer_ear: { name: 'Outer Ear (Pinna/Auricle)', description: 'The visible external portion of the ear that collects sound waves and directs them into the ear canal. Common conditions: otitis externa, cauliflower ear, perichondritis.' },
+  Ear_Canal: { name: 'Ear Canal (External Auditory Canal)', description: 'A tube-like structure measuring approximately 2.5 cm that extends from the outer ear to the eardrum. Common conditions: otitis externa, cerumen impaction, foreign body.' },
+  ear_canal: { name: 'Ear Canal (External Auditory Canal)', description: 'A tube-like structure measuring approximately 2.5 cm that extends from the outer ear to the eardrum. Common conditions: otitis externa, cerumen impaction, foreign body.' },
+  Eardrum: { name: 'Eardrum (Tympanic Membrane)', description: 'A thin, cone-shaped membrane that separates the external ear from the middle ear. Common conditions: perforation, otitis media, tympanosclerosis.' },
+  eardrum: { name: 'Eardrum (Tympanic Membrane)', description: 'A thin, cone-shaped membrane that separates the external ear from the middle ear. Common conditions: perforation, otitis media, tympanosclerosis.' },
+  Ossicles: { name: 'Ossicles (Middle Ear Bones)', description: 'Three tiny bones (malleus, incus, stapes) that form a chain. Common conditions: otosclerosis, ossicular chain dislocation.' },
+  ossicles: { name: 'Ossicles (Middle Ear Bones)', description: 'Three tiny bones (malleus, incus, stapes) that form a chain. Common conditions: otosclerosis, ossicular chain dislocation.' },
+  Cochlea: { name: 'Cochlea', description: 'A spiral-shaped organ that converts sound vibrations into electrical signals. Common conditions: sensorineural hearing loss, Ménière\'s disease.' },
+  cochlea: { name: 'Cochlea', description: 'A spiral-shaped organ that converts sound vibrations into electrical signals. Common conditions: sensorineural hearing loss, Ménière\'s disease.' },
+  Semicircular_Canals: { name: 'Semicircular Canals', description: 'Fluid-filled tubes for balance. Common conditions: BPPV, labyrinthitis.' },
+  semicircular_canals: { name: 'Semicircular Canals', description: 'Fluid-filled tubes for balance. Common conditions: BPPV, labyrinthitis.' },
+  Auditory_Nerve: { name: 'Auditory Nerve', description: 'Carries electrical signals from the cochlea to the brain.' },
+  auditory_nerve: { name: 'Auditory Nerve', description: 'Carries electrical signals from the cochlea to the brain.' },
+  Ear: { name: 'Ear', description: 'The complete hearing and balance organ.' },
+  ear: { name: 'Ear', description: 'The complete hearing and balance organ.' },
+  // Throat
+  Pharynx: { name: 'Pharynx', description: 'The muscular tube connecting nasal cavity and mouth to larynx and esophagus. Common conditions: pharyngitis, tonsillitis.' },
+  pharynx: { name: 'Pharynx', description: 'The muscular tube connecting nasal cavity and mouth to larynx and esophagus. Common conditions: pharyngitis, tonsillitis.' },
+  Larynx: { name: 'Larynx (Voice Box)', description: 'Contains the vocal cords. Common conditions: laryngitis, vocal cord polyps.' },
+  larynx: { name: 'Larynx (Voice Box)', description: 'Contains the vocal cords. Common conditions: laryngitis, vocal cord polyps.' },
+  Epiglottis: { name: 'Epiglottis', description: 'Leaf-shaped flap that covers the larynx during swallowing. Common conditions: epiglottitis.' },
+  epiglottis: { name: 'Epiglottis', description: 'Leaf-shaped flap that covers the larynx during swallowing. Common conditions: epiglottitis.' },
+  Trachea: { name: 'Trachea (Windpipe)', description: 'Connects the larynx to the bronchi. Common conditions: tracheitis.' },
+  trachea: { name: 'Trachea (Windpipe)', description: 'Connects the larynx to the bronchi. Common conditions: tracheitis.' },
+  Vocal_Cords: { name: 'Vocal Cords', description: 'Two bands of muscle tissue that vibrate to produce sound.' },
+  vocal_cords: { name: 'Vocal Cords', description: 'Two bands of muscle tissue that vibrate to produce sound.' },
+  // Dental
+  Teeth: { name: 'Teeth (Dentition)', description: 'Hard structures used for biting and chewing.' },
+  teeth: { name: 'Teeth (Dentition)', description: 'Hard structures used for biting and chewing.' },
+  Gums: { name: 'Gums (Gingiva)', description: 'Soft tissue surrounding and supporting the teeth.' },
+  gums: { name: 'Gums (Gingiva)', description: 'Soft tissue surrounding and supporting the teeth.' },
+  Tongue: { name: 'Tongue', description: 'Muscular organ for taste, speech, and swallowing.' },
+  tongue: { name: 'Tongue', description: 'Muscular organ for taste, speech, and swallowing.' },
+  Mandible: { name: 'Mandible (Lower Jaw)', description: 'The largest bone of the face, forming the lower jaw.' },
+  mandible: { name: 'Mandible (Lower Jaw)', description: 'The largest bone of the face, forming the lower jaw.' },
+  Palate: { name: 'Palate (Roof of Mouth)', description: 'The roof of the mouth separating oral and nasal cavities.' },
+  palate: { name: 'Palate (Roof of Mouth)', description: 'The roof of the mouth separating oral and nasal cavities.' },
+  Oral_Mucosa: { name: 'Oral Mucosa', description: 'Mucous membrane lining the mouth.' },
+  oral_mucosa: { name: 'Oral Mucosa', description: 'Mucous membrane lining the mouth.' },
+  Salivary_Glands: { name: 'Salivary Glands', description: 'Glands that produce saliva.' },
+  salivary_glands: { name: 'Salivary Glands', description: 'Glands that produce saliva.' },
+  Wisdom_Teeth: { name: 'Wisdom Teeth (Third Molars)', description: 'Last molars to erupt, often causing problems.' },
+  wisdom_teeth: { name: 'Wisdom Teeth (Third Molars)', description: 'Last molars to erupt, often causing problems.' },
+  // Nose
+  Nostrils: { name: 'Nostrils (Nasal Vestibule)', description: 'External openings of the nose.' },
+  nostrils: { name: 'Nostrils (Nasal Vestibule)', description: 'External openings of the nose.' },
+  Nasal_Cavity: { name: 'Nasal Cavity', description: 'Air-filled space that filters and humidifies inhaled air.' },
+  nasal_cavity: { name: 'Nasal Cavity', description: 'Air-filled space that filters and humidifies inhaled air.' },
+  Nasal_Septum: { name: 'Nasal Septum', description: 'Wall dividing the nasal cavity into left and right.' },
+  nasal_septum: { name: 'Nasal Septum', description: 'Wall dividing the nasal cavity into left and right.' },
+  Turbinates: { name: 'Turbinates (Nasal Conchae)', description: 'Bony structures that warm and filter air.' },
+  turbinates: { name: 'Turbinates (Nasal Conchae)', description: 'Bony structures that warm and filter air.' },
+  Sinuses: { name: 'Sinuses (Paranasal Sinuses)', description: 'Air-filled spaces in the bones around the nose.' },
+  sinuses: { name: 'Sinuses (Paranasal Sinuses)', description: 'Air-filled spaces in the bones around the nose.' },
+  // Lungs
+  Bronchi: { name: 'Bronchi', description: 'Main air passages branching from the trachea.' },
+  bronchi: { name: 'Bronchi', description: 'Main air passages branching from the trachea.' },
+  Lungs: { name: 'Lungs', description: 'Paired organs responsible for gas exchange.' },
+  lungs: { name: 'Lungs', description: 'Paired organs responsible for gas exchange.' },
+  Heart: { name: 'Heart', description: 'The muscular organ that pumps blood.' },
+  heart: { name: 'Heart', description: 'The muscular organ that pumps blood.' },
+  // Kidney
+  Kidney: { name: 'Kidney', description: 'Paired organs that filter blood and remove waste.' },
+  kidney: { name: 'Kidney', description: 'Paired organs that filter blood and remove waste.' },
+  Renal_Pelvis: { name: 'Renal Pelvis', description: 'Funnel-shaped structure that collects urine.' },
+  Ureter: { name: 'Ureter', description: 'Tubes that carry urine from kidneys to bladder.' },
+  Cortex: { name: 'Renal Cortex', description: 'Outer region containing glomeruli.' },
+  Medulla: { name: 'Renal Medulla', description: 'Inner region containing loops of Henle.' },
+}
+
+export function getPartDescription(partName: string): { name: string; description: string } {
+  if (entPartDescriptions[partName]) return entPartDescriptions[partName]
+  const lowerName = partName.toLowerCase()
+  for (const key in entPartDescriptions) {
+    if (key.toLowerCase() === lowerName) return entPartDescriptions[key]
+  }
+  return { name: partName, description: `Selected part: ${partName}. Click to view detailed information.` }
+}

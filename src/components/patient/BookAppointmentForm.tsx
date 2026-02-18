@@ -1,0 +1,1231 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Doctor, UserData, AppointmentFormData, PaymentData, Appointment } from "@/types/patient"
+import { Branch } from "@/types/branch"
+import { SYMPTOM_CATEGORIES } from "./symptoms/SymptomSelector"
+import PatientInfoStep from "./appointments/steps/PatientInfoStep"
+import SymptomsStep from "./appointments/steps/SymptomsStep"
+import DoctorSelectionStep from "./appointments/steps/DoctorSelectionStep"
+import DateTimeSelectionStep from "./appointments/steps/DateTimeSelectionStep"
+import { isSlotInPast, getDayName, generateTimeSlots, isTimeSlotAvailable, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
+import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blockedDates"
+import { collection, query, where, getDocs } from "firebase/firestore"
+import { db, auth } from "@/firebase/config"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+
+interface BookAppointmentFormProps {
+  user: { uid: string; email: string | null }
+  userData: UserData
+  doctors: Doctor[]
+  onSubmit: (data: {
+    selectedDoctor: string
+    appointmentData: AppointmentFormData
+    paymentMethod: "card" | "upi" | "cash"
+    paymentType: "full" | "partial"
+    paymentData: PaymentData
+  }) => Promise<void>
+  submitting: boolean
+  // Reschedule mode: preselect doctor and jump to date/time only
+  rescheduleMode?: boolean
+  initialDoctorId?: string
+}
+
+export default function BookAppointmentForm({
+  user,
+  userData,
+  doctors,
+  onSubmit,
+  submitting,
+  rescheduleMode = false,
+  initialDoctorId
+}: BookAppointmentFormProps) {
+  const { activeHospitalId } = useMultiHospital()
+  const [currentStep, setCurrentStep] = useState(rescheduleMode ? 4 : 1)
+  const [selectedDoctor, setSelectedDoctor] = useState(initialDoctorId || "")
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("")
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null)
+  const [showBranchConfirm, setShowBranchConfirm] = useState(false)
+  const [loadingBranches, setLoadingBranches] = useState(false)
+  const [appointmentData, setAppointmentData] = useState<AppointmentFormData>({
+    date: "",
+    time: "",
+    problem: "",
+    medicalHistory: ""
+  })
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([])
+  const [bookedTimeSlots, setBookedTimeSlots] = useState<string[]>([])
+  const [allTimeSlots, setAllTimeSlots] = useState<string[]>([])
+  const [pastTimeSlots, setPastTimeSlots] = useState<string[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [hasDuplicateAppointment, setHasDuplicateAppointment] = useState(false)
+  const [duplicateAppointmentTime, setDuplicateAppointmentTime] = useState("")
+  // Symptom selection state
+  const [selectedSymptomCategory, setSelectedSymptomCategory] = useState<string | null>(null)
+  const [previousSymptomCategory, setPreviousSymptomCategory] = useState<string | null>(null)
+  const [symptomAnswers, setSymptomAnswers] = useState<any>({})
+  const [medicalConditions, setMedicalConditions] = useState<string[]>([])
+  const [allergies, setAllergies] = useState(userData?.allergies || "")
+  const [currentMedications, setCurrentMedications] = useState(userData?.currentMedications || "")
+
+  // Animation direction state
+  const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right')
+
+  // Confirmation modal state
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  // Doctor selection confirmation modal (for non-recommended doctors)
+  const [showDoctorConfirmModal, setShowDoctorConfirmModal] = useState(false)
+  const [pendingDoctorId, setPendingDoctorId] = useState<string | null>(null)
+
+  const totalSteps = 4
+
+  // Fetch branches on mount
+  useEffect(() => {
+    const fetchBranches = async () => {
+      if (!activeHospitalId) return
+      
+      try {
+        setLoadingBranches(true)
+
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          setBranches([])
+          return
+        }
+
+        const token = await currentUser.getIdToken()
+        if (!token) {
+          setBranches([])
+          return
+        }
+
+        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+        const data = await response.json()
+        
+        if (data.success && data.branches) {
+          setBranches(data.branches)
+          
+          // Set default branch from patient's defaultBranchId if available
+          if (userData?.defaultBranchId) {
+            const defaultBranch = data.branches.find((b: Branch) => b.id === userData.defaultBranchId)
+            if (defaultBranch) {
+              setSelectedBranchId(defaultBranch.id)
+              setSelectedBranch(defaultBranch)
+            }
+          } else if (data.branches.length > 0) {
+            // If no default branch, select first branch
+            setSelectedBranchId(data.branches[0].id)
+            setSelectedBranch(data.branches[0])
+          }
+        }
+      } catch {
+      } finally {
+        setLoadingBranches(false)
+      }
+    }
+
+    fetchBranches()
+  }, [activeHospitalId, userData?.defaultBranchId])
+
+  // Ensure doctor stays preselected if provided later (doctors load async)
+  useEffect(() => {
+    if (initialDoctorId && !selectedDoctor) {
+      setSelectedDoctor(initialDoctorId)
+    }
+  }, [initialDoctorId, selectedDoctor])
+
+
+  // Currently selected doctor details (used in slots logic and summary UI)
+  const selectedDoctorData = doctors.find(doc => doc.id === selectedDoctor)
+
+  // Fetch available time slots when doctor and date are selected
+  useEffect(() => {
+    const fetchAvailableSlots = async () => {
+      if (!selectedDoctor || !appointmentData.date) {
+        setAvailableTimeSlots([])
+        setBookedTimeSlots([])
+        setAllTimeSlots([])
+        setPastTimeSlots([])
+        setHasDuplicateAppointment(false)
+        setDuplicateAppointmentTime("")
+        return
+      }
+
+      setLoadingSlots(true)
+      try {
+        // Fetch all confirmed appointments for this doctor on this date (and branch if selected)
+        const appointmentsQuery = selectedBranchId
+          ? query(
+              collection(db, "appointments"),
+              where("doctorId", "==", selectedDoctor),
+              where("appointmentDate", "==", appointmentData.date),
+              where("branchId", "==", selectedBranchId),
+              where("status", "==", "confirmed")
+            )
+          : query(
+              collection(db, "appointments"),
+              where("doctorId", "==", selectedDoctor),
+              where("appointmentDate", "==", appointmentData.date),
+              where("status", "==", "confirmed")
+            )
+        
+        const snapshot = await getDocs(appointmentsQuery)
+        const existingAppointments: Appointment[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Appointment))
+
+        // Fetch all confirmed appointments for this patient on this date   
+        const baseCollection = collection(db, "appointments")
+        const patientAppointmentsByUidQuery = query(
+          baseCollection,
+          where("patientUid", "==", user.uid),
+          where("doctorId", "==", selectedDoctor),
+          where("appointmentDate", "==", appointmentData.date),
+          where("status", "==", "confirmed")
+        )
+        const patientAppointmentsLegacyQuery = query(
+          baseCollection,
+          where("patientId", "==", user.uid),
+          where("doctorId", "==", selectedDoctor),
+          where("appointmentDate", "==", appointmentData.date),
+          where("status", "==", "confirmed")
+        )
+
+        const [patientAppointmentsByUid, patientAppointmentsLegacy] = await Promise.all([
+          getDocs(patientAppointmentsByUidQuery),
+          getDocs(patientAppointmentsLegacyQuery)
+        ])
+
+        const patientAppointmentsMap = new Map<string, Appointment>()
+        ;[...patientAppointmentsByUid.docs, ...patientAppointmentsLegacy.docs].forEach(docSnap => {
+          patientAppointmentsMap.set(
+            docSnap.id,
+            { id: docSnap.id, ...docSnap.data() } as Appointment
+          )
+        })
+        const patientAppointmentsList = Array.from(patientAppointmentsMap.values())
+
+        if (patientAppointmentsList.length > 0) {
+          setHasDuplicateAppointment(true)
+          setDuplicateAppointmentTime(patientAppointmentsList[0].appointmentTime)
+        }else{
+          setHasDuplicateAppointment(false)
+          setDuplicateAppointmentTime("")
+        }
+
+
+        // Get doctor's visiting hours for the selected date (use branch timings if available)
+        const selectedDate = new Date(appointmentData.date)
+        // Use branch timings if branch is selected, otherwise use doctor's visiting hours
+        let visitingHours = (selectedDoctorData?.visitingHours || DEFAULT_VISITING_HOURS)
+        if (selectedBranch && selectedBranch.timings) {
+          // Convert branch timings to VisitingHours format
+          const branchVisitingHours = {
+            monday: selectedBranch.timings.monday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.monday.start, end: selectedBranch.timings.monday.end }] }
+              : { isAvailable: false, slots: [] },
+            tuesday: selectedBranch.timings.tuesday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.tuesday.start, end: selectedBranch.timings.tuesday.end }] }
+              : { isAvailable: false, slots: [] },
+            wednesday: selectedBranch.timings.wednesday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.wednesday.start, end: selectedBranch.timings.wednesday.end }] }
+              : { isAvailable: false, slots: [] },
+            thursday: selectedBranch.timings.thursday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.thursday.start, end: selectedBranch.timings.thursday.end }] }
+              : { isAvailable: false, slots: [] },
+            friday: selectedBranch.timings.friday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.friday.start, end: selectedBranch.timings.friday.end }] }
+              : { isAvailable: false, slots: [] },
+            saturday: selectedBranch.timings.saturday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.saturday.start, end: selectedBranch.timings.saturday.end }] }
+              : { isAvailable: false, slots: [] },
+            sunday: selectedBranch.timings.sunday 
+              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.sunday.start, end: selectedBranch.timings.sunday.end }] }
+              : { isAvailable: false, slots: [] },
+          }
+          // Check if doctor has branch-specific timings for this branch
+          if (selectedDoctorData?.branchTimings && selectedBranchId && selectedDoctorData.branchTimings[selectedBranchId]) {
+            visitingHours = selectedDoctorData.branchTimings[selectedBranchId]
+          } else {
+            visitingHours = branchVisitingHours
+          }
+        }
+        const dayName = getDayName(selectedDate)
+        const daySchedule = visitingHours[dayName]
+
+        // Respect blocked dates (normalize to YYYY-MM-DD; support string/Timestamp/object with date)
+        const blockedDates: any[] = Array.isArray((selectedDoctorData as any)?.blockedDates) ? (selectedDoctorData as any).blockedDates : []
+        if (blockedDates.length > 0 && isDateBlockedFromRaw(appointmentData.date, blockedDates)) {
+          // Date is blocked - clear all slots
+          setAllTimeSlots([])
+          setBookedTimeSlots([])
+          setPastTimeSlots([])
+          setAvailableTimeSlots([])
+          setHasDuplicateAppointment(false)
+          setDuplicateAppointmentTime("")
+          return
+        }
+
+        // Generate ALL possible time slots for this day
+        if (daySchedule && daySchedule.isAvailable && daySchedule.slots.length > 0) {
+          const allSlots = generateTimeSlots(daySchedule)
+          setAllTimeSlots(allSlots)
+
+          // Identify which slots are booked
+          const booked = allSlots.filter(slot => {
+            return existingAppointments.some(apt => apt.appointmentTime === slot)
+          })
+          setBookedTimeSlots(booked)
+
+          // Identify which slots are in the past
+          const past = allSlots.filter(slot => {
+            return isSlotInPast(slot, appointmentData.date)
+          })
+          setPastTimeSlots(past)
+
+          // Identify available slots (NOT booked AND NOT in past)
+          const available = allSlots.filter(slot => {
+            const notBooked = isTimeSlotAvailable(slot, existingAppointments)
+            const notPast = !isSlotInPast(slot, appointmentData.date)
+            return notBooked && notPast
+          })
+          setAvailableTimeSlots(available)
+        } else {
+          setAllTimeSlots([])
+          setBookedTimeSlots([])
+          setPastTimeSlots([])
+          setAvailableTimeSlots([])
+           setHasDuplicateAppointment(false)
+           setDuplicateAppointmentTime("")
+        }
+      } catch {
+        setAvailableTimeSlots([])
+        setBookedTimeSlots([])
+        setAllTimeSlots([])
+        setPastTimeSlots([])
+        setHasDuplicateAppointment(false)
+        setDuplicateAppointmentTime("")
+      } finally {
+        setLoadingSlots(false)
+      }
+    }
+
+    fetchAvailableSlots()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDoctor, appointmentData.date, selectedBranchId, selectedBranch])
+
+  const nextStep = () => {
+    if (currentStep < totalSteps && canProceedToNextStep()) {
+      // If moving from step 1, show branch confirmation
+      if (currentStep === 1 && selectedBranchId) {
+        setShowBranchConfirm(true)
+        return
+      }
+      
+      setSlideDirection('right') // Slide from right when going forward
+      const newStep = currentStep + 1
+      setCurrentStep(newStep)
+    }
+  }
+
+  const handleConfirmBranch = () => {
+    setShowBranchConfirm(false)
+    setSlideDirection('right')
+    const newStep = currentStep + 1
+    setCurrentStep(newStep)
+  }
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setSlideDirection('left') // Slide from left when going backward
+      setCurrentStep(currentStep - 1)
+    }
+  }
+
+
+  // Auto-generate chief complaint from structured data
+  useEffect(() => {
+    if (!selectedSymptomCategory) {
+      // If category is cleared, also clear previous category tracking
+      if (previousSymptomCategory) {
+        setPreviousSymptomCategory(null)
+      }
+      return
+    }
+
+    const category = SYMPTOM_CATEGORIES.find(c => c.id === selectedSymptomCategory)
+    if (!category) return
+
+    const categoryLabel = category.label
+    const currentProblem = (appointmentData.problem || '').trim()
+
+    // If category changed (not first selection), reset problem to new category only
+    if (previousSymptomCategory && previousSymptomCategory !== selectedSymptomCategory) {
+      // Category changed - reset to just the new category label (user is changing their selection)
+      setAppointmentData(prev => ({ ...prev, problem: categoryLabel }))
+      setPreviousSymptomCategory(selectedSymptomCategory)
+      return
+    }
+
+    // First time selecting this category
+    if (!previousSymptomCategory) {
+      setPreviousSymptomCategory(selectedSymptomCategory)
+    }
+
+    // If user already typed a free-text complaint, preserve it and prefix with the category (once)
+    if (currentProblem.length > 0) {
+      const alreadyPrefixed = currentProblem.toLowerCase().startsWith(categoryLabel.toLowerCase() + ':') || 
+                              currentProblem.toLowerCase().startsWith(categoryLabel.toLowerCase() + ' :')
+      if (!alreadyPrefixed) {
+        const nextProblem = `${categoryLabel}: ${currentProblem}`
+        if (nextProblem !== appointmentData.problem) {
+          setAppointmentData(prev => ({ ...prev, problem: nextProblem }))
+        }
+      }
+      return
+    }
+
+    // For cancer category, skip auto-generation here (handled by the other useEffect)
+    if (selectedSymptomCategory === "cancer_oncology") {
+      return
+    }
+
+    // Otherwise, build a helpful default from category + quick answers
+    const parts: string[] = []
+    if (symptomAnswers.description) {
+      parts.push(String(symptomAnswers.description))
+    } else if (symptomAnswers.reason) {
+      parts.push(String(symptomAnswers.reason))
+    } else {
+      if (symptomAnswers.duration) parts.push(`for ${symptomAnswers.duration}`)
+      if (symptomAnswers.symptoms && (symptomAnswers.symptoms as string[]).length > 0) {
+        parts.push(`with ${(symptomAnswers.symptoms as string[]).join(', ')}`)
+      }
+    }
+
+    // Persist additional concern for downstream (summary + doctor view)
+    const additional = (symptomAnswers.description as string) || (symptomAnswers.concerns as string) || ''
+    if (additional && additional !== appointmentData.additionalConcern) {
+      setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
+    }
+
+    const detail = parts.join(' ')
+    const complaint = detail ? `${categoryLabel}: ${detail}` : categoryLabel
+
+    setAppointmentData(prev => ({ ...prev, problem: complaint }))
+  }, [selectedSymptomCategory, symptomAnswers, appointmentData.problem, appointmentData.additionalConcern, previousSymptomCategory])
+
+  // Auto-generate medical history from selections
+  useEffect(() => {
+    let history = ''
+    
+    if (medicalConditions.length > 0) {
+      history += `Existing conditions: ${medicalConditions.join(', ')}. `
+    }
+    if (allergies) {
+      history += `Allergies: ${allergies}. `
+    }
+    if (currentMedications) {
+      history += `Current medications: ${currentMedications}.`
+    }
+    
+    setAppointmentData(prev => ({ ...prev, medicalHistory: history.trim() }))
+  }, [medicalConditions, allergies, currentMedications])
+
+  // When SmartQuestions updates, persist "Tell us more" free-text into appointment data
+  useEffect(() => {
+    // For cancer category, build comprehensive summary from all selected fields
+    if (selectedSymptomCategory === "cancer_oncology") {
+      const cancerParts: string[] = []
+      
+      if (symptomAnswers.cancerType) {
+        cancerParts.push(`Type: ${symptomAnswers.cancerType}`)
+      }
+      if (symptomAnswers.visitType) {
+        cancerParts.push(`Visit Type: ${symptomAnswers.visitType}`)
+      }
+      if (symptomAnswers.treatmentStatus) {
+        cancerParts.push(`Status: ${symptomAnswers.treatmentStatus}`)
+      }
+      if (symptomAnswers.symptoms && Array.isArray(symptomAnswers.symptoms) && symptomAnswers.symptoms.length > 0) {
+        const treatments = (symptomAnswers.symptoms as string[]).filter(s => s !== 'None / I don\'t know')
+        if (treatments.length > 0) {
+          cancerParts.push(`Current Treatments: ${treatments.join(', ')}`)
+        }
+      }
+      if (symptomAnswers.additionalConcerns) {
+        cancerParts.push(`Additional Concerns: ${symptomAnswers.additionalConcerns}`)
+      }
+      
+      if (cancerParts.length > 0) {
+        const cancerSummary = cancerParts.join(' | ')
+        if (cancerSummary !== appointmentData.problem) {
+          setAppointmentData(prev => ({ ...prev, problem: cancerSummary }))
+        }
+      }
+    } else {
+      // For other categories, use existing logic
+      const additional = (symptomAnswers.description as string) || (symptomAnswers.concerns as string) || ''
+      if (additional && additional !== appointmentData.additionalConcern) {
+        setAppointmentData(prev => ({ ...prev, additionalConcern: additional }))
+      }
+    }
+  }, [symptomAnswers, selectedSymptomCategory, appointmentData.additionalConcern, appointmentData.problem])
+
+
+  // Filter doctors based on symptom category
+  const filteredDoctors = selectedSymptomCategory 
+    ? doctors.filter(doc => {
+        const category = SYMPTOM_CATEGORIES.find(c => c.id === selectedSymptomCategory)
+        if (!category) return true // If category not found, show all doctors
+        
+        // Normalize doctor specialization - remove special chars and convert to lowercase
+        const normalize = (str: string) => str.toLowerCase().replace(/[()\/]/g, " ").replace(/\s+/g, " ").trim()
+        const docSpecialization = normalize(doc.specialization || "")
+        if (!docSpecialization) return true // If doctor has no specialization, show them
+        
+        // Specialization mappings: category specialization -> doctor specialization variations
+        const specializationMappings: Record<string, string[]> = {
+          "general physician": ["family medicine", "family physician", "family medicine specialist", "general practitioner", "gp", "general practice"],
+          "gynecology": ["gynecologist", "obstetrician", "ob gyn", "obstetrician ob gyn", "gynecologist obstetrician", "women's health"],
+          "psychology": ["psychologist"],
+          "psychiatry": ["psychiatrist"],
+          "gastroenterology": ["gastroenterologist"],
+          "endocrinology": ["endocrinologist"],
+          "cardiology": ["cardiologist"],
+          "orthopedic surgery": ["orthopedic", "orthopedics", "orthopedic surgeon"],
+          "dermatology": ["dermatologist"],
+          "ophthalmology": ["ophthalmologist", "eye specialist"],
+          "pulmonology": ["pulmonologist", "chest specialist", "respiratory"],
+          "nephrology": ["nephrologist", "kidney specialist"],
+          "urology": ["urologist"],
+          "internal medicine": ["internal medicine", "internal medicine specialist"],
+          "hematology": ["hematologist"],
+          "rheumatology": ["rheumatologist"],
+          "allergy specialist": ["allergy specialist", "allergist"],
+          "pediatrics": ["pediatrician", "child specialist"],
+          "geriatrics": ["geriatrician"],
+          "oncology": ["oncologist", "medical oncologist", "surgical oncologist", "radiation oncologist", "cancer specialist"]
+        }
+        
+        // Check if any category specialization matches the doctor's specialization
+        return category.relatedSpecializations.some(categorySpec => {
+          const categorySpecLower = normalize(categorySpec)
+          
+          // Direct match - check if doctor specialization contains category spec or vice versa
+          if (docSpecialization.includes(categorySpecLower) || categorySpecLower.includes(docSpecialization)) {
+            return true
+          }
+          
+          // Check if doctor specialization matches any variation of the category specialization
+          const variations = specializationMappings[categorySpecLower] || []
+          for (const variation of variations) {
+            const variationNormalized = normalize(variation)
+            // Check if doctor specialization contains variation or variation contains doctor specialization
+            if (docSpecialization.includes(variationNormalized) || variationNormalized.includes(docSpecialization)) {
+              return true
+            }
+            // Also check word-by-word matching for better accuracy
+            const docWords = docSpecialization.split(/\s+/)
+            const varWords = variationNormalized.split(/\s+/)
+            if (varWords.some(word => docWords.includes(word) && word.length > 3)) {
+              return true
+            }
+          }
+          
+          return false
+        })
+      })
+    : doctors
+
+  // Calculate which doctors are recommended vs all others
+  const recommendedDoctors = filteredDoctors
+  const otherDoctors = selectedSymptomCategory && filteredDoctors.length > 0
+    ? doctors.filter(doc => !filteredDoctors.some(filtered => filtered.id === doc.id))
+    : []
+
+  // Handle doctor selection with confirmation for non-recommended doctors
+  const handleDoctorSelect = (doctorId: string) => {
+    const isRecommended = recommendedDoctors.some(doc => doc.id === doctorId)
+    
+    if (isRecommended || !selectedSymptomCategory) {
+      // Direct selection for recommended doctors or when no category selected
+      setSelectedDoctor(doctorId)
+    } else {
+      // Show confirmation for non-recommended doctors
+      setPendingDoctorId(doctorId)
+      setShowDoctorConfirmModal(true)
+    }
+  }
+
+  // Confirm selection of non-recommended doctor
+  const handleConfirmDoctorSelection = () => {
+    if (pendingDoctorId) {
+      setSelectedDoctor(pendingDoctorId)
+      setShowDoctorConfirmModal(false)
+      setPendingDoctorId(null)
+    }
+  }
+
+  const canProceedToNextStep = () => {
+    switch (currentStep) {
+      case 1: return selectedBranchId !== "" // Require branch selection
+      case 2: return (appointmentData.problem?.trim().length ?? 0) > 0 // Require free-text only
+      case 3: return selectedDoctor !== ""
+      case 4: return appointmentData.date !== "" && appointmentData.time !== "" && !hasDuplicateAppointment
+      default: return false
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Only allow submission if we're on the final step
+    if (currentStep !== totalSteps) {
+      return
+    }
+    
+    // Show confirmation modal instead of submitting directly
+    setShowConfirmModal(true)
+  }
+
+  const handleConfirmSubmit = async () => {
+    setShowConfirmModal(false)
+    
+    // Submit with cash payment (to be paid at reception desk)
+    await onSubmit({
+      selectedDoctor,
+      appointmentData: {
+        ...appointmentData,
+        branchId: selectedBranchId
+      },
+      paymentMethod: "cash",
+      paymentType: "full",
+      paymentData: { cardNumber: "", cardName: "", expiryDate: "", cvv: "", upiId: "" }
+    })
+
+    // Reset form
+    setCurrentStep(1)
+    setAppointmentData({
+      date: "",
+      time: "",
+      problem: "",
+      medicalHistory: ""
+    })
+    setSelectedDoctor("")
+  }
+
+
+  const handleClear = () => {
+    setCurrentStep(1)
+    setAppointmentData({
+      date: "",
+      time: "",
+      problem: "",
+      medicalHistory: ""
+    })
+    setSelectedDoctor("")
+  }
+
+  const steps = [
+    { number: 1, title: "Patient Info", icon: "👤" },
+    { number: 2, title: "Symptoms", icon: "🩺" },
+    { number: 3, title: "Select Doctor", icon: "👨‍⚕️" },
+    { number: 4, title: "Date & Time", icon: "📅" }
+  ]
+
+  return (
+    <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-2xl shadow-lg overflow-hidden mb-6">
+      {/* Modern Header with Gradient */}
+      <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-6 py-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white text-2xl shadow-lg">
+              📋
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white">Book New Appointment</h2>
+              <p className="text-slate-100 text-xs sm:text-sm mt-0.5">Step {currentStep} of {totalSteps}: {steps[currentStep - 1].title}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Enhanced Progress Stepper */}
+      {/* Mobile compact stepper */}
+      <div className="bg-white px-4 py-3 border-b border-slate-200 sm:hidden">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-700">{steps[currentStep - 1].title}</span>
+          <span className="text-xs text-slate-500">{currentStep} of {totalSteps}</span>
+        </div>
+        <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+          <div 
+            className="h-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-500 ease-out shadow-sm" 
+            style={{ width: `${(currentStep / totalSteps) * 100}%` }} 
+          />
+        </div>
+        <div className="mt-2 text-xs text-slate-500 text-center">
+          {Math.round((currentStep / totalSteps) * 100)}% Complete
+        </div>
+      </div>
+
+      {/* Desktop/tablet full stepper */}
+      <div className="bg-white px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 hidden sm:block">
+        <div className="flex items-center justify-between">
+          {steps.filter(s => rescheduleMode ? s.number <= 4 : true).map((step, index, arr) => (
+            <div key={step.number} className="flex items-center flex-1">
+              <div className="flex flex-col items-center">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold transition-all ${
+                  currentStep > step.number 
+                    ? "bg-green-500 text-white" 
+                    : currentStep === step.number 
+                    ? "bg-slate-700 text-white ring-4 ring-slate-300" 
+                    : "bg-slate-200 text-slate-400"
+                }`}>
+                  {currentStep > step.number ? "✓" : step.icon}
+                </div>
+                <p className={`text-xs mt-2 font-medium hidden sm:block ${
+                  currentStep >= step.number ? "text-slate-800" : "text-slate-400"
+                }`}>
+                  {step.title}
+                </p>
+              </div>
+              {index < arr.length - 1 && (
+                <div className={`flex-1 h-1 mx-2 rounded transition-all ${
+                  currentStep > step.number ? "bg-green-500" : "bg-slate-200"
+                }`} />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Form Container */}
+      <div className="p-4 sm:p-6 overflow-hidden">
+        <form onSubmit={handleSubmit} onKeyDown={(e) => {
+          // Handle Enter key for step navigation
+          if (e.key === 'Enter') {
+            const target = e.target as HTMLElement
+            
+            // Don't trigger if in textarea or if Ctrl/Cmd is pressed
+            if (target.tagName === 'TEXTAREA' || e.ctrlKey || e.metaKey) {
+              return
+            }
+            
+            // Don't trigger if in a modal or dropdown
+            if (target.closest('[role="dialog"]') || target.closest('[data-dropdown-menu]')) {
+              return
+            }
+
+            // If on final step and the callback came from a submit button, allow normal submission
+            if (
+              currentStep === totalSteps &&
+              target instanceof HTMLButtonElement &&
+              target.type === 'submit'
+            ) {
+              return
+            }
+            
+            // Otherwise, prevent default and try to go to next step
+            e.preventDefault()
+            if (currentStep < totalSteps && canProceedToNextStep()) {
+              nextStep()
+            }
+          }
+        }}>
+          {/* Step 1: Patient Information */}
+          {currentStep === 1 && (
+            <PatientInfoStep
+              user={user}
+              userData={userData}
+              branches={branches}
+              selectedBranchId={selectedBranchId}
+              loadingBranches={loadingBranches}
+              slideDirection={slideDirection}
+              onBranchSelect={(branchId, branch) => {
+                setSelectedBranchId(branchId)
+                setSelectedBranch(branch)
+              }}
+            />
+          )}
+
+          {/* Step 2: Symptoms & Medical Information */}
+          {!rescheduleMode && currentStep === 2 && (
+            <SymptomsStep
+              userData={userData}
+              appointmentData={appointmentData}
+              selectedSymptomCategory={selectedSymptomCategory}
+              symptomAnswers={symptomAnswers}
+              medicalConditions={medicalConditions}
+              allergies={allergies}
+              currentMedications={currentMedications}
+              slideDirection={slideDirection}
+              onProblemChange={(problem) => setAppointmentData({ ...appointmentData, problem })}
+              onSymptomCategoryChange={setSelectedSymptomCategory}
+              onSymptomAnswersChange={setSymptomAnswers}
+              onMedicalConditionsChange={setMedicalConditions}
+              onAllergiesChange={setAllergies}
+              onMedicationsChange={setCurrentMedications}
+              onSymptomDetailsChange={(field, value) => setAppointmentData({ ...appointmentData, [field]: value })}
+              onReset={() => {
+                setSelectedSymptomCategory(null)
+                setSymptomAnswers({})
+                setMedicalConditions([])
+                setAllergies(userData?.allergies || "")
+                setCurrentMedications(userData?.currentMedications || "")
+                setAppointmentData(prev => ({
+                  ...prev,
+                  problem: "",
+                  symptomDuration: "",
+                  symptomProgression: "",
+                  symptomTriggers: "",
+                  associatedSymptoms: "",
+                  additionalConcern: "",
+                  medicalHistory: ""
+                }))
+              }}
+            />
+          )}
+
+          {/* Step 3: Doctor Selection (moved from step 2) */}
+          {!rescheduleMode && currentStep === 3 && (
+            <DoctorSelectionStep
+              doctors={doctors}
+              filteredDoctors={filteredDoctors}
+              recommendedDoctors={recommendedDoctors}
+              otherDoctors={otherDoctors}
+              selectedDoctor={selectedDoctor}
+              selectedSymptomCategory={selectedSymptomCategory}
+              slideDirection={slideDirection}
+              onDoctorSelect={handleDoctorSelect}
+            />
+          )}
+
+          {/* Step 4: Date & Time (moved from step 3) */}
+          {currentStep === 4 && (
+            <DateTimeSelectionStep
+              appointmentData={appointmentData}
+              selectedDoctorData={selectedDoctorData}
+              selectedBranchId={selectedBranchId}
+              selectedBranch={selectedBranch}
+              availableTimeSlots={availableTimeSlots}
+              bookedTimeSlots={bookedTimeSlots}
+              allTimeSlots={allTimeSlots}
+              pastTimeSlots={pastTimeSlots}
+              loadingSlots={loadingSlots}
+              hasDuplicateAppointment={hasDuplicateAppointment}
+              duplicateAppointmentTime={duplicateAppointmentTime}
+              slideDirection={slideDirection}
+              onDateChange={(date) => {
+                setAppointmentData({...appointmentData, date, time: ""})
+                setAvailableTimeSlots([])
+              }}
+              onTimeChange={(time) => setAppointmentData({...appointmentData, time})}
+            />
+          )}
+
+
+          {/* Navigation Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-6 mt-6 border-t border-slate-200">
+            {currentStep > 1 && (
+              <button
+                type="button"
+                onClick={prevStep}
+                className="px-4 sm:px-6 py-3 sm:py-3.5 border-2 border-slate-300 rounded-xl hover:bg-slate-100 hover:border-slate-400 transition-all font-semibold text-slate-700 shadow-sm hover:shadow-md text-sm sm:text-base"
+              >
+                ← Previous
+              </button>
+            )}
+            
+            {currentStep < totalSteps ? (
+              <button
+                type="button"
+                onClick={nextStep}
+                disabled={!canProceedToNextStep()}
+                className="btn-modern flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next Step →
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={submitting || !canProceedToNextStep()}
+                className="btn-modern btn-modern-success flex-1 flex items-center justify-center"
+              >
+                {submitting 
+                  ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Processing...
+                    </span>
+                  )
+                  : rescheduleMode
+                    ? "Confirm Reschedule"
+                    : "Book Appointment"}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleClear}
+              className="px-4 sm:px-6 py-3 sm:py-3.5 border-2 border-red-300 rounded-xl hover:bg-red-50 hover:border-red-400 transition-all font-semibold text-red-700 shadow-sm hover:shadow-md text-sm sm:text-base"
+            >
+              Clear
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Branch Confirmation Modal */}
+      {showBranchConfirm && selectedBranchId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-fade-in">
+            <div className="bg-gradient-to-r from-teal-600 to-cyan-700 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white text-2xl">
+                  🏥
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Confirm Branch Selection</h3>
+                  <p className="text-sm text-teal-100">Please confirm your branch choice</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBranchConfirm(false)}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                {(() => {
+                  const selectedBranch = branches.find(b => b.id === selectedBranchId)
+                  return selectedBranch ? (
+                    <div className="bg-teal-50 rounded-xl p-4 border-2 border-teal-100">
+                      <div className="flex items-start gap-3">
+                        <div className="text-3xl">🏥</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 mb-1">Selected Branch</h4>
+                          <p className="text-lg font-bold text-teal-700">
+                            {selectedBranch.name}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {selectedBranch.location}
+                          </p>
+                          {userData?.defaultBranchId === selectedBranchId && (
+                            <span className="inline-block mt-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                              Your Default Branch
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <p className="text-xs text-slate-600">
+                    <strong>Note:</strong> You can change the branch by going back to Step 1. The selected branch will be used for this appointment.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
+              <button
+                onClick={() => setShowBranchConfirm(false)}
+                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleConfirmBranch}
+                className="btn-modern btn-modern-success flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>Yes, Continue</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden transform transition-all animate-fade-in">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white text-2xl">
+                  ✅
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Confirm Appointment</h3>
+                  <p className="text-sm text-green-100">Please review your details before confirming</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+                disabled={submitting}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              <div className="space-y-4">
+                {/* Doctor Information */}
+                <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">👨‍⚕️</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Doctor</h4>
+                      <p className="text-lg font-bold text-blue-700">
+                        {selectedDoctorData ? `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}` : 'N/A'}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {selectedDoctorData?.specialization || 'N/A'}
+                      </p>
+                      {selectedDoctorData?.consultationFee && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          Consultation Fee: ₹{selectedDoctorData.consultationFee}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Appointment Date & Time */}
+                <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">📅</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Date & Time</h4>
+                      <p className="text-lg font-bold text-purple-700">
+                        {appointmentData.date ? new Date(appointmentData.date).toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        }) : 'N/A'}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Time: {appointmentData.time || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Symptoms/Chief Complaint */}
+                <div className="bg-orange-50 rounded-xl p-4 border-2 border-orange-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">🩺</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Chief Complaint</h4>
+                      <p className="text-gray-700 whitespace-pre-wrap">
+                        {appointmentData.problem || 'N/A'}
+                      </p>
+                      {appointmentData.additionalConcern && (
+                        <div className="mt-2 pt-2 border-t border-orange-200">
+                          <p className="text-sm font-medium text-gray-600 mb-1">Additional Concerns:</p>
+                          <p className="text-sm text-gray-700">{appointmentData.additionalConcern}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Medical History */}
+                {appointmentData.medicalHistory && (
+                  <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
+                    <div className="flex items-start gap-3">
+                      <div className="text-3xl">📋</div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 mb-1">Medical History</h4>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {appointmentData.medicalHistory}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Information */}
+                <div className="bg-green-50 rounded-xl p-4 border-2 border-green-100">
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl">💳</div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 mb-1">Payment Information</h4>
+                      <div className="space-y-2">
+                        <div className="bg-white/60 rounded-lg p-3 border border-green-200">
+                          <p className="text-sm text-gray-700 mb-2">
+                            <strong>Payment will be collected at the reception desk</strong>
+                          </p>
+                          {selectedDoctorData?.consultationFee && (
+                            <div className="flex justify-between items-center pt-2 border-t border-green-200">
+                              <span className="text-lg font-semibold text-gray-800">Amount to Pay:</span>
+                              <span className="text-2xl font-bold text-green-700">₹{selectedDoctorData.consultationFee}</span>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-600 mt-2">
+                            💡 Please arrive at the reception desk before your appointment time to complete the payment.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={submitting}
+                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSubmit}
+                disabled={submitting}
+                className="btn-modern btn-modern-success flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    ✅ Confirm & Book Appointment
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Selection Confirmation Modal (for non-recommended doctors) */}
+      {showDoctorConfirmModal && pendingDoctorId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-fade-in">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white text-2xl">
+                  ⚠️
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Select Non-Recommended Doctor?</h3>
+                  <p className="text-sm text-orange-100">Please confirm your selection</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDoctorConfirmModal(false)
+                  setPendingDoctorId(null)
+                }}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
+                  <p className="text-sm text-amber-800 font-semibold mb-2 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>This doctor is not specifically recommended for your symptoms.</span>
+                  </p>
+                  <p className="text-xs text-amber-700 mt-2">
+                    You selected: <strong>{selectedSymptomCategory && SYMPTOM_CATEGORIES.find(c => c.id === selectedSymptomCategory)?.label}</strong>
+                  </p>
+                </div>
+
+                {/* Doctor Information */}
+                {(() => {
+                  const doctorToConfirm = doctors.find(d => d.id === pendingDoctorId)
+                  return doctorToConfirm ? (
+                    <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                      <div className="flex items-start gap-3">
+                        <div className="text-3xl">👨‍⚕️</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 mb-1">Selected Doctor</h4>
+                          <p className="text-lg font-bold text-blue-700">
+                            Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {doctorToConfirm.specialization}
+                          </p>
+                          {doctorToConfirm.consultationFee && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              Consultation Fee: ₹{doctorToConfirm.consultationFee}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                  <p className="text-xs text-slate-600">
+                    <strong>Note:</strong> You can still select this doctor, but we recommend choosing from the suggested doctors above for better treatment of your specific symptoms.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
+              <button
+                onClick={() => {
+                  setShowDoctorConfirmModal(false)
+                  setPendingDoctorId(null)
+                }}
+                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDoctorSelection}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>Yes, Select This Doctor</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
