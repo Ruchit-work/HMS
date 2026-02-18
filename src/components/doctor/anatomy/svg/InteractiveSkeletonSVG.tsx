@@ -113,7 +113,7 @@ export default function InteractiveSkeletonSVG({ onPartSelect, selectedPart }: I
         const partName = id ? svgIdToSkeletonPart[id] : null
         if (partName && skeletonPartsData[partName]) {
           g.setAttribute('pointer-events', 'all')
-          g.style.cursor = 'pointer'
+          ;(g as SVGElement).style.cursor = 'pointer'
           collectPartElements(g, partName)
           const paths = g.querySelectorAll('path')
           paths.forEach((p) => {
