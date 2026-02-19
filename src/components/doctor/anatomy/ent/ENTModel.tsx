@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { findPartName, getSkeletonMeshNumber } from './findPartName'
 import { getPartDescription } from './entPartDescriptions'
 import { getAnatomyTypeFromPath } from './entAnatomyMappings'
-import { getAnatomyFromMeshName, getSkeletonPartFromMeshNameOnly, getMeshNameFromChain } from './skeletonAnatomyData'
+import { getAnatomyFromMeshName, getSkeletonPartFromMeshNameOnly } from './skeletonAnatomyData'
 
 interface ENTModelProps {
   onPartSelect?: (partName: string | null, partInfo?: { name: string; description: string }) => void
@@ -258,9 +258,6 @@ export function ENTModel({
           if (!skeletonResult) skeletonResult = getAnatomyFromMeshName(clickedObject, modelPath)
           partName = skeletonResult ? skeletonResult.partKey : null
           partInfo = skeletonResult ? { name: skeletonResult.name, description: skeletonResult.description } : undefined
-          // Log so you can see which mesh was hit and what part it resolved to (for changing part name/description)
-          const hitMeshName = getMeshNameFromChain(clickedObject) || clickedObject.name || '(no name)'
-          console.log('Raycast hit mesh:', hitMeshName, '| Resolved part:', partName ?? '(none)')
         } else {
           partName = findPartName(clickedObject, modelPath)
           partInfo = partName ? getPartDescription(partName) : undefined
@@ -365,8 +362,6 @@ export function ENTModel({
         if (!skeletonResult) skeletonResult = getAnatomyFromMeshName(clickedObject, modelPath)
         partName = skeletonResult ? skeletonResult.partKey : null
         partInfo = skeletonResult ? { name: skeletonResult.name, description: skeletonResult.description } : undefined
-        const hitMeshName = getMeshNameFromChain(clickedObject) || clickedObject.name || '(no name)'
-        console.log('Raycast hit mesh:', hitMeshName, '| Resolved part:', partName ?? '(none)')
       } else {
         partName = findPartName(clickedObject, modelPath)
         partInfo = partName ? getPartDescription(partName) : undefined

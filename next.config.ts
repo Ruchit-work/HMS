@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'", // unsafe-inline needed for Tailwind
               "img-src 'self' data: blob: https: http:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://speech.googleapis.com https://*.cognitiveservices.azure.com https://*.stt.speech.microsoft.com https://api.groq.com wss://*.firebaseio.com wss://*.cloudfunctions.net",
+              "connect-src 'self' blob: https://*.firebaseio.com https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://speech.googleapis.com https://*.cognitiveservices.azure.com https://*.stt.speech.microsoft.com https://api.groq.com wss://*.firebaseio.com wss://*.cloudfunctions.net",
               "frame-src 'self'",
               "object-src 'none'",
               "base-uri 'self'",

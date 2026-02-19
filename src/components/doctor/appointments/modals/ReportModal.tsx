@@ -1,5 +1,7 @@
 "use client"
 
+import { RevealModal, useRevealModalClose } from "@/components/ui/overlays/RevealModal"
+
 type ReportFilter = "daily" | "weekly" | "monthly" | "yearly" | "custom" | "all"
 type ReportFormat = "pdf" | "excel"
 
@@ -19,40 +21,36 @@ interface ReportModalProps {
   onGenerate: () => void
 }
 
-export function ReportModal({
-  isOpen,
+function ReportModalContent({
   filter,
   format,
   customStartDate,
   customEndDate,
   generating,
   errorMessage,
-  onClose,
   onFilterChange,
   onFormatChange,
   onStartDateChange,
   onEndDateChange,
   onGenerate,
-}: ReportModalProps) {
-  if (!isOpen) return null
+}: Omit<ReportModalProps, "isOpen" | "onClose">) {
+  const requestClose = useRevealModalClose()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xl font-bold text-slate-900">Generate Patient Report</h3>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-            >
+    <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold text-slate-900">Generate Patient Report</h3>
+          <button
+            onClick={requestClose}
+            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
         </div>
-
         <div className="px-6 py-6 space-y-6">
           {errorMessage && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -129,7 +127,7 @@ export function ReportModal({
         <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
           <div className="flex justify-end gap-3">
             <button
-              onClick={onClose}
+              onClick={requestClose}
               disabled={generating}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
@@ -160,7 +158,42 @@ export function ReportModal({
           </div>
         </div>
       </div>
-    </div>
+  )
+}
+
+export function ReportModal({
+  isOpen,
+  filter,
+  format,
+  customStartDate,
+  customEndDate,
+  generating,
+  errorMessage,
+  onClose,
+  onFilterChange,
+  onFormatChange,
+  onStartDateChange,
+  onEndDateChange,
+  onGenerate,
+}: ReportModalProps) {
+  if (!isOpen) return null
+
+  return (
+    <RevealModal isOpen={isOpen} onClose={onClose} contentClassName="p-0">
+      <ReportModalContent
+        filter={filter}
+        format={format}
+        customStartDate={customStartDate}
+        customEndDate={customEndDate}
+        generating={generating}
+        errorMessage={errorMessage}
+        onFilterChange={onFilterChange}
+        onFormatChange={onFormatChange}
+        onStartDateChange={onStartDateChange}
+        onEndDateChange={onEndDateChange}
+        onGenerate={onGenerate}
+      />
+    </RevealModal>
   )
 }
 

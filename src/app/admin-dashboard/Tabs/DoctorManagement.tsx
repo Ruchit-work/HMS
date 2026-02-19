@@ -8,6 +8,7 @@ import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
+import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 import DoctorProfileForm, { DoctorProfileFormValues } from '@/components/forms/DoctorProfileForm'
 import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/shared/date'
@@ -27,6 +28,59 @@ interface Doctor {
     createdAt: string
     updatedAt: string
 }
+
+function AddDoctorModalContent({
+    loading,
+    error,
+    onErrorClear,
+    onSubmit,
+    submitLabel,
+}: {
+    loading: boolean
+    error: string | null
+    onErrorClear: () => void
+    onSubmit: (values: DoctorProfileFormValues) => void | Promise<void>
+    submitLabel: string
+}) {
+    const requestClose = useRevealModalClose()
+    return (
+        <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-green-600 to-green-700 text-white flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center">
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 className="text-lg sm:text-xl font-bold">Add Doctor</h3>
+                        <p className="text-green-100 text-xs sm:text-sm">Add a new doctor to the system</p>
+                    </div>
+                </div>
+                <button
+                    onClick={requestClose}
+                    className="text-white hover:text-green-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg"
+                >
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gray-50 overflow-y-auto max-h-[calc(95vh-200px)]">
+                <DoctorProfileForm
+                    mode="admin"
+                    loading={loading}
+                    externalError={error ?? undefined}
+                    onErrorClear={onErrorClear}
+                    onSubmit={onSubmit}
+                    onCancel={requestClose}
+                    submitLabel={submitLabel}
+                />
+            </div>
+        </div>
+    )
+}
+
 export default function DoctorManagement({ canDelete = true, canAdd = true, disableAdminGuard = true, selectedBranchId = "all" }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean; selectedBranchId?: string } = {}) {
     const [doctors, setDoctors] = useState<Doctor[]>([])
     const [pendingDoctors, setPendingDoctors] = useState<Doctor[]>([])
@@ -1005,43 +1059,20 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             />
             {/* Add Doctor Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden transform transition-all duration-300 ease-out">
-                        <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-green-600 to-green-700 text-white flex items-center justify-between">
-                                <div className="flex items-center space-x-3">
-                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center">
-                                        <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg sm:text-xl font-bold">Add Doctor</h3>
-                                        <p className="text-green-100 text-xs sm:text-sm">Add a new doctor to the system</p>
-                                    </div>
-                                </div>
-                                <button
-                                onClick={closeAddDoctorModal}
-                                className="text-white hover:text-green-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg"
-                                >
-                                    <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gray-50 overflow-y-auto max-h-[calc(95vh-200px)]">
-                            <DoctorProfileForm
-                                mode="admin"
-                                loading={loading}
-                                externalError={error ?? undefined}
-                                onErrorClear={() => setError(null)}
-                                onSubmit={handleCreateDoctor}
-                                onCancel={closeAddDoctorModal}
-                                submitLabel={loading ? 'Adding Doctor...' : 'Add Doctor'}
-                                                />
-                                            </div>
-                                                </div>
-                                            </div>
-                                        )}
+                <RevealModal
+                    isOpen={true}
+                    onClose={closeAddDoctorModal}
+                    contentClassName="p-0"
+                >
+                    <AddDoctorModalContent
+                        loading={loading}
+                        error={error}
+                        onErrorClear={() => setError(null)}
+                        onSubmit={handleCreateDoctor}
+                        submitLabel={loading ? 'Adding Doctor...' : 'Add Doctor'}
+                    />
+                </RevealModal>
+            )}
         </>
     );
 

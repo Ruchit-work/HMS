@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
+import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import Notification from '@/components/ui/feedback/Notification'
 import { auth, db } from '@/firebase/config'
@@ -36,6 +37,151 @@ interface ReceptionistEditFormData {
   lastName: string
   phone: string
   branchId: string
+}
+
+function AddReceptionistModalContent({
+  formData,
+  setFormData,
+  onSubmit,
+  branches,
+  branchesLoading,
+  saving,
+}: {
+  formData: ReceptionistFormData
+  setFormData: React.Dispatch<React.SetStateAction<ReceptionistFormData>>
+  onSubmit: (e: React.FormEvent) => void
+  branches: Branch[]
+  branchesLoading: boolean
+  saving: boolean
+}) {
+  const requestClose = useRevealModalClose()
+  return (
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl min-w-[360px] max-h-[95vh] overflow-hidden flex flex-col border border-slate-200/80">
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 sm:px-10 pt-7 pb-5 rounded-t-2xl shrink-0">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5h4.01M7 20h4c1.103 0 2-.897 2-2V6c0-1.103-.897-2-2-2h-4c-1.103 0-2 .897-2 2v12c0 1.103.897 2 2 2zM7 6V4c0-1.103.897-2 2-2h4c1.103 0 2 .897 2 2v2" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Create New Receptionist</h3>
+              <p className="text-base text-slate-500 mt-1">Add a new receptionist to your team</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={requestClose}
+            className="p-2.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+            aria-label="Close"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <form onSubmit={onSubmit} className="flex-1 overflow-y-auto p-8 sm:p-10 space-y-6 min-h-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">First Name *</label>
+            <input
+              type="text"
+              required
+              value={formData.firstName}
+              onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="Enter first name"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Last Name *</label>
+            <input
+              type="text"
+              required
+              value={formData.lastName}
+              onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="Enter last name"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Email *</label>
+            <input
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="Enter email address"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Phone *</label>
+            <input
+              type="tel"
+              required
+              value={formData.phone}
+              onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="Enter phone number"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Password *</label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={formData.password}
+              onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="Min 6 characters"
+            />
+            <p className="text-sm text-slate-500 mt-1.5">Password must be at least 6 characters</p>
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Branch *</label>
+            <select
+              required
+              value={formData.branchId}
+              onChange={(e) => setFormData((prev) => ({ ...prev, branchId: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+              disabled={branchesLoading || branches.length === 0}
+            >
+              <option value="">
+                {branchesLoading ? 'Loading branches...' : branches.length === 0 ? 'No active branches found' : 'Select a branch'}
+              </option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
+            {!branchesLoading && branches.length === 0 && (
+              <p className="text-sm text-red-500 mt-1.5">No active branches available. Please create a branch first.</p>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={requestClose}
+            disabled={saving}
+            className="px-6 py-3 text-base border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-6 py-3 text-base bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Creating...' : 'Create Receptionist'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
 }
 
 export default function ReceptionistManagement({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
@@ -502,139 +648,21 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
 
       {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h3 className="text-2xl font-bold text-slate-800 mb-4">Create New Receptionist</h3>
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      First Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter first name"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Last Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter last name"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter email address"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Phone *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter phone number"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Password *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter password (min 6 characters)"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Password must be at least 6 characters</p>
-                </div>
-
-                {/* Branch selection */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Branch *
-                  </label>
-                  <select
-                    required
-                    value={formData.branchId}
-                    onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    disabled={branchesLoading || branches.length === 0}
-                  >
-                    <option value="">
-                      {branchesLoading
-                        ? 'Loading branches...'
-                        : branches.length === 0
-                          ? 'No active branches found'
-                          : 'Select a branch'}
-                    </option>
-                    {branches.map((branch) => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                  {!branchesLoading && branches.length === 0 && (
-                    <p className="text-xs text-red-500 mt-1">
-                      No active branches available for this hospital. Please create a branch first.
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
-                    disabled={saving}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={saving}
-                  >
-                    {saving ? 'Creating...' : 'Create Receptionist'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        <RevealModal
+          isOpen={true}
+          onClose={handleCancel}
+          contentClassName="p-0"
+          overlayClassName="mt-30 pt-20 sm:pt-24"
+        >
+          <AddReceptionistModalContent
+            formData={formData}
+            setFormData={setFormData}
+            onSubmit={handleSubmit}
+            branches={branches}
+            branchesLoading={branchesLoading}
+            saving={saving}
+          />
+        </RevealModal>
       )}
 
       {/* Edit Modal */}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import { RevealModal, useRevealModalClose } from "@/components/ui/overlays/RevealModal"
 import { sendOTP, verifyOTP } from "@/utils/campaigns/metaOTP"
 
 interface OTPVerificationModalProps {
@@ -132,8 +133,75 @@ export default function OTPVerificationModal({
   const formattedCountdown = `00:${resendSeconds.toString().padStart(2, "0")}`
 
   return (
-    <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-fade-in">
+    <RevealModal
+      isOpen={isOpen}
+      onClose={onClose}
+      contentClassName="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8"
+    >
+      <OTPVerificationModalContent
+        phone={phone}
+        countryCode={countryCode}
+        title={title}
+        subtitle={subtitle}
+        onVerified={onVerified}
+        onChangePhone={onChangePhone}
+        otp={otp}
+        setOtp={setOtp}
+        otpSent={otpSent}
+        otpVerified={otpVerified}
+        sendingOTP={sendingOTP}
+        verifyingOTP={verifyingOTP}
+        error={error}
+        resendSeconds={resendSeconds}
+        handleVerify={handleVerify}
+        handleResend={handleResend}
+        formattedCountdown={formattedCountdown}
+      />
+    </RevealModal>
+  )
+}
+
+function OTPVerificationModalContent({
+  phone,
+  countryCode,
+  title,
+  subtitle,
+  onVerified,
+  onChangePhone,
+  otp,
+  setOtp,
+  otpSent,
+  otpVerified,
+  sendingOTP,
+  verifyingOTP,
+  error,
+  resendSeconds,
+  handleVerify,
+  handleResend,
+  formattedCountdown,
+}: {
+  phone: string
+  countryCode: string
+  title: string
+  subtitle: string
+  onVerified?: () => void
+  onChangePhone?: () => void
+  otp: string
+  setOtp: (v: string) => void
+  otpSent: boolean
+  otpVerified: boolean
+  sendingOTP: boolean
+  verifyingOTP: boolean
+  error: string
+  resendSeconds: number
+  handleVerify: () => void
+  handleResend: () => void
+  formattedCountdown: string
+}) {
+  const requestClose = useRevealModalClose()
+
+  return (
+    <div>
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-100 rounded-full mb-4">
             <span className="text-3xl">📱</span>
@@ -220,13 +288,12 @@ export default function OTPVerificationModal({
 
         <button
           type="button"
-          onClick={onClose}
+          onClick={requestClose}
           disabled={verifyingOTP || otpVerified}
           className="mt-4 w-full text-sm text-slate-500 hover:text-slate-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {otpVerified ? "" : "Cancel"}
         </button>
-      </div>
     </div>
   )
 }

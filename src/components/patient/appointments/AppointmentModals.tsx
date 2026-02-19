@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import jsPDF from "jspdf"
 import { Appointment } from "@/types/patient"
+import { RevealModal, useRevealModalClose } from "@/components/ui/overlays/RevealModal"
 
 // ============================================================================
 // CancelAppointmentModal - Modal for confirming appointment cancellation
@@ -17,114 +18,134 @@ interface CancelAppointmentModalProps {
   getHoursUntilAppointment: (appointment: Appointment) => number
 }
 
+function CancelAppointmentModalContent({
+  appointment,
+  onConfirm,
+  cancelling,
+  getHoursUntilAppointment,
+}: CancelAppointmentModalProps) {
+  const requestClose = useRevealModalClose()
+  const hoursUntil = getHoursUntilAppointment(appointment!)
+  const CANCELLATION_FEE = 100
+  const refundAmount = hoursUntil >= 10 ? appointment!.paymentAmount : appointment!.paymentAmount - CANCELLATION_FEE
+
+  const handleConfirm = () => {
+    onConfirm()
+    requestClose()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 max-w-md w-full">
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+          <h2 className="text-xl font-semibold text-slate-800">Cancel Appointment</h2>
+          <button
+            onClick={requestClose}
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          <p className="text-sm text-gray-600 mb-2">
+            <strong>Doctor:</strong> Dr. {appointment!.doctorName}
+          </p>
+          <p className="text-sm text-gray-600 mb-2">
+            <strong>Date:</strong> {new Date(appointment!.appointmentDate).toLocaleDateString()}
+          </p>
+          <p className="text-sm text-gray-600 mb-2">
+            <strong>Time:</strong> {appointment!.appointmentTime}
+          </p>
+          <p className="text-sm text-gray-600">
+            <strong>Amount Paid:</strong> ₹{appointment!.paymentAmount}
+          </p>
+        </div>
+
+        <div className={`rounded-lg p-4 mb-4 ${
+          hoursUntil >= 10
+            ? "bg-green-50 border border-green-200"
+            : "bg-yellow-50 border border-yellow-200"
+        }`}>
+          <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+            <span>ℹ️</span>
+            <span>Cancellation Policy</span>
+          </h3>
+          <div className="text-sm text-gray-700 space-y-2">
+            {hoursUntil >= 10 ? (
+              <>
+                <p className="font-semibold text-green-700">✅ Full Refund (100%)</p>
+                <p>You are cancelling more than 10 hours before your appointment.</p>
+                <div className="bg-white rounded p-2 mt-2">
+                  <p className="text-gray-900"><strong>Refund Amount:</strong> ₹{appointment!.paymentAmount}</p>
+                  <p className="text-xs text-gray-600 mt-1">Full amount will be refunded to your account</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-yellow-700">⚠️ Cancellation Fee: ₹100</p>
+                <p>You are cancelling less than 10 hours before your appointment.</p>
+                <div className="bg-white rounded p-2 mt-2 space-y-1">
+                  <p className="text-gray-900"><strong>Original Amount Paid:</strong> ₹{appointment!.paymentAmount}</p>
+                  <p className="text-gray-900"><strong>Cancellation Fee:</strong> <span className="text-red-600 font-bold">-₹{CANCELLATION_FEE}</span></p>
+                  <p className="text-gray-900 pt-1 border-t"><strong>Refund Amount:</strong> <span className="text-green-600 font-bold">₹{refundAmount}</span></p>
+                </div>
+                {appointment!.paymentAmount <= CANCELLATION_FEE ? (
+                  <p className="text-xs text-orange-600 font-semibold mt-2 bg-orange-50 p-2 rounded border border-orange-200">
+                    ⚠️ Your paid amount (₹{appointment!.paymentAmount}) equals/covers the cancellation fee. No refund will be issued.
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+
+        <p className="text-gray-700 mb-6 text-center font-medium">
+          Are you sure you want to cancel this appointment?
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleConfirm}
+            disabled={cancelling}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {cancelling ? "Cancelling..." : "Confirm Cancellation"}
+          </button>
+          <button
+            onClick={requestClose}
+            disabled={cancelling}
+            className="flex-1 px-6 py-2.5 border border-slate-300 rounded-lg hover:bg-slate-50 transition-all font-medium text-slate-700"
+          >
+            Keep Appointment
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function CancelAppointmentModal({
   appointment,
   isOpen,
   onClose,
   onConfirm,
   cancelling,
-  getHoursUntilAppointment
+  getHoursUntilAppointment,
 }: CancelAppointmentModalProps) {
   if (!isOpen || !appointment) return null
 
-  const hoursUntil = getHoursUntilAppointment(appointment)
-  const CANCELLATION_FEE = 100
-  const refundAmount = hoursUntil >= 10 ? appointment.paymentAmount : appointment.paymentAmount - CANCELLATION_FEE
-
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl border border-slate-200 max-w-md w-full">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-            <h2 className="text-xl font-semibold text-slate-800">Cancel Appointment</h2>
-            <button 
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Appointment Details */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <p className="text-sm text-gray-600 mb-2">
-              <strong>Doctor:</strong> Dr. {appointment.doctorName}
-            </p>
-            <p className="text-sm text-gray-600 mb-2">
-              <strong>Date:</strong> {new Date(appointment.appointmentDate).toLocaleDateString()}
-            </p>
-            <p className="text-sm text-gray-600 mb-2">
-              <strong>Time:</strong> {appointment.appointmentTime}
-            </p>
-            <p className="text-sm text-gray-600">
-              <strong>Amount Paid:</strong> ₹{appointment.paymentAmount}
-            </p>
-          </div>
-
-          {/* Cancellation Policy Info */}
-          <div className={`rounded-lg p-4 mb-4 ${
-            hoursUntil >= 10 
-              ? "bg-green-50 border border-green-200" 
-              : "bg-yellow-50 border border-yellow-200"
-          }`}>
-            <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-              <span>ℹ️</span>
-              <span>Cancellation Policy</span>
-            </h3>
-            <div className="text-sm text-gray-700 space-y-2">
-              {hoursUntil >= 10 ? (
-                <>
-                  <p className="font-semibold text-green-700">✅ Full Refund (100%)</p>
-                  <p>You are cancelling more than 10 hours before your appointment.</p>
-                  <div className="bg-white rounded p-2 mt-2">
-                    <p className="text-gray-900"><strong>Refund Amount:</strong> ₹{appointment.paymentAmount}</p>
-                    <p className="text-xs text-gray-600 mt-1">Full amount will be refunded to your account</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="font-semibold text-yellow-700">⚠️ Cancellation Fee: ₹100</p>
-                  <p>You are cancelling less than 10 hours before your appointment.</p>
-                  <div className="bg-white rounded p-2 mt-2 space-y-1">
-                    <p className="text-gray-900"><strong>Original Amount Paid:</strong> ₹{appointment.paymentAmount}</p>
-                    <p className="text-gray-900"><strong>Cancellation Fee:</strong> <span className="text-red-600 font-bold">-₹{CANCELLATION_FEE}</span></p>
-                    <p className="text-gray-900 pt-1 border-t"><strong>Refund Amount:</strong> <span className="text-green-600 font-bold">₹{refundAmount}</span></p>
-                  </div>
-                  {appointment.paymentAmount <= CANCELLATION_FEE ? (
-                    <p className="text-xs text-orange-600 font-semibold mt-2 bg-orange-50 p-2 rounded border border-orange-200">
-                      ⚠️ Your paid amount (₹{appointment.paymentAmount}) equals/covers the cancellation fee. No refund will be issued.
-                    </p>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Confirmation Message */}
-          <p className="text-gray-700 mb-6 text-center font-medium">
-            Are you sure you want to cancel this appointment?
-          </p>
-
-          {/* Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={onConfirm}
-              disabled={cancelling}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {cancelling ? "Cancelling..." : "Confirm Cancellation"}
-            </button>
-            <button
-              onClick={onClose}
-              disabled={cancelling}
-              className="flex-1 px-6 py-2.5 border border-slate-300 rounded-lg hover:bg-slate-50 transition-all font-medium text-slate-700"
-            >
-              Keep Appointment
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <RevealModal isOpen={isOpen} onClose={onClose} contentClassName="p-0">
+      <CancelAppointmentModalContent
+        appointment={appointment}
+        isOpen={isOpen}
+        onClose={onClose}
+        onConfirm={onConfirm}
+        cancelling={cancelling}
+        getHoursUntilAppointment={getHoursUntilAppointment}
+      />
+    </RevealModal>
   )
 }
 
@@ -151,24 +172,19 @@ interface AppointmentSuccessModalProps {
   } | null
 }
 
-export function AppointmentSuccessModal({
-  isOpen,
+function AppointmentSuccessModalContent({
+  appointmentData,
   onClose,
-  appointmentData
-}: AppointmentSuccessModalProps) {
-  
-  // Auto-close after 10 seconds
-  useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(() => {
-        onClose()
-      }, 10000) // 10 seconds
-      
-      return () => clearTimeout(timer)
-    }
-  }, [isOpen, onClose])
+}: {
+  appointmentData: NonNullable<AppointmentSuccessModalProps["appointmentData"]>
+  onClose: () => void
+}) {
+  const requestClose = useRevealModalClose()
 
-  if (!isOpen || !appointmentData) return null
+  useEffect(() => {
+    const timer = setTimeout(() => requestClose(), 10000)
+    return () => clearTimeout(timer)
+  }, [requestClose])
 
   const downloadConfirmationPDF = () => {
     const pdf = new jsPDF()
@@ -255,16 +271,14 @@ export function AppointmentSuccessModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full animate-scale-in overflow-hidden border-2 border-slate-200">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-700 to-slate-800 p-6 text-white relative">
-          <button 
-            onClick={onClose}
-            className="absolute top-4 right-4 w-8 h-8 hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors"
-          >
-            <span className="text-white text-xl">×</span>
-          </button>
+    <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
+      <div className="bg-gradient-to-r from-slate-700 to-slate-800 p-6 text-white relative">
+        <button
+          onClick={requestClose}
+          className="absolute top-4 right-4 w-8 h-8 hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors"
+        >
+          <span className="text-white text-xl">×</span>
+        </button>
           
           <div className="text-center">
             <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg animate-bounce-once">
@@ -384,7 +398,7 @@ export function AppointmentSuccessModal({
               Download PDF
             </button>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition-all border border-slate-300"
             >
               Close
@@ -392,50 +406,27 @@ export function AppointmentSuccessModal({
           </div>
         </div>
       </div>
+  )
+}
 
-      <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-        
-        @keyframes scale-in {
-          from {
-            transform: scale(0.9);
-            opacity: 0;
-          }
-          to {
-            transform: scale(1);
-            opacity: 1;
-          }
-        }
-        
-        @keyframes bounce-once {
-          0%, 100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-10px);
-          }
-        }
-        
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out;
-        }
-        
-        .animate-scale-in {
-          animation: scale-in 0.4s ease-out;
-        }
-        
-        .animate-bounce-once {
-          animation: bounce-once 0.6s ease-out;
-        }
-      `}</style>
-    </div>
+export function AppointmentSuccessModal({
+  isOpen,
+  onClose,
+  appointmentData,
+}: AppointmentSuccessModalProps) {
+  if (!isOpen || !appointmentData) return null
+
+  return (
+    <RevealModal
+      isOpen={isOpen}
+      onClose={onClose}
+      contentClassName="p-0"
+    >
+      <AppointmentSuccessModalContent
+        appointmentData={appointmentData}
+        onClose={onClose}
+      />
+    </RevealModal>
   )
 }
 

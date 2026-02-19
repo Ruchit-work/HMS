@@ -13,6 +13,7 @@ import { InlineSpinner } from '@/components/ui/feedback/StatusComponents'
 import EmptyState from '@/components/ui/feedback/EmptyState'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
+import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 import OTPVerificationModal from '@/components/forms/OTPVerificationModal'
 import PatientProfileForm, { PatientProfileFormValues } from '@/components/forms/PatientProfileForm'
 import { calculateAge, formatDate, formatDateTime } from '@/utils/shared/date'
@@ -61,6 +62,215 @@ interface PatientManagementProps {
     receptionistBranchId?: string | null
     /** When provided (admin dashboard), filter patients by this branch */
     selectedBranchId?: string
+}
+
+type ReportFilterType = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'all'
+
+function GenerateReportModalContent({
+  reportFilter,
+  setReportFilter,
+  customStartDate,
+  setCustomStartDate,
+  customEndDate,
+  setCustomEndDate,
+  reportFormat,
+  setReportFormat,
+  generatingReport,
+  error,
+  onGenerate,
+}: {
+  reportFilter: ReportFilterType
+  setReportFilter: (v: ReportFilterType) => void
+  customStartDate: string
+  setCustomStartDate: (v: string) => void
+  customEndDate: string
+  setCustomEndDate: (v: string) => void
+  reportFormat: 'pdf' | 'excel'
+  setReportFormat: (v: 'pdf' | 'excel') => void
+  generatingReport: boolean
+  error: string | null
+  onGenerate: () => void
+}) {
+  const requestClose = useRevealModalClose()
+  return (
+    <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold text-slate-900">Generate Patient Report</h3>
+          <button
+            onClick={requestClose}
+            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-6 space-y-6">
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-slate-700">Date Range</label>
+          <select
+            value={reportFilter}
+            onChange={(e) => setReportFilter(e.target.value as ReportFilterType)}
+            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            <option value="daily">Daily (Today)</option>
+            <option value="weekly">Weekly (Last 7 days)</option>
+            <option value="monthly">Monthly (Current month)</option>
+            <option value="yearly">Yearly (Current year)</option>
+            <option value="custom">Custom Range</option>
+            <option value="all">All Patients</option>
+          </select>
+        </div>
+        {reportFilter === 'custom' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Start Date</label>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">End Date</label>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+          </div>
+        )}
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-slate-700">Report Format</label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                value="pdf"
+                checked={reportFormat === 'pdf'}
+                onChange={(e) => setReportFormat(e.target.value as 'pdf')}
+                className="h-4 w-4 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-sm text-slate-700">PDF</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                value="excel"
+                checked={reportFormat === 'excel'}
+                onChange={(e) => setReportFormat(e.target.value as 'excel')}
+                className="h-4 w-4 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-sm text-slate-700">Excel (.xlsx)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={requestClose}
+            disabled={generatingReport}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onGenerate}
+            disabled={generatingReport}
+            className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+          >
+            {generatingReport ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Generate Report
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AddPatientModalContent({
+  loading,
+  error,
+  onErrorClear,
+  onSubmit,
+  receptionistBranchId,
+  submitLabel,
+}: {
+  loading: boolean
+  error: string | null
+  onErrorClear: () => void
+  onSubmit: (values: PatientProfileFormValues) => void | Promise<void>
+  receptionistBranchId: string | null
+  submitLabel: string
+}) {
+  const requestClose = useRevealModalClose()
+  const handleCancel = () => {
+    requestClose()
+  }
+  return (
+    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden">
+      <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-lg sm:text-xl font-bold">Add Patient</h3>
+            <p className="text-blue-100 text-xs sm:text-sm">Create a new patient record</p>
+          </div>
+        </div>
+        <button
+          onClick={handleCancel}
+          className="text-white hover:text-blue-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg"
+        >
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gray-50 overflow-y-auto max-h-[calc(95vh-200px)]">
+        <PatientProfileForm
+          mode="admin"
+          loading={loading}
+          externalError={error ?? undefined}
+          onErrorClear={onErrorClear}
+          onSubmit={onSubmit}
+          onCancel={handleCancel}
+          enableCountryCode={false}
+          receptionistMode={receptionistBranchId != null}
+          initialValues={receptionistBranchId != null ? { password: '123456' } : undefined}
+          submitLabel={submitLabel}
+        />
+      </div>
+    </div>
+  )
 }
 
 export default function PatientManagement({
@@ -1514,192 +1724,43 @@ export default function PatientManagement({
           />
           {/* Generate Report Modal */}
           {showReportModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-              <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-                <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-slate-900">Generate Patient Report</h3>
-                    <button
-                      onClick={() => setShowReportModal(false)}
-                      className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                    >
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <div className="px-6 py-6 space-y-6">
-                  {error && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      {error}
-                    </div>
-                  )}
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">Date Range</label>
-                    <select
-                      value={reportFilter}
-                      onChange={(e) => setReportFilter(e.target.value as any)}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                    >
-                      <option value="daily">Daily (Today)</option>
-                      <option value="weekly">Weekly (Last 7 days)</option>
-                      <option value="monthly">Monthly (Current month)</option>
-                      <option value="yearly">Yearly (Current year)</option>
-                      <option value="custom">Custom Range</option>
-                      <option value="all">All Patients</option>
-                    </select>
-                  </div>
-                  {reportFilter === 'custom' && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-slate-700">Start Date</label>
-                        <input
-                          type="date"
-                          value={customStartDate}
-                          onChange={(e) => setCustomStartDate(e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-slate-700">End Date</label>
-                        <input
-                          type="date"
-                          value={customEndDate}
-                          onChange={(e) => setCustomEndDate(e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">Report Format</label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          value="pdf"
-                          checked={reportFormat === 'pdf'}
-                          onChange={(e) => setReportFormat(e.target.value as 'pdf')}
-                          className="h-4 w-4 text-green-600 focus:ring-green-500"
-                        />
-                        <span className="text-sm text-slate-700">PDF</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          value="excel"
-                          checked={reportFormat === 'excel'}
-                          onChange={(e) => setReportFormat(e.target.value as 'excel')}
-                          className="h-4 w-4 text-green-600 focus:ring-green-500"
-                        />
-                        <span className="text-sm text-slate-700">Excel (.xlsx)</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
-                  <div className="flex justify-end gap-3">
-                    <button
-                      onClick={() => setShowReportModal(false)}
-                      disabled={generatingReport}
-                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleGenerateReport}
-                      disabled={generatingReport}
-                      className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
-                    >
-                      {generatingReport ? (
-                        <>
-                          <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          Generate Report
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <RevealModal
+              isOpen={true}
+              onClose={() => setShowReportModal(false)}
+              contentClassName="p-0"
+            >
+              <GenerateReportModalContent
+                reportFilter={reportFilter}
+                setReportFilter={setReportFilter}
+                customStartDate={customStartDate}
+                setCustomStartDate={setCustomStartDate}
+                customEndDate={customEndDate}
+                setCustomEndDate={setCustomEndDate}
+                reportFormat={reportFormat}
+                setReportFormat={setReportFormat}
+                generatingReport={generatingReport}
+                error={error}
+                onGenerate={handleGenerateReport}
+              />
+            </RevealModal>
           )}
         </div>
         {/* Add Patient Modal */}
         {allowAdd && showAddModal && (
-          <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden transform transition-all duration-300 ease-out">
-              <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center">
-                    <svg
-                      className="w-5 h-5 sm:w-6 sm:h-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg sm:text-xl font-bold">
-                      Add Patient
-                    </h3>
-                    <p className="text-blue-100 text-xs sm:text-sm">
-                      Create a new patient record
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={closeAddPatientModal}
-                  className="text-white hover:text-blue-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg"
-                >
-                  <svg
-                    className="w-5 h-5 sm:w-6 sm:h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gray-50 overflow-y-auto max-h-[calc(95vh-200px)]">
-                <PatientProfileForm
-                  mode="admin"
-                  loading={loading}
-                  externalError={error ?? undefined}
-                  onErrorClear={() => setError(null)}
-                  onSubmit={handleCreatePatient}
-                  onCancel={closeAddPatientModal}
-                  enableCountryCode={false}
-                  receptionistMode={receptionistBranchId != null}
-                  initialValues={receptionistBranchId != null ? { password: '123456' } : undefined}
-                  submitLabel={loading ? "Adding Patient..." : (receptionistBranchId != null ? "Create Patient" : "Send OTP")}
-                />
-              </div>
-            </div>
-          </div>
+          <RevealModal
+            isOpen={true}
+            onClose={closeAddPatientModal}
+            contentClassName="p-0"
+          >
+            <AddPatientModalContent
+              loading={loading}
+              error={error}
+              onErrorClear={() => setError(null)}
+              onSubmit={handleCreatePatient}
+              receptionistBranchId={receptionistBranchId}
+              submitLabel={loading ? "Adding Patient..." : (receptionistBranchId != null ? "Create Patient" : "Send OTP")}
+            />
+          </RevealModal>
         )}
         {allowAdd && showOtpModal && pendingPatientValues && (
           <OTPVerificationModal

@@ -8,13 +8,13 @@ interface InteractiveSkeletonSVGProps {
   selectedPart: string | null
 }
 
-// Map fullskeleton.svg group ids and label ids to skeletonPartsData keys
+// Map fullskeleton.svg group ids, path ids, and label ids to skeletonPartsData keys
 const svgIdToSkeletonPart: Record<string, string> = {
-  // Skull & jaw
+  // Skull & jaw (groups)
   Skull: 'Skull',
   Cranium: 'Skull',
   Mandible: 'Mandible',
-  // Spine
+  // Spine (groups)
   CervicalVertebrae: 'Spine',
   ThoracicVertebrae: 'Spine',
   LumbarVertebrae: 'Spine',
@@ -22,24 +22,30 @@ const svgIdToSkeletonPart: Record<string, string> = {
   Coccyx: 'Spine',
   // Chest
   Manubrium: 'Sternum',
-  // Text labels (id prefix l_)
-  l_Sternum: 'Sternum',
-  l_Ribs: 'Ribcage',
-  l_Femur: 'Femur',
+  g3760: 'Ribcage',
+  // Femur (paths at layer3 root)
+  path479: 'Femur',
+  path513: 'Femur',
   // Limbs
   ClavicleLeft: 'Clavicle',
   ClavicleRight: 'Clavicle',
   Scapula: 'Scapula',
   HumerusLeft: 'Humerus',
   HumerusRight: 'Humerus',
-  UlnaLeft: 'Ulna',
-  UlnaRight: 'Ulna',
-  RadiusLeft: 'Radius',
-  RadiusRight: 'Radius',
+  UlnaLeft: 'Radius_Ulna',
+  UlnaRight: 'Radius_Ulna',
+  RadiusLeft: 'Radius_Ulna',
+  RadiusRight: 'Radius_Ulna',
   HandLeft: 'Hand',
   HandRight: 'Hand',
-  TibiaLeft: 'Tibia',
-  TibiaRight: 'Tibia',
+  CarpalsLeft: 'Hand',
+  CarpalsRight: 'Hand',
+  MetacarpalsLeft: 'Hand',
+  MetacarpalsRight: 'Hand',
+  PhalangesLeft: 'Hand',
+  PhalangesRight: 'Hand',
+  TibiaLeft: 'Tibia_Fibula',
+  TibiaRight: 'Tibia_Fibula',
   PatellaLeft: 'Patella',
   PatellaRight: 'Patella',
   // Foot
@@ -49,6 +55,66 @@ const svgIdToSkeletonPart: Record<string, string> = {
   FootRight: 'Tarsals',
   MetatarsalsLeft: 'Tarsals',
   MetatarsalsRight: 'Tarsals',
+  PhalangesFootLeft: 'Tarsals',
+  PhalangesFootRight: 'Tarsals',
+  // Label ids (layer1 text id="l_...")
+  l_Cranium: 'Skull',
+  l_Mandible: 'Mandible',
+  l_Clavicle: 'Clavicle',
+  l_Manubrium: 'Sternum',
+  l_Scapula: 'Scapula',
+  l_Sternum: 'Sternum',
+  l_Ribs: 'Ribcage',
+  l_Humerus: 'Humerus',
+  l_Ulna: 'Radius_Ulna',
+  l_Radius: 'Radius_Ulna',
+  l_Pelvic_Girdle: 'Pelvis',
+  l_Carpals: 'Hand',
+  l_Metacarpals: 'Hand',
+  l_Phalanges: 'Hand',
+  l_Femur: 'Femur',
+  l_Patella: 'Patella',
+  l_Tibia: 'Tibia_Fibula',
+  l_Fibula: 'Tibia_Fibula',
+  l_Tarsals: 'Tarsals',
+  l_Metatarsals: 'Tarsals',
+  l_PhalangesFoot: 'Tarsals',
+  l_Cervicle_Vertebrae: 'Spine',
+  l_Thoracic_Vertebrae: 'Spine',
+  l_Lumbar_Vertebrae: 'Spine',
+  l_Sacrum: 'Spine',
+  l_Coccyx: 'Spine',
+  l_Spinal_Column: 'Spine',
+}
+
+// Fallback: first word of label text (no numbers/symbols) -> part key
+const labelTextToPart: Record<string, string> = {
+  Cranium: 'Skull',
+  Mandible: 'Mandible',
+  Clavicle: 'Clavicle',
+  Manubrium: 'Sternum',
+  Scapula: 'Scapula',
+  Sternum: 'Sternum',
+  Ribs: 'Ribcage',
+  Humerus: 'Humerus',
+  Ulna: 'Radius_Ulna',
+  Radius: 'Radius_Ulna',
+  Pelvic: 'Pelvis',
+  Carpals: 'Hand',
+  Metacarpals: 'Hand',
+  Phalanges: 'Hand',
+  Femur: 'Femur',
+  Patella: 'Patella',
+  Tibia: 'Tibia_Fibula',
+  Fibula: 'Tibia_Fibula',
+  Tarsals: 'Tarsals',
+  Metatarsals: 'Tarsals',
+  Cervical: 'Spine',
+  Thoracic: 'Spine',
+  Lumbar: 'Spine',
+  Sacrum: 'Spine',
+  Coccyx: 'Spine',
+  Spinal: 'Spine',
 }
 
 export default function InteractiveSkeletonSVG({ onPartSelect, selectedPart }: InteractiveSkeletonSVGProps) {
@@ -75,24 +141,35 @@ export default function InteractiveSkeletonSVG({ onPartSelect, selectedPart }: I
 
       partToElementsRef.current.clear()
 
-      // Layer1 (Labels) is on top in DOM - make it non-blocking so clicks reach layer3 (Skeleton)
+      // Layer1 (Labels): keep layer non-blocking so empty area passes through; enable only text labels
       const layer1 = svgElement.querySelector('#layer1')
       if (layer1) (layer1 as SVGElement).setAttribute('pointer-events', 'none')
       const layer4 = svgElement.querySelector('#layer4')
       if (layer4) (layer4 as SVGElement).setAttribute('pointer-events', 'none')
 
-      // Text labels in layer1 we want clickable - re-enable pointer-events and add to map
-      const labelIds = ['l_Sternum', 'l_Ribs', 'l_Femur']
-      labelIds.forEach((id) => {
-        const text = svgElement.querySelector(`text[id="${id}"]`)
-        if (text && svgIdToSkeletonPart[id] && skeletonPartsData[svgIdToSkeletonPart[id]]) {
-          text.setAttribute('pointer-events', 'all')
-          ;(text as SVGElement).style.cursor = 'pointer'
-          const partName = svgIdToSkeletonPart[id]
-          const list = partToElementsRef.current.get(partName) || []
-          list.push(text)
-          partToElementsRef.current.set(partName, list)
-        }
+      const resolvePartFromLabel = (textEl: Element): string | null => {
+        const id = textEl.getAttribute('id')
+        if (id && svgIdToSkeletonPart[id] && skeletonPartsData[svgIdToSkeletonPart[id]]) return svgIdToSkeletonPart[id]
+        const raw = (textEl.textContent || '').trim()
+        const firstWord = raw.replace(/[^a-zA-Z].*$/, '').trim()
+        if (firstWord && labelTextToPart[firstWord] && skeletonPartsData[labelTextToPart[firstWord]]) return labelTextToPart[firstWord]
+        return null
+      }
+
+      // All label texts in layer1: make clickable and add to part map
+      layer1?.querySelectorAll?.('text[id^="l_"]')?.forEach((text) => {
+        const partName = resolvePartFromLabel(text)
+        if (!partName) return
+        text.setAttribute('pointer-events', 'all')
+        ;(text as SVGElement).style.cursor = 'pointer'
+        text.setAttribute('data-skeleton-part', partName)
+        const list = partToElementsRef.current.get(partName) || []
+        list.push(text)
+        partToElementsRef.current.set(partName, list)
+        text.querySelectorAll('tspan').forEach((tspan) => {
+          tspan.setAttribute('pointer-events', 'all')
+          ;(tspan as SVGElement).style.cursor = 'pointer'
+        })
       })
 
       // Skeleton bones: layer3 contains all <g> with id (TarsalsLeft, Skull, etc.)
@@ -113,12 +190,27 @@ export default function InteractiveSkeletonSVG({ onPartSelect, selectedPart }: I
         const partName = id ? svgIdToSkeletonPart[id] : null
         if (partName && skeletonPartsData[partName]) {
           g.setAttribute('pointer-events', 'all')
+          g.setAttribute('data-skeleton-part', partName)
           ;(g as SVGElement).style.cursor = 'pointer'
           collectPartElements(g, partName)
           const paths = g.querySelectorAll('path')
           paths.forEach((p) => {
             p.setAttribute('pointer-events', 'all')
           })
+        }
+      })
+
+      // Root-level paths in layer3 (e.g. path479, path513 for Femur; g3760 is a g so already covered)
+      root.querySelectorAll('path[id]').forEach((path) => {
+        const id = path.getAttribute('id')
+        const partName = id ? svgIdToSkeletonPart[id] : null
+        if (partName && skeletonPartsData[partName]) {
+          path.setAttribute('pointer-events', 'all')
+          path.setAttribute('data-skeleton-part', partName)
+          ;(path as SVGElement).style.cursor = 'pointer'
+          const list = partToElementsRef.current.get(partName) || []
+          list.push(path)
+          partToElementsRef.current.set(partName, list)
         }
       })
     }, 150)
@@ -130,6 +222,8 @@ export default function InteractiveSkeletonSVG({ onPartSelect, selectedPart }: I
     let el = target as Element | null
     const svgElement = containerRef.current?.querySelector('svg')
     while (el && el !== svgElement) {
+      const dataPart = el.getAttribute?.('data-skeleton-part')
+      if (dataPart && skeletonPartsData[dataPart]) return dataPart
       const id = el.getAttribute?.('id')
       if (id && svgIdToSkeletonPart[id]) return svgIdToSkeletonPart[id]
       el = el.parentElement
@@ -145,10 +239,8 @@ export default function InteractiveSkeletonSVG({ onPartSelect, selectedPart }: I
       const partData = skeletonPartsData[partName]
       onPartSelect(partName, { name: partData.partName, description: partData.description })
     } else {
-      const target = e.target as Element
-      if (target === containerRef.current || target?.tagName === 'svg' || target?.tagName === 'div') {
-        onPartSelect(null)
-      }
+      // Click on empty area, background, or non-part element: clear selection
+      onPartSelect(null)
     }
   }
 

@@ -201,6 +201,10 @@ export default function InteractiveNoseSVG({ onPartSelect, selectedPart }: Inter
       svgElement.querySelectorAll("path").forEach((path) => {
         (path as SVGPathElement).setAttribute("pointer-events", "none")
       })
+      svgElement.querySelectorAll("g").forEach((g) => {
+        const hasNoInteractiveChild = !g.querySelector("rect[data-part-name]")
+        if (hasNoInteractiveChild) (g as SVGElement).setAttribute("pointer-events", "none")
+      })
     }
 
     const timeoutId = setTimeout(() => {
@@ -272,7 +276,7 @@ export default function InteractiveNoseSVG({ onPartSelect, selectedPart }: Inter
     >
       <div
         ref={containerRef}
-        className="w-full h-full flex items-center justify-center min-w-0 min-h-0 pointer-events-none [&>svg]:pointer-events-auto [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:object-contain"
+        className="w-full h-full flex items-center justify-center min-w-0 min-h-0 [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto [&>svg]:object-contain"
         dangerouslySetInnerHTML={{ __html: svgContent }}
       />
     </div>

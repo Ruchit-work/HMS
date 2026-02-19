@@ -238,7 +238,8 @@ export const skeletonPartsData: Record<string, SkeletonPartData> = {
   },
   Fibula: {
     partName: 'Fibula',
-    description: 'Thinner lower leg bone alongside the tibia.',
+    description:
+      'Thinner lower leg bone on the outer side of the tibia, extending to the ankle (lateral malleolus). It stabilizes the ankle and anchors muscles and ligaments; it is not a primary weight-bearing bone.',
     diseases: [
       {
         id: 'fibula_fracture',
@@ -256,7 +257,8 @@ export const skeletonPartsData: Record<string, SkeletonPartData> = {
   },
   Scapula: {
     partName: 'Scapula (Shoulder Blade)',
-    description: 'Flat triangular bone at the back of the shoulder.',
+    description:
+      'Flat triangular bone at the back of the shoulder that connects the clavicle to the humerus and forms part of the shoulder joint; it is an attachment point for many muscles including the rotator cuff.',
     diseases: [
       {
         id: 'scapula_fracture',
@@ -292,7 +294,8 @@ export const skeletonPartsData: Record<string, SkeletonPartData> = {
   },
   Tarsals: {
     partName: 'Tarsals',
-    description: 'Bones of the ankle and rear foot.',
+    description:
+      'Seven bones in each foot (including talus and calcaneus) that form the ankle and rear foot; they distribute body weight and form the foot arches.',
     diseases: [
       {
         id: 'ankle_fracture',

@@ -1,9 +1,13 @@
 'use client'
 
 import React, { useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
+import * as THREE from 'three'
 import { ENTModel } from './ENTModel'
+
+const MIN_DISTANCE = 1
+const MAX_DISTANCE = 50
 
 interface ENTSceneProps {
   onPartSelect?: (partName: string | null, partInfo?: { name: string; description: string }) => void
@@ -22,6 +26,7 @@ export function ENTScene({
 }: ENTSceneProps) {
   const controlsRef = useRef<any>(null)
   const lastZoomDeltaRef = useRef(0)
+  const { camera } = useThree()
 
   useFrame(() => {
     if (zoomDelta === 0) {
@@ -31,11 +36,16 @@ export function ENTScene({
     if (!onZoomApplied || zoomDelta === lastZoomDeltaRef.current) return
     lastZoomDeltaRef.current = zoomDelta
     const controls = controlsRef.current
-    if (controls && typeof controls.getDistance === 'function' && typeof controls.setDistance === 'function') {
-      const d = controls.getDistance()
-      const factor = zoomDelta > 0 ? 0.75 : 1.33
-      controls.setDistance(Math.max(1, Math.min(50, d * factor)))
-    }
+    if (!controls || !controls.target) return
+    const target = controls.target as THREE.Vector3
+    const distance = camera.position.distanceTo(target)
+    const factor = zoomDelta > 0 ? 0.75 : 1.33
+    const newDistance = THREE.MathUtils.clamp(distance * factor, MIN_DISTANCE, MAX_DISTANCE)
+    const direction = new THREE.Vector3()
+      .subVectors(camera.position, target)
+      .normalize()
+    camera.position.copy(target).add(direction.multiplyScalar(newDistance))
+    controls.update()
     onZoomApplied()
   })
 
@@ -52,8 +62,8 @@ export function ENTScene({
         ref={controlsRef}
         enablePan={false}
         enableZoom={true}
-        minDistance={1}
-        maxDistance={50}
+        minDistance={MIN_DISTANCE}
+        maxDistance={MAX_DISTANCE}
         enableRotate={true}
         enableDamping={true}
         dampingFactor={0.1}
