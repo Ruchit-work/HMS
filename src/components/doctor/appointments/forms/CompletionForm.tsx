@@ -28,6 +28,7 @@ interface CompletionFormProps {
   onAiPrescriptionAddAll: (medicines: Array<{ name: string; dosage: string; frequency: string; duration: string }>) => void
   onAiPrescriptionAddSingle: (medicine: { name: string; dosage: string; frequency: string; duration: string }, originalIndex: number) => void
   onAiPrescriptionRemove: (originalIndex: number) => void
+  onAiPrescriptionRemoveAll: (indices: number[]) => void
   onAiPrescriptionRegenerate: () => void
   onDeclinePrescription: () => void
   onCopyPreviousPrescription: () => void
@@ -37,6 +38,8 @@ interface CompletionFormProps {
   onSubmit: (e: React.FormEvent) => void
   onAdmitClick: () => void
   onAddAnatomy?: () => void
+  /** Optional form id for external submit (e.g. sticky bar button) */
+  formId?: string
 }
 
 export default function CompletionForm({
@@ -56,6 +59,7 @@ export default function CompletionForm({
   onAiPrescriptionAddAll,
   onAiPrescriptionAddSingle,
   onAiPrescriptionRemove,
+  onAiPrescriptionRemoveAll,
   onAiPrescriptionRegenerate,
   onDeclinePrescription,
   onCopyPreviousPrescription,
@@ -65,6 +69,7 @@ export default function CompletionForm({
   onSubmit,
   onAdmitClick,
   onAddAnatomy,
+  formId,
 }: CompletionFormProps) {
   const handleMedicinesChange = (medicines: CompletionFormEntry["medicines"]) => {
     onCompletionDataChange({
@@ -112,6 +117,16 @@ export default function CompletionForm({
     }
   }
 
+  const handleAiPrescriptionRemoveAll = (indices: number[]) => {
+    onAiPrescriptionRemoveAll(indices)
+    const parsedMedicines = parseAiPrescription(aiPrescription?.medicine || "")
+    const currentRemoved = [...removedAiMedicines, ...indices]
+    const remainingVisible = parsedMedicines.filter((_, idx) => !currentRemoved.includes(idx))
+    if (remainingVisible.length === 0) {
+      onDeclinePrescription()
+    }
+  }
+
   const sameDoctorHistory = patientHistory.filter(
     (historyItem: AppointmentType) =>
       historyItem.doctorId === appointment.doctorId &&
@@ -120,7 +135,7 @@ export default function CompletionForm({
   )
 
   return (
-    <form onSubmit={onSubmit} className="p-3 space-y-4">
+    <form id={formId} onSubmit={onSubmit} className="p-3 space-y-4">
       {/* Doctor's Notes Section — primary clinical field */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -172,7 +187,7 @@ export default function CompletionForm({
           </div>
         </div>
 
-        {/* AI Generated Prescription Suggestion Box */}
+        {/* AI suggested medicines (distinct from added list below) */}
         <AIPrescriptionSuggestion
           isLoading={loadingAiPrescription}
           isVisible={showAiPrescriptionSuggestion}
@@ -182,17 +197,21 @@ export default function CompletionForm({
           onAddAll={onAiPrescriptionAddAll}
           onAddSingle={onAiPrescriptionAddSingle}
           onRemove={handleAiPrescriptionRemove}
+          onRemoveAll={handleAiPrescriptionRemoveAll}
           onRegenerate={onAiPrescriptionRegenerate}
         />
 
-        {/* Structured Medicine Form */}
-        <MedicineForm
+        {/* Added to prescription — clearly distinct from suggestions above */}
+        <div className="mt-4 pt-3 border-t border-slate-200">
+          <p className="text-xs font-semibold text-slate-700 mb-2">Added to prescription</p>
+          <MedicineForm
           appointmentId={appointment.id}
           medicines={completionData.medicines || []}
           medicineSuggestions={medicineSuggestions}
           medicineSuggestionsLoading={medicineSuggestionsLoading}
           onMedicinesChange={handleMedicinesChange}
         />
+        </div>
       </div>
 
       {/* Recheckup Section + Documents actions */}
@@ -317,7 +336,7 @@ export default function CompletionForm({
         </div>
       )}
 
-      {/* Add Anatomy - above Complete Checkup */}
+      {/* Add Anatomy - above actions */}
       {onAddAnatomy && (
         <div className="pt-2 pb-1 border-t border-slate-200 mt-3">
           <button
@@ -343,37 +362,39 @@ export default function CompletionForm({
         </div>
       )}
 
-      {/* Submit Buttons */}
-      <div className="flex gap-2 pt-2">
-        <button
-          type="submit"
-          disabled={updating || !hasValidPrescriptionInput(completionData)}
-          className="btn-modern btn-modern-success btn-modern-sm flex-1"
-        >
-          {updating ? "Completing..." : "Complete Checkup"}
-        </button>
-        <button
-          type="button"
-          onClick={onAdmitClick}
-          disabled={updating || admitting || !hasValidPrescriptionInput(completionData)}
-          className="flex-1 px-4 py-2 bg-slate-900 hover:bg-black text-white rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {admitting ? (
-            <>
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>Sending...</span>
-            </>
-          ) : (
-            <>
-              <span>🏥</span>
-              <span>Admit Patient</span>
-            </>
-          )}
-        </button>
-      </div>
+      {/* In-form submit buttons — hidden when sticky bar is used (formId provided) */}
+      {!formId && (
+        <div className="flex gap-2 pt-2">
+          <button
+            type="submit"
+            disabled={updating || !hasValidPrescriptionInput(completionData)}
+            className="btn-modern btn-modern-success btn-modern-sm flex-1"
+          >
+            {updating ? "Completing..." : "Complete Checkup"}
+          </button>
+          <button
+            type="button"
+            onClick={onAdmitClick}
+            disabled={updating || admitting || !hasValidPrescriptionInput(completionData)}
+            className="flex-1 px-4 py-2 bg-slate-900 hover:bg-black text-white rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {admitting ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Sending...</span>
+              </>
+            ) : (
+              <>
+                <span>🏥</span>
+                <span>Admit Patient</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </form>
   )
 }

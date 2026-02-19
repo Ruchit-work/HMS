@@ -213,14 +213,14 @@ export default function MedicineForm({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {medicines.length === 0 ? (
-        <div className="text-center py-3 bg-gray-50 rounded border border-dashed border-gray-300">
-          <p className="text-xs text-gray-600 mb-2">No medicines added yet</p>
+        <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+          <p className="text-xs text-slate-600 mb-2">No medicines added yet</p>
           <button
             type="button"
             onClick={addMedicine}
-            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-xs transition-all"
+            className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-xs transition-all"
           >
             + Add Medicine
           </button>
@@ -237,7 +237,7 @@ export default function MedicineForm({
 
             return (
               <div key={index} className="relative">
-                <div className="flex flex-wrap items-center gap-2 py-1.5 px-2 rounded border border-gray-200 bg-gray-50/80 hover:bg-gray-50">
+                <div className="flex flex-wrap items-center gap-3 py-2.5 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50/80">
                   <div className="relative flex-1 min-w-[100px] max-w-[180px]">
                     <input
                       type="text"

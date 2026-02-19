@@ -49,24 +49,22 @@ export default function AppointmentActionsCard({
 }: AppointmentActionsCardProps) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm border-l-4 border-l-teal-500">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-          APPOINTMENT
-        </p>
-        <p className="mt-1 text-sm font-semibold text-slate-900">
+      <div className="flex flex-wrap items-center gap-2 text-xs min-h-[3.25rem] pb-3 border-b border-slate-200">
+        <span className="font-medium uppercase tracking-wider text-slate-500">APPOINTMENT</span>
+        <span className="text-slate-400" aria-hidden>·</span>
+        <span className="font-semibold text-slate-900">
           {new Date(appointment.appointmentDate).toLocaleDateString("en-US", {
             day: "numeric",
             month: "short",
             year: "numeric",
           })}{" "}
           · {appointment.appointmentTime}
-        </p>
-        <p className="mt-1.5 flex items-center gap-2 text-xs text-slate-600">
-          <span>Status:</span>
-          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(appointment.status)}`}>
-            {appointment.status === "confirmed" ? "Confirmed" : appointment.status === "completed" ? "Completed" : appointment.status}
-          </span>
-        </p>
+        </span>
+        <span className="text-slate-400" aria-hidden>·</span>
+        <span className="text-slate-600">Status:</span>
+        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(appointment.status)}`}>
+          {appointment.status === "confirmed" ? "Confirmed" : appointment.status === "completed" ? "Completed" : appointment.status}
+        </span>
       </div>
 
       <button
@@ -79,18 +77,12 @@ export default function AppointmentActionsCard({
         {consultationStarted ? "Consultation in progress" : "Start consultation"}
       </button>
 
-      <div className="flex flex-wrap justify-center gap-3 pt-1">
+      <div className="flex gap-3 pt-1">
         <button
           type="button"
           onClick={onOpenDocuments}
-          className="inline-flex items-center gap-2 text-sm font-medium 
-          text-slate-700 
-          bg-white hover:bg-slate-50
-          border border-slate-200 
-          px-4 py-2 rounded-lg 
-          shadow-sm hover:shadow-md
-          transition-all duration-200
-          cursor-pointer"        >
+          className="flex-1 min-w-0 inline-flex items-center justify-center gap-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
+        >
           <FolderIcon className="w-5 h-5 text-blue-600 shrink-0" />
           Documents &amp; reports
         </button>
@@ -98,7 +90,7 @@ export default function AppointmentActionsCard({
           <button
             type="button"
             onClick={onOpenConsentVideo}
-            className="inline-flex items-center gap-2 rounded-full border-2 border-blue-200 bg-blue-50/50 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
+            className="flex-1 min-w-0 inline-flex items-center justify-center gap-2 rounded-lg border-2 border-blue-200 bg-blue-50/50 px-4 py-3 text-sm font-medium text-slate-800 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
           >
             <PlayIcon className="w-4 h-4 text-blue-600 shrink-0" />
             Consent video

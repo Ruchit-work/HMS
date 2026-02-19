@@ -10,8 +10,8 @@ interface PatientInfoSectionProps {
 export default function PatientInfoSection({ appointment }: PatientInfoSectionProps) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm border-l-4 border-l-blue-500">
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-200">
-        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+      <div className="flex items-center gap-2 min-h-[3.25rem] pb-3 mb-3 border-b border-slate-200">
+        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
@@ -19,10 +19,6 @@ export default function PatientInfoSection({ appointment }: PatientInfoSectionPr
         <h4 className="font-semibold text-slate-900 text-sm">Patient information</h4>
       </div>
       <div className="space-y-2 text-xs">
-        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-100">
-          <span className="text-slate-500 text-[10px] font-medium uppercase tracking-wide">Patient ID</span>
-          <p className="font-mono text-slate-900 mt-1 text-xs break-all">{appointment.patientId || "—"}</p>
-        </div>
         <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-100">
           <span className="text-slate-500 text-[10px] font-medium uppercase tracking-wide">Full name</span>
           <p className="text-slate-900 mt-1 text-sm font-semibold">{appointment.patientName}</p>
