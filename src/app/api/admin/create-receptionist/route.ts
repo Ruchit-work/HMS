@@ -99,13 +99,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!receptionistData?.branchId) {
-      return NextResponse.json(
-        { success: false, error: 'Branch assignment is required' },
-        { status: 400 }
-      )
-    }
-
     if (password.length < 6) {
       return NextResponse.json(
         { success: false, error: 'Password must be at least 6 characters' },
@@ -139,28 +132,75 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify branch exists and belongs to the hospital
-    const branchDoc = await db.collection('branches').doc(receptionistData.branchId).get()
-    if (!branchDoc.exists) {
-      return NextResponse.json(
-        { success: false, error: 'Branch not found' },
-        { status: 404 }
-      )
-    }
+    const multipleBranchesEnabled = hospitalData?.multipleBranchesEnabled === true
+    let branchIdToUse = receptionistData.branchId || ''
+    let branchData: admin.firestore.DocumentData
 
-    const branchData = branchDoc.data()
-    if (branchData?.hospitalId !== adminHospitalId) {
-      return NextResponse.json(
-        { success: false, error: 'Branch does not belong to this hospital' },
-        { status: 400 }
-      )
-    }
-
-    if (branchData?.status !== 'active') {
-      return NextResponse.json(
-        { success: false, error: 'Branch is not active' },
-        { status: 400 }
-      )
+    if (branchIdToUse) {
+      // Branch was provided: verify it exists and belongs to the hospital
+      const branchDoc = await db.collection('branches').doc(branchIdToUse).get()
+      if (!branchDoc.exists) {
+        return NextResponse.json(
+          { success: false, error: 'Branch not found' },
+          { status: 404 }
+        )
+      }
+      branchData = branchDoc.data()!
+      if (branchData.hospitalId !== adminHospitalId) {
+        return NextResponse.json(
+          { success: false, error: 'Branch does not belong to this hospital' },
+          { status: 400 }
+        )
+      }
+      if (branchData.status !== 'active') {
+        return NextResponse.json(
+          { success: false, error: 'Branch is not active' },
+          { status: 400 }
+        )
+      }
+    } else {
+      // No branch selected: only allowed for single-branch hospitals
+      if (multipleBranchesEnabled) {
+        return NextResponse.json(
+          { success: false, error: 'Branch assignment is required for multi-branch hospitals. Please select a branch.' },
+          { status: 400 }
+        )
+      }
+      // Single-branch: get the one active branch or create default "Main" if none exists
+      const branchesSnapshot = await db
+        .collection('branches')
+        .where('hospitalId', '==', adminHospitalId)
+        .where('status', '==', 'active')
+        .limit(1)
+        .get()
+      if (!branchesSnapshot.empty) {
+        const doc = branchesSnapshot.docs[0]
+        branchIdToUse = doc.id
+        branchData = doc.data()
+      } else {
+        // Create default "Main" branch (e.g. legacy hospital created before auto-create existed)
+        const defaultTimings = {
+          monday: { start: '09:00', end: '17:00' },
+          tuesday: { start: '09:00', end: '17:00' },
+          wednesday: { start: '09:00', end: '17:00' },
+          thursday: { start: '09:00', end: '17:00' },
+          friday: { start: '09:00', end: '17:00' },
+          saturday: null,
+          sunday: null
+        }
+        const address = hospitalData?.address || ''
+        const branchRef = await db.collection('branches').add({
+          name: 'Main',
+          location: address,
+          hospitalId: adminHospitalId,
+          timings: defaultTimings,
+          status: 'active',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        })
+        branchIdToUse = branchRef.id
+        branchData = { name: 'Main', location: address, hospitalId: adminHospitalId, status: 'active' }
+      }
     }
 
     // Check if user already exists
@@ -197,7 +237,7 @@ export async function POST(request: NextRequest) {
       lastName: receptionistData.lastName,
       phone: receptionistData.phone,
       hospitalId: adminHospitalId,
-      branchId: receptionistData.branchId,
+      branchId: branchIdToUse,
       branchName: branchData?.name || '',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

@@ -142,23 +142,25 @@ function AddReceptionistModalContent({
             <p className="text-sm text-slate-500 mt-1.5">Password must be at least 6 characters</p>
           </div>
           <div>
-            <label className="block text-base font-semibold text-slate-700 mb-2">Branch *</label>
+            <label className="block text-base font-semibold text-slate-700 mb-2">
+              Branch{branches.length > 0 ? ' *' : ''}
+            </label>
             <select
-              required
+              required={branches.length > 0}
               value={formData.branchId}
               onChange={(e) => setFormData((prev) => ({ ...prev, branchId: e.target.value }))}
               className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-              disabled={branchesLoading || branches.length === 0}
+              disabled={branchesLoading}
             >
               <option value="">
-                {branchesLoading ? 'Loading branches...' : branches.length === 0 ? 'No active branches found' : 'Select a branch'}
+                {branchesLoading ? 'Loading branches...' : branches.length === 0 ? 'Default branch (single-branch hospital)' : 'Select a branch'}
               </option>
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>{branch.name}</option>
               ))}
             </select>
             {!branchesLoading && branches.length === 0 && (
-              <p className="text-sm text-red-500 mt-1.5">No active branches available. Please create a branch first.</p>
+              <p className="text-sm text-slate-500 mt-1.5">This hospital uses a single branch. The receptionist will be assigned to the default branch when you create them.</p>
             )}
           </div>
         </div>
@@ -331,7 +333,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
         throw new Error('Authentication token not found')
       }
 
-      if (!formData.branchId) {
+      if (branches.length > 0 && !formData.branchId) {
         throw new Error('Please select a branch for this receptionist')
       }
 
@@ -479,19 +481,20 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
     setSaving(true)
 
     try {
-      if (!editFormData.branchId) {
+      const branchIdToSave = editFormData.branchId || (branches.length === 0 ? editingReceptionist.branchId : '')
+      if (branches.length > 0 && !branchIdToSave) {
         throw new Error('Please select a branch for this receptionist')
       }
 
       const receptionistRef = doc(db, 'receptionists', editingReceptionist.id)
-      const selectedBranch = branches.find(b => b.id === editFormData.branchId)
+      const selectedBranch = branches.find(b => b.id === branchIdToSave)
 
       await updateDoc(receptionistRef, {
         firstName: editFormData.firstName,
         lastName: editFormData.lastName,
         phone: editFormData.phone,
-        branchId: editFormData.branchId,
-        branchName: selectedBranch?.name || '',
+        branchId: branchIdToSave || editingReceptionist.branchId || '',
+        branchName: selectedBranch?.name ?? editingReceptionist.branchName ?? '',
         updatedAt: serverTimestamp()
       })
 
@@ -735,20 +738,20 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
                 {/* Branch selection */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Branch *
+                    Branch{branches.length > 0 ? ' *' : ''}
                   </label>
                   <select
-                    required
+                    required={branches.length > 0}
                     value={editFormData.branchId}
                     onChange={(e) => setEditFormData({ ...editFormData, branchId: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    disabled={branchesLoading || branches.length === 0}
+                    disabled={branchesLoading}
                   >
                     <option value="">
                       {branchesLoading
                         ? 'Loading branches...'
                         : branches.length === 0
-                          ? 'No active branches found'
+                          ? 'Default branch (single-branch hospital)'
                           : 'Select a branch'}
                     </option>
                     {branches.map((branch) => (
@@ -758,8 +761,8 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
                     ))}
                   </select>
                   {!branchesLoading && branches.length === 0 && (
-                    <p className="text-xs text-red-500 mt-1">
-                      No active branches available for this hospital. Please create a branch first.
+                    <p className="text-xs text-slate-500 mt-1">
+                      This hospital uses a single branch. The receptionist remains assigned to the default branch.
                     </p>
                   )}
                 </div>

@@ -31,6 +31,7 @@ function LoginContent() {
   const [, setPendingRole] = useState<DashboardRole | null>(null)
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
   const [pendingPhone, setPendingPhone] = useState<string>("")
+  const [yatharthOpen, setYatharthOpen] = useState(false)
   const router = useRouter()
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   
@@ -736,8 +737,8 @@ function LoginContent() {
                       focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200
                       bg-white text-slate-900 placeholder:text-slate-400
                       transition-all duration-200"
-                      placeholder="••••••••"
-                      minLength={8}
+                      placeholder="••••••"
+                      minLength={6}
                       required
                     />
                   </div>
@@ -877,11 +878,6 @@ function LoginContent() {
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor</td>
                   </tr>
-                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Super Admin</td>
-                  </tr>
                   <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
@@ -904,6 +900,50 @@ function LoginContent() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            {/* Yatharth Hospital – separate dropdown */}
+            <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden bg-slate-50/80">
+              <button
+                type="button"
+                onClick={() => setYatharthOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100/80 transition-colors"
+              >
+                <span>Yatharth Hospital credentials</span>
+                <svg className={`w-4 h-4 text-slate-500 transition-transform ${yatharthOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {yatharthOpen && (
+                <div className="border-t border-slate-200 bg-white">
+                  <table className="min-w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Email ID</th>
+                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Password</th>
+                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Role</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Yatharthhospital@gmaill.com"); setPassword("Yatharthhospital@gmaill.com"); }}>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharthhospital@gmaill.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharth@123</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
+                      </tr>
+                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("YTH1@gmail.com"); setPassword("YTH1@gmail.com"); }}>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">YTH1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">YTH1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist</td>
+                      </tr>
+                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Shrey1@gmail.com"); setPassword("Shrey1@gmail.com"); }}>
+                        <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600">Doctor</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
 
