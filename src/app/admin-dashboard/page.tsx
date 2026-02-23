@@ -221,10 +221,10 @@ export default function AdminDashboard() {
 
       // Get all patients count - use hospital-scoped collection
       const patientsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "patients"))
-      const allPatients = patientsSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as any))
+      const allPatients = patientsSnapshot.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data() 
+      })) as any[]
       
       // Store raw data for client-side filtering
       setRawPatients(allPatients)
@@ -329,7 +329,7 @@ export default function AdminDashboard() {
     // Filter appointments by branch
     let filteredAppointments = rawAppointments
     if (selectedBranchId !== "all") {
-      filteredAppointments = rawAppointments.filter((apt: any) => apt.branchId === selectedBranchId)
+      filteredAppointments = rawAppointments.filter((apt) => apt.branchId === selectedBranchId)
     }
 
     // Recalculate all stats from filtered data
@@ -377,7 +377,7 @@ export default function AdminDashboard() {
     if (selectedBranchId === "all") {
       return recentAppointments
     }
-    return recentAppointments.filter((apt: any) => apt.branchId === selectedBranchId)
+    return recentAppointments.filter((apt) => apt.branchId === selectedBranchId)
   }, [recentAppointments, selectedBranchId])
 
   // Calculate trend data from filtered stats (moved here so displayStats is available)
@@ -468,14 +468,14 @@ export default function AdminDashboard() {
           const p = await getDoc(doc(db, 'patients', String(r.patientId)))
           if (p.exists()) {
             const pd = p.data() as any
-            patientName = `${pd.firstName || ''} ${pd.lastName || ''}`.trim() || r.patientId
+            patientName = `${String(pd?.firstName ?? '')} ${String(pd?.lastName ?? '')}`.trim() || String(r.patientId)
           }
         } catch {}
         try {
           const dref = await getDoc(doc(db, 'doctors', String(r.doctorId)))
           if (dref.exists()) {
             const dd = dref.data() as any
-            doctorName = `${dd.firstName || ''} ${dd.lastName || ''}`.trim() || r.doctorId
+            doctorName = `${String(dd?.firstName ?? '')} ${String(dd?.lastName ?? '')}`.trim() || String(r.doctorId)
           }
         } catch {}
         return { ...r, patientName, doctorName }
@@ -855,7 +855,7 @@ export default function AdminDashboard() {
                           await setActiveHospital(hospitalId)
                           setNotification({ type: "success", message: "Hospital switched successfully" })
                         } catch (err: any) {
-                          setNotification({ type: "error", message: err.message || "Failed to switch hospital" })
+                          setNotification({ type: "error", message: err?.message || "Failed to switch hospital" })
                         }
                       }
                     }}

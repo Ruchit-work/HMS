@@ -18,6 +18,7 @@ import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { getStatusColor } from "@/utils/appointmentHelpers"
 import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 import Notification from "@/components/ui/feedback/Notification"
+import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import type { Branch } from "@/types/branch"
 
 interface UserData {
@@ -48,6 +49,13 @@ export default function DoctorDashboard() {
   // Protect route - only allow doctors (or admins for demo)
   const { user, loading } = useAuth("doctor")
   const { activeHospitalId } = useMultiHospital()
+
+  // Badge clears when user visits the appointments page (same as header)
+  const confirmedCount = appointments.filter(apt => apt.status === "confirmed").length
+  const appointmentsBadge = useNotificationBadge({
+    badgeKey: 'doctor-appointments',
+    rawCount: confirmedCount,
+  })
 
   // Function to set up real-time appointments listener
   const setupAppointmentsListener = useCallback((doctorId: string, branchId: string | null) => {
@@ -704,7 +712,7 @@ export default function DoctorDashboard() {
                 <span>View All</span>
               </Link>
               <NotificationBadge 
-                count={appointments.filter(apt => apt.status === "confirmed").length}
+                count={appointmentsBadge.displayCount}
                 position="top-right"
               />
             </div>

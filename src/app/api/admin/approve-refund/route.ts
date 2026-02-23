@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Refund request is not pending' }, { status: 400 })
     }
 
-    const appointmentId = String(refund.appointmentId || '')
+    const appointmentId = String(refund?.appointmentId || '')
     if (!appointmentId) {
       return NextResponse.json({ error: 'Invalid appointmentId on refund request' }, { status: 400 })
     }
@@ -57,8 +57,8 @@ export async function POST(req: Request) {
     }
     const apt = aptSnap.data() as any
 
-    const amount = Number(refund.paymentAmount ?? apt.paymentAmount ?? apt.totalConsultationFee ?? 0)
-    const patientId = String(refund.patientId || apt.patientId || "")
+    const amount = Number(refund?.paymentAmount ?? apt?.paymentAmount ?? apt?.totalConsultationFee ?? 0)
+    const patientId = String(refund?.patientId || apt?.patientId || "")
 
     if (!patientId) {
       return NextResponse.json({ error: "Patient ID missing on refund request" }, { status: 400 })
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, amountRefunded: amount })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: e?.message ?? 'Internal error' }, { status: 500 })
   }
 }
 
