@@ -130,7 +130,9 @@ export function ENTModel({
             const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b
             if (brightness < 0.5) {
               mat.color.multiplyScalar(1.0 / Math.max(brightness, 0.05) * 0.55)
-              mat.color.clampScalar(0, 1)
+              mat.color.r = Math.max(0, Math.min(1, mat.color.r))
+              mat.color.g = Math.max(0, Math.min(1, mat.color.g))
+              mat.color.b = Math.max(0, Math.min(1, mat.color.b))
             }
             if (isPhysical && (mat as THREE.MeshPhysicalMaterial).transmission !== undefined) {
               (mat as THREE.MeshPhysicalMaterial).depthWrite = true

@@ -74,7 +74,6 @@ export const entPartDescriptions: Record<string, { name: string; description: st
   Pulmonary_Trunk: { name: 'Pulmonary trunk', description: 'Main vessel that splits into left and right pulmonary arteries.' },
   Right_Pulmonary_Vein: { name: 'Right pulmonary vein', description: 'Carries oxygenated blood from right lung to heart.' },
   Left_Pulmonary_Vein: { name: 'Left pulmonary vein', description: 'Carries oxygenated blood from left lung to heart.' },
-  Trachea: { name: 'Trachea', description: 'Windpipe connecting larynx to bronchi.' },
   Bronchi: { name: 'Bronchi', description: 'Main air passages branching from the trachea.' },
   // Kidney
   Kidney: { name: 'Kidney', description: 'Paired organs that filter blood and remove waste.' },
