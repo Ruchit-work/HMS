@@ -9,6 +9,15 @@ import { getPartDescription } from './entPartDescriptions'
 import { getAnatomyTypeFromPath } from './entAnatomyMappings'
 import { getAnatomyFromMeshName, getSkeletonPartFromMeshNameOnly } from './skeletonAnatomyData'
 
+/** Return the first hit that is a Mesh (never a Group or other container). */
+function getFirstHitMesh(intersects: THREE.Intersection[]): THREE.Mesh | null {
+  for (let i = 0; i < intersects.length; i++) {
+    const obj = intersects[i].object
+    if (obj instanceof THREE.Mesh) return obj
+  }
+  return null
+}
+
 interface ENTModelProps {
   onPartSelect?: (partName: string | null, partInfo?: { name: string; description: string }) => void
   selectedPart?: string | null
@@ -33,6 +42,10 @@ export function ENTModel({
   const selectedSkeletonMeshNumberRef = useRef<number | null>(null)
   /** For skeleton: highlight only the exact mesh that was clicked (by object reference), not by name/number */
   const selectedSkeletonMeshRef = useRef<THREE.Object3D | null>(null)
+  /** For lungs/other anatomy: highlight only the clicked mesh so "all parts" don't light up together */
+  const selectedAnatomyMeshRef = useRef<THREE.Object3D | null>(null)
+  /** For lungs/other anatomy: hover only the mesh under cursor, not all meshes with the same part name */
+  const hoveredAnatomyMeshRef = useRef<THREE.Object3D | null>(null)
 
   React.useEffect(() => {
     if (externalSelectedPart !== undefined) setSelectedPart(externalSelectedPart)
@@ -43,6 +56,8 @@ export function ENTModel({
     initializedRef.current = false
     setModelReady(false)
     modelRef.current = null
+    selectedAnatomyMeshRef.current = null
+    hoveredAnatomyMeshRef.current = null
   }, [modelPath])
 
   React.useEffect(() => {
@@ -93,19 +108,34 @@ export function ENTModel({
     camera.updateProjectionMatrix()
     camera.updateMatrixWorld()
 
-    // Clone materials per mesh so shared materials (e.g. free_pack skeleton) don't all change when one part is highlighted
+    // Clone material per mesh so no two meshes share a material (critical for lungs: one click = one part)
     clonedScene.traverse((child: THREE.Object3D) => {
+      child.visible = true
       if (child instanceof THREE.Mesh && child.material) {
         const mesh = child as THREE.Mesh
         if (Array.isArray(mesh.material)) {
-          mesh.material = mesh.material.map((mat) => mat.clone())
+          mesh.material = mesh.material.map((m) => (m as THREE.Material).clone())
         } else {
-          mesh.material = mesh.material.clone()
+          mesh.material = (mesh.material as THREE.Material).clone()
         }
         const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
-        if (material instanceof THREE.MeshStandardMaterial) {
-          mesh.userData.originalColor = material.color.clone()
-          mesh.userData.originalEmissive = material.emissive.clone()
+        const isStandard = material instanceof THREE.MeshStandardMaterial
+        const isPhysical = material instanceof THREE.MeshPhysicalMaterial
+        if (isStandard || isPhysical) {
+          const mat = material as THREE.MeshStandardMaterial
+          mesh.userData.originalColor = mat.color.clone()
+          mesh.userData.originalEmissive = mat.emissive.clone()
+          if (anatomyType === 'lungs') {
+            const { r, g, b } = mat.color
+            const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            if (brightness < 0.5) {
+              mat.color.multiplyScalar(1.0 / Math.max(brightness, 0.05) * 0.55)
+              mat.color.clampScalar(0, 1)
+            }
+            if (isPhysical && (mat as THREE.MeshPhysicalMaterial).transmission !== undefined) {
+              (mat as THREE.MeshPhysicalMaterial).depthWrite = true
+            }
+          }
         }
         mesh.castShadow = true
         mesh.receiveShadow = true
@@ -113,7 +143,7 @@ export function ENTModel({
       }
     })
 
-    // Skeleton: assign global mesh index so each mesh gets a distinct part (avoids all showing "Radius & Ulna" when names are missing)
+    // Skeleton: assign global mesh index so each mesh gets a distinct part
     if (anatomyType === 'skeleton') {
       let skeletonMeshIndex = 0
       clonedScene.traverse((child: THREE.Object3D) => {
@@ -122,10 +152,23 @@ export function ENTModel({
         }
       })
     }
+    // Lungs/heart: assign mesh index (1–16) so every mesh maps to one of the 16 parts
+    if (anatomyType === 'lungs') {
+      let lungsMeshIndex = 0
+      clonedScene.traverse((child: THREE.Object3D) => {
+        if (child instanceof THREE.Mesh) {
+          lungsMeshIndex++
+          ;(child as THREE.Mesh).userData.lungsMeshIndex = ((lungsMeshIndex - 1) % 16) + 1
+        }
+      })
+    }
 
     initializedRef.current = true
     setModelReady(true)
   }, [scene, camera, modelPath])
+
+  const anatomyTypeRef = useRef(getAnatomyTypeFromPath(modelPath))
+  anatomyTypeRef.current = getAnatomyTypeFromPath(modelPath)
 
   useFrame(({ pointer }) => {
     if (!groupRef.current || !modelRef.current || isDraggingRef.current) return
@@ -137,45 +180,76 @@ export function ENTModel({
     }
 
     let newHoveredPart: string | null = null
-    if (intersects.length > 0) {
-      const partName = findPartName(intersects[0].object as THREE.Mesh, modelPath)
+    const newHoveredMesh = getFirstHitMesh(intersects)
+    if (newHoveredMesh) {
+      const partName = findPartName(newHoveredMesh, modelPath)
       if (partName) newHoveredPart = partName
     }
 
-    if (newHoveredPart !== hoveredPart) {
-      if (hoveredPart && hoveredPart !== selectedPart && modelRef.current) {
-        modelRef.current.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            const childPartName = findPartName(child, modelPath)
-            if (childPartName === hoveredPart) {
-              const material = Array.isArray(child.material) ? child.material[0] : child.material
-              if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
-                material.color.copy(child.userData.originalColor)
-                material.emissive.copy(child.userData.originalEmissive)
-                material.emissiveIntensity = 0
+    const isSkeletonFrame = anatomyTypeRef.current === 'skeleton'
+    const hoverChanged = newHoveredPart !== hoveredPart || newHoveredMesh !== hoveredAnatomyMeshRef.current
+
+    if (hoverChanged) {
+      // Clear previous hover: for non-skeleton only clear the single previously hovered mesh (not all with same part name)
+      if (modelRef.current) {
+        if (isSkeletonFrame) {
+          if (hoveredPart && hoveredPart !== selectedPart) {
+            modelRef.current.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                const childPartName = findPartName(child, modelPath)
+                if (childPartName === hoveredPart) {
+                  const material = Array.isArray(child.material) ? child.material[0] : child.material
+                  if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
+                    material.color.copy(child.userData.originalColor)
+                    material.emissive.copy(child.userData.originalEmissive)
+                    material.emissiveIntensity = 0
+                  }
+                }
               }
+            })
+          }
+        } else {
+          const prevHovered = hoveredAnatomyMeshRef.current
+          if (prevHovered && prevHovered !== selectedAnatomyMeshRef.current && prevHovered instanceof THREE.Mesh) {
+            const material = Array.isArray(prevHovered.material) ? prevHovered.material[0] : prevHovered.material
+            if (material instanceof THREE.MeshStandardMaterial && prevHovered.userData.originalColor) {
+              material.color.copy(prevHovered.userData.originalColor)
+              material.emissive.copy(prevHovered.userData.originalEmissive)
+              material.emissiveIntensity = 0
             }
           }
-        })
+        }
       }
 
+      hoveredAnatomyMeshRef.current = isSkeletonFrame ? null : newHoveredMesh
       setHoveredPart(newHoveredPart)
 
-      if (newHoveredPart && newHoveredPart !== selectedPart && modelRef.current) {
-        modelRef.current.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            const childPartName = findPartName(child, modelPath)
-            if (childPartName === newHoveredPart) {
-              const material = Array.isArray(child.material) ? child.material[0] : child.material
-              if (material instanceof THREE.MeshStandardMaterial) {
-                const originalColor = child.userData.originalColor || new THREE.Color(0.8, 0.8, 0.8)
-                material.color.copy(originalColor).multiplyScalar(1.3)
-                material.emissive.setHex(0x333333)
-                material.emissiveIntensity = 0.15
+      // Apply new hover: for non-skeleton only the mesh under cursor; for skeleton all meshes with that part name
+      if (modelRef.current) {
+        if (isSkeletonFrame && newHoveredPart && newHoveredPart !== selectedPart) {
+          modelRef.current.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              const childPartName = findPartName(child, modelPath)
+              if (childPartName === newHoveredPart) {
+                const material = Array.isArray(child.material) ? child.material[0] : child.material
+                if (material instanceof THREE.MeshStandardMaterial) {
+                  const originalColor = child.userData.originalColor || new THREE.Color(0.8, 0.8, 0.8)
+                  material.color.copy(originalColor).multiplyScalar(1.3)
+                  material.emissive.setHex(0x333333)
+                  material.emissiveIntensity = 0.15
+                }
               }
             }
+          })
+        } else if (!isSkeletonFrame && newHoveredMesh && newHoveredMesh !== selectedAnatomyMeshRef.current) {
+          const material = Array.isArray(newHoveredMesh.material) ? newHoveredMesh.material[0] : newHoveredMesh.material
+          if (material instanceof THREE.MeshStandardMaterial) {
+            const originalColor = newHoveredMesh.userData.originalColor || new THREE.Color(0.8, 0.8, 0.8)
+            material.color.copy(originalColor).multiplyScalar(1.3)
+            material.emissive.setHex(0x333333)
+            material.emissiveIntensity = 0.15
           }
-        })
+        }
       }
 
       gl.domElement.style.cursor = newHoveredPart ? 'pointer' : 'default'
@@ -213,6 +287,10 @@ export function ENTModel({
         const childNum = getSkeletonMeshNumber(child, modelPath)
         return childNum === meshNumber
       }
+      // For lungs/other anatomy: highlight only the exact clicked mesh so one click doesn't light up the whole model
+      if (!isSkeleton && selectedAnatomyMeshRef.current != null) {
+        return child === selectedAnatomyMeshRef.current
+      }
       const childPartName = findPartName(child, modelPath)
       return childPartName === partName
     },
@@ -247,37 +325,49 @@ export function ENTModel({
 
       raycaster.setFromCamera(mouse, camera)
       const intersects = raycaster.intersectObject(modelRef.current, true)
+      const clickedMesh = getFirstHitMesh(intersects)
 
-      if (intersects.length > 0) {
-        const clickedObject = intersects[0].object as THREE.Mesh
+      if (clickedMesh) {
         let partName: string | null
         let partInfo: { name: string; description: string } | undefined
         if (isSkeleton) {
-          // Try name first (SM_HumanSkeleton_01..20, Bone_18, etc.); fall back to full resolver so panel always shows something
-          let skeletonResult = getSkeletonPartFromMeshNameOnly(clickedObject)
-          if (!skeletonResult) skeletonResult = getAnatomyFromMeshName(clickedObject, modelPath)
+          let skeletonResult = getSkeletonPartFromMeshNameOnly(clickedMesh)
+          if (!skeletonResult) skeletonResult = getAnatomyFromMeshName(clickedMesh, modelPath)
           partName = skeletonResult ? skeletonResult.partKey : null
           partInfo = skeletonResult ? { name: skeletonResult.name, description: skeletonResult.description } : undefined
         } else {
-          partName = findPartName(clickedObject, modelPath)
+          partName = findPartName(clickedMesh, modelPath)
           partInfo = partName ? getPartDescription(partName) : undefined
         }
-        const clickedSkeletonNum = isSkeleton ? getSkeletonMeshNumber(clickedObject, modelPath) : null
+        const clickedSkeletonNum = isSkeleton ? getSkeletonMeshNumber(clickedMesh, modelPath) : null
 
         const hasPartForPanel = partName != null && !partName.startsWith('Part_')
         const shouldHighlight = modelRef.current && (hasPartForPanel || isSkeleton)
 
         if (shouldHighlight) {
-          if (selectedPart || selectedSkeletonMeshRef.current) {
+          // Reset previous selection
+          if (isSkeleton) {
+            if (selectedPart || selectedSkeletonMeshRef.current) {
+              modelRef.current.traverse((child) => {
+                if (child instanceof THREE.Mesh && shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
+                  const mat = Array.isArray(child.material) ? child.material[0] : child.material
+                  if (mat instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
+                    mat.color.copy(child.userData.originalColor)
+                    mat.emissive.copy(child.userData.originalEmissive)
+                    mat.emissiveIntensity = 0
+                  }
+                }
+              })
+            }
+          } else {
+            // Lungs / non-skeleton: reset every mesh to original, then highlight only the clicked one (avoids shared material or wrong selection)
             modelRef.current.traverse((child) => {
               if (child instanceof THREE.Mesh) {
-                if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
-                  const material = Array.isArray(child.material) ? child.material[0] : child.material
-                  if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
-                    material.color.copy(child.userData.originalColor)
-                    material.emissive.copy(child.userData.originalEmissive)
-                    material.emissiveIntensity = 0
-                  }
+                const mat = Array.isArray(child.material) ? child.material[0] : child.material
+                if (mat instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
+                  mat.color.copy(child.userData.originalColor)
+                  mat.emissive.copy(child.userData.originalEmissive)
+                  mat.emissiveIntensity = 0
                 }
               }
             })
@@ -286,23 +376,17 @@ export function ENTModel({
           const newSelectedPart = isSkeleton ? partName : (selectedPart === partName ? null : partName)
           setSelectedPart(newSelectedPart ?? null)
           selectedSkeletonMeshNumberRef.current = newSelectedPart && clickedSkeletonNum != null ? clickedSkeletonNum : null
-          selectedSkeletonMeshRef.current = isSkeleton && (newSelectedPart != null || partName === null) ? clickedObject : null
+          selectedSkeletonMeshRef.current = isSkeleton && (newSelectedPart != null || partName === null) ? clickedMesh : null
+          selectedAnatomyMeshRef.current = !isSkeleton && newSelectedPart != null ? clickedMesh : null
 
+          // Highlight only the clicked mesh
           if (newSelectedPart || isSkeleton) {
-            modelRef.current.traverse((child) => {
-              if (child instanceof THREE.Mesh) {
-                const isTarget =
-                  isSkeleton ? child === clickedObject : shouldHighlightMesh(child, newSelectedPart, selectedSkeletonMeshNumberRef.current)
-                if (isTarget) {
-                  const material = Array.isArray(child.material) ? child.material[0] : child.material
-                  if (material instanceof THREE.MeshStandardMaterial) {
-                    material.color.setHex(0x4ade80)
-                    material.emissive.setHex(0x22c55e)
-                    material.emissiveIntensity = 0.4
-                  }
-                }
-              }
-            })
+            const mat = Array.isArray(clickedMesh.material) ? clickedMesh.material[0] : clickedMesh.material
+            if (mat instanceof THREE.MeshStandardMaterial) {
+              mat.color.setHex(0x4ade80)
+              mat.emissive.setHex(0x22c55e)
+              mat.emissiveIntensity = 0.4
+            }
           }
 
           if (hasPartForPanel) {
@@ -313,20 +397,33 @@ export function ENTModel({
         }
       } else {
         if (selectedPart && modelRef.current) {
-          modelRef.current.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
-                const material = Array.isArray(child.material) ? child.material[0] : child.material
-                if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
-                  material.color.copy(child.userData.originalColor)
-                  material.emissive.copy(child.userData.originalEmissive)
-                  material.emissiveIntensity = 0
+          if (isSkeleton) {
+            modelRef.current.traverse((child) => {
+              if (child instanceof THREE.Mesh && shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
+                const mat = Array.isArray(child.material) ? child.material[0] : child.material
+                if (mat instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
+                  mat.color.copy(child.userData.originalColor)
+                  mat.emissive.copy(child.userData.originalEmissive)
+                  mat.emissiveIntensity = 0
                 }
               }
-            }
-          })
+            })
+          } else {
+            // Lungs: reset every mesh so no part stays highlighted
+            modelRef.current.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                const mat = Array.isArray(child.material) ? child.material[0] : child.material
+                if (mat instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
+                  mat.color.copy(child.userData.originalColor)
+                  mat.emissive.copy(child.userData.originalEmissive)
+                  mat.emissiveIntensity = 0
+                }
+              }
+            })
+          }
           selectedSkeletonMeshNumberRef.current = null
           selectedSkeletonMeshRef.current = null
+          selectedAnatomyMeshRef.current = null
           setSelectedPart(null)
           onPartSelect?.(null, undefined)
         }
@@ -337,112 +434,11 @@ export function ENTModel({
     isDraggingRef.current = false
   }, [selectedPart, camera, raycaster, onPartSelect, gl, modelPath, isSkeleton, shouldHighlightMesh])
 
-  const handleClick = React.useCallback((event: any) => {
-    if (!groupRef.current || !modelRef.current) return
-
-    event.stopPropagation()
-
-    const rect = gl.domElement.getBoundingClientRect()
-    const clientX = event.clientX ?? (event.nativeEvent?.clientX ?? 0)
-    const clientY = event.clientY ?? (event.nativeEvent?.clientY ?? 0)
-
-    const mouse = new THREE.Vector2()
-    mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
-    mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
-
-    raycaster.setFromCamera(mouse, camera)
-    const intersects = raycaster.intersectObject(modelRef.current, true)
-
-    if (intersects.length > 0) {
-      const clickedObject = intersects[0].object as THREE.Mesh
-      let partName: string | null
-      let partInfo: { name: string; description: string } | undefined
-      if (isSkeleton) {
-        let skeletonResult = getSkeletonPartFromMeshNameOnly(clickedObject)
-        if (!skeletonResult) skeletonResult = getAnatomyFromMeshName(clickedObject, modelPath)
-        partName = skeletonResult ? skeletonResult.partKey : null
-        partInfo = skeletonResult ? { name: skeletonResult.name, description: skeletonResult.description } : undefined
-      } else {
-        partName = findPartName(clickedObject, modelPath)
-        partInfo = partName ? getPartDescription(partName) : undefined
-      }
-      const clickedSkeletonNum = isSkeleton ? getSkeletonMeshNumber(clickedObject, modelPath) : null
-
-      const hasPartForPanel = partName != null && !partName.startsWith('Part_')
-      const shouldHighlight = modelRef.current && (hasPartForPanel || isSkeleton)
-
-      if (shouldHighlight) {
-        if (selectedPart || selectedSkeletonMeshRef.current) {
-          modelRef.current.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
-                const material = Array.isArray(child.material) ? child.material[0] : child.material
-                if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
-                  material.color.copy(child.userData.originalColor)
-                  material.emissive.copy(child.userData.originalEmissive)
-                  material.emissiveIntensity = 0
-                }
-              }
-            }
-          })
-        }
-
-        const newSelectedPart = isSkeleton ? partName : (selectedPart === partName ? null : partName)
-        setSelectedPart(newSelectedPart ?? null)
-        selectedSkeletonMeshNumberRef.current = newSelectedPart && clickedSkeletonNum != null ? clickedSkeletonNum : null
-        selectedSkeletonMeshRef.current = isSkeleton && (newSelectedPart != null || partName === null) ? clickedObject : null
-
-        if (newSelectedPart || isSkeleton) {
-          modelRef.current.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              const isTarget =
-                isSkeleton ? child === clickedObject : shouldHighlightMesh(child, newSelectedPart, selectedSkeletonMeshNumberRef.current)
-              if (isTarget) {
-                const material = Array.isArray(child.material) ? child.material[0] : child.material
-                if (material instanceof THREE.MeshStandardMaterial) {
-                  material.color.setHex(0x4ade80)
-                  material.emissive.setHex(0x22c55e)
-                  material.emissiveIntensity = 0.4
-                }
-              }
-            }
-          })
-        }
-
-        if (hasPartForPanel) {
-          onPartSelect?.(partName!, partInfo)
-        } else if (isSkeleton) {
-          onPartSelect?.(null, undefined)
-        }
-      }
-    } else {
-      if (selectedPart && modelRef.current) {
-        modelRef.current.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            if (shouldHighlightMesh(child, selectedPart, selectedSkeletonMeshNumberRef.current)) {
-              const material = Array.isArray(child.material) ? child.material[0] : child.material
-              if (material instanceof THREE.MeshStandardMaterial && child.userData.originalColor) {
-                material.color.copy(child.userData.originalColor)
-                material.emissive.copy(child.userData.originalEmissive)
-                material.emissiveIntensity = 0
-              }
-            }
-          }
-        })
-        selectedSkeletonMeshNumberRef.current = null
-        selectedSkeletonMeshRef.current = null
-        setSelectedPart(null)
-        onPartSelect?.(null, undefined)
-      }
-    }
-  }, [selectedPart, camera, raycaster, onPartSelect, gl, modelPath, isSkeleton, shouldHighlightMesh])
-
   if (!scene || !modelReady || !modelRef.current) return null
 
   return (
     <group
       ref={groupRef}
-      onClick={handleClick as any}
       onPointerDown={handlePointerDown as any}
       onPointerMove={handlePointerMove as any}
       onPointerUp={handlePointerUp as any}

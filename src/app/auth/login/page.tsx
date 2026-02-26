@@ -898,6 +898,11 @@ function LoginContent() {
                     <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600">Admin</td>
                   </tr>
+                  <tr className="hover:bg-blue-50 cursor-pointer" hidden={true}  onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600">Admin1@gmail.com</td>
+                      <td className="px-2 py-2 text-slate-600">Admin1@gmail.com</td>
+                      <td className="px-2 py-2 text-slate-600"> Super Admin</td>
+                  </tr>
                 </tbody>
               </table>
             </div>

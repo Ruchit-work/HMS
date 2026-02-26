@@ -26,6 +26,12 @@ export function findPartName(
     return result ? result.partKey : null
   }
 
+  // Lungs: prefer mesh index (1–16) so we show all 16 part names instead of collapsing to 5–6 from name matching
+  if (anatomyType === 'lungs' && (object as THREE.Mesh).userData?.lungsMeshIndex != null) {
+    const idx = (object as THREE.Mesh).userData.lungsMeshIndex as number
+    if (objectNumberMapping[idx]) return objectNumberMapping[idx]
+  }
+
   // Resolve name from object or parent chain (some GLBs put name on parent group)
   const effectiveName = getObjectOrParentName(object)
 
@@ -128,13 +134,27 @@ function matchByNamePattern(anatomyType: string, objectName: string): string | n
   }
 
   if (anatomyType === 'lungs') {
-    if (/trachea|windpipe/.test(lowerName)) return 'Trachea'
-    if (/bronch|bronchus/.test(lowerName)) return 'Bronchi'
-    if (/linkerlong|rechterlong|lung|pulmonary/.test(lowerName)) return 'Lungs'
-    if (/heart|cardiac|stomach|normaal4/.test(lowerName)) return 'Heart'
-    if (/normaal25/.test(lowerName)) return 'Trachea'
-    if (/normaal6/.test(lowerName)) return 'Bronchi'
-    if (/normaal5/.test(lowerName)) return 'Lungs'
+    if (/trachea|windpipe|normaal25/.test(lowerName)) return 'Trachea'
+    if (/bronch|bronchus|normaal6/.test(lowerName)) return 'Bronchi'
+    if (/linkerlong|left.?lung|leftlung/.test(lowerName)) return 'Left_Lung'
+    if (/rechterlong|right.?lung|rightlung/.test(lowerName)) return 'Right_Lung'
+    if (/left.?ventricle|ventricle.?left/.test(lowerName)) return 'Left_Ventricle'
+    if (/right.?ventricle|ventricle.?right/.test(lowerName)) return 'Right_Ventricle'
+    if (/right.?atrium|atrium.?right/.test(lowerName)) return 'Right_Atrium'
+    if (/left.?atrium|atrium.?left/.test(lowerName)) return 'Left_Atrium'
+    if (/aorta/.test(lowerName)) return 'Aorta'
+    if (/left.?pulmonary.?artery|pulmonary.?artery.?left/.test(lowerName)) return 'Left_Pulmonary_Artery'
+    if (/right.?pulmonary.?artery|pulmonary.?artery.?right/.test(lowerName)) return 'Right_Pulmonary_Artery'
+    if (/superior.?caval.?vein|superior.?vena.?cava|caval.?vein.?superior/.test(lowerName)) return 'Superior_Caval_Vein'
+    if (/inferior.?caval.?vein|inferior.?vena.?cava|caval.?vein.?inferior/.test(lowerName)) return 'Inferior_Caval_Vein'
+    if (/pulmonary.?trunk|trunk.?pulmonary/.test(lowerName)) return 'Pulmonary_Trunk'
+    if (/right.?pulmonary.?vein|pulmonary.?vein.?right/.test(lowerName)) return 'Right_Pulmonary_Vein'
+    if (/left.?pulmonary.?vein|pulmonary.?vein.?left/.test(lowerName)) return 'Left_Pulmonary_Vein'
+    if (/pulmonary.?artery/.test(lowerName)) return 'Right_Pulmonary_Artery'
+    if (/pulmonary.?vein/.test(lowerName)) return 'Right_Pulmonary_Vein'
+    if (/lung|pulmonary/.test(lowerName)) return 'Left_Lung'
+    if (/heart|cardiac|normaal4/.test(lowerName)) return 'Aorta'
+    if (/normaal5/.test(lowerName)) return 'Left_Lung'
   }
 
   if (anatomyType === 'kidney') {
@@ -208,7 +228,7 @@ function matchFromParent(object: THREE.Object3D, anatomyType: string): string | 
         if (r) return r
       }
       if (anatomyType === 'lungs') {
-        const r = m(/trachea|windpipe/, 'Trachea') || m(/bronch/, 'Bronchi') || m(/lung|pulmonary/, 'Lungs') || m(/heart|cardiac|stomach/, 'Heart')
+        const r = m(/trachea|windpipe/, 'Trachea') || m(/bronch/, 'Bronchi') || m(/linkerlong|left.?lung/, 'Left_Lung') || m(/rechterlong|right.?lung/, 'Right_Lung') || m(/left.?ventricle/, 'Left_Ventricle') || m(/right.?ventricle/, 'Right_Ventricle') || m(/right.?atrium/, 'Right_Atrium') || m(/left.?atrium/, 'Left_Atrium') || m(/aorta/, 'Aorta') || m(/left.?pulmonary.?artery/, 'Left_Pulmonary_Artery') || m(/right.?pulmonary.?artery/, 'Right_Pulmonary_Artery') || m(/superior.?caval|superior.?vena/, 'Superior_Caval_Vein') || m(/inferior.?caval|inferior.?vena/, 'Inferior_Caval_Vein') || m(/pulmonary.?trunk/, 'Pulmonary_Trunk') || m(/right.?pulmonary.?vein/, 'Right_Pulmonary_Vein') || m(/left.?pulmonary.?vein/, 'Left_Pulmonary_Vein') || m(/lung|pulmonary/, 'Left_Lung') || m(/heart|cardiac/, 'Aorta')
         if (r) return r
       }
       if (anatomyType === 'kidney') {

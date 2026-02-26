@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
+import * as THREE from 'three'
 import { PerspectiveCamera, useGLTF } from '@react-three/drei'
 import { ENTScene } from './ent/ENTScene'
 
@@ -22,6 +23,8 @@ interface ENTAnatomyViewerProps {
   selectedPart?: string | null
 }
 
+const isLungsModel = (path: string) => path.includes('lungs') || path.includes('heart')
+
 export default function ENTAnatomyViewer({
   modelPath = '/models/ear/ear-anatomy.glb',
   onPartSelect,
@@ -30,12 +33,18 @@ export default function ENTAnatomyViewer({
 }: ENTAnatomyViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [zoomDelta, setZoomDelta] = useState(0)
+  const isLungs = isLungsModel(modelPath)
+  const bgColor = isLungs ? '#ffffff' : '#f1f5f9'
+  const exposure = isLungs ? 1.5 : 1.35
 
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg overflow-hidden flex items-center justify-center ${className}`}
-      style={{ touchAction: 'none' }}
+      className={`relative w-full h-full rounded-lg overflow-hidden flex items-center justify-center ${className}`}
+      style={{
+        touchAction: 'none',
+        background: isLungs ? '#ffffff' : 'linear-gradient(to bottom right, #f8fafc, #e2e8f0)'
+      }}
     >
       <div className="w-full max-w-2xl h-full max-h-[600px] mx-auto relative">
         <Canvas
@@ -45,14 +54,17 @@ export default function ENTAnatomyViewer({
             antialias: true,
             alpha: true,
             preserveDrawingBuffer: true,
-            powerPreference: 'high-performance'
+            powerPreference: 'high-performance',
+            toneMapping: THREE.ACESFilmicToneMapping,
+            toneMappingExposure: exposure,
+            outputColorSpace: THREE.SRGBColorSpace
           }}
           dpr={[1, 2]}
           camera={{ position: [0, 0, 8], fov: 45, near: 0.1, far: 1000 }}
           frameloop="always"
         >
           <PerspectiveCamera makeDefault position={[0, 0, 8]} fov={45} near={0.1} far={1000} />
-          <color attach="background" args={['#f8fafc']} />
+          <color attach="background" args={[bgColor]} />
           <Suspense fallback={null}>
             <ENTScene
               onPartSelect={onPartSelect}
@@ -94,4 +106,5 @@ export default function ENTAnatomyViewer({
 
 if (typeof window !== 'undefined') {
   useGLTF.preload('/models/ear/ear-anatomy.glb')
+  useGLTF.preload('/models/lungs/healthy_heart_and_lungs.glb')
 }

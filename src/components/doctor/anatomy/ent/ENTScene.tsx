@@ -5,6 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { ENTModel } from './ENTModel'
+import { getAnatomyTypeFromPath } from './entAnatomyMappings'
 
 const MIN_DISTANCE = 1
 const MAX_DISTANCE = 50
@@ -49,12 +50,18 @@ export function ENTScene({
     onZoomApplied()
   })
 
+  const isLungs = modelPath ? getAnatomyTypeFromPath(modelPath) === 'lungs' : false
+  const ambientIntensity = isLungs ? 0.95 : 0.7
+  const dir1Intensity = isLungs ? 1.8 : 1.5
+
   return (
     <>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 5, 5]} intensity={0.9} castShadow />
-      <directionalLight position={[-5, 3, -5]} intensity={0.5} />
-      <pointLight position={[0, 10, 0]} intensity={0.4} />
+      <ambientLight intensity={ambientIntensity} />
+      <directionalLight position={[4, 4, 6]} intensity={dir1Intensity} castShadow />
+      <directionalLight position={[-4, 2, -4]} intensity={isLungs ? 1 : 0.7} />
+      <directionalLight position={[0, -2, -3]} intensity={isLungs ? 0.6 : 0.4} />
+      <pointLight position={[0, 6, 2]} intensity={isLungs ? 0.9 : 0.7} />
+      <pointLight position={[-2, 3, 4]} intensity={isLungs ? 0.6 : 0.4} />
 
       <ENTModel key={modelPath} onPartSelect={onPartSelect} selectedPart={selectedPart} modelPath={modelPath} />
 

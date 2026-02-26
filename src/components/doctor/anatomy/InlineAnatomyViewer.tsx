@@ -70,7 +70,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
   const [activeNameSuggestion, setActiveNameSuggestion] = useState<{ section: '3d' | '2d', index: number } | null>(null)
   const [inlineSuggestion, setInlineSuggestion] = useState<{ section: '3d' | '2d', index: number, suggestion: string } | null>(null)
   const [activeView, setActiveView] = useState<'3d' | '2d'>('3d')
-  
+
   // State for 3D model section
   const [selectedPart, setSelectedPart] = useState<string | null>(null)
   const [selectedPartInfo, setSelectedPartInfo] = useState<{ name: string; description: string } | null>(null)
@@ -186,10 +186,12 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       'Sinuses': 'Sinuses', 'Paranasal_Sinuses': 'Sinuses',
     },
     lungs: {
-      'Trachea': 'Trachea', 'Windpipe': 'Trachea',
-      'Bronchi': 'Bronchi', 'Bronchus': 'Bronchi',
-      'Lungs': 'Lungs', 'Lung': 'Lungs',
-      'Heart': 'Heart',
+      'Left_Lung': 'Left_Lung', 'Right_Lung': 'Right_Lung', 'Left_Ventricle': 'Left_Ventricle', 'Right_Ventricle': 'Right_Ventricle',
+      'Right_Atrium': 'Right_Atrium', 'Left_Atrium': 'Left_Atrium', 'Aorta': 'Aorta',
+      'Left_Pulmonary_Artery': 'Left_Pulmonary_Artery', 'Right_Pulmonary_Artery': 'Right_Pulmonary_Artery',
+      'Superior_Caval_Vein': 'Superior_Caval_Vein', 'Inferior_Caval_Vein': 'Inferior_Caval_Vein',
+      'Pulmonary_Trunk': 'Pulmonary_Trunk', 'Right_Pulmonary_Vein': 'Right_Pulmonary_Vein', 'Left_Pulmonary_Vein': 'Left_Pulmonary_Vein',
+      'Trachea': 'Trachea', 'Windpipe': 'Trachea', 'Bronchi': 'Bronchi', 'Bronchus': 'Bronchi',
     },
     kidney: {
       'Kidney': 'Kidney', 'Left_Kidney': 'Kidney', 'Right_Kidney': 'Kidney',
@@ -246,7 +248,10 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
           1: 'Nostrils', 2: 'Nasal_Cavity', 3: 'Nasal_Septum', 4: 'Turbinates', 5: 'Sinuses',
         },
         lungs: {
-          1: 'Trachea', 2: 'Bronchi', 3: 'Lungs', 4: 'Heart',
+          1: 'Left_Lung', 2: 'Right_Lung', 3: 'Left_Ventricle', 4: 'Right_Ventricle',
+          5: 'Right_Atrium', 6: 'Left_Atrium', 7: 'Aorta', 8: 'Left_Pulmonary_Artery', 9: 'Right_Pulmonary_Artery',
+          10: 'Superior_Caval_Vein', 11: 'Inferior_Caval_Vein', 12: 'Pulmonary_Trunk',
+          13: 'Right_Pulmonary_Vein', 14: 'Left_Pulmonary_Vein', 15: 'Trachea', 16: 'Bronchi',
         },
         kidney: {
           1: 'Kidney', 2: 'Renal_Pelvis', 3: 'Ureter', 4: 'Cortex', 5: 'Medulla',
@@ -314,15 +319,24 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return 'Sinuses'
       }
     } else if (anatomyType === 'lungs') {
-      if (lowerName.includes('trachea') || lowerName.includes('windpipe')) {
-        return 'Trachea'
-      } else if (lowerName.includes('bronch')) {
-        return 'Bronchi'
-      } else if (lowerName.includes('lung')) {
-        return 'Lungs'
-      } else if (lowerName.includes('heart')) {
-        return 'Heart'
-      }
+      if (lowerName.includes('left') && lowerName.includes('lung')) return 'Left_Lung'
+      if (lowerName.includes('right') && lowerName.includes('lung')) return 'Right_Lung'
+      if (lowerName.includes('left') && lowerName.includes('ventricle')) return 'Left_Ventricle'
+      if (lowerName.includes('right') && lowerName.includes('ventricle')) return 'Right_Ventricle'
+      if (lowerName.includes('right') && lowerName.includes('atrium')) return 'Right_Atrium'
+      if (lowerName.includes('left') && lowerName.includes('atrium')) return 'Left_Atrium'
+      if (lowerName.includes('aorta')) return 'Aorta'
+      if (lowerName.includes('left') && lowerName.includes('pulmonary') && lowerName.includes('artery')) return 'Left_Pulmonary_Artery'
+      if (lowerName.includes('right') && lowerName.includes('pulmonary') && lowerName.includes('artery')) return 'Right_Pulmonary_Artery'
+      if (lowerName.includes('superior') && (lowerName.includes('caval') || lowerName.includes('vena'))) return 'Superior_Caval_Vein'
+      if (lowerName.includes('inferior') && (lowerName.includes('caval') || lowerName.includes('vena'))) return 'Inferior_Caval_Vein'
+      if (lowerName.includes('pulmonary') && lowerName.includes('trunk')) return 'Pulmonary_Trunk'
+      if (lowerName.includes('right') && lowerName.includes('pulmonary') && lowerName.includes('vein')) return 'Right_Pulmonary_Vein'
+      if (lowerName.includes('left') && lowerName.includes('pulmonary') && lowerName.includes('vein')) return 'Left_Pulmonary_Vein'
+      if (lowerName.includes('trachea') || lowerName.includes('windpipe')) return 'Trachea'
+      if (lowerName.includes('bronch')) return 'Bronchi'
+      if (lowerName.includes('lung')) return 'Left_Lung'
+      if (lowerName.includes('heart')) return 'Aorta'
     } else if (anatomyType === 'kidney') {
       if (lowerName.includes('kidney') || lowerName.includes('renal') && !lowerName.includes('pelvis') && !lowerName.includes('cortex') && !lowerName.includes('medulla')) {
         return 'Kidney'
@@ -1039,14 +1053,16 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
           {/* Left: Model Viewer */}
           <div className="lg:col-span-6">
             {effectiveView === '3d' ? (
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200" style={{ height: '600px', minHeight: '600px', position: 'relative' }}>
-                <DynamicENTAnatomyViewer
-                  onPartSelect={handlePartSelect}
-                  selectedPart={selectedPart}
-                  modelPath={getModelPath()}
-                  className="w-full h-full"
-                />
-              </div>
+              <>
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200" style={{ height: '600px', minHeight: '600px', position: 'relative' }}>
+                  <DynamicENTAnatomyViewer
+                    onPartSelect={handlePartSelect}
+                    selectedPart={selectedPart}
+                    modelPath={getModelPath()}
+                    className="w-full h-full"
+                  />
+                </div>
+              </>
             ) : (
               <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200" style={{ height: '600px', minHeight: '600px' }}>
                 {anatomyType === 'skeleton' ? (

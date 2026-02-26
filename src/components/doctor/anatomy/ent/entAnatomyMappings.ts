@@ -28,7 +28,13 @@ export function getAnatomyTypeFromPath(modelPath: string): AnatomyType {
 export function getObjectNumberMapping(anatomyType: AnatomyType): Record<number, string> {
   const mappings: Record<AnatomyType, Record<number, string>> = {
     nose: { 0: 'Nostrils', 1: 'Nostrils', 2: 'Nasal_Cavity', 3: 'Nasal_Septum', 4: 'Turbinates', 5: 'Sinuses', 6: 'Nasal_Cavity', 7: 'Sinuses', 8: 'Turbinates', 9: 'Nasal_Cavity', 10: 'Nostrils', 11: 'Sinuses', 12: 'Nasal_Septum', 13: 'Turbinates', 14: 'Nasal_Cavity', 15: 'Sinuses', 16: 'Nostrils', 17: 'Nasal_Septum', 18: 'Turbinates', 19: 'Nasal_Cavity', 20: 'Sinuses', 21: 'Nostrils', 22: 'Nasal_Septum', 23: 'Turbinates', 24: 'Nasal_Cavity' },
-    lungs: { 1: 'Trachea', 2: 'Bronchi', 3: 'Lungs', 4: 'Heart' },
+    lungs: {
+      1: 'Left_Lung', 2: 'Right_Lung', 3: 'Left_Ventricle', 4: 'Right_Ventricle',
+      5: 'Right_Atrium', 6: 'Left_Atrium', 7: 'Aorta', 8: 'Left_Pulmonary_Artery', 9: 'Right_Pulmonary_Artery',
+      10: 'Superior_Caval_Vein', 11: 'Inferior_Caval_Vein', 12: 'Pulmonary_Trunk',
+      13: 'Right_Pulmonary_Vein', 14: 'Left_Pulmonary_Vein',
+      15: 'Trachea', 16: 'Bronchi'
+    },
     throat: { 1: 'Pharynx', 2: 'Larynx', 3: 'Epiglottis', 4: 'Trachea', 5: 'Vocal_Cords' },
     dental: { 1: 'Teeth', 2: 'Gums', 3: 'Tongue', 4: 'Mandible', 5: 'Palate', 6: 'Oral_Mucosa', 7: 'Salivary_Glands', 8: 'Wisdom_Teeth' },
     kidney: { 1: 'Kidney', 2: 'Renal_Pelvis', 3: 'Ureter', 4: 'Cortex', 5: 'Medulla' },
@@ -59,10 +65,22 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Salivary_Glands: 'Salivary_Glands', Salivary_Gland: 'Salivary_Glands', Parotid: 'Salivary_Glands', Submandibular: 'Salivary_Glands', Sublingual: 'Salivary_Glands',
   },
   lungs: {
-    Trachea: 'Trachea', Windpipe: 'Trachea', Bronchi: 'Bronchi', Bronchus: 'Bronchi', Lungs: 'Lungs', Lung: 'Lungs',
-    Left_Lung: 'Lungs', Right_Lung: 'Lungs', Left_lung: 'Lungs', Right_lung: 'Lungs', LeftLung: 'Lungs', RightLung: 'Lungs', Heart: 'Heart',
-    SM_Heart: 'Heart', SM_Lungs: 'Lungs', SM_Trachea: 'Trachea', SM_Bronchi: 'Bronchi', Heart_Mesh: 'Heart', Lungs_Mesh: 'Lungs', Trachea_Mesh: 'Trachea',
-    normaal25_normaal25_0: 'Trachea', normaal25: 'Trachea', normaal6_normaal6_0: 'Bronchi', normaal6: 'Bronchi', normaal5_normaal5_0: 'Lungs', normaal5: 'Lungs', normaal4_normaal4_0: 'Heart', normaal4: 'Heart', linkerlong3_linkerlong3_0: 'Lungs', linkerlong3: 'Lungs',
+    Left_Lung: 'Left_Lung', 'Left lung': 'Left_Lung', Left_lung: 'Left_Lung', LeftLung: 'Left_Lung', linkerlong: 'Left_Lung',
+    Right_Lung: 'Right_Lung', 'Right lung': 'Right_Lung', Right_lung: 'Right_Lung', RightLung: 'Right_Lung', rechterlong: 'Right_Lung',
+    Left_Ventricle: 'Left_Ventricle', 'Left ventricle': 'Left_Ventricle', Left_ventricle: 'Left_Ventricle',
+    Right_Ventricle: 'Right_Ventricle', 'Right ventricle': 'Right_Ventricle', Right_ventricle: 'Right_Ventricle',
+    Right_Atrium: 'Right_Atrium', 'Right atrium': 'Right_Atrium', Right_atrium: 'Right_Atrium',
+    Left_Atrium: 'Left_Atrium', 'Left atrium': 'Left_Atrium', Left_atrium: 'Left_Atrium',
+    Aorta: 'Aorta',
+    Left_Pulmonary_Artery: 'Left_Pulmonary_Artery', 'Left pulmonary artery': 'Left_Pulmonary_Artery',
+    Right_Pulmonary_Artery: 'Right_Pulmonary_Artery', 'Right pulmonary artery': 'Right_Pulmonary_Artery',
+    Superior_Caval_Vein: 'Superior_Caval_Vein', 'Superior caval vein': 'Superior_Caval_Vein', Superior_Vena_Cava: 'Superior_Caval_Vein',
+    Inferior_Caval_Vein: 'Inferior_Caval_Vein', 'Inferior caval vein': 'Inferior_Caval_Vein', Inferior_Vena_Cava: 'Inferior_Caval_Vein',
+    Pulmonary_Trunk: 'Pulmonary_Trunk', 'Pulmonary trunk': 'Pulmonary_Trunk',
+    Right_Pulmonary_Vein: 'Right_Pulmonary_Vein', 'Right pulmonary vein': 'Right_Pulmonary_Vein',
+    Left_Pulmonary_Vein: 'Left_Pulmonary_Vein', 'Left pulmonary vein': 'Left_Pulmonary_Vein',
+    Trachea: 'Trachea', Windpipe: 'Trachea', Bronchi: 'Bronchi', Bronchus: 'Bronchi', Lungs: 'Left_Lung', Lung: 'Right_Lung',
+    SM_Heart: 'Aorta', Heart_Mesh: 'Aorta', normaal25: 'Trachea', normaal6: 'Bronchi', normaal4: 'Aorta', normaal5: 'Left_Lung', linkerlong3: 'Left_Lung', rechterlong3: 'Right_Lung',
   },
   kidney: {
     Kidney: 'Kidney', Left_Kidney: 'Kidney', Right_Kidney: 'Kidney', Renal_Pelvis: 'Renal_Pelvis', Ureter: 'Ureter', Cortex: 'Cortex', Medulla: 'Medulla', SM_Kidney: 'Kidney', SM_Ureter: 'Ureter',
