@@ -1,0 +1,11 @@
+Model Information:
+* title:	Ear Anatomy
+* source:	https://sketchfab.com/3d-models/ear-anatomy-a73b47d7e2ae494681184c3a5701b549
+* author:	supiadawiah (https://sketchfab.com/supiadawiah)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ear Anatomy" (https://sketchfab.com/3d-models/ear-anatomy-a73b47d7e2ae494681184c3a5701b549) by supiadawiah (https://sketchfab.com/supiadawiah) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

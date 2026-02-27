@@ -59,7 +59,7 @@ export const entPartDescriptions: Record<string, { name: string; description: st
   turbinates: { name: 'Turbinates (Nasal Conchae)', description: 'Bony structures that warm and filter air.' },
   Sinuses: { name: 'Sinuses (Paranasal Sinuses)', description: 'Air-filled spaces in the bones around the nose.' },
   sinuses: { name: 'Sinuses (Paranasal Sinuses)', description: 'Air-filled spaces in the bones around the nose.' },
-  // Lungs & heart – 16 parts (display names as specified)
+  // Lungs & heart – 15 parts (display names as specified)
   Left_Lung: { name: 'Left lung', description: 'Left organ for gas exchange.' },
   Right_Lung: { name: 'Right lung', description: 'Right organ for gas exchange.' },
   Left_Ventricle: { name: 'Left ventricle', description: 'Pumps blood to the body.' },
@@ -74,7 +74,6 @@ export const entPartDescriptions: Record<string, { name: string; description: st
   Pulmonary_Trunk: { name: 'Pulmonary trunk', description: 'Main vessel that splits into left and right pulmonary arteries.' },
   Right_Pulmonary_Vein: { name: 'Right pulmonary vein', description: 'Carries oxygenated blood from right lung to heart.' },
   Left_Pulmonary_Vein: { name: 'Left pulmonary vein', description: 'Carries oxygenated blood from left lung to heart.' },
-  Bronchi: { name: 'Bronchi', description: 'Main air passages branching from the trachea.' },
   // Kidney
   Kidney: { name: 'Kidney', description: 'Paired organs that filter blood and remove waste.' },
   kidney: { name: 'Kidney', description: 'Paired organs that filter blood and remove waste.' },

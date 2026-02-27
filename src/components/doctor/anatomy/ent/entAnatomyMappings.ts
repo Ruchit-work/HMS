@@ -2,14 +2,13 @@
  * ENT anatomy mappings - object names, anatomical names, helpers
  */
 
-export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton'
+export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes'
 
 export const objectNameToPartMap: Record<string, string> = {
   'Object 1': 'Outer_Ear', 'Object 2': 'Ear_Canal', 'Object 3': 'Eardrum', 'Object 4': 'Ossicles', 'Object 5': 'Cochlea', 'Object 6': 'Semicircular_Canals', 'Object 7': 'Auditory_Nerve',
   'object 1': 'Outer_Ear', 'object 2': 'Ear_Canal', 'object 3': 'Eardrum', 'object 4': 'Ossicles', 'object 5': 'Cochlea', 'object 6': 'Semicircular_Canals', 'object 7': 'Auditory_Nerve',
   'Object_1': 'Outer_Ear', 'Object_2': 'Ear_Canal', 'Object_3': 'Eardrum', 'Object_4': 'Ossicles', 'Object_5': 'Cochlea', 'Object_6': 'Semicircular_Canals', 'Object_7': 'Auditory_Nerve',
   'Object_10': 'Outer_Ear', 'Object_11': 'Ear_Canal', 'Object_12': 'Eardrum', 'Object_13': 'Ossicles', 'Object_14': 'Cochlea', 'Object_15': 'Semicircular_Canals', 'Object_16': 'Auditory_Nerve',
-  'object_1': 'Outer_Ear', 'object_2': 'Ear_Canal', 'object_3': 'Eardrum', 'object_4': 'Ossicles', 'object_5': 'Cochlea', 'object_6': 'Semicircular_Canals', 'object_7': 'Auditory_Nerve',
   'object_10': 'Outer_Ear', 'object_11': 'Ear_Canal', 'object_12': 'Eardrum', 'object_13': 'Ossicles', 'object_14': 'Cochlea', 'object_15': 'Semicircular_Canals', 'object_16': 'Auditory_Nerve',
   'mesh_1': 'Outer_Ear', 'mesh_2': 'Ear_Canal', 'mesh_3': 'Eardrum', 'mesh_4': 'Ossicles', 'mesh_5': 'Cochlea', 'mesh_6': 'Semicircular_Canals', 'mesh_7': 'Auditory_Nerve',
   'Mesh_1': 'Outer_Ear', 'Mesh_2': 'Ear_Canal', 'Mesh_3': 'Eardrum', 'Mesh_4': 'Ossicles', 'Mesh_5': 'Cochlea', 'Mesh_6': 'Semicircular_Canals', 'Mesh_7': 'Auditory_Nerve',
@@ -18,10 +17,12 @@ export const objectNameToPartMap: Record<string, string> = {
 export function getAnatomyTypeFromPath(modelPath: string): AnatomyType {
   if (modelPath.includes('skeleton') || modelPath.includes('bone') || modelPath.includes('skelton')) return 'skeleton'
   if (modelPath.includes('thorat') || modelPath.includes('throat') || modelPath.includes('larynx')) return 'throat'
-  if (modelPath.includes('mouth') || modelPath.includes('mandible') || modelPath.includes('dental')) return 'dental'
+  if (modelPath.includes('human_mouth_detailed') || modelPath.includes('mouth') || modelPath.includes('mandible') || modelPath.includes('dental')) return 'dental'
   if (modelPath.includes('nose') || modelPath.includes('hidung')) return 'nose'
   if (modelPath.includes('kidney') || modelPath.includes('renal')) return 'kidney'
+  if (modelPath.includes('thorax_and_abdomen')) return 'lymph_nodes'
   if (modelPath.includes('lungs') || modelPath.includes('heart')) return 'lungs'
+  if (modelPath.includes('ear')) return 'ear'
   return 'ear'
 }
 
@@ -32,14 +33,14 @@ export function getObjectNumberMapping(anatomyType: AnatomyType): Record<number,
       1: 'Left_Lung', 2: 'Right_Lung', 3: 'Left_Ventricle', 4: 'Right_Ventricle',
       5: 'Right_Atrium', 6: 'Left_Atrium', 7: 'Aorta', 8: 'Left_Pulmonary_Artery', 9: 'Right_Pulmonary_Artery',
       10: 'Superior_Caval_Vein', 11: 'Inferior_Caval_Vein', 12: 'Pulmonary_Trunk',
-      13: 'Right_Pulmonary_Vein', 14: 'Left_Pulmonary_Vein',
-      15: 'Trachea', 16: 'Bronchi'
+      13: 'Right_Pulmonary_Vein', 14: 'Left_Pulmonary_Vein', 15: 'Trachea', 16: 'Bronchi'
     },
     throat: { 1: 'Pharynx', 2: 'Larynx', 3: 'Epiglottis', 4: 'Trachea', 5: 'Vocal_Cords' },
     dental: { 1: 'Teeth', 2: 'Gums', 3: 'Tongue', 4: 'Mandible', 5: 'Palate', 6: 'Oral_Mucosa', 7: 'Salivary_Glands', 8: 'Wisdom_Teeth' },
     kidney: { 1: 'Kidney', 2: 'Renal_Pelvis', 3: 'Ureter', 4: 'Cortex', 5: 'Medulla' },
     ear: { 1: 'Outer_Ear', 2: 'Ear_Canal', 3: 'Eardrum', 4: 'Ossicles', 5: 'Cochlea', 6: 'Semicircular_Canals', 7: 'Auditory_Nerve', 10: 'Outer_Ear', 11: 'Ear_Canal', 12: 'Eardrum', 13: 'Ossicles', 14: 'Cochlea', 15: 'Semicircular_Canals', 16: 'Auditory_Nerve' },
     skeleton: { 1: 'Skull', 2: 'Spine', 3: 'Ribcage', 4: 'Pelvis', 5: 'Humerus', 6: 'Radius', 7: 'Ulna', 8: 'Femur', 9: 'Tibia', 10: 'Fibula', 11: 'Clavicle', 12: 'Scapula', 13: 'Sternum', 14: 'Patella' },
+    lymph_nodes: {},
   }
   return mappings[anatomyType] ?? mappings.ear
 }
@@ -63,6 +64,9 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Palate: 'Palate', Hard_Palate: 'Palate', Soft_Palate: 'Palate', Palate_Bone: 'Palate', Uvula: 'Palate',
     Oral_Mucosa: 'Oral_Mucosa', Mucosa: 'Oral_Mucosa', Oral_Mucous_Membrane: 'Oral_Mucosa', Lips: 'Oral_Mucosa', Lip: 'Oral_Mucosa', Upper_Lip: 'Oral_Mucosa', Lower_Lip: 'Oral_Mucosa', Cheek: 'Oral_Mucosa', Buccal_Mucosa: 'Oral_Mucosa',
     Salivary_Glands: 'Salivary_Glands', Salivary_Gland: 'Salivary_Glands', Parotid: 'Salivary_Glands', Submandibular: 'Salivary_Glands', Sublingual: 'Salivary_Glands',
+    // human_mouth_detailed scene nodes/meshes
+    mouth_0: 'Oral_Mucosa', teeth_1: 'Teeth', wet_2: 'Tongue',
+    Object_0: 'Oral_Mucosa', Object_1: 'Teeth', Object_2: 'Tongue', Object_4: 'Oral_Mucosa', Object_6: 'Teeth', Object_8: 'Tongue',
   },
   lungs: {
     Left_Lung: 'Left_Lung', 'Left lung': 'Left_Lung', Left_lung: 'Left_Lung', LeftLung: 'Left_Lung', linkerlong: 'Left_Lung',
@@ -79,8 +83,8 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Pulmonary_Trunk: 'Pulmonary_Trunk', 'Pulmonary trunk': 'Pulmonary_Trunk',
     Right_Pulmonary_Vein: 'Right_Pulmonary_Vein', 'Right pulmonary vein': 'Right_Pulmonary_Vein',
     Left_Pulmonary_Vein: 'Left_Pulmonary_Vein', 'Left pulmonary vein': 'Left_Pulmonary_Vein',
-    Trachea: 'Trachea', Windpipe: 'Trachea', Bronchi: 'Bronchi', Bronchus: 'Bronchi', Lungs: 'Left_Lung', Lung: 'Right_Lung',
-    SM_Heart: 'Aorta', Heart_Mesh: 'Aorta', normaal25: 'Trachea', normaal6: 'Bronchi', normaal4: 'Aorta', normaal5: 'Left_Lung', linkerlong3: 'Left_Lung', rechterlong3: 'Right_Lung',
+    Lungs: 'Left_Lung', Lung: 'Right_Lung',
+    SM_Heart: 'Aorta', Heart_Mesh: 'Aorta', normaal4: 'Aorta', normaal5: 'Left_Lung', linkerlong3: 'Left_Lung', rechterlong3: 'Right_Lung',
   },
   kidney: {
     Kidney: 'Kidney', Left_Kidney: 'Kidney', Right_Kidney: 'Kidney', Renal_Pelvis: 'Renal_Pelvis', Ureter: 'Ureter', Cortex: 'Cortex', Medulla: 'Medulla', SM_Kidney: 'Kidney', SM_Ureter: 'Ureter',
@@ -97,5 +101,19 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Pelvis: 'Pelvis', Hip: 'Pelvis', Ilium: 'Pelvis', Ischium: 'Pelvis', Pubis: 'Pelvis',
     Humerus: 'Humerus', Radius: 'Radius', Ulna: 'Ulna', Femur: 'Femur', Tibia: 'Tibia', Fibula: 'Fibula',
     Clavicle: 'Clavicle', Scapula: 'Scapula', Patella: 'Patella', Knee_Cap: 'Patella',
+  },
+  lymph_nodes: {
+    Dikke_darms: 'Large_Intestine', Dunne_darms: 'Small_Intestine', 'Dikke_darms_Dikke_darms_0': 'Large_Intestine', 'Dunne_darms_Dunne_darms_0': 'Small_Intestine',
+    Galblaas: 'Gallbladder', 'Galblaas_Galblaas_0': 'Gallbladder',
+    Lever: 'Liver', 'Lever_Lever_0': 'Liver',
+    Milt: 'Spleen', 'Milt_Milt_0': 'Spleen',
+    Pancreas: 'Pancreas', 'Pancreas_Pancreas_0': 'Pancreas',
+    Niertjes: 'Kidneys', 'Niertjes_Niertjes_0': 'Kidneys',
+    PM3D_Sphere3D1: 'Thoracic_Nodes', 'PM3D_Sphere3D1_PM3D_Sphere3D1_0': 'Thoracic_Nodes',
+    Bronchi: 'Bronchi', 'Bronchi_Bronchi_0': 'Bronchi',
+    Htc: 'Abdominal_Nodes', 'Htc_Htc_0': 'Abdominal_Nodes',
+    Kraakbeen_trache: 'Trachea', 'Kraakbeen_trache_Kraakbeen_trache_0': 'Trachea',
+    Hart6: 'Heart', 'Hart6_Hart6_0': 'Heart',
+    RootNode: 'Thoracic_Nodes', Sketchfab_model: 'Thoracic_Nodes',
   },
 }

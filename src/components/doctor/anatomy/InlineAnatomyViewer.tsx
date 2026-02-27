@@ -15,6 +15,7 @@ import { dentalPartsData } from '@/constants/dentalDiseases'
 import { lungsPartsData } from '@/constants/lungsDiseases'
 import { kidneyPartsData } from '@/constants/kidneyDiseases'
 import { skeletonPartsData } from '@/constants/skeletonDiseases'
+import { lymphNodesPartsData } from '@/constants/lymphNodesDiseases'
 import { completeAppointment } from '@/utils/appointmentHelpers'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useAuth } from '@/hooks/useAuth'
@@ -39,7 +40,7 @@ const DynamicENTAnatomyViewer = dynamic(
 )
 
 export interface AnatomyViewerData {
-  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton'
+  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes'
   selectedPart?: string
   selectedPartInfo?: any
   selectedDisease?: Disease | null
@@ -52,7 +53,7 @@ export interface AnatomyViewerData {
 interface InlineAnatomyViewerProps {
   appointmentId: string
   patientName: string
-  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton'
+  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes'
   initialData?: AnatomyViewerData | null
   onComplete?: () => void
   onDataChange?: (data: AnatomyViewerData | null) => void
@@ -129,6 +130,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return kidneyPartsData
       case 'skeleton':
         return skeletonPartsData
+      case 'lymph_nodes':
+        return lymphNodesPartsData
       case 'ear':
       default:
         return earPartsData
@@ -141,7 +144,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       case 'throat':
         return '/models/thorat/anatomy_of_the_larynx.glb'
       case 'dental':
-        return '/models/mouth/mandible.glb'
+        return '/models/dental/dental.glb'
       case 'nose':
         return '/models/nose/anatomi_hidung_nose_anatomy.glb'
       case 'lungs':
@@ -150,6 +153,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return '/models/kidney/kidney.glb'
       case 'skeleton':
         return '/models/skeleton/free_pack_-_human_skeleton.glb'
+      case 'lymph_nodes':
+        return '/3dmodels/thorax_and_abdomen_some_of_the_lymph_nodes/scene.gltf'
       case 'ear':
       default:
         return '/models/ear/ear-anatomy.glb'
@@ -203,6 +208,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       'Pelvis': 'Pelvis', 'Humerus': 'Humerus', 'Radius': 'Radius', 'Ulna': 'Ulna',
       'Femur': 'Femur', 'Tibia': 'Tibia', 'Fibula': 'Fibula', 'Clavicle': 'Clavicle', 'Scapula': 'Scapula', 'Patella': 'Patella',
     },
+    lymph_nodes: {},
     ear: {}
   }
 
@@ -267,6 +273,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
           1: 'Skull', 2: 'Spine', 3: 'Ribcage', 4: 'Pelvis', 5: 'Humerus', 6: 'Radius', 7: 'Ulna',
           8: 'Femur', 9: 'Tibia', 10: 'Fibula', 11: 'Clavicle', 12: 'Scapula', 13: 'Sternum', 14: 'Patella',
         },
+        lymph_nodes: {},
       }
       if (partMappings[anatomyType] && partMappings[anatomyType][objectNumber]) {
         return partMappings[anatomyType][objectNumber]
@@ -1003,8 +1010,10 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
   const partsData = getPartsData()
   const currentPartData = selectedPart ? partsData[selectedPart] : null
 
-  const show2DView = anatomyType !== 'kidney' && anatomyType !== 'nose'
-  const effectiveView = show2DView ? activeView : '3d'
+  const show2DView = anatomyType !== 'kidney' && anatomyType !== 'nose' && anatomyType !== 'lymph_nodes'
+  // Mouth/oral: 2D only (no 3D model)
+  const effectiveView = anatomyType === 'dental' ? '2d' : (show2DView ? activeView : '3d')
+  const showViewToggle = show2DView && anatomyType !== 'dental'
 
   return (
     <div className="w-full bg-white">
@@ -1016,8 +1025,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         </div>
       )}
       <div className="p-4">
-        {/* View Toggle - hidden for kidney and nose (3D only) */}
-        {show2DView && (
+        {/* View Toggle - hidden for kidney, nose, lymph_nodes (3D only) and dental (2D only) */}
+        {showViewToggle && (
           <div className="flex gap-2 bg-slate-100 p-1 rounded-lg w-fit mb-4">
             <button
               onClick={() => setActiveView('3d')}

@@ -166,7 +166,7 @@ export default function CompletionForm({
 
       {/* Prescription Section */}
       <div>
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between mb-1">
           <label className="block text-xs font-medium text-gray-700">
             Prescribed Medicines <span className="text-red-500">*</span>
           </label>
@@ -202,8 +202,8 @@ export default function CompletionForm({
         />
 
         {/* Added to prescription — clearly distinct from suggestions above */}
-        <div className="mt-4 pt-3 border-t border-slate-200">
-          <p className="text-xs font-semibold text-slate-700 mb-2">Added to prescription</p>
+        <div className="mt-2 pt-2 border-t border-slate-200">
+          <p className="text-xs font-semibold text-slate-700 mb-1.5">Added to prescription</p>
           <MedicineForm
           appointmentId={appointment.id}
           medicines={completionData.medicines || []}

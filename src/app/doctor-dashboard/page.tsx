@@ -475,12 +475,21 @@ export default function DoctorDashboard() {
                     const isPast = new Date(`${apt.appointmentDate}T${apt.appointmentTime}`).getTime() < Date.now()
                     
                     return (
-                      <div 
+                      <div
                         key={apt.id}
-                        className={`p-4 rounded-lg border transition-all hover:shadow-sm ${
-                          isPast 
-                            ? 'bg-slate-50 border-slate-200' 
-                            : 'bg-blue-50 border-blue-200'
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => viewAppointmentDetails(apt)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            viewAppointmentDetails(apt)
+                          }
+                        }}
+                        className={`p-4 rounded-lg border transition-all hover:shadow-md cursor-pointer ${
+                          isPast
+                            ? 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                            : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -502,12 +511,18 @@ export default function DoctorDashboard() {
                             </div>
                           </div>
                           {!isPast && (
-                            <button 
-                              onClick={() => viewAppointmentDetails(apt)}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                viewAppointmentDetails(apt)
+                              }}
                               className="btn-modern btn-modern-sm"
                             >
                               View Details
                             </button>
+                          )}
+                          {isPast && (
+                            <span className="text-sm text-slate-500">Click to open</span>
                           )}
                         </div>
                       </div>

@@ -1,0 +1,11 @@
+Model Information:
+* title:	Thorax and abdomen: some of the lymph nodes
+* source:	https://sketchfab.com/3d-models/thorax-and-abdomen-some-of-the-lymph-nodes-836b2a28b86c4e8e8596ab80e0584478
+* author:	E-learning UMCG (https://sketchfab.com/eLearningUMCG)
+
+Model License:
+* license type:	CC-BY-NC-ND-4.0 (http://creativecommons.org/licenses/by-nc-nd/4.0/)
+* requirements:	Author must be credited. No commercial use. Modified versions can not be distributed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Thorax and abdomen: some of the lymph nodes" (https://sketchfab.com/3d-models/thorax-and-abdomen-some-of-the-lymph-nodes-836b2a28b86c4e8e8596ab80e0584478) by E-learning UMCG (https://sketchfab.com/eLearningUMCG) licensed under CC-BY-NC-ND-4.0 (http://creativecommons.org/licenses/by-nc-nd/4.0/)

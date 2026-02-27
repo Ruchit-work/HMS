@@ -1,0 +1,11 @@
+Model Information:
+* title:	Healthy heart and lungs
+* source:	https://sketchfab.com/3d-models/healthy-heart-and-lungs-5c62cd4d4ba04243be1062d2263d3ef0
+* author:	E-learning UMCG (https://sketchfab.com/eLearningUMCG)
+
+Model License:
+* license type:	CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+* requirements:	Author must be credited. No commercial use. Modified versions must have the same license.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Healthy heart and lungs" (https://sketchfab.com/3d-models/healthy-heart-and-lungs-5c62cd4d4ba04243be1062d2263d3ef0) by E-learning UMCG (https://sketchfab.com/eLearningUMCG) licensed under CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)

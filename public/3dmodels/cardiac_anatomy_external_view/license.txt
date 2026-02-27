@@ -1,0 +1,11 @@
+Model Information:
+* title:	Cardiac Anatomy: external view
+* source:	https://sketchfab.com/3d-models/cardiac-anatomy-external-view-e8e8c6685e82474d8393693fd0646dc7
+* author:	E-learning UMCG (https://sketchfab.com/eLearningUMCG)
+
+Model License:
+* license type:	CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+* requirements:	Author must be credited. No commercial use. Modified versions must have the same license.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Cardiac Anatomy: external view" (https://sketchfab.com/3d-models/cardiac-anatomy-external-view-e8e8c6685e82474d8393693fd0646dc7) by E-learning UMCG (https://sketchfab.com/eLearningUMCG) licensed under CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)

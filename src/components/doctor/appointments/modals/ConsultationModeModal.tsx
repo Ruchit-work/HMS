@@ -2,18 +2,18 @@
 
 import { useState, useEffect } from "react"
 import { useRevealModalClose, RevealModal } from "@/components/ui/overlays/RevealModal"
-import { type AnatomyModel } from "@/utils/anatomyModelMapping"
+import { type AnatomyModel, type AnatomyType } from "@/utils/anatomyModelMapping"
 import { getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
 
-type SelectedMode = "normal" | "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | null
+type SelectedMode = "normal" | AnatomyType | null
 
 interface ConsultationModeModalProps {
   isOpen: boolean
   appointmentId: string | null
   doctorSpecialization?: string
-  alreadySelectedTypes: ('ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton')[]
+  alreadySelectedTypes: AnatomyType[]
   onSelectNormal: () => void
-  onSelectAnatomy: (anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton') => void
+  onSelectAnatomy: (anatomyType: AnatomyType) => void
   onClose: () => void
 }
 
@@ -63,11 +63,11 @@ function ConsultationModeModalContent({
   onSelectAnatomy,
 }: {
   doctorSpecialization?: string
-  alreadySelectedTypes: ('ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton')[]
+  alreadySelectedTypes: AnatomyType[]
   selectedMode: SelectedMode
   setSelectedMode: (m: SelectedMode) => void
   onSelectNormal: () => void
-  onSelectAnatomy: (anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton') => void
+  onSelectAnatomy: (anatomyType: AnatomyType) => void
 }) {
   const requestClose = useRevealModalClose()
 
@@ -82,6 +82,7 @@ function ConsultationModeModalContent({
     lungs: { from: 'from-amber-50', to: 'to-orange-50', border: 'border-slate-200', selectedBorder: 'border-amber-400', bg: 'bg-amber-500' },
     kidney: { from: 'from-amber-50', to: 'to-orange-50', border: 'border-slate-200', selectedBorder: 'border-amber-400', bg: 'bg-amber-500' },
     skeleton: { from: 'from-stone-50', to: 'to-slate-100', border: 'border-slate-200', selectedBorder: 'border-stone-400', bg: 'bg-stone-500' },
+    lymph_nodes: { from: 'from-cyan-50', to: 'to-teal-50', border: 'border-slate-200', selectedBorder: 'border-cyan-400', bg: 'bg-cyan-500' },
   }
 
   const handleContinue = () => {

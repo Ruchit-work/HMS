@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import { findPartName, getSkeletonMeshNumber } from './findPartName'
+import { findPartName, getSkeletonMeshNumber, getObjectAndParentNames } from './findPartName'
 import { getPartDescription } from './entPartDescriptions'
 import { getAnatomyTypeFromPath } from './entAnatomyMappings'
 import { getAnatomyFromMeshName, getSkeletonPartFromMeshNameOnly } from './skeletonAnatomyData'
@@ -126,10 +126,14 @@ export function ENTModel({
           mesh.userData.originalColor = mat.color.clone()
           mesh.userData.originalEmissive = mat.emissive.clone()
           if (anatomyType === 'lungs') {
+            // Sketchfab-style: matte, readable anatomy (no shine)
+            mat.roughness = Math.max(mat.roughness ?? 0.5, 0.78)
+            mat.metalness = 0
+            mat.envMapIntensity = 0
             const { r, g, b } = mat.color
             const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b
             if (brightness < 0.5) {
-              mat.color.multiplyScalar(1.0 / Math.max(brightness, 0.05) * 0.55)
+              mat.color.multiplyScalar(1.0 / Math.max(brightness, 0.05) * 0.6)
               mat.color.r = Math.max(0, Math.min(1, mat.color.r))
               mat.color.g = Math.max(0, Math.min(1, mat.color.g))
               mat.color.b = Math.max(0, Math.min(1, mat.color.b))
@@ -289,12 +293,14 @@ export function ENTModel({
         const childNum = getSkeletonMeshNumber(child, modelPath)
         return childNum === meshNumber
       }
-      // For lungs/other anatomy: highlight only the exact clicked mesh so one click doesn't light up the whole model
+      // For lungs/other anatomy: highlight by part name so the whole part (e.g. entire left lung) is selected
+      if (!isSkeleton && partName != null) {
+        const childPartName = findPartName(child, modelPath)
+        return childPartName === partName
+      }
       if (!isSkeleton && selectedAnatomyMeshRef.current != null) {
         return child === selectedAnatomyMeshRef.current
       }
-      const childPartName = findPartName(child, modelPath)
-      return childPartName === partName
     },
     [isSkeleton, modelPath]
   )
@@ -340,6 +346,11 @@ export function ENTModel({
         } else {
           partName = findPartName(clickedMesh, modelPath)
           partInfo = partName ? getPartDescription(partName) : undefined
+          // Log mesh/parent names so you can add them to lungsMeshPartMapping.ts (open DevTools → Console)
+          if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+            const names = getObjectAndParentNames(clickedMesh)
+            console.log('[Lungs] Clicked mesh names (add to lungsMeshPartMapping.ts):', names, '→ part:', partName)
+          }
         }
         const clickedSkeletonNum = isSkeleton ? getSkeletonMeshNumber(clickedMesh, modelPath) : null
 
@@ -362,7 +373,7 @@ export function ENTModel({
               })
             }
           } else {
-            // Lungs / non-skeleton: reset every mesh to original, then highlight only the clicked one (avoids shared material or wrong selection)
+            // Lungs / non-skeleton: reset every mesh to original, then highlight only the selected part’s meshes
             modelRef.current.traverse((child) => {
               if (child instanceof THREE.Mesh) {
                 const mat = Array.isArray(child.material) ? child.material[0] : child.material
@@ -381,13 +392,26 @@ export function ENTModel({
           selectedSkeletonMeshRef.current = isSkeleton && (newSelectedPart != null || partName === null) ? clickedMesh : null
           selectedAnatomyMeshRef.current = !isSkeleton && newSelectedPart != null ? clickedMesh : null
 
-          // Highlight only the clicked mesh
+          // Highlight: skeleton = single mesh by number; lungs/anatomy = all meshes with same part name (e.g. entire left lung)
           if (newSelectedPart || isSkeleton) {
-            const mat = Array.isArray(clickedMesh.material) ? clickedMesh.material[0] : clickedMesh.material
-            if (mat instanceof THREE.MeshStandardMaterial) {
-              mat.color.setHex(0x4ade80)
-              mat.emissive.setHex(0x22c55e)
-              mat.emissiveIntensity = 0.4
+            if (isSkeleton) {
+              const mat = Array.isArray(clickedMesh.material) ? clickedMesh.material[0] : clickedMesh.material
+              if (mat instanceof THREE.MeshStandardMaterial) {
+                mat.color.setHex(0x4ade80)
+                mat.emissive.setHex(0x22c55e)
+                mat.emissiveIntensity = 0.4
+              }
+            } else {
+              modelRef.current.traverse((child) => {
+                if (child instanceof THREE.Mesh && findPartName(child, modelPath) === newSelectedPart) {
+                  const mat = Array.isArray(child.material) ? child.material[0] : child.material
+                  if (mat instanceof THREE.MeshStandardMaterial) {
+                    mat.color.setHex(0x4ade80)
+                    mat.emissive.setHex(0x22c55e)
+                    mat.emissiveIntensity = 0.4
+                  }
+                }
+              })
             }
           }
 

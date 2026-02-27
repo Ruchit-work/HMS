@@ -1,0 +1,11 @@
+Model Information:
+* title:	Ear Model
+* source:	https://sketchfab.com/3d-models/ear-model-955afc96ce3440669eec7b97f3411b15
+* author:	mcguiret (https://sketchfab.com/mcguiret)
+
+Model License:
+* license type:	CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+* requirements:	Author must be credited. No commercial use. Modified versions must have the same license.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ear Model" (https://sketchfab.com/3d-models/ear-model-955afc96ce3440669eec7b97f3411b15) by mcguiret (https://sketchfab.com/mcguiret) licensed under CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)

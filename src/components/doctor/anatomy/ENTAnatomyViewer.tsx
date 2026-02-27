@@ -34,8 +34,12 @@ export default function ENTAnatomyViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const [zoomDelta, setZoomDelta] = useState(0)
   const isLungs = isLungsModel(modelPath)
-  const bgColor = isLungs ? '#ffffff' : '#f1f5f9'
-  const exposure = isLungs ? 1.5 : 1.35
+  // Sketchfab-style: neutral soft background for anatomy (like the E-learning UMCG heart & lungs viewer)
+  const bgStyle = isLungs
+    ? 'linear-gradient(160deg, #f0f0f0 0%, #e8e8e8 50%, #e0e0e0 100%)'
+    : 'linear-gradient(to bottom right, #f8fafc, #e2e8f0)'
+  const bgColor = isLungs ? '#ececec' : '#f1f5f9'
+  const exposure = isLungs ? 1.38 : 1.35
 
   return (
     <div
@@ -43,7 +47,7 @@ export default function ENTAnatomyViewer({
       className={`relative w-full h-full rounded-lg overflow-hidden flex items-center justify-center ${className}`}
       style={{
         touchAction: 'none',
-        background: isLungs ? '#ffffff' : 'linear-gradient(to bottom right, #f8fafc, #e2e8f0)'
+        background: bgStyle
       }}
     >
       <div className="w-full max-w-2xl h-full max-h-[600px] mx-auto relative">

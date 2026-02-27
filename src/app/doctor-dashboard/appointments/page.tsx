@@ -19,7 +19,7 @@ import dynamic from "next/dynamic"
 import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
 import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
 import type { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
-import { getAnatomyModelDetails } from "@/utils/anatomyModelMapping"
+import { getAnatomyModelDetails, getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
 
 // Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
 const InlineAnatomyViewer = dynamic(
@@ -39,7 +39,6 @@ import { formatMedicinesAsText as formatMedicinesAsTextUtil } from "@/utils/appo
 import { TabKey, CompletionFormEntry, hasValidPrescriptionInput } from "@/types/appointments"
 import ConsultationModeModal from "@/components/doctor/appointments/modals/ConsultationModeModal"
 import CompletionForm from "@/components/doctor/appointments/forms/CompletionForm"
-import PatientInfoSection from "@/components/doctor/appointments/sections/PatientInfoSection"
 import LifestyleSection from "@/components/doctor/appointments/sections/LifestyleSection"
 import MedicalInfoSection from "@/components/doctor/appointments/sections/MedicalInfoSection"
 import AIDiagnosisSuggestion from "@/components/doctor/appointments/ai/AIDiagnosisSuggestion"
@@ -55,7 +54,6 @@ import EmptyState from "@/components/doctor/appointments/ui/EmptyState"
 import HistorySearch from "@/components/doctor/appointments/ui/HistorySearch"
 import PatientSummaryBar from "@/components/doctor/appointments/ui/PatientSummaryBar"
 import ClinicalSummaryCard from "@/components/doctor/appointments/ui/ClinicalSummaryCard"
-import AppointmentActionsCard from "@/components/doctor/appointments/ui/AppointmentActionsCard"
 import AppointmentsListPane from "@/components/doctor/appointments/ui/AppointmentsListPane"
 import CollapsibleSection from "@/components/doctor/appointments/ui/CollapsibleSection"
 import { useDoctorAppointments } from "@/hooks/useDoctorAppointments"
@@ -71,8 +69,8 @@ function DoctorAppointmentsContent() {
   const [updating, setUpdating] = useState<{ [key: string]: boolean }>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{ [key: string]: boolean }>({})
   const [consultationMode, setConsultationMode] = useState<{ [key: string]: "normal" | "anatomy" | null }>({})
-  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton")[] }>({})
-  const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" }>({})
+  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes")[] }>({})
+  const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" }>({})
   const [anatomyViewerData, setAnatomyViewerData] = useState<{ [key: string]: { [anatomyType: string]: AnatomyViewerData | null } }>({})
   const [showCombinedCompletionModal, setShowCombinedCompletionModal] = useState<{ [key: string]: boolean }>({})
   const appointmentCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -427,27 +425,17 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const handleCompleteConsultationClick = (appointmentId: string) => {
-    setShowConsultationModeModal({
-      open: true,
-      appointmentId: appointmentId,
-    })
-    
-    // Auto-scroll to appointment details area to show the modal
+  const ensureNormalConsultationOpen = (appointmentId: string) => {
+    setShowCompletionForm((prev) => ({ ...prev, [appointmentId]: true }))
+    setConsultationMode((prev) => ({ ...prev, [appointmentId]: prev[appointmentId] ?? "normal" }))
     setTimeout(() => {
-      if (appointmentDetailsRef.current) {
-        appointmentDetailsRef.current.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-          inline: "nearest",
-        })
-      }
-    }, 100)
+      completionFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
+    }, 150)
   }
 
   const handleConsultationModeSelect = (
     mode: "normal" | "anatomy",
-    anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton"
+    anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes"
   ) => {
     const appointmentId = showConsultationModeModal.appointmentId
     if (!appointmentId) return
@@ -492,6 +480,35 @@ function DoctorAppointmentsContent() {
 
   const handleAddAnotherAnatomy = (appointmentId: string) => {
     setShowConsultationModeModal({ open: true, appointmentId })
+  }
+
+  const openNormalConsultation = (appointmentId: string) => {
+    setConsultationMode((prev) => ({ ...prev, [appointmentId]: "normal" }))
+    setShowCompletionForm((prev) => ({ ...prev, [appointmentId]: true }))
+    setTimeout(() => {
+      completionFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
+    }, 200)
+  }
+
+  const openAnatomyFromQuickCard = (
+    appointmentId: string,
+    anatomyType: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes"
+  ) => {
+    setConsultationMode((prev) => ({ ...prev, [appointmentId]: "anatomy" }))
+    setSelectedAnatomyTypes((prev) => {
+      const current = prev[appointmentId] || []
+      if (current.includes(anatomyType)) return prev
+      return { ...prev, [appointmentId]: [...current, anatomyType] }
+    })
+    setActiveAnatomyTab((prev) => ({ ...prev, [appointmentId]: anatomyType }))
+    setShowCompletionForm((prev) => ({ ...prev, [appointmentId]: true }))
+    setTimeout(() => {
+      completionFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
+    }, 200)
+  }
+
+  const switchToNormalConsultation = (appointmentId: string) => {
+    setConsultationMode((prev) => ({ ...prev, [appointmentId]: "normal" }))
   }
 
   const handleSkip = useCallback(
@@ -788,8 +805,6 @@ function DoctorAppointmentsContent() {
         }
       )
 
-      const hasExistingPrescription = !!aiPrescription[appointmentId]?.medicine
-      
       setAiPrescription((prev) => ({
         ...prev,
         [appointmentId]: {
@@ -798,11 +813,6 @@ function DoctorAppointmentsContent() {
         },
       }))
       setShowAiPrescriptionSuggestion((prev) => ({ ...prev, [appointmentId]: true }))
-      
-      // Only show notification if explicitly requested and it's a new generation
-        if (showNotification && !hasExistingPrescription) {
-          setNotification({ type: "success", message: "Prescription generated!" })
-      }
     } catch (error: unknown) {
       const errorMessage =
         (error as { response?: { data?: { error?: string } } }).response?.data?.error ||
@@ -1411,6 +1421,19 @@ function DoctorAppointmentsContent() {
     filteredHistoryAppointments,
   } = useAppointmentFilters(appointments, activeTab, historyTabFilters)
 
+  // Default open normal consultation form when a confirmed appointment is selected
+  const expandedAptId = expandedAppointment
+    ? paginatedAppointments.find((a) => a.id === expandedAppointment)?.id ?? null
+    : null
+  const expandedAptStatus = expandedAppointment
+    ? paginatedAppointments.find((a) => a.id === expandedAppointment)?.status ?? null
+    : null
+  useEffect(() => {
+    if (!expandedAptId || expandedAptStatus !== "confirmed") return
+    setShowCompletionForm((prev) => ({ ...prev, [expandedAptId]: true }))
+    setConsultationMode((prev) => ({ ...prev, [expandedAptId]: prev[expandedAptId] ?? "normal" }))
+  }, [expandedAptId, expandedAptStatus])
+
   useEffect(() => {
     appointments.forEach((apt) => {
       const isFormOpen = showCompletionForm[apt.id]
@@ -1542,41 +1565,82 @@ function DoctorAppointmentsContent() {
             >
               {selectedAppointment ? (
                 <>
-                  <PatientSummaryBar appointment={selectedAppointment} />
+                  <PatientSummaryBar
+                    appointment={selectedAppointment}
+                    onOpenDocuments={
+                      activeTab !== "history"
+                        ? () => setDocumentsModal({ open: true, appointment: selectedAppointment })
+                        : undefined
+                    }
+                    onOpenConsentVideo={
+                      activeTab !== "history"
+                        ? () => setConsentModal({ open: true, appointment: selectedAppointment })
+                        : undefined
+                    }
+                  />
                   <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50 pb-28">
-                    {/* Patient Information — open by default */}
-                    <CollapsibleSection
-                      title="Patient information"
-                      defaultOpen={true}
-                    >
-                      <div
-                        className={`grid grid-cols-1 ${
-                          activeTab === "history" ? "" : "lg:grid-cols-2"
-                        } gap-4`}
-                      >
-                        <PatientInfoSection appointment={selectedAppointment} />
-                        {activeTab !== "history" && (
-                          <AppointmentActionsCard
-                            appointment={selectedAppointment}
-                            updating={!!updating[selectedAppointment.id]}
-                            onStartConsultation={() =>
-                              handleCompleteConsultationClick(selectedAppointment.id)
-                            }
-                            onOpenDocuments={() =>
-                              setDocumentsModal({ open: true, appointment: selectedAppointment })
-                            }
-                            onOpenConsentVideo={() =>
-                              setConsentModal({ open: true, appointment: selectedAppointment })
-                            }
-                            consultationStarted={
-                              !!consultationMode[selectedAppointment.id] ||
-                              !!showCompletionForm[selectedAppointment.id]
-                            }
-                          />
-                        )}
-                      </div>
-                    </CollapsibleSection>
-
+                    {activeTab !== "history" &&
+                      selectedAppointment.status === "confirmed" &&
+                      (() => {
+                        const models = getAvailableAnatomyModels(selectedAppointment.doctorSpecialization)
+                        const isNormal =
+                          consultationMode[selectedAppointment.id] === "normal" ||
+                          !consultationMode[selectedAppointment.id]
+                        const added = selectedAnatomyTypes[selectedAppointment.id] || []
+                        return (
+                          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-1">
+                              Consultation
+                            </p>
+                            <div className="flex gap-2 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin]">
+                              <button
+                                type="button"
+                                onClick={() => openNormalConsultation(selectedAppointment.id)}
+                                className={`flex-shrink-0 w-24 sm:w-28 rounded-xl border-2 p-3 flex flex-col items-center justify-center gap-1.5 transition-all hover:shadow-md ${
+                                  isNormal
+                                    ? "border-blue-400 bg-blue-50/80 text-blue-800"
+                                    : "border-slate-200 bg-slate-50/50 text-slate-800 hover:border-slate-300 hover:bg-slate-100"
+                                }`}
+                              >
+                                <span className="text-2xl" aria-hidden>
+                                  📋
+                                </span>
+                                <span className="text-xs font-semibold text-center leading-tight line-clamp-2">
+                                  Normal consultation
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {isNormal ? "Open" : "Click to open"}
+                                </span>
+                              </button>
+                              {models.map((model) => {
+                                const isAdded = added.includes(model.type as "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton")
+                                return (
+                                  <button
+                                    key={model.type}
+                                    type="button"
+                                    onClick={() => openAnatomyFromQuickCard(selectedAppointment.id, model.type as "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton")}
+                                    className={`flex-shrink-0 w-24 sm:w-28 rounded-xl border-2 p-3 flex flex-col items-center justify-center gap-1.5 transition-all hover:shadow-md ${
+                                      isAdded
+                                        ? "border-blue-400 bg-blue-50/80 text-blue-800"
+                                        : "border-slate-200 bg-slate-50/50 text-slate-800 hover:border-slate-300 hover:bg-slate-100"
+                                    }`}
+                                  >
+                                    <span className="text-2xl" aria-hidden>
+                                      {model.icon}
+                                    </span>
+                                    <span className="text-xs font-semibold text-center leading-tight line-clamp-2">
+                                      {model.label}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500">
+                                      {isAdded ? "Open" : "Click to open"}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </section>
+                        )
+                      })()}
                     {/* Clinical details / Previous checkup — Clinical open by default, History collapsed */}
                     <CollapsibleSection
                       key={activeTab}
@@ -1852,7 +1916,7 @@ function DoctorAppointmentsContent() {
                                   getAIDiagnosisSuggestion(selectedAppointment)
                                 }
                                 onCompleteConsultation={() =>
-                                  handleCompleteConsultationClick(selectedAppointment.id)
+                                  ensureNormalConsultationOpen(selectedAppointment.id)
                                 }
                               />
                             )}
@@ -1932,30 +1996,27 @@ function DoctorAppointmentsContent() {
                             </>
                           )}
                         </h4>
-                        <button
-                          onClick={() => {
-                            toggleCompletionForm(selectedAppointment.id)
-                            setConsultationMode((prev) => ({
-                              ...prev,
-                              [selectedAppointment.id]: null,
-                            }))
-                          }}
-                          className="rounded p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                        {consultationMode[selectedAppointment.id] === "anatomy" ? (
+                          <button
+                            onClick={() => switchToNormalConsultation(selectedAppointment.id)}
+                            className="rounded p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                            title="Back to consultation form"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        ) : null}
                       </div>
 
                       {consultationMode[selectedAppointment.id] === "anatomy" ? (

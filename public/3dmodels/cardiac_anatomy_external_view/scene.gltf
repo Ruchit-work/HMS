@@ -1,0 +1,368 @@
+{
+  "accessors": [
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 65532,
+      "max": [
+        141.37973022460938,
+        192.0240020751953,
+        165.21853637695313
+      ],
+      "min": [
+        -141.0819091796875,
+        -184.74652099609375,
+        -160.1614227294922
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 786384,
+      "componentType": 5126,
+      "count": 65532,
+      "max": [
+        1.0,
+        0.999997615814209,
+        1.0
+      ],
+      "min": [
+        -1.0,
+        -1.0,
+        -0.9999986290931702
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 65532,
+      "max": [
+        0.9921568632125854,
+        0.9843137264251709,
+        0.95686274766922,
+        1.0
+      ],
+      "min": [
+        0.20392157137393951,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 303429,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 1572768,
+      "componentType": 5126,
+      "count": 65532,
+      "max": [
+        140.62387084960938,
+        140.35426330566406,
+        150.54946899414063
+      ],
+      "min": [
+        -143.75735473632813,
+        -198.07772827148438,
+        -89.3533706665039
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 2359152,
+      "componentType": 5126,
+      "count": 65532,
+      "max": [
+        0.9999843239784241,
+        0.9999720454216003,
+        0.999858021736145
+      ],
+      "min": [
+        -0.9999843835830688,
+        -0.9999341368675232,
+        -0.9999377727508545
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 1048512,
+      "componentType": 5126,
+      "count": 65532,
+      "max": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "min": [
+        0.125490203499794,
+        0.003921568859368563,
+        0.003921568859368563,
+        1.0
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 1213716,
+      "componentType": 5125,
+      "count": 342846,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 3145536,
+      "componentType": 5126,
+      "count": 22217,
+      "max": [
+        139.9665985107422,
+        124.89020538330078,
+        160.15350341796875
+      ],
+      "min": [
+        -140.79278564453125,
+        -178.75668334960938,
+        -74.61065673828125
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 3412140,
+      "componentType": 5126,
+      "count": 22217,
+      "max": [
+        0.9999899864196777,
+        0.9998090267181396,
+        0.9998132586479187
+      ],
+      "min": [
+        -0.9998137354850769,
+        -0.9998146295547485,
+        -0.999780535697937
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 2097024,
+      "componentType": 5126,
+      "count": 22217,
+      "max": [
+        0.9764705896377563,
+        0.9686274528503418,
+        0.8941176533699036,
+        1.0
+      ],
+      "min": [
+        0.125490203499794,
+        0.0117647061124444,
+        0.0117647061124444,
+        1.0
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 2585100,
+      "componentType": 5125,
+      "count": 97476,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "extras": {
+      "author": "E-learning UMCG (https://sketchfab.com/eLearningUMCG)",
+      "license": "CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)",
+      "source": "https://sketchfab.com/3d-models/cardiac-anatomy-external-view-e8e8c6685e82474d8393693fd0646dc7",
+      "title": "Cardiac Anatomy: external view"
+    },
+    "generator": "Sketchfab-12.66.0",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 2975004,
+      "name": "floatBufferViews",
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 3678744,
+      "byteOffset": 2975004,
+      "byteStride": 12,
+      "name": "floatBufferViews",
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2452496,
+      "byteOffset": 6653748,
+      "byteStride": 16,
+      "name": "floatBufferViews",
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 9106244,
+      "uri": "scene.bin"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.5,
+          0.5,
+          0.5,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835_MM634_BP51951_FMA4706_Coronary_sinus835_0",
+      "primitives": [
+        {
+          "attributes": {
+            "COLOR_0": 2,
+            "NORMAL": 1,
+            "POSITION": 0
+          },
+          "indices": 3,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835_MM634_BP51951_FMA4706_Coronary_sinus835_0",
+      "primitives": [
+        {
+          "attributes": {
+            "COLOR_0": 6,
+            "NORMAL": 5,
+            "POSITION": 4
+          },
+          "indices": 7,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835_MM634_BP51951_FMA4706_Coronary_sinus835_0",
+      "primitives": [
+        {
+          "attributes": {
+            "COLOR_0": 10,
+            "NORMAL": 9,
+            "POSITION": 8
+          },
+          "indices": 11,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1
+      ],
+      "matrix": [
+        0.0018458535196259618,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.098618155148252e-19,
+        -0.0018458535196259618,
+        0.0,
+        0.0,
+        0.0018458535196259618,
+        4.098618155148252e-19,
+        0.0,
+        15.128150939941406,
+        -227.507568359375,
+        2.3743638992309064,
+        1.0
+      ],
+      "name": "Sketchfab_model"
+    },
+    {
+      "children": [
+        2
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        -1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "6509efaa6ff0404790bc2091491b6b28.fbx"
+    },
+    {
+      "children": [
+        3
+      ],
+      "name": "RootNode"
+    },
+    {
+      "children": [
+        4,
+        5,
+        6
+      ],
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835"
+    },
+    {
+      "mesh": 0,
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835_MM634_BP51951_FMA4706_Coronary_sinus835_0"
+    },
+    {
+      "mesh": 1,
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835_MM634_BP51951_FMA4706_Coronary_sinus835_0"
+    },
+    {
+      "mesh": 2,
+      "name": "MM634_BP51951_FMA4706_Coronary_sinus835_MM634_BP51951_FMA4706_Coronary_sinus835_0"
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Sketchfab_Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}

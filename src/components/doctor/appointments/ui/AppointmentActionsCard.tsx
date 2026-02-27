@@ -6,21 +6,8 @@ import { getStatusColor } from "@/utils/appointmentHelpers"
 interface AppointmentActionsCardProps {
   appointment: AppointmentType
   updating: boolean
-  onStartConsultation: () => void
   onOpenDocuments: () => void
   onOpenConsentVideo?: () => void
-  consultationStarted: boolean
-}
-
-function StethoscopeIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 4h-1a2 2 0 0 0 -2 2v3.5a5.5 5.5 0 0 0 11 0v-3.5a2 2 0 0 0 -2 -2h-1" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 15a6 6 0 1 0 12 0v-3" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3v2 M6 3v2" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 10a2 2 0 1 0 4 0 2 2 0 1 0 -4 0" />
-    </svg>
-  )
 }
 
 function FolderIcon({ className }: { className?: string }) {
@@ -42,14 +29,12 @@ function PlayIcon({ className }: { className?: string }) {
 export default function AppointmentActionsCard({
   appointment,
   updating,
-  onStartConsultation,
   onOpenDocuments,
   onOpenConsentVideo,
-  consultationStarted,
 }: AppointmentActionsCardProps) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm border-l-4 border-l-teal-500">
-      <div className="flex flex-wrap items-center gap-2 text-xs min-h-[3.25rem] pb-3 border-b border-slate-200">
+    <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2.5 shadow-sm border-l-4 border-l-teal-500">
+      <div className="flex flex-wrap items-center gap-1.5 text-xs pb-2 border-b border-slate-200">
         <span className="font-medium uppercase tracking-wider text-slate-500">APPOINTMENT</span>
         <span className="text-slate-400" aria-hidden>·</span>
         <span className="font-semibold text-slate-900">
@@ -62,35 +47,25 @@ export default function AppointmentActionsCard({
         </span>
         <span className="text-slate-400" aria-hidden>·</span>
         <span className="text-slate-600">Status:</span>
-        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(appointment.status)}`}>
+        <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[11px] font-medium ${getStatusColor(appointment.status)}`}>
           {appointment.status === "confirmed" ? "Confirmed" : appointment.status === "completed" ? "Completed" : appointment.status}
         </span>
       </div>
 
-      <button
-        type="button"
-        onClick={onStartConsultation}
-        disabled={updating || consultationStarted}
-        className="w-full rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
-      >
-        <StethoscopeIcon className="w-5 h-5 text-white shrink-0" />
-        {consultationStarted ? "Consultation in progress" : "Start consultation"}
-      </button>
-
-      <div className="flex gap-3 pt-1">
+      <div className="flex gap-2">
         <button
           type="button"
           onClick={onOpenDocuments}
-          className="flex-1 min-w-0 inline-flex items-center justify-center gap-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
+          className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
         >
-          <FolderIcon className="w-5 h-5 text-blue-600 shrink-0" />
+          <FolderIcon className="w-4 h-4 text-blue-600 shrink-0" />
           Documents &amp; reports
         </button>
         {onOpenConsentVideo && (
           <button
             type="button"
             onClick={onOpenConsentVideo}
-            className="flex-1 min-w-0 inline-flex items-center justify-center gap-2 rounded-lg border-2 border-blue-200 bg-blue-50/50 px-4 py-3 text-sm font-medium text-slate-800 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
+            className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-blue-200 bg-blue-50/50 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
           >
             <PlayIcon className="w-4 h-4 text-blue-600 shrink-0" />
             Consent video

@@ -11,6 +11,7 @@ import {
 } from './entAnatomyMappings'
 import { entPartDescriptions } from './entPartDescriptions'
 import { getAnatomyFromMeshName, getSkeletonMeshNumberFromObject, getSkeletonPartKeyFromMeshNumber } from './skeletonAnatomyData'
+import { LUNGS_MESH_NAMES_BY_PART, LUNGS_PART_KEYS } from './lungsMeshPartMapping'
 
 export function findPartName(
   object: THREE.Object3D,
@@ -26,10 +27,35 @@ export function findPartName(
     return result ? result.partKey : null
   }
 
-  // Lungs: prefer mesh index (1–16) so we show all 16 part names instead of collapsing to 5–6 from name matching
-  if (anatomyType === 'lungs' && (object as THREE.Mesh).userData?.lungsMeshIndex != null) {
-    const idx = (object as THREE.Mesh).userData.lungsMeshIndex as number
-    if (objectNumberMapping[idx]) return objectNumberMapping[idx]
+  if (anatomyType === 'lungs') {
+    // Lungs: use name-based resolution first so only the actual left lung / right lung / etc. meshes get that part
+    // (lungsMeshIndex is used only as fallback so we don’t mark wrong meshes as Left_Lung)
+    const namesInChain = getObjectAndParentNames(object)
+    for (const n of namesInChain) {
+      const part = getLungsPartFromEditableMapping(n)
+      if (part) return part
+    }
+    const effectiveNameLungs = getObjectOrParentName(object)
+    if (effectiveNameLungs) {
+      const objectName = effectiveNameLungs.trim()
+      const lowerLungs = objectName.toLowerCase()
+      const isGenericLungsName = lowerLungs === 'lungs' || lowerLungs === 'lung'
+      if (!isGenericLungsName) {
+        if (anatomicalNameToPartMap.lungs?.[objectName]) return anatomicalNameToPartMap.lungs[objectName]
+        for (const [anatomicalName, mappedPart] of Object.entries(anatomicalNameToPartMap.lungs ?? {})) {
+          if (anatomicalName.toLowerCase() === lowerLungs) return mappedPart
+        }
+        const patternPart = matchByNamePattern('lungs', objectName)
+        if (patternPart) return patternPart
+      }
+    }
+    const parentPart = matchFromParent(object, 'lungs')
+    if (parentPart) return parentPart
+    if ((object as THREE.Mesh).userData?.lungsMeshIndex != null) {
+      const idx = (object as THREE.Mesh).userData.lungsMeshIndex as number
+      if (objectNumberMapping[idx]) return objectNumberMapping[idx]
+    }
+    return null
   }
 
   // Resolve name from object or parent chain (some GLBs put name on parent group)
@@ -84,6 +110,11 @@ export function findPartName(
   // Parent hierarchy
   if (!partName) partName = matchFromParent(object, anatomyType)
 
+  // Abdomen / Cardiac / Lymphatic / Lymph nodes: if no mapping, show mesh name so user sees something
+  if (!partName && anatomyType === 'lymph_nodes' && effectiveName) {
+    partName = effectiveName
+  }
+
   return partName
 }
 
@@ -107,6 +138,33 @@ function getObjectOrParentName(object: THREE.Object3D): string | null {
   return null
 }
 
+/** Get all non-empty names from object and its parents (object first, then parent chain). Used for lungs editable mapping. Exported so callers can log clicked mesh names for editing lungsMeshPartMapping.ts. */
+export function getObjectAndParentNames(object: THREE.Object3D): string[] {
+  const names: string[] = []
+  let current: THREE.Object3D | null = object
+  let depth = 0
+  while (current && depth < 6) {
+    if (current.name && typeof current.name === 'string' && current.name.trim() !== '') {
+      names.push(current.name.trim())
+    }
+    current = current.parent
+    depth++
+  }
+  return names
+}
+
+/** Resolve a single name using the editable lungs mapping (lungsMeshPartMapping.ts). Case-insensitive. */
+function getLungsPartFromEditableMapping(name: string): string | null {
+  const lower = name.toLowerCase()
+  for (const partKey of LUNGS_PART_KEYS) {
+    const list = LUNGS_MESH_NAMES_BY_PART[partKey]
+    for (const entry of list) {
+      if (entry.toLowerCase() === lower) return partKey
+    }
+  }
+  return null
+}
+
 function matchByNamePattern(anatomyType: string, objectName: string): string | null {
   const lowerName = objectName.toLowerCase()
   const name = objectName.toLowerCase()
@@ -125,17 +183,15 @@ function matchByNamePattern(anatomyType: string, objectName: string): string | n
     if (/tooth|teeth|incisor|canine|(premolar(?!.*tongue))|(molar(?!.*tongue|.*third|.*wisdom))|dental(?!.*tongue)|dentition(?!.*tongue)/.test(name) ||
         /tooth[_\s-]?\d+|teeth[_\s-]?\d+|upper[_\s-]?tooth|lower[_\s-]?tooth|^t[_\s-]?\d+|^d[_\s-]?\d+/.test(objectName)) return 'Teeth'
     if (/gum|gingiva|gingival|gums/.test(name)) return 'Gums'
-    if (/tongue/.test(name) && !/tooth|teeth/.test(name)) return 'Tongue'
+    if (/tongue|wet/.test(name) && !/tooth|teeth/.test(name)) return 'Tongue'
     if (/mandible|mandibular|(jaw(?!upper|tongue))/.test(name)) return 'Mandible'
     if (/palate|palatal|uvula/.test(name)) return 'Palate'
-    if (/mucosa|mucous|(lip(?!tongue))|cheek|buccal/.test(name)) return 'Oral_Mucosa'
+    if (/mucosa|mucous|(lip(?!tongue))|cheek|buccal|mouth/.test(name)) return 'Oral_Mucosa'
     if (/salivary|parotid|submandibular|sublingual/.test(name)) return 'Salivary_Glands'
     if (/^\d+$|^tooth\d+|^teeth\d+/i.test(objectName) && !/bone|mesh|object|group|root|scene|default/.test(name)) return 'Teeth'
   }
 
   if (anatomyType === 'lungs') {
-    if (/trachea|windpipe|normaal25/.test(lowerName)) return 'Trachea'
-    if (/bronch|bronchus|normaal6/.test(lowerName)) return 'Bronchi'
     if (/linkerlong|left.?lung|leftlung/.test(lowerName)) return 'Left_Lung'
     if (/rechterlong|right.?lung|rightlung/.test(lowerName)) return 'Right_Lung'
     if (/left.?ventricle|ventricle.?left/.test(lowerName)) return 'Left_Ventricle'
@@ -152,7 +208,6 @@ function matchByNamePattern(anatomyType: string, objectName: string): string | n
     if (/left.?pulmonary.?vein|pulmonary.?vein.?left/.test(lowerName)) return 'Left_Pulmonary_Vein'
     if (/pulmonary.?artery/.test(lowerName)) return 'Right_Pulmonary_Artery'
     if (/pulmonary.?vein/.test(lowerName)) return 'Right_Pulmonary_Vein'
-    if (/lung|pulmonary/.test(lowerName)) return 'Left_Lung'
     if (/heart|cardiac|normaal4/.test(lowerName)) return 'Aorta'
     if (/normaal5/.test(lowerName)) return 'Left_Lung'
   }
@@ -228,7 +283,7 @@ function matchFromParent(object: THREE.Object3D, anatomyType: string): string | 
         if (r) return r
       }
       if (anatomyType === 'lungs') {
-        const r = m(/trachea|windpipe/, 'Trachea') || m(/bronch/, 'Bronchi') || m(/linkerlong|left.?lung/, 'Left_Lung') || m(/rechterlong|right.?lung/, 'Right_Lung') || m(/left.?ventricle/, 'Left_Ventricle') || m(/right.?ventricle/, 'Right_Ventricle') || m(/right.?atrium/, 'Right_Atrium') || m(/left.?atrium/, 'Left_Atrium') || m(/aorta/, 'Aorta') || m(/left.?pulmonary.?artery/, 'Left_Pulmonary_Artery') || m(/right.?pulmonary.?artery/, 'Right_Pulmonary_Artery') || m(/superior.?caval|superior.?vena/, 'Superior_Caval_Vein') || m(/inferior.?caval|inferior.?vena/, 'Inferior_Caval_Vein') || m(/pulmonary.?trunk/, 'Pulmonary_Trunk') || m(/right.?pulmonary.?vein/, 'Right_Pulmonary_Vein') || m(/left.?pulmonary.?vein/, 'Left_Pulmonary_Vein') || m(/lung|pulmonary/, 'Left_Lung') || m(/heart|cardiac/, 'Aorta')
+        const r = m(/linkerlong|left.?lung/, 'Left_Lung') || m(/rechterlong|right.?lung/, 'Right_Lung') || m(/left.?ventricle/, 'Left_Ventricle') || m(/right.?ventricle/, 'Right_Ventricle') || m(/right.?atrium/, 'Right_Atrium') || m(/left.?atrium/, 'Left_Atrium') || m(/aorta/, 'Aorta') || m(/left.?pulmonary.?artery/, 'Left_Pulmonary_Artery') || m(/right.?pulmonary.?artery/, 'Right_Pulmonary_Artery') || m(/superior.?caval|superior.?vena/, 'Superior_Caval_Vein') || m(/inferior.?caval|inferior.?vena/, 'Inferior_Caval_Vein') || m(/pulmonary.?trunk/, 'Pulmonary_Trunk') || m(/right.?pulmonary.?vein/, 'Right_Pulmonary_Vein') || m(/left.?pulmonary.?vein/, 'Left_Pulmonary_Vein') || m(/heart|cardiac/, 'Aorta')
         if (r) return r
       }
       if (anatomyType === 'kidney') {

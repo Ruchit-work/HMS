@@ -2,7 +2,7 @@
 
 import React, { useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, ContactShadows } from '@react-three/drei'
 import * as THREE from 'three'
 import { ENTModel } from './ENTModel'
 import { getAnatomyTypeFromPath } from './entAnatomyMappings'
@@ -51,19 +51,40 @@ export function ENTScene({
   })
 
   const isLungs = modelPath ? getAnatomyTypeFromPath(modelPath) === 'lungs' : false
-  const ambientIntensity = isLungs ? 0.95 : 0.7
-  const dir1Intensity = isLungs ? 1.8 : 1.5
+  // Sketchfab-style: soft, even lighting so anatomy reads clearly (medical/educational)
+  const ambientIntensity = isLungs ? 0.72 : 0.45
+  const dirKeyIntensity = isLungs ? 0.9 : 1.15
+  const dirFillIntensity = isLungs ? 0.65 : 0.5
 
   return (
     <>
       <ambientLight intensity={ambientIntensity} />
-      <directionalLight position={[4, 4, 6]} intensity={dir1Intensity} castShadow />
-      <directionalLight position={[-4, 2, -4]} intensity={isLungs ? 1 : 0.7} />
-      <directionalLight position={[0, -2, -3]} intensity={isLungs ? 0.6 : 0.4} />
-      <pointLight position={[0, 6, 2]} intensity={isLungs ? 0.9 : 0.7} />
-      <pointLight position={[-2, 3, 4]} intensity={isLungs ? 0.6 : 0.4} />
+      <directionalLight
+        position={[4, 5, 5]}
+        intensity={dirKeyIntensity}
+        castShadow={!isLungs}
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-far={50}
+        shadow-camera-left={-8}
+        shadow-camera-right={8}
+        shadow-camera-top={8}
+        shadow-camera-bottom={-8}
+        shadow-bias={-0.0001}
+      />
+      <directionalLight position={[-3, 4, 3]} intensity={dirFillIntensity} />
+      <directionalLight position={[0, 2, -4]} intensity={isLungs ? 0.5 : 0.3} />
+      <directionalLight position={[0, -2, 2]} intensity={0.25} />
+      <pointLight position={[0, 5, 4]} intensity={isLungs ? 0.35 : 0.4} distance={24} />
 
       <ENTModel key={modelPath} onPartSelect={onPartSelect} selectedPart={selectedPart} modelPath={modelPath} />
+
+      <ContactShadows
+        position={[0, -1.5, 0]}
+        opacity={isLungs ? 0.2 : 0.35}
+        scale={12}
+        blur={2.5}
+        far={4}
+      />
 
       <OrbitControls
         ref={controlsRef}
