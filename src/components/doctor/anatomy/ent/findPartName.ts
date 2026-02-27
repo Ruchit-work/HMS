@@ -255,6 +255,23 @@ function matchByNamePattern(anatomyType: string, objectName: string): string | n
     if (/patella|knee cap/.test(lowerName)) return 'Patella'
   }
 
+  // Thorax/abdomen lymph nodes model: map dummy mesh names (e.g. Hart6_Hart6_0_5) to real anatomical names
+  if (anatomyType === 'lymph_nodes') {
+    if (/^hart6/i.test(objectName)) return 'Heart'           // Hart = Heart (Dutch)
+    if (/^lever/i.test(objectName)) return 'Liver'           // Lever = Liver (Dutch)
+    if (/^milt/i.test(objectName)) return 'Spleen'          // Milt = Spleen (Dutch)
+    if (/^galblaas/i.test(objectName)) return 'Gallbladder'  // Galblaas = Gallbladder (Dutch)
+    if (/^dikke_darms/i.test(objectName)) return 'Large_Intestine'
+    if (/^dunne_darms/i.test(objectName)) return 'Small_Intestine'
+    if (/^niertjes/i.test(objectName)) return 'Kidneys'     // Niertjes = Kidneys (Dutch)
+    if (/^pancreas/i.test(objectName)) return 'Pancreas'
+    if (/^kraakbeen_trache/i.test(objectName)) return 'Trachea'  // Trachea/cartilage
+    if (/^bronchi/i.test(objectName)) return 'Bronchi'
+    if (/^htc/i.test(objectName)) return 'Abdominal_Nodes'
+    if (/^pm3d_sphere3d1/i.test(objectName)) return 'Thoracic_Nodes'
+    if (/rootnode|sketchfab_model/i.test(objectName)) return 'Thoracic_Nodes'
+  }
+
   return null
 }
 
@@ -301,6 +318,10 @@ function matchFromParent(object: THREE.Object3D, anatomyType: string): string | 
           if (part) return part
         }
         const r = m(/skull|cranium|mandible|jaw/, 'Skull') || m(/spine|vertebra|sacrum|coccyx/, 'Spine') || m(/rib|sternum|ribcage/, 'Ribcage') || m(/pelvis|hip|ilium|ischium|pubis/, 'Pelvis') || m(/humerus/, 'Humerus') || m(/radius/, 'Radius') || m(/ulna/, 'Ulna') || m(/femur/, 'Femur') || m(/tibia/, 'Tibia') || m(/fibula/, 'Fibula') || m(/clavicle/, 'Clavicle') || m(/scapula/, 'Scapula') || m(/patella/, 'Patella')
+        if (r) return r
+      }
+      if (anatomyType === 'lymph_nodes') {
+        const r = m(/^hart6/, 'Heart') || m(/^lever/, 'Liver') || m(/^milt/, 'Spleen') || m(/^galblaas/, 'Gallbladder') || m(/^dikke_darms/, 'Large_Intestine') || m(/^dunne_darms/, 'Small_Intestine') || m(/^niertjes/, 'Kidneys') || m(/^pancreas/, 'Pancreas') || m(/^kraakbeen_trache/, 'Trachea') || m(/^bronchi/, 'Bronchi') || m(/^htc/, 'Abdominal_Nodes') || m(/^pm3d_sphere3d1/, 'Thoracic_Nodes') || m(/rootnode|sketchfab_model/, 'Thoracic_Nodes')
         if (r) return r
       }
     }

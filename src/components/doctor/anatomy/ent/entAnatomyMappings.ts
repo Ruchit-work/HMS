@@ -103,6 +103,7 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Clavicle: 'Clavicle', Scapula: 'Scapula', Patella: 'Patella', Knee_Cap: 'Patella',
   },
   lymph_nodes: {
+    // Dutch/original mesh names → real anatomical part names (thorax_and_abdomen_some_of_the_lymph_nodes model)
     Dikke_darms: 'Large_Intestine', Dunne_darms: 'Small_Intestine', 'Dikke_darms_Dikke_darms_0': 'Large_Intestine', 'Dunne_darms_Dunne_darms_0': 'Small_Intestine',
     Galblaas: 'Gallbladder', 'Galblaas_Galblaas_0': 'Gallbladder',
     Lever: 'Liver', 'Lever_Lever_0': 'Liver',
@@ -113,7 +114,7 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Bronchi: 'Bronchi', 'Bronchi_Bronchi_0': 'Bronchi',
     Htc: 'Abdominal_Nodes', 'Htc_Htc_0': 'Abdominal_Nodes',
     Kraakbeen_trache: 'Trachea', 'Kraakbeen_trache_Kraakbeen_trache_0': 'Trachea',
-    Hart6: 'Heart', 'Hart6_Hart6_0': 'Heart',
+    Hart6: 'Heart', 'Hart6_Hart6_0': 'Heart', 'Hart6_Hart6_0_5': 'Heart', 'Hart6_Hart6_0_1': 'Heart', 'Hart6_Hart6_0_2': 'Heart', 'Hart6_Hart6_0_3': 'Heart', 'Hart6_Hart6_0_4': 'Heart',
     RootNode: 'Thoracic_Nodes', Sketchfab_model: 'Thoracic_Nodes',
   },
 }
