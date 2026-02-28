@@ -188,6 +188,7 @@ export default function PatientSelector({
                 }}
                 language="en-IN"
                 useMedicalModel={false}
+                allowGujarati
                 variant="inline"
               />
             </div>

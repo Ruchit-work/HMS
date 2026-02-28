@@ -984,6 +984,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                           }}
                           language="en-IN"
                           useMedicalModel={false}
+                          allowGujarati
                           variant="inline"
                         />
                       </div>

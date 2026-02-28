@@ -13,6 +13,8 @@ interface VoiceInputProps {
   useGoogleCloud?: boolean // Set to true for better Indian accent support (default: true for accuracy)
   useAzure?: boolean // Alternative: Azure Speech Services (better pricing)
   useMedicalModel?: boolean // Use medical model for better medical terminology accuracy
+  /** When true, shows EN | ગુજરાતી toggle for notes etc.; do not use on medicine section */
+  allowGujarati?: boolean
   /** When true, renders only a compact mic button (e.g. for embedding inside an input) */
   variant?: 'default' | 'inline'
 }
@@ -27,11 +29,13 @@ export default function VoiceInput({
   useGoogleCloud = true, // Default to true for better accuracy (medical use case)
   useAzure = false, // Alternative option
   useMedicalModel = true, // Use medical model for medical terminology
+  allowGujarati = false,
   variant = 'default'
 }: VoiceInputProps) {
   const [isListening, setIsListening] = useState(false)
   const [isSupported, setIsSupported] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [voiceLanguage, setVoiceLanguage] = useState<'en-IN' | 'gu-IN'>('en-IN')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const lastAppliedTranscriptRef = useRef<string>('')
@@ -42,6 +46,9 @@ export default function VoiceInput({
 
   const SILENCE_AUTO_STOP_MS = 2000
   const CLOUD_MAX_DURATION_MS = 12000
+
+  // When allowGujarati, user can switch EN/ગુજરાતી; otherwise use language prop (English path unchanged)
+  const effectiveLanguage = allowGujarati ? voiceLanguage : language
 
   const {
     transcript,
@@ -56,7 +63,7 @@ export default function VoiceInput({
 
   // Sync listening state from hook when using browser API - only this instance if we started it
   useEffect(() => {
-    const usingBrowser = !useMedicalModel && browserSupportsSpeechRecognition && !useAzure
+    const usingBrowser = !useMedicalModel && effectiveLanguage !== 'gu-IN' && browserSupportsSpeechRecognition && !useAzure
     if (!usingBrowser) return
     if (listening && weStartedListeningRef.current) {
       setIsListening(true)
@@ -65,21 +72,21 @@ export default function VoiceInput({
       weStartedListeningRef.current = false
       setIsListening(false)
     }
-  }, [listening, useMedicalModel, browserSupportsSpeechRecognition, useAzure])
+  }, [listening, useMedicalModel, effectiveLanguage, browserSupportsSpeechRecognition, useAzure])
 
   // Only forward transcript when it actually changes and we started this session (browser API is global)
   useEffect(() => {
-    const usingBrowser = !useMedicalModel && browserSupportsSpeechRecognition && !useAzure
+    const usingBrowser = !useMedicalModel && effectiveLanguage !== 'gu-IN' && browserSupportsSpeechRecognition && !useAzure
     if (!usingBrowser || !transcript) return
     if (!weStartedListeningRef.current) return
     if (transcript === lastAppliedTranscriptRef.current) return
     lastAppliedTranscriptRef.current = transcript
     onTranscript(transcript)
-  }, [transcript, onTranscript, useMedicalModel, browserSupportsSpeechRecognition, useAzure])
+  }, [transcript, onTranscript, useMedicalModel, effectiveLanguage, browserSupportsSpeechRecognition, useAzure])
 
   // Auto-stop: reset silence timer on each transcript update (browser API)
   useEffect(() => {
-    const usingBrowser = !useMedicalModel && browserSupportsSpeechRecognition && !useAzure
+    const usingBrowser = !useMedicalModel && effectiveLanguage !== 'gu-IN' && browserSupportsSpeechRecognition && !useAzure
     if (!usingBrowser || !isListening) return
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
     silenceTimeoutRef.current = setTimeout(() => {
@@ -92,7 +99,7 @@ export default function VoiceInput({
         silenceTimeoutRef.current = null
       }
     }
-  }, [transcript, isListening, useMedicalModel, browserSupportsSpeechRecognition, useAzure])
+  }, [transcript, isListening, useMedicalModel, effectiveLanguage, browserSupportsSpeechRecognition, useAzure])
 
   // Clear all timers on unmount
   useEffect(() => {
@@ -105,22 +112,24 @@ export default function VoiceInput({
   const startListening = async () => {
     try {
       setError(null)
-      
+
       if (useAzure) {
         await startAzureRecognition()
+      } else if (effectiveLanguage === 'gu-IN') {
+        // Gujarati not supported by browser API; use Google Cloud
+        await startGoogleCloudRecognition()
       } else if (useMedicalModel) {
         // Medical terminology needs Cloud medical model
         await startGoogleCloudRecognition()
       } else if (browserSupportsSpeechRecognition) {
-        // Prefer browser Web Speech API = same engine as Google mic (Chrome/Edge)
-        // Best accuracy for general speech and Indian accent
+        // Prefer browser Web Speech API (Chrome/Edge) — keeps English working as before
         weStartedListeningRef.current = true
         resetTranscript()
         lastAppliedTranscriptRef.current = ''
         setIsListening(true)
         SpeechRecognition.startListening({
           continuous,
-          language,
+          language: effectiveLanguage,
           interimResults: true
         })
       } else if (useGoogleCloud) {
@@ -146,7 +155,7 @@ export default function VoiceInput({
       clearTimeout(maxDurationTimeoutRef.current)
       maxDurationTimeoutRef.current = null
     }
-    const usedCloud = useAzure || useMedicalModel || (useGoogleCloud && !browserSupportsSpeechRecognition)
+    const usedCloud = useAzure || useMedicalModel || effectiveLanguage === 'gu-IN' || (useGoogleCloud && !browserSupportsSpeechRecognition)
     if (usedCloud) {
       stopCloudRecognition()
     } else {
@@ -195,7 +204,7 @@ export default function VoiceInput({
     try {
       const formData = new FormData()
       formData.append('audio', audioBlob, 'recording.webm')
-      formData.append('language', language)
+      formData.append('language', effectiveLanguage)
 
       const response = await fetch('/api/speech-to-text-azure', {
         method: 'POST',
@@ -275,8 +284,8 @@ export default function VoiceInput({
     try {
       const formData = new FormData()
       formData.append('audio', audioBlob, 'recording.webm')
-      formData.append('language', language)
-      formData.append('useMedicalModel', useMedicalModel ? 'true' : 'false')
+      formData.append('language', effectiveLanguage)
+      formData.append('useMedicalModel', (useMedicalModel && effectiveLanguage !== 'gu-IN') ? 'true' : 'false')
 
       const response = await fetch('/api/speech-to-text', {
         method: 'POST',
@@ -351,7 +360,28 @@ export default function VoiceInput({
 
   if (variant === 'inline') {
     return (
-      <div className={`relative flex items-center shrink-0 ${className}`}>
+      <div className={`relative flex items-center shrink-0 gap-0.5 ${className}`}>
+        {allowGujarati && (
+          <span className="flex items-center gap-0.5 text-[10px] text-slate-500">
+            <button
+              type="button"
+              onClick={() => setVoiceLanguage('en-IN')}
+              className={`px-1 py-0.5 rounded ${voiceLanguage === 'en-IN' ? 'bg-slate-200 font-medium text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+              title="English"
+            >
+              EN
+            </button>
+            <span className="text-slate-300">|</span>
+            <button
+              type="button"
+              onClick={() => setVoiceLanguage('gu-IN')}
+              className={`px-1 py-0.5 rounded ${voiceLanguage === 'gu-IN' ? 'bg-slate-200 font-medium text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+              title="GUJ"
+            >
+              GUJ
+            </button>
+          </span>
+        )}
         {button}
       </div>
     )
@@ -359,18 +389,39 @@ export default function VoiceInput({
 
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
+      {allowGujarati && (
+        <span className="flex items-center gap-0.5 text-xs text-slate-500">
+          <button
+            type="button"
+            onClick={() => setVoiceLanguage('en-IN')}
+            className={`px-1.5 py-0.5 rounded ${voiceLanguage === 'en-IN' ? 'bg-slate-200 font-medium text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+            title="English"
+          >
+            EN
+          </button>
+          <span className="text-slate-300">|</span>
+          <button
+            type="button"
+            onClick={() => setVoiceLanguage('gu-IN')}
+            className={`px-1.5 py-0.5 rounded ${voiceLanguage === 'gu-IN' ? 'bg-slate-200 font-medium text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}
+            title="GUJ"
+          >
+            GUJ
+          </button>
+        </span>
+      )}
       {button}
       {error && (
         <span className="text-xs text-red-600" title={error}>
           ⚠️ {error}
         </span>
       )}
-      {isListening && !useMedicalModel && browserSupportsSpeechRecognition && !useAzure && (
+      {isListening && !useMedicalModel && effectiveLanguage !== 'gu-IN' && browserSupportsSpeechRecognition && !useAzure && (
         <span className="text-xs text-slate-500 animate-pulse">
           Listening...
         </span>
       )}
-      {isListening && (useMedicalModel || useAzure || !browserSupportsSpeechRecognition) && (
+      {isListening && (useMedicalModel || useAzure || effectiveLanguage === 'gu-IN' || !browserSupportsSpeechRecognition) && (
         <span className="text-xs text-slate-500 animate-pulse">
           Recording...
         </span>

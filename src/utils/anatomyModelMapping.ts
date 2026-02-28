@@ -57,9 +57,9 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
   },
   {
     type: 'lymph_nodes',
-    label: 'Thorax and abdomen: some of the lymph nodes',
-    icon: '🔬',
-    description: 'Lymph nodes of the thorax and abdomen for imaging and anatomy education (E-learning UMCG model).'
+    label: 'Lymph Nodes',
+    icon: '🧬',
+    description: 'Lymph nodes anatomy and related conditions'
   }
 ]
 
@@ -86,7 +86,7 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     return ['dental']
   }
 
-  // ENT specializations → ear, nose, throat (and dental/oral)
+  // ENT specializations → ear, nose, and throat
   if (
     lowerSpecialization.includes('ent') ||
     lowerSpecialization.includes('otorhinolaryngologist') ||
@@ -94,7 +94,7 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     lowerSpecialization.includes('nose') ||
     lowerSpecialization.includes('throat')
   ) {
-    return ['ear', 'nose', 'throat', 'dental']
+    return ['ear', 'nose', 'throat']
   }
 
   // Nephrologist / Urology → kidney
@@ -134,44 +134,35 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     return ['skeleton']
   }
 
-  // Family Medicine / General Physician → ENT, lungs, kidney, skeleton, lymph nodes
+  // Family Medicine / General Physician → ENT, lungs, kidney, skeleton
   if (
     lowerSpecialization.includes('family medicine') ||
     lowerSpecialization.includes('family physician') ||
     lowerSpecialization.includes('general physician') ||
     lowerSpecialization.includes('primary care')
   ) {
-    return ['ear', 'nose', 'throat', 'dental', 'lungs', 'kidney', 'skeleton', 'lymph_nodes']
+    return ['ear', 'nose', 'throat', 'lungs', 'kidney', 'skeleton']
   }
 
-  // Pediatrician → broad set
+  // Pediatrician → ear, nose, throat, lungs, kidney, skeleton (common in children)
   if (lowerSpecialization.includes('pediatrician') || lowerSpecialization.includes('pediatric')) {
-    return ['ear', 'nose', 'throat', 'dental', 'lungs', 'kidney', 'skeleton', 'lymph_nodes']
-  }
-
-  // Gastroenterologist / General Surgery → lymph nodes
-  if (
-    lowerSpecialization.includes('gastroenterolog') ||
-    lowerSpecialization.includes('general surgery') ||
-    lowerSpecialization.includes('gastro') ||
-    lowerSpecialization.includes('hepatolog')
-  ) {
-    return ['lymph_nodes']
-  }
-
-  // Oncologist / Hematology → lymph nodes
-  if (
-    lowerSpecialization.includes('oncolog') ||
-    lowerSpecialization.includes('hematolog') ||
-    lowerSpecialization.includes('lymphoma') ||
-    lowerSpecialization.includes('lymphatic')
-  ) {
-    return ['lymph_nodes']
+    return ['ear', 'nose', 'throat', 'lungs', 'kidney', 'skeleton']
   }
 
   // Ophthalmologist → none (eye is different system, no models yet)
   if (lowerSpecialization.includes('ophthalmologist') || lowerSpecialization.includes('eye')) {
     return []
+  }
+
+  // Oncology / Immunology / Hematology → lymph nodes
+  if (
+    lowerSpecialization.includes('oncolog') ||
+    lowerSpecialization.includes('immunolog') ||
+    lowerSpecialization.includes('hematolog') ||
+    lowerSpecialization.includes('haematolog') ||
+    lowerSpecialization.includes('lymph')
+  ) {
+    return ['lymph_nodes']
   }
 
   // For other specializations, return empty array (no relevant models)

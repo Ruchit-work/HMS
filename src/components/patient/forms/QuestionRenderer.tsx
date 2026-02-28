@@ -199,6 +199,7 @@ export function QuestionRenderer({
                     onTranscript={(text) => onChange(question.key, text)}
                     useGoogleCloud={useGoogleCloud}
                     language="en-IN"
+                    allowGujarati
                     variant="inline"
                   />
                 </div>
@@ -233,6 +234,7 @@ export function QuestionRenderer({
                     }}
                     useGoogleCloud={useGoogleCloud}
                     language="en-IN"
+                    allowGujarati
                     variant="inline"
                   />
                 </div>

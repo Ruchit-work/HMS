@@ -16,6 +16,11 @@ export async function POST(req: NextRequest) {
     const language = (formData.get('language') as string) || 'en-IN'
     const useMedicalModelParam = formData.get('useMedicalModel') === 'true'
 
+    // Medical model is en-US only; for Gujarati always use general model
+    const useMedicalModel =
+      (useMedicalModelParam || process.env.USE_MEDICAL_MODEL === 'true') &&
+      language !== 'gu-IN'
+
     if (!audioFile) {
       return NextResponse.json(
         { error: 'No audio file provided' },
@@ -41,13 +46,7 @@ export async function POST(req: NextRequest) {
     const buffer = await audioFile.arrayBuffer()
     const base64Audio = Buffer.from(buffer).toString('base64')
 
-    // Decide model
-    const useMedicalModel =
-      useMedicalModelParam || process.env.USE_MEDICAL_MODEL === 'true'
-
-    const model = useMedicalModel ? 'medical_dictation' : 'latest_long'
-
-    // Medical models only support en-US
+    // Decide model (useMedicalModel already excludes gu-IN above)
     const effectiveLanguage =
       useMedicalModel && language === 'en-IN' ? 'en-US' : language
 
@@ -70,6 +69,13 @@ export async function POST(req: NextRequest) {
 
     if (useMedicalModel) {
       config.model = 'medical_dictation'
+    } else if (language === 'gu-IN') {
+      /**
+       * Google Speech-to-Text (v1) does not support the "latest_long" / enhanced model for Gujarati.
+       * If we request an unsupported model, the API returns:
+       * "The requested model is currently not supported for language : gu-IN."
+       */
+      config.model = 'default'
     } else {
       config.model = 'latest_long'
       config.useEnhanced = true

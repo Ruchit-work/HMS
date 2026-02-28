@@ -144,7 +144,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       case 'throat':
         return '/models/thorat/anatomy_of_the_larynx.glb'
       case 'dental':
-        return '/models/dental/dental.glb'
+        return '/models/mouth/mandible.glb'
       case 'nose':
         return '/models/nose/anatomi_hidung_nose_anatomy.glb'
       case 'lungs':
@@ -208,7 +208,6 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       'Pelvis': 'Pelvis', 'Humerus': 'Humerus', 'Radius': 'Radius', 'Ulna': 'Ulna',
       'Femur': 'Femur', 'Tibia': 'Tibia', 'Fibula': 'Fibula', 'Clavicle': 'Clavicle', 'Scapula': 'Scapula', 'Patella': 'Patella',
     },
-    lymph_nodes: {},
     ear: {}
   }
 
@@ -273,7 +272,6 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
           1: 'Skull', 2: 'Spine', 3: 'Ribcage', 4: 'Pelvis', 5: 'Humerus', 6: 'Radius', 7: 'Ulna',
           8: 'Femur', 9: 'Tibia', 10: 'Fibula', 11: 'Clavicle', 12: 'Scapula', 13: 'Sternum', 14: 'Patella',
         },
-        lymph_nodes: {},
       }
       if (partMappings[anatomyType] && partMappings[anatomyType][objectNumber]) {
         return partMappings[anatomyType][objectNumber]
@@ -1011,9 +1009,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
   const currentPartData = selectedPart ? partsData[selectedPart] : null
 
   const show2DView = anatomyType !== 'kidney' && anatomyType !== 'nose' && anatomyType !== 'lymph_nodes'
-  // Mouth/oral: 2D only (no 3D model)
-  const effectiveView = anatomyType === 'dental' ? '2d' : (show2DView ? activeView : '3d')
-  const showViewToggle = show2DView && anatomyType !== 'dental'
+  const effectiveView = show2DView ? activeView : '3d'
 
   return (
     <div className="w-full bg-white">
@@ -1025,8 +1021,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         </div>
       )}
       <div className="p-4">
-        {/* View Toggle - hidden for kidney, nose, lymph_nodes (3D only) and dental (2D only) */}
-        {showViewToggle && (
+        {/* View Toggle - hidden for kidney and nose (3D only) */}
+        {show2DView && (
           <div className="flex gap-2 bg-slate-100 p-1 rounded-lg w-fit mb-4">
             <button
               onClick={() => setActiveView('3d')}
@@ -1147,7 +1143,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 <svg className="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                 </svg>
-                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : anatomyType === 'skeleton' ? 'skeleton' : 'ear'} model</p>
+                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : anatomyType === 'skeleton' ? 'skeleton' : anatomyType === 'lymph_nodes' ? 'lymph nodes' : 'ear'} model</p>
                 <p className="text-xs text-slate-500 mt-1">to see its name and description here</p>
               </div>
             )}
@@ -1479,6 +1475,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                       language="en-IN"
                       useGoogleCloud={false}
                       useMedicalModel={false}
+                      allowGujarati
                       variant="inline"
                     />
                   </div>

@@ -493,6 +493,7 @@ export default function DoctorBookAppointmentPage() {
                       }}
                       language="en-IN"
                       useMedicalModel={false}
+                      allowGujarati
                       variant="inline"
                     />
                   </div>

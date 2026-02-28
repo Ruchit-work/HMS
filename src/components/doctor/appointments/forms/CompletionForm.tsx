@@ -157,6 +157,7 @@ export default function CompletionForm({
                 language="en-IN"
                 useGoogleCloud={false}
                 useMedicalModel={false}
+                allowGujarati
                 variant="inline"
               />
             </div>
