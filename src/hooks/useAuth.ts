@@ -6,7 +6,7 @@ import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 
-type UserRole = "patient" | "doctor" | "admin" | "receptionist" | null
+type UserRole = "patient" | "doctor" | "admin" | "receptionist" | "pharmacy" | null
 // const STAFF_ROLES: Exclude<UserRole, "patient" | null>[] = ["admin", "doctor", "receptionist"] // Not currently used
 
 interface AuthUser {
@@ -70,6 +70,16 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
       return null
     }
 
+    if (requiredRole === "pharmacy") {
+      const pharmacistDoc = await getDoc(doc(db, "pharmacists", uid))
+      if (pharmacistDoc.exists()) {
+        const data = { role: "pharmacy" as UserRole, data: pharmacistDoc.data() }
+        userDataCache.set(uid, { ...data, timestamp: Date.now() })
+        return data
+      }
+      return null
+    }
+
     // No specific role required, check all collections sequentially
     const adminDoc = await getDoc(doc(db, "admins", uid))
     if (adminDoc.exists()) {
@@ -95,6 +105,13 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
     const receptionistDoc = await getDoc(doc(db, "receptionists", uid))
     if (receptionistDoc.exists()) {
       const data = { role: "receptionist" as UserRole, data: receptionistDoc.data() }
+      userDataCache.set(uid, { ...data, timestamp: Date.now() })
+      return data
+    }
+
+    const pharmacistDoc = await getDoc(doc(db, "pharmacists", uid))
+    if (pharmacistDoc.exists()) {
+      const data = { role: "pharmacy" as UserRole, data: pharmacistDoc.data() }
       userDataCache.set(uid, { ...data, timestamp: Date.now() })
       return data
     }
@@ -134,7 +151,7 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
             const actualUserRoleData = await getUserRole(currentUser.uid)
             if (actualUserRoleData) {
               // User has a different role - redirect to their dashboard
-              const dashboardPath = `/${actualUserRoleData.role}-dashboard`
+              const dashboardPath = actualUserRoleData.role === 'pharmacy' ? '/pharmacy' : `/${actualUserRoleData.role}-dashboard`
               router.replace(dashboardPath)
               setLoading(false)
               return
@@ -176,9 +193,9 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
 
         // If route requires specific role and user has different role, redirect
         if (requiredRole && requiredRole !== userRoleData.role) {
-          const dashboardPath = `/${userRoleData.role}-dashboard`
-          router.replace(dashboardPath)
-          return
+const dashboardPath = userRoleData.role === 'pharmacy' ? '/pharmacy' : `/${userRoleData.role}-dashboard`
+              router.replace(dashboardPath)
+              return
         }
 
         setUser({
@@ -230,7 +247,8 @@ export function usePublicRoute() {
         //   }
         // }
 
-        router.replace(`/${userRoleData.role}-dashboard`)
+        const dashboardPath = userRoleData.role === 'pharmacy' ? '/pharmacy' : `/${userRoleData.role}-dashboard`
+        router.replace(dashboardPath)
         return true // Indicates redirect happened
       } else {
         // User exists but no data - sign them out

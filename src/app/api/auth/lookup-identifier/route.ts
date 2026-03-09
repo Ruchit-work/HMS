@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
-type DashboardRole = "patient" | "doctor" | "admin" | "receptionist"
+type DashboardRole = "patient" | "doctor" | "admin" | "receptionist" | "pharmacy"
 
 const PHONE_FIELDS = ["phone", "phoneNumber", "contactNumber", "mobile", "contact", "mfaPhone"]
 
@@ -10,6 +10,7 @@ const COLLECTION_ROLE_MAP: Array<{ role: DashboardRole; collection: string }> = 
   { role: "doctor", collection: "doctors" },
   { role: "receptionist", collection: "receptionists" },
   { role: "admin", collection: "admins" },
+  { role: "pharmacy", collection: "pharmacists" },
 ]
 
 function normalizePhoneInput(value: string) {
@@ -50,7 +51,7 @@ function getSearchTargets(roleHint?: DashboardRole | null) {
   if (roleHint) {
     return COLLECTION_ROLE_MAP.filter((entry) => entry.role === roleHint)
   }
-  const precedence: DashboardRole[] = ["patient", "doctor", "receptionist", "admin"]
+  const precedence: DashboardRole[] = ["patient", "doctor", "receptionist", "admin", "pharmacy"]
   return precedence
     .map((role) => COLLECTION_ROLE_MAP.find((entry) => entry.role === role))
     .filter((entry): entry is { role: DashboardRole; collection: string } => Boolean(entry))

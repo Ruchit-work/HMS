@@ -5,27 +5,41 @@ import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
+type UserRole = 'patient' | 'doctor' | 'admin' | 'receptionist' | 'pharmacy' | null
+
 interface AdminProtectedProps {
   children: React.ReactNode
   fallback?: React.ReactNode
+  /** When set, allows these roles (e.g. ["admin", "pharmacy"]). When omitted, only "admin" is allowed. */
+  allowedRoles?: UserRole[]
 }
 
-export default function AdminProtected({ children, fallback }: AdminProtectedProps) {
-  const { user, loading } = useAuth("admin")
+export default function AdminProtected({ children, fallback, allowedRoles }: AdminProtectedProps) {
+  const { user, loading } = useAuth(allowedRoles ? undefined : 'admin')
   const router = useRouter()
+
+  const allowed = !user
+    ? false
+    : allowedRoles
+      ? allowedRoles.includes(user.role)
+      : user.role === 'admin'
 
   useEffect(() => {
     if (!loading && !user) {
-      // Redirect to login if not authenticated
       router.replace('/auth/login?role=admin')
+      return
     }
-  }, [user, loading, router])
+    if (!loading && user && !allowed) {
+      const dashboardPath = user.role === 'pharmacy' ? '/pharmacy' : user.role ? `/${user.role}-dashboard` : '/auth/login'
+      router.replace(dashboardPath)
+    }
+  }, [user, loading, allowed, router])
 
   if (loading) {
-    return <LoadingSpinner message="Verifying admin access..." />
+    return <LoadingSpinner message="Verifying access..." />
   }
 
-  if (!user) {
+  if (!user || !allowed) {
     return fallback || (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -35,7 +49,7 @@ export default function AdminProtected({ children, fallback }: AdminProtectedPro
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
-          <p className="text-gray-600 mb-4">You need admin privileges to access this page.</p>
+          <p className="text-gray-600 mb-4">You need admin or pharmacy privileges to access this page.</p>
           <button
             onClick={() => router.push('/auth/login?role=admin')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

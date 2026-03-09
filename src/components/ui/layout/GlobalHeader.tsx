@@ -32,9 +32,9 @@ export default function GlobalHeader() {
     pathname 
   })
 
-  // Routes that don't need the header
-  const noHeaderRoutes = ["/", "/auth/login", "/auth/signup", "/auth/forgot-password", "/admin-dashboard", "/receptionist-dashboard"]
-  const shouldShowHeader = !noHeaderRoutes.includes(pathname) && !pathname?.startsWith("/admin-dashboard") && !pathname?.startsWith("/receptionist-dashboard")
+  // Routes that don't need the header (they have their own)
+  const noHeaderRoutes = ["/", "/auth/login", "/auth/signup", "/auth/forgot-password", "/admin-dashboard", "/receptionist-dashboard", "/pharmacy"]
+  const shouldShowHeader = !noHeaderRoutes.includes(pathname) && !pathname?.startsWith("/admin-dashboard") && !pathname?.startsWith("/receptionist-dashboard") && !pathname?.startsWith("/pharmacy")
 
   // Scroll effect for header
   useEffect(() => {

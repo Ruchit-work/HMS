@@ -61,6 +61,14 @@ export const COLLECTION_MAP = {
   billing_records: 'billing_records',
   admission_requests: 'admission_requests',
   admissions: 'admissions',
+  // Pharmacy (multi-branch)
+  pharmacy_medicines: 'pharmacy_medicines',
+  pharmacy_stock: 'pharmacy_stock',
+  pharmacy_sales: 'pharmacy_sales',
+  pharmacy_suppliers: 'pharmacy_suppliers',
+  pharmacy_purchase_orders: 'pharmacy_purchase_orders',
+  pharmacy_transfers: 'pharmacy_transfers',
+  pharmacy_stock_logs: 'pharmacy_stock_logs',
 } as const
 
 export type CollectionName = keyof typeof COLLECTION_MAP

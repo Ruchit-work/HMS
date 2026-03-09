@@ -72,7 +72,7 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
         setIsSuperAdmin(userIsSuperAdmin)
       } else {
         // Fallback: Check role-specific collections for backward compatibility
-        const roleCollections = ['admins', 'doctors', 'receptionists', 'patients']
+        const roleCollections = ['admins', 'doctors', 'receptionists', 'patients', 'pharmacists']
         for (const roleColl of roleCollections) {
           const roleDoc = await getDoc(doc(db, roleColl, user.uid))
           if (roleDoc.exists()) {

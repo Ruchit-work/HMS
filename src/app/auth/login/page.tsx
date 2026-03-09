@@ -9,8 +9,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 
-type DashboardRole = "patient" | "doctor" | "admin" | "receptionist"
-const STAFF_ROLES: DashboardRole[] = ["admin", "doctor", "receptionist"]
+type DashboardRole = "patient" | "doctor" | "admin" | "receptionist" | "pharmacy"
+const STAFF_ROLES: DashboardRole[] = ["admin", "doctor", "receptionist", "pharmacy"]
 
 function LoginContent() {
   const searchParams = useSearchParams()
@@ -224,6 +224,19 @@ function LoginContent() {
       }
     }
 
+    // Check pharmacists collection (pharmacy portal)
+    const pharmacistDoc = await getDoc(doc(db, "pharmacists", user.uid))
+    if (pharmacistDoc.exists()) {
+      const pharmacistData = pharmacistDoc.data()
+      return {
+        role: "pharmacy" as DashboardRole,
+        data: pharmacistData,
+        redirect: "/pharmacy",
+        hospitals: hospitals.length > 0 ? hospitals : (pharmacistData?.hospitalId ? [pharmacistData.hospitalId] : []),
+        activeHospital: activeHospital || pharmacistData?.hospitalId || null
+      }
+    }
+
     return null
   }
 
@@ -231,14 +244,27 @@ function LoginContent() {
     // Determine redirect path first
     let redirectPath = roleInfo.redirect
     
-    // Sync user document in users collection (for multi-hospital support)
-    // This ensures super admin status and hospital associations are properly synced
-    try {
-      const userDocRef = doc(db, "users", user.uid)
-      const userDoc = await getDoc(userDocRef)
+      // Sync user document in users collection (for multi-hospital support)
+      try {
+        const userDocRef = doc(db, "users", user.uid)
+        const userDoc = await getDoc(userDocRef)
       
+      // If pharmacy role, sync to users collection
+      if (roleInfo.role === "pharmacy" && !userDoc.exists()) {
+        const pharmaData = roleInfo.data || {}
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email || pharmaData.email || "",
+          role: "pharmacy",
+          hospitals: roleInfo.hospitals || (pharmaData?.hospitalId ? [pharmaData.hospitalId] : []),
+          activeHospital: roleInfo.activeHospital || pharmaData?.hospitalId || null,
+          firstName: pharmaData?.firstName,
+          lastName: pharmaData?.lastName,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true })
+      }
       // If super admin, fetch all hospitals and sync to users collection
-      if (roleInfo.isSuperAdmin) {
+      else if (roleInfo.isSuperAdmin) {
         const hospitalsSnapshot = await getDocs(collection(db, "hospitals"))
         const allHospitalIds = hospitalsSnapshot.docs
           .filter(doc => doc.data().status === "active")
@@ -321,7 +347,7 @@ function LoginContent() {
       }
     }
 
-    // For staff (admin/doctor/receptionist), they belong to one hospital - auto-select
+    // For staff (admin/doctor/receptionist/pharmacy), they belong to one hospital - auto-select
     if (STAFF_ROLES.includes(roleInfo.role)) {
       const hospitals = roleInfo.hospitals || []
       if (hospitals.length > 0) {
@@ -705,6 +731,8 @@ function LoginContent() {
                           ? "admin@hospital.com / +91 98765 43210"
                           : role === "receptionist"
                           ? "receptionist@hospital.com / +91 98765 43210"
+                          : role === "pharmacy"
+                          ? "pharmacy@hospital.com / +91 98765 43210"
                           : role === "patient"
                           ? "patient@email.com / 9876543210"
                           : "Email or phone"
@@ -829,8 +857,8 @@ function LoginContent() {
             </div>
           )}
 
-            {/* Info Box for Admin/Receptionist - No signup available */}
-            {(role === "admin" || role === "receptionist") && (
+            {/* Info Box for Admin/Receptionist/Pharmacy - No signup available */}
+            {(role === "admin" || role === "receptionist" || role === "pharmacy") && (
               <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0">
@@ -845,12 +873,32 @@ function LoginContent() {
                     <p className="text-xs text-blue-700 leading-relaxed">
                       {role === "admin" 
                         ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
+                        : role === "pharmacy"
+                        ? "Pharmacy accounts are created by administrators. Use the credentials provided by your admin or see the table below."
                         : "Receptionist accounts are created by administrators. Please contact your supervisor or system administrator for access."}
                     </p>
                   </div>
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Role selector: Login as ... */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <span className="text-xs text-slate-500">Login as:</span>
+            {(["patient", "doctor", "admin", "receptionist", "pharmacy"] as const).map((r) => (
+              <Link
+                key={r}
+                href={`/auth/login?role=${r}`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  role === r
+                    ? "bg-cyan-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {r === "pharmacy" ? "Pharmacy" : r.charAt(0).toUpperCase() + r.slice(1)}
+              </Link>
+            ))}
           </div>
 
           {/* Test Credentials Table */}
@@ -894,9 +942,14 @@ function LoginContent() {
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Surat)</td>
                   </tr>
                   <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600">Sardar1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600">Admin</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Sardar1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Sardar1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
+                  </tr>
+                  <tr className="hover:bg-emerald-50 cursor-pointer" onClick={() => { setIdentifier("Pharmacy1@gmail.com"); setPassword("Pharmacy1@gmail.com"); }}>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy1@gmail.com</td>
+                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100 font-medium">Pharmacy (Portal)</td>
                   </tr>
                   <tr className="hover:bg-blue-50 cursor-pointer" hidden={true}  onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600">Admin1@gmail.com</td>
@@ -930,8 +983,8 @@ function LoginContent() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Yatharthhospital@gmaill.com"); setPassword("Yatharthhospital@gmaill.com"); }}>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharthhospital@gmaill.com</td>
+                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Yatharthhospital@gmail.com"); setPassword("Yatharth@123"); }}>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharthhospital@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharth@123</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
                       </tr>

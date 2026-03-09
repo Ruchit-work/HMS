@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
@@ -27,6 +28,8 @@ import ReceptionistManagement from "./Tabs/ReceptionistManagement"
 import DoctorPerformanceAnalytics from "./Tabs/DoctorPerformanceAnalytics"
 import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnalytics"
 import BranchManagement from "./Tabs/BranchManagement"
+import PharmacyManagement from "./Tabs/PharmacyManagement"
+import { PharmacyPortalProvider } from "@/contexts/PharmacyPortalContext"
 import AdminProtected from "@/components/AdminProtected"
 import PieChart, { DEFAULT_COLORS, DEFAULT_COLORS_ALT } from "./components/PieChart"
 import StatCard from "./components/StatCard"
@@ -112,7 +115,9 @@ export default function AdminDashboard() {
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "receptionists" | "branches">("overview")
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams.get("tab")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "receptionists" | "branches" | "pharmacy">("overview")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
   const [analyticsSubTab, setAnalyticsSubTab] = useState<"overview" | "patients" | "financial" | "doctors" | "receptionists">("overview")
@@ -153,11 +158,15 @@ export default function AdminDashboard() {
 
   // Trend data will be calculated after displayStats is defined
 
-  // Protect route - only allow admins
-  const { user, loading: authLoading } = useAuth("admin")
+  // Protect route - allow admins only (pharmacy users are redirected to /pharmacy)
+  const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
-
   const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
+
+  // Sync activeTab with URL
+  useEffect(() => {
+    if (tabFromUrl === "pharmacy") setActiveTab("pharmacy")
+  }, [tabFromUrl])
 
   // Fetch branches on mount
   useEffect(() => {
@@ -212,11 +221,20 @@ export default function AdminDashboard() {
     try {
       setLoading(true)
 
-      // Get admin data
+      // Get admin or pharmacy user data
       const adminDoc = await getDoc(doc(db, "admins", user.uid))
       if (adminDoc.exists()) {
         const data = adminDoc.data() as UserData
         setUserData(data)
+      } else if (user.role === "pharmacy" && user.data) {
+        const d = user.data as Record<string, unknown>
+        setUserData({
+          id: user.uid,
+          name: [d.firstName, d.lastName].filter(Boolean).join(" ") || (user.email ?? ""),
+          firstName: d.firstName as string | undefined,
+          email: (user.email ?? d.email as string) || "",
+          role: "pharmacy",
+        })
       }
 
       // Get all patients count - use hospital-scoped collection
@@ -561,7 +579,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <AdminProtected>
+    <AdminProtected allowedRoles={["admin"]}>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Mobile Menu Button - Only show when sidebar is closed */}
       {!sidebarOpen && (
@@ -738,12 +756,25 @@ export default function AdminDashboard() {
               </>
             )}
 
+            {/* Management section: Pharmacy for all admins; Branches & Receptionists for branch admins only */}
+            <div className="border-t border-slate-300/30 my-2"></div>
+            <div className="px-3 py-1">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
+            </div>
+            {/* Pharmacy – visible to both Super Admin and Branch Admin */}
+            <TabButton
+              id="pharmacy"
+              activeTab={activeTab}
+              onClick={() => { setActiveTab("pharmacy"); setSidebarOpen(false) }}
+              icon={
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+              }
+              label="Pharmacy"
+            />
             {!isSuperAdmin && (
               <>
-                <div className="border-t border-slate-300/30 my-2"></div>
-                <div className="px-3 py-1">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
-                </div>
                 {(activeHospital as any)?.multipleBranchesEnabled !== false && (
                   <TabButton
                     id="branches"
@@ -813,7 +844,7 @@ export default function AdminDashboard() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex-1 text-center sm:text-left">
                 <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent capitalize">
-                  {activeTab === "overview" ? "Dashboard Overview" : 
+                  {activeTab === "overview" ? "Dashboard Overview" :
                    activeTab === "patients" ? "Patient Management" :
                    activeTab === "doctors" ? "Doctor Management" :
                    activeTab === "campaigns" ? "Campaigns" :
@@ -824,6 +855,7 @@ export default function AdminDashboard() {
                    activeTab === "admins" ? "Admin Assignment" :
                    activeTab === "branches" ? "Branch Management" :
                    activeTab === "receptionists" ? "Receptionist Management" :
+                   activeTab === "pharmacy" ? "Pharmacy" :
                    "Dashboard"}
                 </h1>
                 <p className="text-sm sm:text-base text-slate-600 mt-1">
@@ -838,6 +870,7 @@ export default function AdminDashboard() {
                    activeTab === "admins" ? "Create and assign admins to hospitals" :
                    activeTab === "branches" ? "Create and manage branches for your hospital" :
                    activeTab === "receptionists" ? "Create and manage receptionists for your hospital" :
+                   activeTab === "pharmacy" ? "Multi-branch pharmacy inventory, prescriptions, and analytics" :
                    "Administrative dashboard"}
                 </p>
               </div>
@@ -1515,6 +1548,12 @@ export default function AdminDashboard() {
                 <p className="text-slate-600">This hospital has single-branch mode. Contact Super Admin to enable multiple branches.</p>
               </div>
             )
+          )}
+
+          {activeTab === "pharmacy" && (
+            <PharmacyPortalProvider>
+              <PharmacyManagement />
+            </PharmacyPortalProvider>
           )}
 
           {activeTab === "patients" && (

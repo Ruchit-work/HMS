@@ -8,9 +8,11 @@ interface LoadingSpinnerProps {
   message?: string
   size?: "sm" | "md" | "lg"
   className?: string
+  /** When true, no full-height box or background – use inside tabs/sections */
+  inline?: boolean
 }
 
-export function LoadingSpinner({ message = "Loading...", size = "lg", className = "" }: LoadingSpinnerProps) {
+export function LoadingSpinner({ message = "Loading...", size = "lg", className = "", inline = false }: LoadingSpinnerProps) {
   const sizeMap = {
     sm: "32px",
     md: "48px",
@@ -20,7 +22,13 @@ export function LoadingSpinner({ message = "Loading...", size = "lg", className 
   const spinnerSize = sizeMap[size]
 
   return (
-    <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${className}`}>
+    <div
+      className={
+        inline
+          ? `flex items-center justify-center py-12 ${className}`
+          : `min-h-screen flex items-center justify-center bg-gray-50 ${className}`
+      }
+    >
       <div className="text-center">
         <div className="loading mx-auto" style={{ width: spinnerSize, height: spinnerSize }}>
           <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>

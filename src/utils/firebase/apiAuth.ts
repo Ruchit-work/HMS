@@ -1,7 +1,7 @@
 
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 
-export type UserRole = "admin" | "doctor" | "patient" | "receptionist"
+export type UserRole = "admin" | "doctor" | "patient" | "receptionist" | "pharmacy"
 
 export interface AuthenticatedUser {
   uid: string
@@ -93,12 +93,21 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
       return null
     }
 
+    if (requiredRole === "pharmacy") {
+      const pharmacistDoc = await db.collection("pharmacists").doc(uid).get()
+      if (pharmacistDoc.exists) {
+        return { role: "pharmacy", data: pharmacistDoc.data() }
+      }
+      return null
+    }
+
     // No specific role required, check all collections
-    const [adminDoc, doctorDoc, patientDoc, receptionistDoc] = await Promise.all([
+    const [adminDoc, doctorDoc, patientDoc, receptionistDoc, pharmacistDoc] = await Promise.all([
       db.collection("admins").doc(uid).get(),
       db.collection("doctors").doc(uid).get(),
       db.collection("patients").doc(uid).get(),
       db.collection("receptionists").doc(uid).get(),
+      db.collection("pharmacists").doc(uid).get(),
     ])
 
     if (adminDoc.exists) {
@@ -112,6 +121,9 @@ async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role
     }
     if (receptionistDoc.exists) {
       return { role: "receptionist", data: receptionistDoc.data() }
+    }
+    if (pharmacistDoc.exists) {
+      return { role: "pharmacy", data: pharmacistDoc.data() }
     }
 
     return null
