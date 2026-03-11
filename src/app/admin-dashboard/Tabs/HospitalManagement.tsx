@@ -18,6 +18,7 @@ interface HospitalFormData {
   email: string
   multipleBranchesEnabled: boolean
   enableAnalytics: boolean
+  enablePharmacy: boolean
 }
 
 export default function HospitalManagement() {
@@ -37,7 +38,8 @@ export default function HospitalManagement() {
     phone: '',
     email: '',
     multipleBranchesEnabled: false,
-    enableAnalytics: true
+    enableAnalytics: true,
+    enablePharmacy: false,
   })
 
   useEffect(() => {
@@ -94,7 +96,8 @@ export default function HospitalManagement() {
         body: JSON.stringify({
           ...formData,
           multipleBranchesEnabled: formData.multipleBranchesEnabled,
-          enableAnalytics: formData.enableAnalytics
+          enableAnalytics: formData.enableAnalytics,
+          enablePharmacy: formData.enablePharmacy,
         })
       })
 
@@ -107,7 +110,7 @@ export default function HospitalManagement() {
       setSuccess(editingHospital ? 'Hospital updated successfully!' : 'Hospital created successfully!')
       setShowAddModal(false)
       setEditingHospital(null)
-      setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true })
+      setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true, enablePharmacy: false })
       await loadHospitals()
       await refreshContextHospitals()
     } catch (err: any) {
@@ -126,7 +129,8 @@ export default function HospitalManagement() {
       phone: hospital.phone,
       email: hospital.email || '',
       multipleBranchesEnabled: (hospital as any).multipleBranchesEnabled === true,
-      enableAnalytics: (hospital as any).enableAnalytics !== false
+      enableAnalytics: (hospital as any).enableAnalytics !== false,
+      enablePharmacy: (hospital as any).enablePharmacy === true,
     })
     setShowAddModal(true)
   }
@@ -170,7 +174,7 @@ export default function HospitalManagement() {
   const handleCancel = () => {
     setShowAddModal(false)
     setEditingHospital(null)
-    setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true })
+    setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true, enablePharmacy: false })
     setError(null)
     setSuccess(null)
   }
@@ -215,7 +219,7 @@ export default function HospitalManagement() {
         <button
           onClick={() => {
             setEditingHospital(null)
-            setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true })
+            setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true, enablePharmacy: false })
             setShowAddModal(true)
           }}
           className="btn-modern btn-modern-sm"
@@ -367,22 +371,42 @@ export default function HospitalManagement() {
                   </label>
                 </div>
 
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">Enable analytics</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Show or hide advanced analytics (Analytics Hub, revenue & patient analytics). Super admin can enable later.
-                    </p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Enable analytics</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Show or hide advanced analytics (Analytics Hub, revenue &amp; patient analytics). Super admin can enable later.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.enableAnalytics}
+                        onChange={(e) => setFormData({ ...formData, enableAnalytics: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                    </label>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.enableAnalytics}
-                      onChange={(e) => setFormData({ ...formData, enableAnalytics: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                  </label>
+
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Enable pharmacy module</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        When enabled, this hospital gets a pharmacy portal and pharmacist logins. Admins can then create pharmacists from the Pharmacy tab.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.enablePharmacy}
+                        onChange={(e) => setFormData({ ...formData, enablePharmacy: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

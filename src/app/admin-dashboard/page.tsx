@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnapshot } from "firebase/firestore"
@@ -25,6 +26,7 @@ import FinancialAnalytics from "./Tabs/FinancialAnalytics"
 import HospitalManagement from "./Tabs/HospitalManagement"
 import AdminAssignment from "./Tabs/AdminAssignment"
 import ReceptionistManagement from "./Tabs/ReceptionistManagement"
+import PharmacistManagement from "./Tabs/PharmacistManagement"
 import DoctorPerformanceAnalytics from "./Tabs/DoctorPerformanceAnalytics"
 import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnalytics"
 import BranchManagement from "./Tabs/BranchManagement"
@@ -117,10 +119,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get("tab")
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "receptionists" | "branches" | "pharmacy">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "branches" | "staff">("overview")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
   const [analyticsSubTab, setAnalyticsSubTab] = useState<"overview" | "patients" | "financial" | "doctors" | "receptionists">("overview")
+  const [staffSubTab, setStaffSubTab] = useState<"receptionists" | "pharmacists">("receptionists")
   const [showRecentAppointments, setShowRecentAppointments] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [processingRefundId, setProcessingRefundId] = useState<string | null>(null)
@@ -163,10 +166,16 @@ export default function AdminDashboard() {
   const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
   const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
 
-  // Sync activeTab with URL
+  // Sync activeTab with URL (limited set)
   useEffect(() => {
-    if (tabFromUrl === "pharmacy") setActiveTab("pharmacy")
-  }, [tabFromUrl])
+    if (!tabFromUrl) return
+    if (["overview","patients","doctors","campaigns","appointments","billing","analytics","hospitals","admins","branches","staff"].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl as any)
+    } else if (tabFromUrl === "receptionists" || tabFromUrl === "pharmacists") {
+      setActiveTab("staff")
+      setStaffSubTab(tabFromUrl)
+    }
+  }, [tabFromUrl, setStaffSubTab])
 
   // Fetch branches on mount
   useEffect(() => {
@@ -756,51 +765,36 @@ export default function AdminDashboard() {
               </>
             )}
 
-            {/* Management section: Pharmacy for all admins; Branches & Receptionists for branch admins only */}
+            {/* Management section: Branches & Staff */}
             <div className="border-t border-slate-300/30 my-2"></div>
             <div className="px-3 py-1">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
             </div>
-            {/* Pharmacy – visible to both Super Admin and Branch Admin */}
+            {/* Pharmacy tab removed from admin sidebar; pharmacy users use dedicated /pharmacy portal */}
+            {(activeHospital as any)?.multipleBranchesEnabled !== false && (
+              <TabButton
+                id="branches"
+                activeTab={activeTab}
+                onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
+                icon={
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm12 0h4a2 2 0 012 2v10h-6V9a2 2 0 012-2z" />
+                  </svg>
+                }
+                label="Branches"
+              />
+            )}
             <TabButton
-              id="pharmacy"
+              id="staff"
               activeTab={activeTab}
-              onClick={() => { setActiveTab("pharmacy"); setSidebarOpen(false) }}
+              onClick={() => { setActiveTab("staff"); setStaffSubTab("receptionists"); setSidebarOpen(false) }}
               icon={
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               }
-              label="Pharmacy"
+              label="Staff"
             />
-            {!isSuperAdmin && (
-              <>
-                {(activeHospital as any)?.multipleBranchesEnabled !== false && (
-                  <TabButton
-                    id="branches"
-                    activeTab={activeTab}
-                    onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
-                    icon={
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm12 0h4a2 2 0 012 2v10h-6V9a2 2 0 012-2z" />
-                      </svg>
-                    }
-                    label="Branches"
-                  />
-                )}
-                <TabButton
-                  id="receptionists"
-                  activeTab={activeTab}
-                  onClick={() => { setActiveTab("receptionists"); setSidebarOpen(false) }}
-                  icon={
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  }
-                  label="Receptionists"
-                />
-              </>
-            )}
             
           </div>
 
@@ -854,8 +848,7 @@ export default function AdminDashboard() {
                    activeTab === "hospitals" ? "Hospital Management" :
                    activeTab === "admins" ? "Admin Assignment" :
                    activeTab === "branches" ? "Branch Management" :
-                   activeTab === "receptionists" ? "Receptionist Management" :
-                   activeTab === "pharmacy" ? "Pharmacy" :
+                   activeTab === "staff" ? "Staff Management" :
                    "Dashboard"}
                 </h1>
                 <p className="text-sm sm:text-base text-slate-600 mt-1">
@@ -869,39 +862,51 @@ export default function AdminDashboard() {
                    activeTab === "hospitals" ? "Create and manage hospitals in the system" :
                    activeTab === "admins" ? "Create and assign admins to hospitals" :
                    activeTab === "branches" ? "Create and manage branches for your hospital" :
-                   activeTab === "receptionists" ? "Create and manage receptionists for your hospital" :
-                   activeTab === "pharmacy" ? "Multi-branch pharmacy inventory, prescriptions, and analytics" :
+                   activeTab === "staff" ? "Create and manage receptionists & pharmacists for your hospital" :
                    "Administrative dashboard"}
                 </p>
               </div>
               
               {/* Hospital Selector for Super Admins */}
-              {isSuperAdmin && hasMultipleHospitals && (
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-medium text-slate-700">Hospital:</label>
-                  <select
-                    value={activeHospitalId || ""}
-                    onChange={async (e) => {
-                      const hospitalId = e.target.value
-                      if (hospitalId) {
-                        try {
-                          await setActiveHospital(hospitalId)
-                          setNotification({ type: "success", message: "Hospital switched successfully" })
-                        } catch (err: any) {
-                          setNotification({ type: "error", message: err?.message || "Failed to switch hospital" })
+              <div className="flex items-center gap-3 justify-center sm:justify-end">
+                {isSuperAdmin && hasMultipleHospitals && (
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm font-medium text-slate-700">Hospital:</label>
+                    <select
+                      value={activeHospitalId || ""}
+                      onChange={async (e) => {
+                        const hospitalId = e.target.value
+                        if (hospitalId) {
+                          try {
+                            await setActiveHospital(hospitalId)
+                            setNotification({ type: "success", message: "Hospital switched successfully" })
+                          } catch (err: any) {
+                            setNotification({ type: "error", message: err?.message || "Failed to switch hospital" })
+                          }
                         }
-                      }
-                    }}
-                    className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                      }}
+                      className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                    >
+                      {userHospitals.map((hospital) => (
+                        <option key={hospital.id} value={hospital.id}>
+                          {hospital.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {(activeHospital as any)?.enablePharmacy && (
+                  <Link
+                    href="/pharmacy"
+                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
                   >
-                    {userHospitals.map((hospital) => (
-                      <option key={hospital.id} value={hospital.id}>
-                        {hospital.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                    <span>Open Pharmacy Portal</span>
+                  </Link>
+                )}
+              </div>
               
               {/* Branch Filter - Visible only when hospital has multiple branches */}
               {branches.length > 0 && (activeHospital as any)?.multipleBranchesEnabled !== false && (
@@ -1550,12 +1555,6 @@ export default function AdminDashboard() {
             )
           )}
 
-          {activeTab === "pharmacy" && (
-            <PharmacyPortalProvider>
-              <PharmacyManagement />
-            </PharmacyPortalProvider>
-          )}
-
           {activeTab === "patients" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
               <SubTabNavigation
@@ -1604,6 +1603,27 @@ export default function AdminDashboard() {
               <div className="p-6">
                 {billingSubTab === "all" && <BillingManagement selectedBranchId={selectedBranchId} />}
                 {billingSubTab === "analytics" && analyticsEnabled && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "staff" && (
+            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+              <SubTabNavigation
+                tabs={[
+                  { id: "receptionists", label: "Receptionists" },
+                  { id: "pharmacists", label: "Pharmacists" },
+                ]}
+                activeTab={staffSubTab}
+                onTabChange={setStaffSubTab}
+              />
+              <div className="p-6">
+                {staffSubTab === "receptionists" && (
+                  <ReceptionistManagement selectedBranchId={selectedBranchId} />
+                )}
+                {staffSubTab === "pharmacists" && (
+                  <PharmacistManagement selectedBranchId={selectedBranchId} />
+                )}
               </div>
             </div>
           )}
@@ -1764,12 +1784,6 @@ export default function AdminDashboard() {
           {activeTab === "admins" && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
               <AdminAssignment />
-            </div>
-          )}
-
-          {activeTab === "receptionists" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
-              <ReceptionistManagement selectedBranchId={selectedBranchId} />
             </div>
           )}
 

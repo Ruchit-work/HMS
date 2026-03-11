@@ -883,24 +883,6 @@ function LoginContent() {
             )}
           </div>
 
-          {/* Role selector: Login as ... */}
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-            <span className="text-xs text-slate-500">Login as:</span>
-            {(["patient", "doctor", "admin", "receptionist", "pharmacy"] as const).map((r) => (
-              <Link
-                key={r}
-                href={`/auth/login?role=${r}`}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  role === r
-                    ? "bg-cyan-600 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {r === "pharmacy" ? "Pharmacy" : r.charAt(0).toUpperCase() + r.slice(1)}
-              </Link>
-            ))}
-          </div>
-
           {/* Test Credentials Table */}
           <div className="space-y-4 pt-6 border-t border-gray-200">
             <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider text-center mb-3">

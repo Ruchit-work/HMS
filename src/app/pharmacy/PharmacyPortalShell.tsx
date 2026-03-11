@@ -12,8 +12,10 @@ import type { PharmacyPortalTabId } from '@/contexts/PharmacyPortalContext'
 const TAB_LABELS: Record<PharmacyPortalTabId, string> = {
   overview: 'Overview',
   inventory: 'Inventory',
-  queue: 'Prescription Queue',
+  queue: 'Dispense & Billing',
   sales: 'Sales Records',
+  cash_and_expenses: 'Cash & Expenses',
+  returns: 'Sales Returns',
   orders: 'Orders',
   transfers: 'Transfers',
   reports: 'Reports',
@@ -26,6 +28,8 @@ const TAB_SUBTITLES: Record<PharmacyPortalTabId, string> = {
   inventory: 'Stock levels, barcode lookup and bulk import',
   queue: 'Dispense prescriptions and sell to walk-in customers',
   sales: 'View and track all pharmacy sales',
+  cash_and_expenses: 'Daily income & expense, billing counter, shifts and expenses',
+  returns: 'Process medicine sales returns and refunds',
   orders: 'Place and receive purchase orders',
   transfers: 'Transfer stock between branches',
   reports: 'Expiry, valuation, sales and reorder reports',
@@ -45,6 +49,16 @@ const navIcons: Record<PharmacyPortalTabId, React.ReactNode> = {
   ),
   sales: (
     <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+  ),
+  cash_and_expenses: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18v10H3V7zM7 7V5a2 2 0 012-2h6a2 2 0 012 2v2M8 13h3m2 0h3" />
+    </svg>
+  ),
+  returns: (
+    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+    </svg>
   ),
   orders: (
     <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
@@ -69,6 +83,7 @@ const ACTIVE_TAB_STORAGE_KEY = 'pharmacy-active-tab'
 export default function PharmacyPortalShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const isPharmacyUser = user?.role === 'pharmacy'
   const { activeHospitalId, userHospitals, setActiveHospital, isSuperAdmin } = useMultiHospital()
   const portal = usePharmacyPortal()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -101,22 +116,27 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
     if (typeof window === 'undefined') return
     if (!portal) return
     try {
-      const storedTab = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) as PharmacyPortalTabId | null
-      if (!storedTab) return
-      // Only apply if this tab exists in current tab list
-      if (storedTab && ([
+      const storedTab = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) as string | null
+      const tab: PharmacyPortalTabId | null =
+        storedTab === 'billing_counter' || storedTab === 'expenses'
+          ? 'cash_and_expenses'
+          : (storedTab as PharmacyPortalTabId | null)
+      if (!tab) return
+      const validTabs: PharmacyPortalTabId[] = [
         'overview',
         'inventory',
         'queue',
         'sales',
+        'cash_and_expenses',
         'orders',
         'transfers',
         'reports',
         'users',
         'suppliers',
-      ] as PharmacyPortalTabId[]).includes(storedTab)) {
-        if (storedTab !== portal.activeTab) {
-          portal.setActiveTab(storedTab)
+      ]
+      if (validTabs.includes(tab)) {
+        if (tab !== portal.activeTab) {
+          portal.setActiveTab(tab)
         }
       }
     } catch {
@@ -141,6 +161,27 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
     }
   }, [portal, portal?.branches.length])
 
+  // For pharmacist users, lock portal to their assigned branch (no branch switching)
+  useEffect(() => {
+    if (!portal) return
+    if (!isPharmacyUser) return
+    const pharmacistData = user?.data as any | undefined
+    const branchId = pharmacistData?.branchId as string | undefined
+    const branchName = pharmacistData?.branchName as string | undefined
+    if (!branchId) {
+      // No specific branch assigned; keep current filter
+      return
+    }
+    const alreadySingle =
+      portal.branches.length === 1 && portal.branches[0]?.id === branchId
+    if (!alreadySingle) {
+      portal.setBranches([{ id: branchId, name: branchName || 'Main' }])
+    }
+    if (portal.branchFilter !== branchId) {
+      portal.setBranchFilter(branchId)
+    }
+  }, [portal, isPharmacyUser, user?.data])
+
   const performLogout = async () => {
     await signOut(auth)
     window.location.href = '/auth/login?role=pharmacy'
@@ -159,16 +200,25 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
   const bgPage = '#F0F4F8'
 
   const tabList: { id: PharmacyPortalTabId; label: string }[] = [
-    { id: 'overview', label: TAB_LABELS.overview },
-    { id: 'inventory', label: TAB_LABELS.inventory },
-    { id: 'queue', label: TAB_LABELS.queue },
-    { id: 'sales', label: TAB_LABELS.sales },
-    { id: 'orders', label: TAB_LABELS.orders },
+    { id: 'queue', label: TAB_LABELS.queue },                // 1. Dispense & Billing
+    { id: 'returns', label: TAB_LABELS.returns },            // 2. Sales Returns
+    { id: 'sales', label: TAB_LABELS.sales },                // 3. Sales Records
+    { id: 'cash_and_expenses', label: TAB_LABELS.cash_and_expenses }, // 4. Cash & Expenses
+    { id: 'inventory', label: TAB_LABELS.inventory },        // 6. Inventory
+    { id: 'orders', label: TAB_LABELS.orders },              // 7. Orders
     ...(isSuperAdmin ? [{ id: 'transfers' as const, label: TAB_LABELS.transfers }] : []),
-    { id: 'reports', label: TAB_LABELS.reports },
+    { id: 'reports', label: TAB_LABELS.reports },    // 8. Reports
+    { id: 'suppliers', label: TAB_LABELS.suppliers },// 9. Suppliers
     ...(isAdmin ? [{ id: 'users' as const, label: TAB_LABELS.users }] : []),
-    { id: 'suppliers', label: TAB_LABELS.suppliers },
+    { id: 'overview', label: TAB_LABELS.overview },  // 10. Overview
   ]
+
+  const currentBranchName =
+    portal.branches.find((b) => b.id === portal.branchFilter)?.name ??
+    (portal.branchFilter === 'all' ? (portal.branches.length > 0 ? 'All branches' : undefined) : undefined)
+
+  const isReadOnlyAdminTab =
+    isAdmin && (portal.activeTab === 'queue' || portal.activeTab === 'suppliers' || portal.activeTab === 'orders')
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: bgPage, fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -302,13 +352,28 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
         <header className="sticky top-0 z-30 shrink-0 shadow-sm" style={{ backgroundColor: '#F0F4F8' }}>
           {/* 72px row on desktop so with 4px blue line = 76px total, matching sidebar header; on mobile min-height allows wrap */}
           <div className={`flex flex-col sm:flex-row sm:items-center gap-4 min-h-[56px] sm:min-h-[72px] lg:h-[72px] px-4 sm:px-6 lg:px-8 ${!sidebarOpen ? 'pl-14 sm:pl-16 lg:pl-8' : ''}`}>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-semibold text-[#263238] truncate capitalize">
-                {TAB_LABELS[portal.activeTab]}
-              </h1>
-              <p className="text-sm text-[#607D8B] mt-0.5 truncate">
-                {TAB_SUBTITLES[portal.activeTab]}
-              </p>
+            <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex items-center gap-3 mb-1 sm:mb-0">
+                {isAdmin && (
+                  <Link
+                    href="/admin-dashboard"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#CFD8DC] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#E3F2FD] transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7 7-7M3 12h18" />
+                    </svg>
+                    <span>Back to admin</span>
+                  </Link>
+                )}
+                <div className="text-left">
+                  <h1 className="text-2xl font-semibold text-[#263238] truncate capitalize">
+                    {TAB_LABELS[portal.activeTab]}
+                  </h1>
+                  <p className="text-sm text-[#607D8B] mt-0.5 truncate">
+                    {TAB_SUBTITLES[portal.activeTab]}
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <div className="relative" ref={notificationsRef}>
@@ -334,8 +399,8 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
                   </div>
                 )}
               </div>
-              {/* Branch selector moved here for quick access; user profile dropdown removed */}
-              {portal.branches.length > 0 && (
+              {/* Branch selector for admins; static label for pharmacists */}
+              {isAdmin && portal.branches.length > 0 ? (
                 <select
                   value={portal.branchFilter}
                   onChange={(e) => {
@@ -352,20 +417,47 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
                       }
                     }
                   }}
-                  className="rounded-lg border border-[#CFD8DC] bg-white px-2.5 py-2 text-sm text-[#263238] focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 focus:border-[#1565C0] max-w-[180px]"
+                  className="hidden sm:inline-block rounded-lg border border-[#CFD8DC] bg-white px-2.5 py-2 text-xs sm:text-sm text-[#263238] focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 focus:border-[#1565C0] max-w-[200px]"
                 >
                   <option value="all">All branches</option>
                   {portal.branches.map((b) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
+              ) : (
+                currentBranchName && (
+                  <div className="hidden sm:flex items-center rounded-lg border border-[#CFD8DC] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] max-w-[200px]">
+                    <span className="mr-1 text-[#6B7280]">Branch:</span>
+                    <span className="truncate">{currentBranchName}</span>
+                  </div>
+                )
               )}
             </div>
           </div>
         </header>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-x-hidden">
-          {children}
+          {isAdmin && (
+            <div className="mb-3 flex justify-center">
+              <div className="rounded-full bg-white/90 border border-[#CBD5E1] px-4 py-1 text-[11px] font-medium text-[#475569] shadow-sm">
+                Logged in as Admin – some pharmacy actions may be view-only. Use a pharmacist login for full dispensing access.
+              </div>
+            </div>
+          )}
+          {isReadOnlyAdminTab ? (
+            <div className="relative">
+              <div className="pointer-events-none select-none opacity-70">
+                {children}
+              </div>
+              <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
+                <div className="rounded-full bg-white/95 border border-[#F97316] px-4 py-1 text-[11px] font-semibold text-[#EA580C] shadow-sm">
+                  Admin can view but not change data on this tab. Switch to another tab or use a pharmacist login to perform actions.
+                </div>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
       {showLogoutConfirm && (

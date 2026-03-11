@@ -29,13 +29,16 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
   }
-  const { appointmentId, branchId, lines, customerName, customerPhone, paymentMode } = body as {
+  const { appointmentId, branchId, lines, customerName, customerPhone, paymentMode, tenderNotes, changeNotes, changeGiven } = body as {
     appointmentId?: string
     branchId: string
     lines: Array<{ medicineId: string; quantity: number; batchId?: string }>
     customerName?: string
     customerPhone?: string
     paymentMode?: string
+    tenderNotes?: Record<string, number>
+    changeNotes?: Record<string, number>
+    changeGiven?: number
   }
   const paymentModeValue = (paymentMode ?? '').toLowerCase()
   const allowedPaymentModes = ['cash', 'card', 'upi', 'credit', 'other'] as const
@@ -49,6 +52,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { success: false, error: 'branchId and lines (array) are required' },
       { status: 400 }
+    )
+  }
+
+  const db = admin.firestore()
+  const hospitalId = ctxResult.context.hospitalId
+  const sessionsPath = getPharmacyCollectionPath(hospitalId, 'cashSessions')
+  const sessionCheck = await db
+    .collection(sessionsPath)
+    .where('cashierId', '==', auth.user.uid)
+    .where('branchId', '==', branchId)
+    .where('status', '==', 'open')
+    .limit(1)
+    .get()
+  if (sessionCheck.empty) {
+    return NextResponse.json(
+      { success: false, error: 'Please start a cash session first to complete sales.' },
+      { status: 403 }
     )
   }
 
@@ -66,9 +86,6 @@ export async function POST(request: NextRequest) {
       )
     }
   }
-
-  const db = admin.firestore()
-  const hospitalId = ctxResult.context.hospitalId
 
   let patientName: string
   let patientId: string | undefined
@@ -202,6 +219,9 @@ const deductions: Array<{ stockRef: DocRef; batches: MedicineBatch[]; totalQty: 
   if (customerPhoneFinal != null) saleData.customerPhone = customerPhoneFinal
   if (doctorId != null) saleData.doctorId = doctorId
   if (doctorName != null) saleData.doctorName = doctorName
+  if (validPaymentMode === 'cash' && tenderNotes != null) saleData.tenderNotes = tenderNotes
+  if (validPaymentMode === 'cash' && changeNotes != null) saleData.changeNotes = changeNotes
+  if (validPaymentMode === 'cash' && changeGiven != null) saleData.changeGiven = Number(changeGiven) || 0
 
   const salesPath = getPharmacyCollectionPath(hospitalId, 'sales')
   const saleRef = db.collection(salesPath).doc(saleId)
@@ -224,6 +244,47 @@ const deductions: Array<{ stockRef: DocRef; batches: MedicineBatch[]; totalQty: 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Dispense failed'
     return NextResponse.json({ success: false, error: message }, { status: 500 })
+  }
+
+  if (validPaymentMode === 'cash' && (Number(changeGiven) || 0) >= 0) {
+    const sessionsPath = getPharmacyCollectionPath(hospitalId, 'cashSessions')
+    const branchIdForSession = ctxResult.context.branchId || branchId
+    const sessionSnap = await db
+      .collection(sessionsPath)
+      .where('cashierId', '==', auth.user.uid)
+      .where('branchId', '==', branchIdForSession)
+      .where('status', '==', 'open')
+      .limit(1)
+      .get()
+    if (!sessionSnap.empty) {
+      const sessionRef = sessionSnap.docs[0].ref
+      const sessionData = sessionSnap.docs[0].data() as {
+        runningNotes?: Record<string, number>
+        changeNotesTotal?: Record<string, number>
+        cashSales?: number
+        changeGiven?: number
+      }
+      const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+      const running = { ...(sessionData.runningNotes || {}) }
+      const tender = tenderNotes || {}
+      const change = changeNotes || {}
+      denoms.forEach((d) => {
+        const t = Number(tender[d]) || 0
+        const c = Number(change[d]) || 0
+        running[d] = Math.max(0, (Number(running[d]) || 0) + t - c)
+      })
+      const changeNotesTotal = { ...(sessionData.changeNotesTotal || {}) }
+      denoms.forEach((d) => {
+        const c = Number(change[d]) || 0
+        if (c > 0) changeNotesTotal[d] = (Number(changeNotesTotal[d]) || 0) + c
+      })
+      await sessionRef.update({
+        runningNotes: running,
+        changeNotesTotal,
+        cashSales: admin.firestore.FieldValue.increment(totalAmount),
+        changeGiven: admin.firestore.FieldValue.increment(Number(changeGiven) || 0),
+      })
+    }
   }
 
   return NextResponse.json({ success: true, sale: { id: saleId, ...saleData } as PharmacySale })

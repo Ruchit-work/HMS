@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, code, address, phone, email, multipleBranchesEnabled, enableAnalytics } = body
+    const { name, code, address, phone, email, multipleBranchesEnabled, enableAnalytics, enablePharmacy } = body
 
     // Validate required fields
     if (!name || !code || !address || !phone || !email) {
@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
 
     const enableMultipleBranches = multipleBranchesEnabled === true
     const enableAnalyticsValue = enableAnalytics !== false // default true
+    const enablePharmacyValue = enablePharmacy === true
 
     // Create hospital
     const hospitalRef = db.collection('hospitals').doc()
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
       status: 'active',
       multipleBranchesEnabled: enableMultipleBranches,
       enableAnalytics: enableAnalyticsValue,
+      enablePharmacy: enablePharmacyValue,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     })
@@ -186,7 +188,8 @@ export async function POST(request: NextRequest) {
         email,
         status: 'active',
         multipleBranchesEnabled: enableMultipleBranches,
-        enableAnalytics: enableAnalyticsValue
+        enableAnalytics: enableAnalyticsValue,
+        enablePharmacy: enablePharmacyValue,
       }
     })
   } catch (error: any) {

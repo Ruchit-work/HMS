@@ -143,24 +143,26 @@ function AddReceptionistModalContent({
           </div>
           <div>
             <label className="block text-base font-semibold text-slate-700 mb-2">
-              Branch{branches.length > 0 ? ' *' : ''}
+              Branch{branches.length > 1 ? ' *' : ''}
             </label>
-            <select
-              required={branches.length > 0}
-              value={formData.branchId}
-              onChange={(e) => setFormData((prev) => ({ ...prev, branchId: e.target.value }))}
-              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-              disabled={branchesLoading}
-            >
-              <option value="">
-                {branchesLoading ? 'Loading branches...' : branches.length === 0 ? 'Default branch (single-branch hospital)' : 'Select a branch'}
-              </option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
-              ))}
-            </select>
-            {!branchesLoading && branches.length === 0 && (
-              <p className="text-sm text-slate-500 mt-1.5">This hospital uses a single branch. The receptionist will be assigned to the default branch when you create them.</p>
+            {branches.length <= 1 ? (
+              <div className="px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-sm text-slate-700">
+                {branches.length === 1 ? branches[0].name : 'Main'}
+                <p className="text-xs text-slate-500 mt-1">This hospital uses a single branch. The receptionist will be assigned here automatically.</p>
+              </div>
+            ) : (
+              <select
+                required
+                value={formData.branchId}
+                onChange={(e) => setFormData((prev) => ({ ...prev, branchId: e.target.value }))}
+                className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                disabled={branchesLoading}
+              >
+                <option value="">{branchesLoading ? 'Loading branches...' : 'Select a branch'}</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
             )}
           </div>
         </div>
@@ -571,7 +573,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
               email: '',
               phone: '',
               password: '',
-              branchId: ''
+              branchId: branches.length === 1 ? branches[0].id : ''
             })
             setShowAddModal(true)
           }}

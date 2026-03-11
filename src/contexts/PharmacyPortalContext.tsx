@@ -7,6 +7,8 @@ export type PharmacyPortalTabId =
   | 'inventory'
   | 'queue'
   | 'sales'
+  | 'cash_and_expenses'
+  | 'returns'
   | 'orders'
   | 'transfers'
   | 'reports'

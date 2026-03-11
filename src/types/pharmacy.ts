@@ -107,6 +107,114 @@ export interface PharmacySale {
   status: 'completed' | 'cancelled'
   /** prescription = from doctor; walk_in = direct customer */
   saleType?: PharmacySaleType
+  /** Total amount refunded across all returns for this sale */
+  refundedAmount?: number
+  /** Net amount after refunds (totalAmount - refundedAmount) */
+  netAmount?: number
+  /** Optional record of individual return operations */
+  returns?: Array<{
+    id: string
+    createdAt: Timestamp | string
+    lines: Array<{ medicineId: string; quantity: number }>
+    note?: string | null
+    amount: number
+  }>
+  /** Cash sales only: notes/coins received from customer (e.g. { '100': 1, '50': 2 }) */
+  tenderNotes?: Record<string, number>
+  /** Cash sales only: notes/coins given as change (e.g. { '20': 1, '10': 1 }) */
+  changeNotes?: Record<string, number>
+  /** Cash sales only: total change given to customer */
+  changeGiven?: number
+}
+
+// ----- Cash sessions (billing counter) -----
+export type CashSessionStatus = 'open' | 'balanced' | 'short' | 'extra'
+
+export interface PharmacyCashSession {
+  id: string
+  hospitalId: string
+  branchId: string
+  cashierId: string
+  /** ISO string or Timestamp when counter was opened */
+  openedAt: Timestamp | string
+  /** ISO string or Timestamp when counter was closed */
+  closedAt?: Timestamp | string | null
+  /** Opening physical cash total */
+  openingCashTotal: number
+  /** Opening note breakdown, keys are denomination strings e.g. '500','200', '100' */
+  openingNotes: Record<string, number>
+  /** Closing physical cash total (optional until closed) */
+  closingCashTotal?: number
+  /** Closing note breakdown */
+  closingNotes?: Record<string, number>
+  /** Aggregated amounts during session */
+  cashSales?: number
+  upiSales?: number
+  cardSales?: number
+  refunds?: number
+  changeGiven?: number
+  /** Total cash expenses booked against this session */
+  cashExpenses?: number
+  /** Expected cash at close and difference vs actual */
+  expectedCash?: number
+  difference?: number
+  status?: CashSessionStatus
+  /** Running count of notes in drawer: openingNotes + tenders - change (updated on each cash sale) */
+  runningNotes?: Record<string, number>
+  /** Total change notes given out this session, by denomination (e.g. '500','200',...,'1') */
+  changeNotesTotal?: Record<string, number>
+  /** Display name of person who opened the shift */
+  openedByName?: string
+  /** Display name of person who closed the shift */
+  closedByName?: string
+}
+
+// ----- Expenses -----
+
+export type PharmacyExpensePaymentMethod = 'cash' | 'upi' | 'card' | 'bank' | 'other'
+
+export interface PharmacyExpenseCategory {
+  id: string
+  hospitalId: string
+  name: string
+  active: boolean
+  createdAt: Timestamp | string
+  createdBy: string
+}
+
+export interface PharmacyExpense {
+  id: string
+  hospitalId: string
+  branchId: string
+  /** Expense date (YYYY-MM-DD or Timestamp) */
+  date: Timestamp | string
+  /** Optional category (legacy); use note for free-text description */
+  categoryId?: string
+  categoryName?: string
+  amount: number
+  paymentMethod: PharmacyExpensePaymentMethod
+  /** Required note describing the expense (e.g. "Buying new stand") */
+  description?: string
+  addedBy: string
+  receiptUrl?: string | null
+  createdAt: Timestamp | string
+  updatedAt?: Timestamp | string
+}
+
+// ----- Shifts (editable times for counter / reporting) -----
+export interface PharmacyShift {
+  id: string
+  hospitalId: string
+  /** Display name e.g. "Morning", "Evening" */
+  name: string
+  /** Start time "HH:mm" (24h) */
+  startTime: string
+  /** End time "HH:mm" (24h) */
+  endTime: string
+  /** Sort order (lower first) */
+  order: number
+  createdAt?: Timestamp | string
+  updatedAt?: Timestamp | string
 }
 
 // ----- Supplier -----

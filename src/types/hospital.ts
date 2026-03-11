@@ -17,6 +17,8 @@ export interface Hospital {
   multipleBranchesEnabled?: boolean
   /** When false, hide advanced analytics (Analytics Hub, analytics sub-tabs). Super admin can enable later. */
   enableAnalytics?: boolean
+  /** When true, pharmacy module (pharmacy tab + pharmacists) is enabled for this hospital. */
+  enablePharmacy?: boolean
   createdAt: Timestamp | string
   updatedAt: Timestamp | string
 }

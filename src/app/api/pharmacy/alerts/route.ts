@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       const exp = (b.expiryDate || '').slice(0, 10)
       if (!exp) continue
       const days = daysUntilExpiry(exp)
-      if (days <= 30) {
+      if (days <= 90) {
         expiring.push({
           branchId,
           branchName,

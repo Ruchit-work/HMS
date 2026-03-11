@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { auth } from '@/firebase/config'
@@ -11,6 +11,11 @@ import type { PharmacyPortalTabId } from '@/contexts/PharmacyPortalContext'
 import SubTabNavigation from '@/components/admin/SubTabNavigation'
 import Notification from '@/components/ui/feedback/Notification'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import Pagination from '@/components/ui/navigation/Pagination'
+import { useTablePagination } from '@/hooks/useTablePagination'
+import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
+import { CashTenderModal } from '@/components/pharmacy/CashTenderModal'
+import { RefundCashModal } from '@/components/pharmacy/RefundCashModal'
 import type { Branch } from '@/types/branch'
 import type {
   PharmacyMedicine,
@@ -31,7 +36,7 @@ import { playScanBeep } from '@/utils/scanBeep'
 import { BarcodeCameraScanner } from '@/components/pharmacy/BarcodeCameraScanner'
 import jsPDF from 'jspdf'
 
-type PharmacySubTab = 'overview' | 'inventory' | 'queue' | 'sales' | 'suppliers' | 'orders' | 'transfers' | 'analytics' | 'reports' | 'users'
+type PharmacySubTab = 'overview' | 'inventory' | 'queue' | 'sales' | 'returns' | 'suppliers' | 'orders' | 'transfers' | 'analytics' | 'reports' | 'users' | 'cash_and_expenses'
 
 const PDF_CURRENCY = 'Rs. '
 
@@ -1714,6 +1719,139 @@ function CreatePharmacyUserForm({
   )
 }
 
+function AddPharmacistModalContent({
+  form,
+  setForm,
+  branches,
+  saving,
+  onSubmit,
+}: {
+  form: { firstName: string; lastName: string; email: string; password: string; branchId: string }
+  setForm: React.Dispatch<React.SetStateAction<{ firstName: string; lastName: string; email: string; password: string; branchId: string }>>
+  branches: Array<{ id: string; name: string }>
+  saving: boolean
+  onSubmit: (e: React.FormEvent) => void
+}) {
+  const requestClose = useRevealModalClose()
+  return (
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl min-w-[360px] max-h-[95vh] overflow-hidden flex flex-col border border-slate-200/80">
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 sm:px-10 pt-7 pb-5 rounded-t-2xl shrink-0">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5h4.01M7 20h4c1.103 0 2-.897 2-2V6c0-1.103-.897-2-2-2h-4c-1.103 0-2 .897-2 2v12c0 1.103.897 2 2 2zM7 6V4c0-1.103.897-2 2-2h4c1.103 0 2 .897 2 2v2" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Create New Pharmacist</h3>
+              <p className="text-base text-slate-500 mt-1">Add a new pharmacy login for a specific branch</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={requestClose}
+            className="p-2.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+            aria-label="Close"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <form onSubmit={onSubmit} className="flex-1 overflow-y-auto p-8 sm:p-10 space-y-6 min-h-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">First Name *</label>
+            <input
+              type="text"
+              required
+              value={form.firstName}
+              onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter first name"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Last Name *</label>
+            <input
+              type="text"
+              required
+              value={form.lastName}
+              onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter last name"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Email *</label>
+            <input
+              type="email"
+              required
+              value={form.email}
+              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter email address"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Password *</label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={form.password}
+              onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Min 6 characters"
+            />
+            <p className="text-sm text-slate-500 mt-1.5">Password must be at least 6 characters</p>
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">
+              Branch{branches.length > 0 ? ' *' : ''}
+            </label>
+            <select
+              required={branches.length > 0}
+              value={form.branchId}
+              onChange={(e) => setForm((prev) => ({ ...prev, branchId: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="">
+                {branches.length === 0 ? 'No branches configured' : 'Select a branch'}
+              </option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            {branches.length === 0 && (
+              <p className="text-sm text-slate-500 mt-1.5">Create branches first from the Branches tab, then assign pharmacists.</p>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={requestClose}
+            disabled={saving}
+            className="px-6 py-3 text-base border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-6 py-3 text-base bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Creating...' : 'Create Pharmacist'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 type QueueItem = {
   appointmentId: string
   patientName: string
@@ -1752,6 +1890,9 @@ function DispenseModal({
   const branchId = queueItem.branchId || ''
   const branchStock = stock.filter((s) => s.branchId === branchId)
   const [saving, setSaving] = useState(false)
+  const [showCashTenderModal, setShowCashTenderModal] = useState(false)
+  const [pendingDispensePayload, setPendingDispensePayload] = useState<Array<{ medicineId: string; quantity: number }> | null>(null)
+  const [pendingBillAmount, setPendingBillAmount] = useState(0)
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
   const displayMedicines = useMemo(() => {
     const seen = new Set<string>()
@@ -1844,6 +1985,31 @@ function DispenseModal({
       onError('Select at least one medicine and enter quantity.')
       return
     }
+    const orderLinesForTotal = lines
+      .filter((l) => l.medicineId && Number(l.quantity) > 0)
+      .map((l) => {
+        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === l.medicineId)
+        const qty = Math.max(0, Number(l.quantity) || 0)
+        const rate = med ? Number(med.sellingPrice) || 0 : 0
+        return { amount: qty * rate }
+      })
+    const gross = orderLinesForTotal.reduce((sum, l) => sum + l.amount, 0)
+    const disc = Math.max(0, Number(discountAmount) || 0)
+    const taxable = Math.max(0, gross - disc)
+    const taxPct = taxPercent / 100
+    const netTotalBill = taxable + taxable * taxPct
+    setPendingDispensePayload(payload)
+    setPendingBillAmount(netTotalBill)
+    setShowCashTenderModal(true)
+  }
+
+  const doDispenseWithCash = async (
+    tenderNotes: Record<string, number>,
+    changeNotes: Record<string, number>,
+    changeGiven: number
+  ) => {
+    const payload = pendingDispensePayload
+    if (!payload || !branchId) return
     setSaving(true)
     try {
       const token = await getToken()
@@ -1851,7 +2017,15 @@ function DispenseModal({
       const res = await fetch('/api/pharmacy/dispense', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ appointmentId: queueItem.appointmentId, branchId, lines: payload, paymentMode: 'cash' }),
+        body: JSON.stringify({
+          appointmentId: queueItem.appointmentId,
+          branchId,
+          lines: payload,
+          paymentMode: 'cash',
+          tenderNotes,
+          changeNotes,
+          changeGiven,
+        }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Dispense failed')
@@ -1882,6 +2056,8 @@ function DispenseModal({
         taxPercent,
         netTotal: billNet,
       })
+      setPendingDispensePayload(null)
+      setShowCashTenderModal(false)
       onSuccess()
       onClose()
     } catch (err: any) {
@@ -1914,6 +2090,12 @@ function DispenseModal({
 
   const content = (
     <>
+      <CashTenderModal
+        isOpen={showCashTenderModal}
+        onClose={() => { setShowCashTenderModal(false); setPendingDispensePayload(null) }}
+        billAmount={pendingBillAmount}
+        onConfirm={doDispenseWithCash}
+      />
       <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
         <div className="flex items-center gap-3">
           {inline && (
@@ -2232,6 +2414,7 @@ function PharmacyBillingPanel({
   onOpenAddMedicine,
   posSearchRef,
   queueItems,
+  hasActiveSession = true,
 }: {
   branches: Array<{ id: string; name: string }>
   medicines: PharmacyMedicine[]
@@ -2246,6 +2429,8 @@ function PharmacyBillingPanel({
   posSearchRef?: React.RefObject<HTMLInputElement | null>
   /** Optional: pending prescriptions to power unified patient/prescription search */
   queueItems?: QueueItem[]
+  /** If false, user must start a cash session before completing sales */
+  hasActiveSession?: boolean
 }) {
   const [saving, setSaving] = useState(false)
   const [customerName, setCustomerName] = useState('')
@@ -2264,6 +2449,14 @@ function PharmacyBillingPanel({
   const [lines, setLines] = useState<Array<{ medicineId: string; quantity: string; batchId?: string }>>([])
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
   const [scanMode, setScanMode] = useState<'scanner' | 'camera'>('scanner')
+  const [showCashTenderModal, setShowCashTenderModal] = useState(false)
+  const [pendingDispensePayload, setPendingDispensePayload] = useState<{
+    branchId: string
+    customerName: string
+    customerPhone: string
+    lines: Array<{ medicineId: string; quantity: number; batchId?: string }>
+  } | null>(null)
+  const [pendingBillAmount, setPendingBillAmount] = useState(0)
   const [searchPatientQuery, setSearchPatientQuery] = useState('')
   const [searchPatientOpen, setSearchPatientOpen] = useState(false)
   const patientSearchRef = useRef<HTMLDivElement | null>(null)
@@ -2368,6 +2561,10 @@ function PharmacyBillingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!hasActiveSession) {
+      onError('Please start a cash session first (Cash & expenses → Start shift).')
+      return
+    }
     if (!customerName.trim()) { onError('Customer name required'); return }
     if (!customerPhone.trim() && !noPhoneHospitalPatient) {
       onError('Enter phone number or mark as hospital patient without phone.')
@@ -2393,6 +2590,25 @@ function PharmacyBillingPanel({
     }
     const payload = validLines.map((l) => ({ medicineId: l.medicineId!, quantity: Math.floor(Number(l.quantity) || 0), ...(l.batchId ? { batchId: l.batchId } : {}) }))
     if (payload.length === 0) { onError('Add at least one medicine with quantity'); return }
+    const grossFromPayload = payload.reduce((sum, p) => {
+      const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
+      return sum + p.quantity * (med ? Number(med.sellingPrice) || 0 : 0)
+    }, 0)
+    const disc = Math.max(0, Number(discountAmount) || 0)
+    const taxable = Math.max(0, grossFromPayload - disc)
+    const billTax = taxable * (taxPercent / 100)
+    const net = taxable + billTax
+    if (paymentMode === 'cash') {
+      setPendingDispensePayload({
+        branchId: effectiveBranchId,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        lines: payload,
+      })
+      setPendingBillAmount(net)
+      setShowCashTenderModal(true)
+      return
+    }
     setSaving(true)
     try {
       const token = await getToken()
@@ -2451,6 +2667,76 @@ function PharmacyBillingPanel({
     }
   }
 
+  const doDispenseWithCash = async (
+    tenderNotes: Record<string, number>,
+    changeNotes: Record<string, number>,
+    changeGiven: number
+  ) => {
+    const pending = pendingDispensePayload
+    if (!pending) return
+    setSaving(true)
+    try {
+      const token = await getToken()
+      if (!token) { onError('Not authenticated'); return }
+      const res = await fetch('/api/pharmacy/dispense', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          branchId: pending.branchId,
+          customerName: pending.customerName,
+          customerPhone: pending.customerPhone,
+          paymentMode: 'cash',
+          lines: pending.lines,
+          tenderNotes,
+          changeNotes,
+          changeGiven,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Sale failed')
+      const branchName = selectedBranchName ?? branches.find((b) => b.id === pending.branchId)?.name ?? ''
+      const today = new Date().toISOString().slice(0, 10)
+      const billLines = pending.lines.map((p) => {
+        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
+        const qty = p.quantity
+        const rate = med ? Number(med.sellingPrice) || 0 : 0
+        const amount = qty * rate
+        const tax = amount * (taxPercent / 100)
+        return { name: med?.name ?? '', qty, rate, amount, tax }
+      })
+      const gross = billLines.reduce((s, l) => s + l.amount, 0)
+      const disc = Math.max(0, Number(discountAmount) || 0)
+      const taxable = Math.max(0, gross - disc)
+      const billTax = taxable * (taxPercent / 100)
+      const net = taxable + billTax
+      generateBillPDFAndPrint({
+        type: 'walk_in',
+        patientName: pending.customerName,
+        customerPhone: pending.customerPhone,
+        date: today,
+        branchName,
+        lines: billLines,
+        grossTotal: gross,
+        discountAmount: disc > 0 ? disc : undefined,
+        taxTotal: billTax,
+        taxPercent,
+        netTotal: net,
+      })
+      setPendingDispensePayload(null)
+      setShowCashTenderModal(false)
+      onSuccess()
+      setCustomerName('')
+      setCustomerPhone('')
+      setTaxPercent(0)
+      setDiscountAmount(0)
+      setLines([])
+    } catch (err: any) {
+      onError(err?.message || 'Failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const orderLines = lines.filter((l) => l.medicineId && Number(l.quantity) > 0)
   const canCompleteSale = orderLines.length > 0 && orderLines.every((l) => {
     const avail = getAvailable(l.medicineId)
@@ -2469,6 +2755,12 @@ function PharmacyBillingPanel({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0 bg-white rounded-xl border border-[#E5E7EB] shadow-sm overflow-hidden">
+      <CashTenderModal
+        isOpen={showCashTenderModal}
+        onClose={() => { setShowCashTenderModal(false); setPendingDispensePayload(null) }}
+        billAmount={pendingBillAmount}
+        onConfirm={doDispenseWithCash}
+      />
       {/* Universal patient / prescription search */}
       <div className="shrink-0 p-4 border-b border-[#E5E7EB] bg-white" ref={patientSearchRef}>
         <label className="block text-xs font-medium text-slate-500 mb-1">Search patient / prescription</label>
@@ -2530,14 +2822,15 @@ function PharmacyBillingPanel({
           )}
         </div>
         <div className="space-y-3">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Customer Name</label>
-            <input type="text" placeholder="Name *" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" required />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <label className="block text-xs text-slate-500">Phone Number</label>
-              <label htmlFor="noPhoneHospitalPatient" className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Customer Name</label>
+              <input type="text" placeholder="Name *" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" required />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <label className="block text-xs text-slate-500">Phone Number</label>
+                <label htmlFor="noPhoneHospitalPatient" className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
               <span> Patient from hospital – without phone</span>
                 <input
                   id="noPhoneHospitalPatient"
@@ -2572,19 +2865,21 @@ function PharmacyBillingPanel({
               } ${noPhoneHospitalPatient ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
             />
           </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Doctor Name (optional)</label>
-            <input
-              type="text"
-              placeholder="Doctor"
-              value={doctorName}
-              onChange={(e) => setDoctorName(e.target.value)}
-              className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Address</label>
-            <input type="text" placeholder="Address (optional)" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Doctor Name (optional)</label>
+              <input
+                type="text"
+                placeholder="Doctor"
+                value={doctorName}
+                onChange={(e) => setDoctorName(e.target.value)}
+                className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Address</label>
+              <input type="text" placeholder="Address (optional)" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" />
+            </div>
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Payment Mode</label>
@@ -2599,6 +2894,7 @@ function PharmacyBillingPanel({
                   {opt.label}
                 </button>
               ))}
+            </div>
             </div>
           </div>
         </div>
@@ -2901,9 +3197,9 @@ function PharmacyBillingPanel({
           </div>
           <button
             type="submit"
-            disabled={saving || !canCompleteSale}
+            disabled={saving || !canCompleteSale || !hasActiveSession}
             className="ml-auto rounded-full bg-[#2563EB] text-white font-semibold py-2.5 px-6 text-xs sm:text-sm hover:bg-[#1d4ed8] disabled:opacity-50 disabled:cursor-not-allowed transition"
-            title={!canCompleteSale && orderLines.length > 0 ? 'Reduce quantity to available stock or remove out-of-stock items' : ''}
+            title={!hasActiveSession ? 'Start a cash session first (Cash & expenses → Start shift)' : !canCompleteSale && orderLines.length > 0 ? 'Reduce quantity to available stock or remove out-of-stock items' : ''}
           >
             {saving ? 'Processing…' : 'Complete sale & print bill'}
           </button>
@@ -2950,6 +3246,14 @@ function WalkInSaleForm({
   const [lines, setLines] = useState<Array<{ medicineId: string; quantity: string }>>([{ medicineId: '', quantity: '' }])
   const [scanMode, setScanMode] = useState<'scanner' | 'camera'>('scanner')
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
+  const [showCashTenderModal, setShowCashTenderModal] = useState(false)
+  const [pendingDispensePayload, setPendingDispensePayload] = useState<{
+    branchId: string
+    customerName: string
+    customerPhone: string
+    lines: Array<{ medicineId: string; quantity: number }>
+  } | null>(null)
+  const [pendingBillAmount, setPendingBillAmount] = useState(0)
   const displayMedicines = useMemo(() => {
     const seen = new Set<string>()
     const out: PharmacyMedicine[] = []
@@ -3018,6 +3322,25 @@ function WalkInSaleForm({
       .filter((l) => l.medicineId && Number(l.quantity) > 0)
       .map((l) => ({ medicineId: l.medicineId, quantity: Math.floor(Number(l.quantity) || 0) }))
     if (payload.length === 0) { onError('Add at least one medicine with quantity'); return }
+    const grossFromPayload = payload.reduce((sum, p) => {
+      const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
+      return sum + p.quantity * (med ? Number(med.sellingPrice) || 0 : 0)
+    }, 0)
+    const disc = Math.max(0, Number(discountAmount) || 0)
+    const taxable = Math.max(0, grossFromPayload - disc)
+    const billTax = taxable * (taxPercent / 100)
+    const net = taxable + billTax
+    if (paymentMode === 'cash') {
+      setPendingDispensePayload({
+        branchId: effectiveBranchId,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        lines: payload,
+      })
+      setPendingBillAmount(net)
+      setShowCashTenderModal(true)
+      return
+    }
     setSaving(true)
     try {
       const token = await getToken()
@@ -3072,6 +3395,72 @@ function WalkInSaleForm({
     }
   }
 
+  const doDispenseWithCash = async (
+    tenderNotes: Record<string, number>,
+    changeNotes: Record<string, number>,
+    changeGiven: number
+  ) => {
+    const pending = pendingDispensePayload
+    if (!pending) return
+    setSaving(true)
+    try {
+      const token = await getToken()
+      if (!token) { onError('Not authenticated'); return }
+      const res = await fetch('/api/pharmacy/dispense', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          branchId: pending.branchId,
+          customerName: pending.customerName,
+          customerPhone: pending.customerPhone,
+          paymentMode: 'cash',
+          lines: pending.lines,
+          tenderNotes,
+          changeNotes,
+          changeGiven,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Sale failed')
+      const branchName = selectedBranchName ?? branches.find((b) => b.id === pending.branchId)?.name ?? ''
+      const today = new Date().toISOString().slice(0, 10)
+      const billLines = pending.lines.map((p) => {
+        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
+        const qty = p.quantity
+        const rate = med ? Number(med.sellingPrice) || 0 : 0
+        const amount = qty * rate
+        const tax = amount * (taxPercent / 100)
+        return { name: med?.name ?? '', qty, rate, amount, tax }
+      })
+      const gross = billLines.reduce((s, l) => s + l.amount, 0)
+      const disc = Math.max(0, Number(discountAmount) || 0)
+      const taxable = Math.max(0, gross - disc)
+      const billTax = taxable * (taxPercent / 100)
+      const net = taxable + billTax
+      generateBillPDFAndPrint({
+        type: 'walk_in',
+        patientName: pending.customerName,
+        customerPhone: pending.customerPhone,
+        date: today,
+        branchName,
+        lines: billLines,
+        grossTotal: gross,
+        discountAmount: disc > 0 ? disc : undefined,
+        taxTotal: billTax,
+        taxPercent,
+        netTotal: net,
+      })
+      setPendingDispensePayload(null)
+      setShowCashTenderModal(false)
+      onSuccess()
+      setCustomerName(''); setCustomerPhone(''); setTaxPercent(0); setDiscountAmount(0); setLines([{ medicineId: '', quantity: '' }])
+    } catch (err: any) {
+      onError(err?.message || 'Failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const orderLines = lines.filter((l) => l.medicineId && Number(l.quantity) > 0)
   const grossTotal = orderLines.reduce((sum, l) => {
     const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === l.medicineId)
@@ -3085,6 +3474,12 @@ function WalkInSaleForm({
   const today = new Date().toISOString().slice(0, 10)
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <CashTenderModal
+        isOpen={showCashTenderModal}
+        onClose={() => { setShowCashTenderModal(false); setPendingDispensePayload(null) }}
+        billAmount={pendingBillAmount}
+        onConfirm={doDispenseWithCash}
+      />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
         <div>
           <label className="text-xs text-slate-500 uppercase tracking-wide">Customer name</label>
@@ -3743,6 +4138,7 @@ export default function PharmacyManagement() {
   const [inventorySupplierFilter, setInventorySupplierFilter] = useState<string>('all')
   const [inventoryExpiryFilter, setInventoryExpiryFilter] = useState<'all' | 'expiring_soon' | 'expired'>('all')
   const [inventoryViewBatchesStock, setInventoryViewBatchesStock] = useState<BranchMedicineStock | null>(null)
+  const [inventoryDetailView, setInventoryDetailView] = useState<{ stock: BranchMedicineStock; medicine: PharmacyMedicine | null } | null>(null)
   const [inventoryRowActionsOpen, setInventoryRowActionsOpen] = useState<string | null>(null)
   const [branches, setBranchesState] = useState<Array<{ id: string; name: string }>>([])
   const branchFilter = isPharmacyPortal && portal ? portal.branchFilter : branchFilterLocal
@@ -3753,7 +4149,7 @@ export default function PharmacyManagement() {
   branchFilterRef.current = branchFilter
   portalRef.current = portal
 
-  const [subTabLocal, setSubTabLocal] = useState<PharmacySubTab>('overview')
+  const [subTabLocal, setSubTabLocal] = useState<PharmacySubTab>('queue')
   const subTab = (isPharmacyPortal && portal ? portal.activeTab : subTabLocal) as PharmacySubTab
   const headerSearchQuery = (isPharmacyPortal && portal ? portal.headerSearchQuery : '') || ''
   const setSubTab = (isPharmacyPortal && portal
@@ -3769,6 +4165,7 @@ export default function PharmacyManagement() {
   const [suppliers, setSuppliers] = useState<PharmacySupplier[]>([])
   const [lowStock, setLowStock] = useState<LowStockAlert[]>([])
   const [expiring, setExpiring] = useState<ExpiryAlert[]>([])
+  const [inventoryHealthFilter, setInventoryHealthFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'expiring_soon' | 'dead_stock'>('all')
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [dispenseQueueItem, setDispenseQueueItem] = useState<QueueItem | null>(null)
   const queuePosSearchRef = useRef<HTMLInputElement>(null)
@@ -3797,12 +4194,225 @@ export default function PharmacyManagement() {
     dailySalesTotal: number
     mostPrescribed: Array<{ medicineName: string; count: number }>
   } | null>(null)
+  const [selectedReturnSale, setSelectedReturnSale] = useState<PharmacySale | null>(null)
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({})
+  const [returnSubmitting, setReturnSubmitting] = useState(false)
+  const [showRefundPaymentModal, setShowRefundPaymentModal] = useState(false)
+  const [pendingReturnPayload, setPendingReturnPayload] = useState<{
+    saleId: string
+    lines: { medicineId: string; quantity: number }[]
+    refundAmount: number
+  } | null>(null)
+  const [refundPaymentMode, setRefundPaymentMode] = useState<'cash' | 'upi' | 'card' | 'other'>('cash')
+  const [showRefundCashModal, setShowRefundCashModal] = useState(false)
+  const [selectedSaleDetail, setSelectedSaleDetail] = useState<PharmacySale | null>(null)
+  const [salesSearch, setSalesSearch] = useState('')
+  const [returnsSearch, setReturnsSearch] = useState('')
+  const saleDetailRef = useRef<HTMLDivElement | null>(null)
+  const [salesDate, setSalesDate] = useState<string>('')
+  const [returnsDate, setReturnsDate] = useState<string>('')
+  const [salesPaymentFilter, setSalesPaymentFilter] = useState<string>('all')
+  const [returnsPaymentFilter, setReturnsPaymentFilter] = useState<string>('all')
+  const [salesMinAmount, setSalesMinAmount] = useState<string>('')
+  const [salesMaxAmount, setSalesMaxAmount] = useState<string>('')
+  const [returnsMinAmount, setReturnsMinAmount] = useState<string>('')
+  const [returnsMaxAmount, setReturnsMaxAmount] = useState<string>('')
+  const [returnsInnerTab, setReturnsInnerTab] = useState<'by_sale' | 'by_return'>('by_sale')
+  const [activeCashSession, setActiveCashSession] = useState<import('@/types/pharmacy').PharmacyCashSession | null>(null)
+  const [recentCashSessions, setRecentCashSessions] = useState<import('@/types/pharmacy').PharmacyCashSession[]>([])
+  const [cashSessionsLoading, setCashSessionsLoading] = useState(false)
+  const [viewShiftReportSession, setViewShiftReportSession] = useState<import('@/types/pharmacy').PharmacyCashSession | null>(null)
+  const [shiftReportExpenses, setShiftReportExpenses] = useState<import('@/types/pharmacy').PharmacyExpense[]>([])
+  const [cashOpeningNotes, setCashOpeningNotes] = useState<Record<string, string>>({ '500': '', '200': '', '100': '', '50': '', '20': '', '10': '', '5': '', '2': '', '1': '' })
+  const [cashClosingNotes, setCashClosingNotes] = useState<Record<string, string>>({ '500': '', '200': '', '100': '', '50': '', '20': '', '10': '', '5': '', '2': '', '1': '' })
+  const openCounterSectionRef = useRef<HTMLDivElement>(null)
+  const closeCounterSectionRef = useRef<HTMLDivElement>(null)
+  const [highlightOpenCounter, setHighlightOpenCounter] = useState(false)
+  const [highlightCloseCounter, setHighlightCloseCounter] = useState(false)
+  const lastPreFilledSessionIdRef = useRef<string | null>(null)
+  const [lastClosedSummary, setLastClosedSummary] = useState<{
+    openingCashTotal: number
+    closingCashTotal: number
+    cashSales: number
+    upiSales: number
+    cardSales: number
+    refunds: number
+    cashExpenses: number
+    profit: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!highlightOpenCounter && !highlightCloseCounter) return
+    const t = setTimeout(() => {
+      setHighlightOpenCounter(false)
+      setHighlightCloseCounter(false)
+    }, 4000)
+    return () => clearTimeout(t)
+  }, [highlightOpenCounter, highlightCloseCounter])
+
+  // Pre-fill close counter form with expected notes from runningNotes (from dispense/billing)
+  useEffect(() => {
+    const session = activeCashSession
+    if (!session?.id || !session.runningNotes) return
+    if (lastPreFilledSessionIdRef.current === session.id) return
+    lastPreFilledSessionIdRef.current = session.id
+    const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+    const next: Record<string, string> = {}
+    denoms.forEach((d) => {
+      const n = session.runningNotes![d]
+      next[d] = n != null && n > 0 ? String(n) : ''
+    })
+    setCashClosingNotes(next)
+  }, [activeCashSession?.id, activeCashSession?.runningNotes])
+
+  useEffect(() => {
+    if (!activeCashSession) lastPreFilledSessionIdRef.current = null
+  }, [activeCashSession])
+
+  const [expenseCategories, setExpenseCategories] = useState<import('@/types/pharmacy').PharmacyExpenseCategory[]>([])
+  const [expenses, setExpenses] = useState<import('@/types/pharmacy').PharmacyExpense[]>([])
+  const [expenseFilters, setExpenseFilters] = useState<{ dateFrom: string; dateTo: string; categoryId: string; paymentMethod: string }>({
+    dateFrom: '',
+    dateTo: '',
+    categoryId: 'all',
+    paymentMethod: 'all',
+  })
+  const [expenseForm, setExpenseForm] = useState<{ date: string; amount: string; paymentMethod: string; note: string }>({
+    date: new Date().toISOString().slice(0, 10),
+    amount: '',
+    paymentMethod: 'cash',
+    note: '',
+  })
+  const [showExpenseCashModal, setShowExpenseCashModal] = useState(false)
+  const [pendingExpensePayload, setPendingExpensePayload] = useState<{ amount: number; date: string; note: string; paymentMethod: string } | null>(null)
+  const CASHIER_OPTIONS = ['Rahul', 'Priya']
+  const [openedByName, setOpenedByName] = useState<string>(CASHIER_OPTIONS[0])
+  const [showCloseShiftConfirm, setShowCloseShiftConfirm] = useState(false)
+  const [closedByName, setClosedByName] = useState<string>(CASHIER_OPTIONS[0])
+  const [showAddPharmacistModal, setShowAddPharmacistModal] = useState(false)
+  const [pharmacistForm, setPharmacistForm] = useState<{ firstName: string; lastName: string; email: string; password: string; branchId: string }>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    branchId: '',
+  })
+
+  const getSaleReturnedMap = useCallback((sale: PharmacySale) => {
+    const map: Record<string, number> = {}
+    if (!sale.returns) return map
+    for (const ret of sale.returns) {
+      for (const line of ret.lines || []) {
+        const key = line.medicineId
+        const qty = Number(line.quantity) || 0
+        if (!qty) continue
+        map[key] = (map[key] || 0) + qty
+      }
+    }
+    return map
+  }, [])
 
   const getToken = useCallback(async () => {
     const user = auth.currentUser
     if (!user) return null
     return user.getIdToken()
   }, [])
+
+  useEffect(() => {
+    const s = viewShiftReportSession
+    if (!s?.branchId || !activeHospitalId) {
+      setShiftReportExpenses([])
+      return
+    }
+    let dateFrom = ''
+    let dateTo = ''
+    const opened = typeof s.openedAt === 'string' ? s.openedAt : (s.openedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.()
+    const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
+    if (opened) dateFrom = opened.slice(0, 10)
+    if (closed) dateTo = closed.slice(0, 10)
+    else dateTo = new Date().toISOString().slice(0, 10)
+    if (!dateFrom) {
+      setShiftReportExpenses([])
+      return
+    }
+    getToken().then((token) => {
+      if (!token) return
+      const params = new URLSearchParams()
+      params.set('hospitalId', activeHospitalId)
+      params.set('branchId', s.branchId)
+      params.set('dateFrom', dateFrom)
+      params.set('dateTo', dateTo)
+      fetch(`/api/pharmacy/expenses?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.expenses)) setShiftReportExpenses(data.expenses)
+          else setShiftReportExpenses([])
+        })
+        .catch(() => setShiftReportExpenses([]))
+    })
+  }, [viewShiftReportSession, activeHospitalId, getToken])
+
+  const fetchCashSessions = useCallback(async () => {
+    setCashSessionsLoading(true)
+    try {
+      const token = await getToken()
+      if (!token) return null
+      const params = new URLSearchParams()
+      if (activeHospitalId) params.set('hospitalId', activeHospitalId)
+      if (branchFilter && branchFilter !== 'all') params.set('branchId', branchFilter)
+      const res = await fetch(`/api/pharmacy/cash-session?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) {
+        console.warn('Failed to load cash sessions', { status: res.status, body: data })
+        setActiveCashSession(null)
+        return null
+      }
+      setActiveCashSession(data.activeSession ?? null)
+      setRecentCashSessions(data.recentSessions ?? [])
+      return data.activeSession ?? null
+    } catch (e) {
+      console.error(e)
+      return null
+    } finally {
+      setCashSessionsLoading(false)
+    }
+  }, [getToken, activeHospitalId, branchFilter])
+
+  const fetchExpensesAndCategories = useCallback(async () => {
+    if (!activeHospitalId) return
+    try {
+      const token = await getToken()
+      if (!token) return
+      const params = new URLSearchParams()
+      params.set('hospitalId', activeHospitalId)
+      if (branchFilter && branchFilter !== 'all') params.set('branchId', branchFilter)
+      if (expenseFilters.dateFrom) params.set('dateFrom', expenseFilters.dateFrom)
+      if (expenseFilters.dateTo) params.set('dateTo', expenseFilters.dateTo)
+      if (expenseFilters.categoryId !== 'all') params.set('categoryId', expenseFilters.categoryId)
+      if (expenseFilters.paymentMethod !== 'all') params.set('paymentMethod', expenseFilters.paymentMethod)
+
+      const [catRes, expRes] = await Promise.all([
+        fetch(`/api/pharmacy/expenses/categories?hospitalId=${activeHospitalId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`/api/pharmacy/expenses?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ])
+      const catData = await catRes.json().catch(() => ({}))
+      const expData = await expRes.json().catch(() => ({}))
+      if (catRes.ok && catData.success && Array.isArray(catData.categories)) {
+        setExpenseCategories(catData.categories)
+      }
+      if (expRes.ok && expData.success && Array.isArray(expData.expenses)) {
+        setExpenses(expData.expenses)
+      }
+    } catch (e) {
+      // ignore for now; page will show empty state
+    }
+  }, [activeHospitalId, branchFilter, expenseFilters, getToken])
 
   const fetchBranches = useCallback(async () => {
     if (!activeHospitalId) return
@@ -3913,6 +4523,42 @@ export default function PharmacyManagement() {
     }
   }, [activeHospitalId, isSuperAdmin, isAdmin, getToken])
 
+  const submitReturn = useCallback(
+    async (mode: 'cash' | 'upi' | 'card' | 'other', notes?: Record<string, number>) => {
+      if (!pendingReturnPayload) return
+      setReturnSubmitting(true)
+      setError(null)
+      try {
+        const token = await getToken()
+        if (!token) throw new Error('Not authenticated')
+        const res = await fetch('/api/pharmacy/sales/return', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            saleId: pendingReturnPayload.saleId,
+            lines: pendingReturnPayload.lines,
+            refundPaymentMode: mode,
+            ...(mode === 'cash' && notes && Object.keys(notes).length > 0 && { refundNotes: notes }),
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.success) throw new Error(data.error || 'Sales return failed')
+        setSuccess('Sales return recorded and stock updated.')
+        setReturnQuantities({})
+        setSelectedReturnSale(null)
+        setPendingReturnPayload(null)
+        setShowRefundPaymentModal(false)
+        setShowRefundCashModal(false)
+        await fetchPharmacy(true)
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Sales return failed')
+      } finally {
+        setReturnSubmitting(false)
+      }
+    },
+    [pendingReturnPayload, getToken, fetchPharmacy]
+  )
+
   const hasLoadedOnceRef = useRef(false)
   useEffect(() => {
     fetchBranches()
@@ -3922,7 +4568,11 @@ export default function PharmacyManagement() {
     const isInitial = !hasLoadedOnceRef.current
     if (isInitial) hasLoadedOnceRef.current = true
     fetchPharmacy(isInitial ? false : true)
-  }, [fetchPharmacy, branchFilter])
+    fetchCashSessions()
+    if (subTab === 'cash_and_expenses') {
+      fetchExpensesAndCategories()
+    }
+  }, [fetchPharmacy, fetchCashSessions, fetchExpensesAndCategories, branchFilter, subTab])
 
   type RecordPeriod = 'weekly' | 'monthly' | 'six_months' | 'year' | 'all'
   const [recordPeriod, setRecordPeriod] = useState<RecordPeriod>('monthly')
@@ -4017,6 +4667,50 @@ export default function PharmacyManagement() {
     }, 0)
   }, [overviewDateRange, branchFilter, sales])
 
+  /** Period refund total for selected range (sum of refundedAmount on matching sales) */
+  const periodRefundTotal = useMemo(() => {
+    const now = Date.now()
+    const dayMs = 24 * 60 * 60 * 1000
+    const cutoffMs: Record<OverviewDateRange, number | null> = {
+      today: dayMs,
+      '7d': 7 * dayMs,
+      '30d': 30 * dayMs,
+      '6m': 180 * dayMs,
+      year: 365 * dayMs,
+      all: null,
+    }
+    const cutoff = cutoffMs[overviewDateRange]
+    const salesFiltered = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    return salesFiltered.reduce((sum, s) => {
+      const d = toDate(s.dispensedAt)
+      if (!d) return sum
+      if (cutoff !== null && now - d.getTime() > cutoff) return sum
+      return sum + (Number(s.refundedAmount) || 0)
+    }, 0)
+  }, [overviewDateRange, branchFilter, sales])
+
+  /** Period sales count (number of bills) for the selected range */
+  const periodSalesCount = useMemo(() => {
+    const now = Date.now()
+    const dayMs = 24 * 60 * 60 * 1000
+    const cutoffMs: Record<OverviewDateRange, number | null> = {
+      today: dayMs,
+      '7d': 7 * dayMs,
+      '30d': 30 * dayMs,
+      '6m': 180 * dayMs,
+      year: 365 * dayMs,
+      all: null,
+    }
+    const cutoff = cutoffMs[overviewDateRange]
+    const salesFiltered = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    return salesFiltered.filter((s) => {
+      const d = toDate(s.dispensedAt)
+      if (!d) return false
+      if (cutoff !== null && now - d.getTime() > cutoff) return false
+      return true
+    }).length
+  }, [overviewDateRange, branchFilter, sales])
+
   /** Sales trend for line chart: daily for 7d/30d, monthly for 6m/year/all */
   const salesTrendData = useMemo(() => {
     const now = new Date()
@@ -4097,26 +4791,295 @@ export default function PharmacyManagement() {
     return categoryDistribution.map((c) => ({ ...c, pct: (c.count / total) * 100 }))
   }, [categoryDistribution])
 
-  /** Inventory health: In Stock, Low Stock, Out of Stock, Expiring Soon */
+  /** Inventory health: In Stock, Low Stock, Out of Stock, Expiring Soon, Dead Stock */
   const inventoryHealthCounts = useMemo(() => {
     const branchStock = branchFilter === 'all' ? stock : stock.filter((s) => s.branchId === branchFilter)
     let inStock = 0
     let lowStockCount = 0
     let outOfStock = 0
+    let deadStock = 0
+    const deadStockIds: string[] = []
+
+    // Build map of medicineId -> total quantity sold in last 90 days
+    const now = new Date()
+    const cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+    const salesInWindow = sales.filter((sale) => {
+      const dRaw = sale.dispensedAt
+      if (!dRaw) return false
+      const d = typeof dRaw === 'string' ? new Date(dRaw) : (dRaw as any)?.toDate?.() ?? null
+      if (!d) return false
+      return d >= cutoff && d <= now
+    })
+    const soldMap = new Map<string, number>()
+    salesInWindow.forEach((sale) => {
+      const lines = sale.lines || []
+      lines.forEach((l) => {
+        const id = l.medicineId || l.medicineName || ''
+        if (!id) return
+        const qty = Number(l.quantity) || 0
+        if (qty <= 0) return
+        soldMap.set(id, (soldMap.get(id) || 0) + qty)
+      })
+    })
+
+    // Determine threshold for "dead stock" – lowest 20% of sold quantities (excluding zero)
+    const soldValues = Array.from(soldMap.values()).filter((v) => v > 0).sort((a, b) => a - b)
+    const threshold = soldValues.length > 0 ? soldValues[Math.floor(soldValues.length * 0.2)] || soldValues[0] : 0
+
     branchStock.forEach((s) => {
       const med = medicines.find((m) => (m.medicineId ?? m.id) === s.medicineId)
       const min = med?.minStockLevel ?? 0
-      if (s.totalQuantity <= 0) outOfStock += 1
-      else if (s.totalQuantity < min) lowStockCount += 1
-      else inStock += 1
+      const qty = s.totalQuantity ?? 0
+      const soldQty = soldMap.get(s.medicineId || s.medicineName || '') || 0
+
+      if (qty <= 0) {
+        outOfStock += 1
+      } else if (min > 0 && qty < min) {
+        lowStockCount += 1
+      } else {
+        inStock += 1
+        if (threshold > 0 && soldQty > 0 && soldQty <= threshold) {
+          deadStock += 1
+          if (s.medicineId) deadStockIds.push(s.medicineId)
+        }
+      }
     })
+
+    const expiringCount = branchFilter === 'all'
+      ? expiring.length
+      : expiring.filter((e) => e.branchId === branchFilter).length
+
     return {
       inStock,
       lowStock: lowStockCount,
       outOfStock,
-      expiringSoon: expiring.length,
+      expiringSoon: expiringCount,
+      deadStock,
+      deadStockIds,
     }
-  }, [stock, medicines, branchFilter, expiring.length])
+  }, [stock, medicines, branchFilter, expiring, sales])
+
+  const inventoryHealthItems = useMemo(() => {
+    if (inventoryHealthFilter === 'all') return []
+    const branchStock = branchFilter === 'all' ? stock : stock.filter((s) => s.branchId === branchFilter)
+    const deadIds = new Set<string>(inventoryHealthCounts.deadStockIds || [])
+
+    return branchStock
+      .map((s) => {
+        const med = medicines.find((m) => (m.medicineId ?? m.id) === s.medicineId)
+        const min = med?.minStockLevel ?? 0
+        const qty = s.totalQuantity ?? 0
+        const branchName = branches.find((b) => b.id === s.branchId)?.name ?? s.branchId
+        const nearestExpiry = getNearestExpiry(s)
+        const daysLeft = nearestExpiry ? daysUntilExpiryForBatch(nearestExpiry) : null
+        const hasExpiring = expiring.some((e) => e.medicineId === s.medicineId && e.branchId === s.branchId)
+
+        let category: 'in_stock' | 'low_stock' | 'out_of_stock' | 'expiring_soon' | 'dead_stock' = 'in_stock'
+        if (qty <= 0) category = 'out_of_stock'
+        else if (min > 0 && qty < min) category = 'low_stock'
+        else if (hasExpiring) category = 'expiring_soon'
+        else if (deadIds.has(s.medicineId)) category = 'dead_stock'
+
+        return {
+          id: s.id,
+          medicineName: s.medicineName || med?.name || s.medicineId,
+          branchName,
+          qty,
+          minLevel: min,
+          nearestExpiry,
+          daysLeft,
+          category,
+        }
+      })
+      .filter((row) => row.category === inventoryHealthFilter)
+  }, [inventoryHealthFilter, stock, medicines, branches, branchFilter, expiring, inventoryHealthCounts.deadStockIds])
+
+  // Auto-scroll sales detail into view when selection changes
+  useEffect(() => {
+    if (!selectedSaleDetail) return
+    if (!saleDetailRef.current) return
+    // Small timeout to ensure layout has rendered before scrolling
+    const id = window.setTimeout(() => {
+      saleDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+    return () => window.clearTimeout(id)
+  }, [selectedSaleDetail])
+
+  // Filtered sales for search + branch
+  const filteredSales = useMemo(() => {
+    const base = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    const term = salesSearch.trim().toLowerCase()
+    return base.filter((s) => {
+      // Date filter (single specific date)
+      if (salesDate) {
+        const raw = s.dispensedAt
+        const d =
+          typeof raw === 'string'
+            ? new Date(raw)
+            : (raw as { toDate?: () => Date })?.toDate?.() ?? null
+        if (!d) return false
+        const selected = new Date(salesDate)
+        d.setHours(0, 0, 0, 0)
+        selected.setHours(0, 0, 0, 0)
+        if (d.getTime() !== selected.getTime()) return false
+      }
+      // Payment mode filter
+      if (salesPaymentFilter !== 'all') {
+        const mode = (s.paymentMode || 'unknown').toString()
+        if (mode !== salesPaymentFilter) return false
+      }
+      // Amount range filter – use net if available
+      if (salesMinAmount || salesMaxAmount) {
+        const amt = Number(s.netAmount ?? s.totalAmount ?? 0)
+        if (salesMinAmount && amt < Number(salesMinAmount)) return false
+        if (salesMaxAmount && amt > Number(salesMaxAmount)) return false
+      }
+      if (!term) return true
+      const invoice = (s.invoiceNumber || '').toString().toLowerCase()
+      const name = (s.patientName || '').toLowerCase()
+      const phone = (s.customerPhone || '').toLowerCase()
+      const meds = (s.lines || []).map((l) => l.medicineName).join(' ').toLowerCase()
+      return invoice.includes(term) || name.includes(term) || phone.includes(term) || meds.includes(term)
+    })
+  }, [sales, branchFilter, salesSearch, salesDate, salesPaymentFilter, salesMinAmount, salesMaxAmount])
+
+  const {
+    currentPage: salesPage,
+    pageSize: salesPageSize,
+    totalPages: salesTotalPages,
+    paginatedItems: paginatedSales,
+    goToPage: goToSalesPage,
+    setPageSize: setSalesPageSize,
+  } = useTablePagination(filteredSales, { initialPageSize: 10 })
+
+  // Daily income & expense for Cash & Expenses tab (today only)
+  const dailySummary = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const baseSales = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    const todaySalesTotal = baseSales.reduce((sum, s) => {
+      const raw = s.dispensedAt
+      const d =
+        typeof raw === 'string'
+          ? new Date(raw)
+          : (raw as { toDate?: () => Date })?.toDate?.() ?? null
+      if (!d) return sum
+      const saleDateStr = d.toISOString().slice(0, 10)
+      if (saleDateStr !== todayStr) return sum
+      return sum + Number(s.netAmount ?? s.totalAmount ?? 0)
+    }, 0)
+    const todayExpenseTotal = expenses.reduce((sum, e) => {
+      const dateStr = typeof e.date === 'string' ? e.date.slice(0, 10) : (e.date as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''
+      if (dateStr !== todayStr) return sum
+      return sum + Number(e.amount ?? 0)
+    }, 0)
+    return { todayStr, todaySalesTotal, todayExpenseTotal, net: todaySalesTotal - todayExpenseTotal }
+  }, [sales, expenses, branchFilter])
+
+  // Filtered sales for returns tab (can share logic, separate search term)
+  const filteredReturnSales = useMemo(() => {
+    const base = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    const term = returnsSearch.trim().toLowerCase()
+    return base.filter((s) => {
+      // Date filter (single specific date)
+      if (returnsDate) {
+        const raw = s.dispensedAt
+        const d =
+          typeof raw === 'string'
+            ? new Date(raw)
+            : (raw as { toDate?: () => Date })?.toDate?.() ?? null
+        if (!d) return false
+        const selected = new Date(returnsDate)
+        d.setHours(0, 0, 0, 0)
+        selected.setHours(0, 0, 0, 0)
+        if (d.getTime() !== selected.getTime()) return false
+      }
+      // Payment mode filter
+      if (returnsPaymentFilter !== 'all') {
+        const mode = (s.paymentMode || 'unknown').toString()
+        if (mode !== returnsPaymentFilter) return false
+      }
+      // Amount range filter – use net if available
+      if (returnsMinAmount || returnsMaxAmount) {
+        const amt = Number(s.netAmount ?? s.totalAmount ?? 0)
+        if (returnsMinAmount && amt < Number(returnsMinAmount)) return false
+        if (returnsMaxAmount && amt > Number(returnsMaxAmount)) return false
+      }
+      if (!term) return true
+      const invoice = (s.invoiceNumber || '').toString().toLowerCase()
+      const name = (s.patientName || '').toLowerCase()
+      const phone = (s.customerPhone || '').toLowerCase()
+      const meds = (s.lines || []).map((l) => l.medicineName).join(' ').toLowerCase()
+      return invoice.includes(term) || name.includes(term) || phone.includes(term) || meds.includes(term)
+    })
+  }, [sales, branchFilter, returnsSearch, returnsDate, returnsPaymentFilter, returnsMinAmount, returnsMaxAmount])
+
+  const totalRefundForFilteredSales = useMemo(
+    () => filteredReturnSales.reduce((sum, s) => sum + (Number(s.refundedAmount) || 0), 0),
+    [filteredReturnSales],
+  )
+
+  const returnEvents = useMemo(() => {
+    const base = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    const events: Array<{
+      id: string
+      saleId: string
+      invoice: string
+      patientName: string
+      phone: string
+      createdAt: Date | null
+      amount: number
+      paymentMode: string | null
+      lines: Array<{
+        medicineId: string
+        medicineName: string
+        quantity: number
+        unitPrice: number
+      }>
+    }> = []
+    base.forEach((s) => {
+      if (!s.returns || s.returns.length === 0) return
+      const saleLineMap = new Map<string, { medicineName: string; unitPrice: number }>()
+      ;(s.lines || []).forEach((l) => saleLineMap.set(l.medicineId, { medicineName: l.medicineName, unitPrice: l.unitPrice }))
+      s.returns.forEach((r) => {
+        const createdAt = toDate(r.createdAt)
+        events.push({
+          id: r.id,
+          saleId: s.id,
+          invoice: s.invoiceNumber || s.id,
+          patientName: s.patientName || 'Walk-in',
+          phone: s.customerPhone || '',
+          createdAt,
+          amount: Number(r.amount) || 0,
+          paymentMode: (s.paymentMode as string) || null,
+          lines: (r.lines || []).map((rl) => {
+            const baseLine = saleLineMap.get(rl.medicineId)
+            return {
+              medicineId: rl.medicineId,
+              medicineName: baseLine?.medicineName || '',
+              quantity: rl.quantity,
+              unitPrice: baseLine?.unitPrice ?? 0,
+            }
+          }),
+        })
+      })
+    })
+    events.sort((a, b) => {
+      if (!a.createdAt && !b.createdAt) return 0
+      if (!a.createdAt) return 1
+      if (!b.createdAt) return -1
+      return b.createdAt.getTime() - a.createdAt.getTime()
+    })
+    return events
+  }, [sales, branchFilter])
+
+  const {
+    currentPage: returnsPage,
+    pageSize: returnsPageSize,
+    totalPages: returnsTotalPages,
+    paginatedItems: paginatedReturnSales,
+    goToPage: goToReturnsPage,
+    setPageSize: setReturnsPageSize,
+  } = useTablePagination(filteredReturnSales, { initialPageSize: 10 })
 
   /** Purchase order status counts */
   const poStatusCounts = useMemo(() => {
@@ -4126,6 +5089,73 @@ export default function PharmacyManagement() {
     const cancelled = list.filter((o) => (o.status ?? '').toLowerCase() === 'cancelled').length
     return { pending, received, cancelled }
   }, [branchFilter, purchaseOrders])
+
+  const ordersForTable = useMemo(
+    () => (branchFilter === 'all' ? purchaseOrders : purchaseOrders.filter((o) => o.branchId === branchFilter)),
+    [purchaseOrders, branchFilter],
+  )
+
+  const {
+    currentPage: ordersPage,
+    pageSize: ordersPageSize,
+    totalPages: ordersTotalPages,
+    paginatedItems: paginatedOrders,
+    goToPage: goToOrdersPage,
+    setPageSize: setOrdersPageSize,
+  } = useTablePagination(ordersForTable, { initialPageSize: 10 })
+
+  const filteredSuppliers = useMemo(() => {
+    const q = supplierSearchQuery.trim().toLowerCase()
+    let filtered = q
+      ? suppliers.filter(
+          (s) =>
+            s.name?.toLowerCase().includes(q) ||
+            s.contactPerson?.toLowerCase().includes(q) ||
+            s.email?.toLowerCase().includes(q) ||
+            s.phone?.includes(q),
+        )
+      : suppliers
+    if (isPharmacyPortal && headerSearchQuery.trim()) {
+      const hq = headerSearchQuery.trim().toLowerCase()
+      filtered = filtered.filter(
+        (s) =>
+          s.name?.toLowerCase().includes(hq) ||
+          s.contactPerson?.toLowerCase().includes(hq) ||
+          s.email?.toLowerCase().includes(hq) ||
+          s.phone?.includes(hq),
+      )
+    }
+    return filtered
+  }, [suppliers, supplierSearchQuery, isPharmacyPortal, headerSearchQuery])
+
+  const {
+    currentPage: supplierPage,
+    pageSize: supplierPageSize,
+    totalPages: supplierTotalPages,
+    paginatedItems: paginatedSuppliers,
+    goToPage: goToSupplierPage,
+    setPageSize: setSupplierPageSize,
+  } = useTablePagination(filteredSuppliers, { initialPageSize: 10 })
+
+  // simple keyframes for row expand animation (fade + slight slide)
+  const expandStyle = `
+    @keyframes fadeExpand {
+      0% { opacity: 0; transform: translateY(-4px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+  `
+
+  const paymentModeSummary = useMemo(() => {
+    const base = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    const summary: Record<string, { count: number; amount: number }> = {}
+    base.forEach((s) => {
+      const mode = (s.paymentMode || 'unknown') as string
+      if (!summary[mode]) summary[mode] = { count: 0, amount: 0 }
+      summary[mode].count += 1
+      summary[mode].amount += Number(s.totalAmount) || 0
+    })
+    return summary
+  }, [sales, branchFilter])
 
   /** Top selling medicines (top 8) for bar chart */
   const topSellingMedicines = useMemo(() => {
@@ -4146,9 +5176,10 @@ export default function PharmacyManagement() {
     }).slice(0, 10)
   }, [branchFilter, sales, overviewRecentSalesSearch])
 
-  type ReportType = 'expiry' | 'valuation' | 'sales' | 'over_under' | 'reorder'
+  type ReportType = 'expiry' | 'valuation' | 'sales' | 'over_under' | 'reorder' | 'stock_sold'
   const [reportType, setReportType] = useState<ReportType>('expiry')
   const [expiryReportDays, setExpiryReportDays] = useState<30 | 60 | 90>(30)
+  const [stockSoldReportPeriod, setStockSoldReportPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day')
   const reportPrintRef = useRef<HTMLDivElement>(null)
 
   const daysUntilExpiry = (expiryStr: string) => {
@@ -4309,7 +5340,39 @@ export default function PharmacyManagement() {
     return rows
   }, [stock, medicines, sales, branchFilter, branches, toDate])
 
-  const isViewOnly = branchFilter === 'all'
+  const stockSoldReportData = useMemo(() => {
+    const now = Date.now()
+    const oneDayMs = 24 * 60 * 60 * 1000
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const startOfTodayMs = startOfToday.getTime()
+    let periodStartMs = startOfTodayMs
+    if (stockSoldReportPeriod === 'day') periodStartMs = startOfTodayMs
+    else if (stockSoldReportPeriod === 'week') periodStartMs = now - 7 * oneDayMs
+    else if (stockSoldReportPeriod === 'month') periodStartMs = now - 30 * oneDayMs
+    else if (stockSoldReportPeriod === 'year') periodStartMs = now - 365 * oneDayMs
+
+    const salesFiltered = (branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter))
+      .filter((s) => {
+        const d = toDate(s.dispensedAt)
+        return d && d.getTime() >= periodStartMs
+      })
+    const soldAmount = salesFiltered.reduce((sum, s) => sum + (Number(s.netAmount ?? s.totalAmount) ?? 0), 0)
+    const soldCount = salesFiltered.length
+
+    const st = branchFilter === 'all' ? stock : stock.filter((s) => s.branchId === branchFilter)
+    let totalStockValue = 0
+    st.forEach((s) => {
+      const med = medicines.find((m) => (m.medicineId ?? m.id) === s.medicineId)
+      const selling = Number(med?.sellingPrice) ?? 0
+      const qty = Number(s.totalQuantity) ?? 0
+      totalStockValue += selling * qty
+    })
+
+    return { totalStockValue, soldAmount, soldCount }
+  }, [stock, medicines, sales, branchFilter, stockSoldReportPeriod, toDate])
+
+  const isViewOnly = false
   const selectedBranchName = branchFilter !== 'all' ? branches.find((b) => b.id === branchFilter)?.name : undefined
 
   const filteredStock = branchFilter === 'all' ? stock : stock.filter(s => s.branchId === branchFilter)
@@ -4338,14 +5401,15 @@ export default function PharmacyManagement() {
     const med = medicines.find((m) => (m.medicineId ?? m.id) === s.medicineId)
     return med?.supplierId === inventorySupplierFilter
   })
-  const daysUntilExpiryForBatch = (expiryStr: string) => {
+  function daysUntilExpiryForBatch(expiryStr: string) {
     const exp = new Date(expiryStr.slice(0, 10))
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     exp.setHours(0, 0, 0, 0)
     return Math.ceil((exp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
   }
-  const getNearestExpiry = (s: BranchMedicineStock) => {
+
+  function getNearestExpiry(s: BranchMedicineStock) {
     const batches = Array.isArray(s.batches) ? s.batches : []
     let nearest: string | null = null
     batches.forEach((b: { expiryDate?: string }) => {
@@ -4363,6 +5427,15 @@ export default function PharmacyManagement() {
     if (inventoryExpiryFilter === 'expired') return days < 0
     return true
   })
+
+  const {
+    currentPage: inventoryPage,
+    pageSize: inventoryPageSize,
+    totalPages: inventoryTotalPages,
+    paginatedItems: paginatedInventoryRows,
+    goToPage: goToInventoryPage,
+    setPageSize: setInventoryPageSize,
+  } = useTablePagination(inventoryTableRows, { initialPageSize: 20 })
 
   /** Inventory page: summary metrics (based on branch-filtered stock only) */
   const inventorySummary = useMemo(() => {
@@ -4438,17 +5511,50 @@ export default function PharmacyManagement() {
         {!isPharmacyPortal && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/50 px-6 py-3">
             <span className="text-sm text-slate-600">Pharmacy management</span>
-            <Link href="/pharmacy" className="inline-flex items-center gap-1.5 rounded-lg bg-[#1565C0] px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-[#0D47A1]">Open Pharmacy Portal</Link>
-          </div>
-        )}
-        {isViewOnly && (
-          <div className="rounded-none border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <strong>View only.</strong> Select a specific branch from the {isPharmacyPortal ? 'header' : 'dropdown below'} to perform operations.
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPharmacistForm({ firstName: '', lastName: '', email: '', password: '', branchId: '' })
+                    setShowAddPharmacistModal(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create Pharmacist
+                </button>
+              )}
+              <Link
+                href="/pharmacy"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1565C0] px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-[#0D47A1]"
+              >
+                Open Pharmacy Portal
+              </Link>
+            </div>
           </div>
         )}
         {!isPharmacyPortal && (
           <div className="border-b border-slate-200 px-6 pt-6">
-            <SubTabNavigation variant="default" tabs={[{ id: 'overview', label: 'Overview' }, { id: 'inventory', label: 'Inventory' }, { id: 'queue', label: 'Prescription Queue' }, { id: 'sales', label: 'Sales record' }, ...(isSuperAdmin ? [{ id: 'transfers' as const, label: 'Transfers' }] : []), { id: 'reports', label: 'Reports' }, ...(isAdmin ? [{ id: 'users' as const, label: 'Pharmacy Users' }] : []), { id: 'suppliers', label: 'Suppliers' }]} activeTab={subTab} onTabChange={(id) => setSubTab(id as PharmacySubTab)} />
+            <SubTabNavigation
+              variant="default"
+              tabs={[
+                { id: 'queue', label: 'Dispense & Billing' },     // 1
+                { id: 'returns', label: 'Sales returns' },        // 2
+                { id: 'sales', label: 'Sales records' },          // 3
+                { id: 'inventory', label: 'Inventory' },          // 4
+                { id: 'orders', label: 'Orders' },                // 5
+                ...(isSuperAdmin ? [{ id: 'transfers' as const, label: 'Transfers' }] : []),
+                { id: 'reports', label: 'Reports' },              // 6
+                { id: 'suppliers', label: 'Suppliers' },          // 7
+                ...(isAdmin ? [{ id: 'users' as const, label: 'Pharmacy Users' }] : []),
+                { id: 'overview', label: 'Overview' },            // 8
+              ]}
+              activeTab={subTab}
+              onTabChange={(id) => setSubTab(id as PharmacySubTab)}
+            />
           </div>
         )}
         <div className={isPharmacyPortal ? '' : 'p-6'}>
@@ -4547,6 +5653,22 @@ export default function PharmacyManagement() {
               <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition hover:shadow-md">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-500">Sales Returns</p>
+                    <p className="mt-2 text-2xl font-bold text-rose-600">
+                      ₹{periodRefundTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                    </p>
+                    <p className="mt-1 text-xs text-rose-500">Refunded to patients in this period</p>
+                  </div>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition hover:shadow-md">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-500">Expiring Soon</p>
                     <p className="mt-2 text-2xl font-bold text-slate-900">{analytics?.expiringCount ?? expiring.length}</p>
                     <p className="mt-1 text-xs text-rose-600">Within 30 days</p>
@@ -4591,6 +5713,52 @@ export default function PharmacyManagement() {
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* Payment mode breakdown */}
+            <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-800 mb-3">Payments by mode</h3>
+              <p className="text-xs text-slate-500 mb-3">
+                Number of bills and total amount collected by each payment method{branchFilter !== 'all' && ' for this branch'}.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs sm:text-sm">
+                  <thead className="bg-slate-50 border-b border-[#E5E7EB]">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-slate-700">Payment mode</th>
+                      <th className="text-right px-3 py-2 font-medium text-slate-700">Bills</th>
+                      <th className="text-right px-3 py-2 font-medium text-slate-700">Total amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {['cash', 'upi', 'card', 'credit', 'other', 'unknown'].map((mode) => {
+                      const row = paymentModeSummary[mode]
+                      if (!row) return null
+                      const label =
+                        mode === 'cash'
+                          ? 'Cash'
+                          : mode === 'upi'
+                          ? 'UPI'
+                          : mode === 'card'
+                          ? 'Card'
+                          : mode === 'credit'
+                          ? 'Credit'
+                          : mode === 'other'
+                          ? 'Other / Insurance'
+                          : 'Not set'
+                      return (
+                        <tr key={mode} className="border-b border-[#E5E7EB] last:border-0">
+                          <td className="px-3 py-2 text-slate-800">{label}</td>
+                          <td className="px-3 py-2 text-right text-slate-700">{row.count}</td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-900">
+                            ₹{row.amount.toFixed(2)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -4702,14 +5870,136 @@ export default function PharmacyManagement() {
 
             {/* Inventory Health Status */}
             <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">Inventory Health Status</h3>
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <h3 className="text-lg font-semibold text-slate-800">Inventory Health Status</h3>
+                {inventoryHealthFilter !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setInventoryHealthFilter('all')}
+                    className="text-xs font-medium text-slate-600 hover:text-slate-900 underline"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
               <div className="flex flex-wrap gap-4">
-                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 border border-emerald-200">In Stock <span className="font-bold">{inventoryHealthCounts.inStock}</span></span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 border border-amber-200">Low Stock <span className="font-bold">{inventoryHealthCounts.lowStock}</span></span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-medium text-red-700 border border-red-200">Out of Stock <span className="font-bold">{inventoryHealthCounts.outOfStock}</span></span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 border border-rose-200">Expiring Soon <span className="font-bold">{inventoryHealthCounts.expiringSoon}</span></span>
+                <button
+                  type="button"
+                  onClick={() => setInventoryHealthFilter('in_stock')}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${
+                    inventoryHealthFilter === 'in_stock'
+                      ? 'bg-emerald-600 text-white border-emerald-700'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  <span>In Stock</span>
+                  <span className="font-bold">{inventoryHealthCounts.inStock}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInventoryHealthFilter('low_stock')}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${
+                    inventoryHealthFilter === 'low_stock'
+                      ? 'bg-amber-600 text-white border-amber-700'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  <span>Low Stock</span>
+                  <span className="font-bold">{inventoryHealthCounts.lowStock}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInventoryHealthFilter('out_of_stock')}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${
+                    inventoryHealthFilter === 'out_of_stock'
+                      ? 'bg-red-600 text-white border-red-700'
+                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  }`}
+                >
+                  <span>Out of Stock</span>
+                  <span className="font-bold">{inventoryHealthCounts.outOfStock}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInventoryHealthFilter('expiring_soon')}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${
+                    inventoryHealthFilter === 'expiring_soon'
+                      ? 'bg-rose-600 text-white border-rose-700'
+                      : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                  }`}
+                >
+                  <span>Expiring Soon</span>
+                  <span className="font-bold">{inventoryHealthCounts.expiringSoon}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInventoryHealthFilter('dead_stock')}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${
+                    inventoryHealthFilter === 'dead_stock'
+                      ? 'bg-slate-800 text-white border-slate-900'
+                      : 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>Dead Stock (last 3 months)</span>
+                  <span className="font-bold">{inventoryHealthCounts.deadStock}</span>
+                </button>
               </div>
             </div>
+
+            {inventoryHealthFilter !== 'all' && (
+              <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-slate-800">
+                    {inventoryHealthFilter === 'low_stock'
+                      ? 'Low stock medicines'
+                      : inventoryHealthFilter === 'out_of_stock'
+                      ? 'Out of stock medicines'
+                      : inventoryHealthFilter === 'expiring_soon'
+                      ? 'Expiring soon medicines'
+                      : inventoryHealthFilter === 'dead_stock'
+                      ? 'Dead stock medicines (last 3 months)'
+                      : 'In stock medicines'}
+                  </h4>
+                  <span className="text-xs text-slate-500">
+                    {inventoryHealthItems.length} item{inventoryHealthItems.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {inventoryHealthItems.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-4">
+                    No medicines found for this category with the current branch filter.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs sm:text-sm">
+                      <thead className="bg-slate-50 border-b border-[#E5E7EB]">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-slate-700">Medicine</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-700">Branch</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-700">Qty</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-700">Min Level</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-700">Nearest Expiry</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-700">Days Left</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryHealthItems.slice(0, 50).map((row) => (
+                          <tr key={row.id} className="border-t border-[#E5E7EB] hover:bg-slate-50/60 transition">
+                            <td className="px-3 py-2 font-medium text-slate-900">{row.medicineName}</td>
+                            <td className="px-3 py-2 text-slate-600">{row.branchName}</td>
+                            <td className="px-3 py-2 text-right font-medium text-slate-900">{row.qty}</td>
+                            <td className="px-3 py-2 text-right text-slate-700">{row.minLevel || '—'}</td>
+                            <td className="px-3 py-2 text-slate-600">{row.nearestExpiry || '—'}</td>
+                            <td className="px-3 py-2 text-right text-slate-700">
+                              {row.daysLeft != null ? `${row.daysLeft}d` : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Expiring Medicines table + Recent Sales + Purchase Orders */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -4730,7 +6020,7 @@ export default function PharmacyManagement() {
                     </thead>
                     <tbody>
                       {expiring.length === 0 ? (
-                        <tr><td colSpan={5} className="p-6 text-center text-slate-500">No medicines expiring in the next 30 days.</td></tr>
+                        <tr><td colSpan={5} className="p-6 text-center text-slate-500">No medicines expiring in the next 90 days.</td></tr>
                       ) : (
                         expiring.slice(0, 8).map((a, i) => {
                           const urgent = a.daysUntilExpiry <= 7
@@ -5025,15 +6315,15 @@ export default function PharmacyManagement() {
                           <th className="text-left p-4 font-medium text-slate-700">Branch</th>
                           <th className="text-right p-4 font-medium text-slate-700">Quantity</th>
                           <th className="text-right p-4 font-medium text-slate-700">Min Level</th>
+                          <th className="text-right p-4 font-medium text-slate-700">Price (₹)</th>
                           <th className="text-left p-4 font-medium text-slate-700">Stock Status</th>
                           <th className="text-center p-4 font-medium text-slate-700">Batch Count</th>
                           <th className="text-left p-4 font-medium text-slate-700">Nearest Expiry</th>
-                          <th className="text-left p-4 font-medium text-slate-700">Supplier</th>
                           <th className="text-right p-4 font-medium text-slate-700">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {inventoryTableRows.map((s) => {
+                        {paginatedInventoryRows.map((s) => {
                           const med = medicines.find((m) => (m.medicineId ?? m.id) === s.medicineId)
                           const minLevel = med?.minStockLevel ?? 0
                           const belowMin = minLevel > 0 && (s.totalQuantity ?? 0) < minLevel
@@ -5051,12 +6341,14 @@ export default function PharmacyManagement() {
                               <td className="p-4 text-slate-600">{branches.find((b) => b.id === s.branchId)?.name ?? s.branchId}</td>
                               <td className="p-4 text-right font-medium text-slate-900">{s.totalQuantity}</td>
                               <td className="p-4 text-right text-slate-600">{minLevel}</td>
+                              <td className="p-4 text-right font-medium tabular-nums text-slate-900">
+                                {med?.sellingPrice != null && Number(med.sellingPrice) !== 0 ? `₹${Number(med.sellingPrice).toFixed(2)}` : '—'}
+                              </td>
                               <td className="p-4">
                                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}>{statusLabel}</span>
                               </td>
                               <td className="p-4 text-center text-slate-600">{s.batches?.length ?? 0}</td>
                               <td className="p-4 text-slate-600">{nearestExpiry ?? '—'}</td>
-                              <td className="p-4 text-slate-600 max-w-[120px] truncate" title={supplierName}>{supplierName}</td>
                               <td className="p-4 text-right">
                                 <div className="relative inline-block">
                                   <button
@@ -5071,8 +6363,7 @@ export default function PharmacyManagement() {
                                     <>
                                       <div className="fixed inset-0 z-10" onClick={() => setInventoryRowActionsOpen(null)} aria-hidden />
                                       <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-lg">
-                                        <button type="button" onClick={() => { setInventoryRowActionsOpen(null); if (med) setEditMinLevelMedicine(med); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">View Medicine</button>
-                                        <button type="button" onClick={() => { setInventoryRowActionsOpen(null); if (med) setEditMinLevelMedicine(med); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Edit Medicine</button>
+                                        <button type="button" onClick={() => { setInventoryRowActionsOpen(null); setInventoryDetailView({ stock: s, medicine: med ?? null }); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 font-medium">View full details</button>
                                         <button type="button" onClick={() => { setInventoryRowActionsOpen(null); setPendingAddToOrder({ medicineId: s.medicineId, medicineName: s.medicineName, quantity: med?.reorderQuantity ?? 10 }); setSubTab('orders'); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Add Stock</button>
                                         <button type="button" onClick={() => { setInventoryRowActionsOpen(null); setInventoryViewBatchesStock(s); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">View Batches</button>
                                         <button type="button" className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-500 hover:bg-slate-50">Print Barcode</button>
@@ -5097,7 +6388,7 @@ export default function PharmacyManagement() {
 
                 {/* Mobile cards */}
                 <div className="md:hidden space-y-4">
-                  {inventoryTableRows.map((s) => {
+                  {paginatedInventoryRows.map((s) => {
                     const med = medicines.find((m) => (m.medicineId ?? m.id) === s.medicineId)
                     const minLevel = med?.minStockLevel ?? 0
                     const belowMin = minLevel > 0 && (s.totalQuantity ?? 0) < minLevel
@@ -5119,8 +6410,9 @@ export default function PharmacyManagement() {
                           <dt className="text-slate-500">Branch</dt><dd className="text-slate-900">{branches.find((b) => b.id === s.branchId)?.name ?? s.branchId}</dd>
                           <dt className="text-slate-500">Quantity</dt><dd className="text-slate-900 font-medium">{s.totalQuantity}</dd>
                           <dt className="text-slate-500">Min level</dt><dd className="text-slate-900">{minLevel}</dd>
+                          <dt className="text-slate-500">Price</dt><dd className="text-slate-900 font-medium">{med?.sellingPrice != null && Number(med.sellingPrice) !== 0 ? `₹${Number(med.sellingPrice).toFixed(2)}` : '—'}</dd>
                           <dt className="text-slate-500">Nearest expiry</dt><dd className="text-slate-900">{nearestExpiry ?? '—'}</dd>
-                          <dt className="text-slate-500">Supplier</dt><dd className="text-slate-900 truncate" title={supplierName}>{supplierName}</dd>
+                          <dt className="text-slate-500">Supplier name</dt><dd className="text-slate-900 truncate" title={supplierName}>{supplierName}</dd>
                         </dl>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button type="button" onClick={() => setEditMinLevelMedicine(med ?? null)} className="rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Edit</button>
@@ -5134,6 +6426,19 @@ export default function PharmacyManagement() {
                   )}
                 </div>
               </>
+            )}
+
+            {inventoryTableRows.length > 0 && (
+              <Pagination
+                currentPage={inventoryPage}
+                totalPages={inventoryTotalPages}
+                pageSize={inventoryPageSize}
+                totalItems={inventoryTableRows.length}
+                onPageChange={goToInventoryPage}
+                onPageSizeChange={setInventoryPageSize}
+                itemLabel="items"
+                className="mt-3 rounded-xl border border-slate-200"
+              />
             )}
 
             {/* Inventory health donut */}
@@ -5172,6 +6477,104 @@ export default function PharmacyManagement() {
                 </div>
               </div>
             </div>
+
+            {/* Medicine full details modal */}
+            {inventoryDetailView && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setInventoryDetailView(null)}>
+                <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  <div className="border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between shrink-0">
+                    <h3 className="text-lg font-semibold text-slate-800">Medicine details</h3>
+                    <button type="button" onClick={() => setInventoryDetailView(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  <div className="overflow-y-auto p-6 space-y-6">
+                    {(() => {
+                      const { stock, medicine: med } = inventoryDetailView
+                      const supplierName = med?.supplierId ? suppliers.find((sup) => sup.id === med.supplierId)?.name ?? '—' : '—'
+                      const branchName = branches.find((b) => b.id === stock.branchId)?.name ?? stock.branchId
+                      const minLevel = med?.minStockLevel ?? 0
+                      const belowMin = minLevel > 0 && (stock.totalQuantity ?? 0) < minLevel
+                      const outOfStock = (stock.totalQuantity ?? 0) === 0
+                      const statusLabel = outOfStock ? 'Out of Stock' : belowMin ? 'Low Stock' : 'In Stock'
+                      const statusClass = outOfStock ? 'bg-red-100 text-red-800' : belowMin ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                      const nearestExpiry = getNearestExpiry(stock)
+                      return (
+                        <>
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Basic info</h4>
+                            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                              <div><dt className="text-slate-500">Medicine name</dt><dd className="font-medium text-slate-900">{stock.medicineName}</dd></div>
+                              <div><dt className="text-slate-500">Generic name</dt><dd className="text-slate-900">{med?.genericName ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Strength</dt><dd className="text-slate-900">{med?.strength ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Manufacturer</dt><dd className="text-slate-900">{med?.manufacturer ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Category</dt><dd className="text-slate-900">{med?.category ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Unit</dt><dd className="text-slate-900">{med?.unit ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Pack size</dt><dd className="text-slate-900">{med?.packSize ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Schedule</dt><dd className="text-slate-900">{med?.schedule ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Barcode</dt><dd className="text-slate-900 font-mono text-xs">{med?.barcode ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">HSN code</dt><dd className="text-slate-900">{med?.hsnCode ?? '—'}</dd></div>
+                            </dl>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Pricing & reorder</h4>
+                            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                              <div><dt className="text-slate-500">Purchase price</dt><dd className="font-medium text-slate-900">₹{med?.purchasePrice != null ? Number(med.purchasePrice).toFixed(2) : '—'}</dd></div>
+                              <div><dt className="text-slate-500">Selling price</dt><dd className="font-medium text-slate-900">₹{med?.sellingPrice != null ? Number(med.sellingPrice).toFixed(2) : '—'}</dd></div>
+                              <div><dt className="text-slate-500">Min stock level</dt><dd className="text-slate-900">{minLevel}</dd></div>
+                              <div><dt className="text-slate-500">Reorder quantity</dt><dd className="text-slate-900">{med?.reorderQuantity ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Lead time (days)</dt><dd className="text-slate-900">{med?.leadTimeDays ?? '—'}</dd></div>
+                              <div><dt className="text-slate-500">Supplier name</dt><dd className="text-slate-900">{supplierName}</dd></div>
+                            </dl>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Stock at branch</h4>
+                            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                              <div><dt className="text-slate-500">Branch</dt><dd className="text-slate-900">{branchName}</dd></div>
+                              <div><dt className="text-slate-500">Quantity</dt><dd className="font-medium text-slate-900">{stock.totalQuantity}</dd></div>
+                              <div><dt className="text-slate-500">Stock status</dt><dd><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}>{statusLabel}</span></dd></div>
+                              <div><dt className="text-slate-500">Batch count</dt><dd className="text-slate-900">{stock.batches?.length ?? 0}</dd></div>
+                              <div><dt className="text-slate-500">Nearest expiry</dt><dd className="text-slate-900">{nearestExpiry ?? '—'}</dd></div>
+                            </dl>
+                          </div>
+                          {(Array.isArray(stock.batches) && stock.batches.length > 0) && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Batches</h4>
+                              <div className="rounded-lg border border-[#E5E7EB] overflow-hidden">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-slate-50 border-b border-[#E5E7EB]">
+                                    <tr>
+                                      <th className="text-left py-2 px-3 font-medium text-slate-700">Batch</th>
+                                      <th className="text-right py-2 px-3 font-medium text-slate-700">Qty</th>
+                                      <th className="text-left py-2 px-3 font-medium text-slate-700">Expiry</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {stock.batches.slice(0, 10).map((b: MedicineBatch, i: number) => (
+                                      <tr key={i} className="border-b border-[#E5E7EB] last:border-0">
+                                        <td className="py-2 px-3 font-medium text-slate-900">{b.batchNumber ?? '—'}</td>
+                                        <td className="py-2 px-3 text-right text-slate-700">{b.quantity ?? 0}</td>
+                                        <td className="py-2 px-3 text-slate-600">{(b.expiryDate ?? '').slice(0, 10) || '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {stock.batches.length > 10 && <p className="text-xs text-slate-500 px-3 py-2 bg-slate-50">+{stock.batches.length - 10} more. Use View Batches for full list.</p>}
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2 pt-2 border-t border-[#E5E7EB]">
+                            <button type="button" onClick={() => { setInventoryDetailView(null); if (med) setEditMinLevelMedicine(med); }} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">Edit medicine</button>
+                            <button type="button" onClick={() => { setInventoryDetailView(null); setInventoryViewBatchesStock(stock); }} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">View batches</button>
+                            <button type="button" onClick={() => { setInventoryDetailView(null); setPendingAddToOrder({ medicineId: stock.medicineId, medicineName: stock.medicineName, quantity: med?.reorderQuantity ?? 10 }); setSubTab('orders'); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Add stock</button>
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Batch detail modal */}
             {inventoryViewBatchesStock && (
@@ -5217,6 +6620,12 @@ export default function PharmacyManagement() {
 
         {subTab === 'queue' && (
           <div className="space-y-4">
+            {!cashSessionsLoading && !activeCashSession && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-2">
+                <span className="font-medium">Start a cash session to complete sales and returns.</span>
+                <span>Go to <strong>Cash & expenses</strong> and click <strong>Start shift</strong>.</span>
+              </div>
+            )}
             {/* Inner tabs for queue: Walk-in vs Prescription list */}
             <div className="inline-flex rounded-full border border-[#E5E7EB] bg-[#F9FAFB] p-0.5 text-xs font-medium text-slate-600">
               <button
@@ -5253,12 +6662,13 @@ export default function PharmacyManagement() {
                     selectedBranchId={!isViewOnly ? branchFilter : undefined}
                     selectedBranchName={!isViewOnly ? selectedBranchName : undefined}
                     hospitalId={activeHospitalId ?? ''}
-                    onSuccess={() => { setSuccess('Sale recorded; stock updated.'); fetchPharmacy(); }}
+                    onSuccess={() => { setSuccess('Sale recorded; stock updated.'); fetchPharmacy(); fetchCashSessions(); }}
                     onError={setError}
                     getToken={getToken}
                     onOpenAddMedicine={(b) => setAddMedicineModalBarcode(b)}
                     posSearchRef={queuePosSearchRef}
                     queueItems={pendingQueue}
+                    hasActiveSession={!!activeCashSession}
                   />
                 </div>
                 <p className="px-4 pb-4 text-xs text-slate-500 border-t border-[#E5E7EB] bg-[#F8FAFC]">
@@ -5276,7 +6686,7 @@ export default function PharmacyManagement() {
                     medicines={medicines}
                     stock={stock}
                     hospitalId={activeHospitalId ?? ''}
-                    onSuccess={() => { setSuccess('Medicine dispensed; stock updated.'); setDispenseQueueItem(null); fetchPharmacy(); }}
+                    onSuccess={() => { setSuccess('Medicine dispensed; stock updated.'); setDispenseQueueItem(null); fetchPharmacy(); fetchCashSessions(); }}
                     onError={setError}
                     onClose={() => setDispenseQueueItem(null)}
                     getToken={getToken}
@@ -5319,7 +6729,9 @@ export default function PharmacyManagement() {
                                       <button
                                         type="button"
                                         onClick={() => setDispenseQueueItem(q)}
-                                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1d4ed8] transition"
+                                        disabled={!activeCashSession}
+                                        title={!activeCashSession ? 'Start a cash session first (Cash & expenses → Start shift)' : ''}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1d4ed8] transition disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
                                         Dispense
                                       </button>
@@ -5348,8 +6760,177 @@ export default function PharmacyManagement() {
 
         {subTab === 'sales' && (
           <div className="space-y-6">
+            {/* Selling data – same as Overview */}
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F7F9FC] p-4 sm:p-5">
+              <h3 className="text-lg font-semibold text-slate-800 mb-3">Selling data</h3>
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {(['today', '7d', '30d', '6m', 'year', 'all'] as OverviewDateRange[]).map((range) => (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => setOverviewDateRange(range)}
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                  >
+                    {range === 'today' ? 'Today' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '6m' ? '6m' : range === 'year' ? 'Year' : 'All'}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium text-slate-500">Sales</p>
+                  <p className="text-xl font-bold text-slate-900">₹{periodSalesTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-emerald-600">Revenue</p>
+                </div>
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium text-slate-500">Sales returns</p>
+                  <p className="text-xl font-bold text-rose-600">₹{periodRefundTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-rose-500">Refunded</p>
+                </div>
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium text-slate-500">Bills</p>
+                  <p className="text-xl font-bold text-slate-900">{periodSalesCount}</p>
+                  <p className="text-[10px] text-slate-500">In period</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-2">Payments by mode</h4>
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left py-1.5 font-medium text-slate-700">Mode</th>
+                        <th className="text-right py-1.5 font-medium text-slate-700">Bills</th>
+                        <th className="text-right py-1.5 font-medium text-slate-700">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {['cash', 'upi', 'card', 'credit', 'other', 'unknown'].map((mode) => {
+                        const row = paymentModeSummary[mode]
+                        if (!row) return null
+                        const label = mode === 'cash' ? 'Cash' : mode === 'upi' ? 'UPI' : mode === 'card' ? 'Card' : mode === 'credit' ? 'Credit' : mode === 'other' ? 'Other' : 'Not set'
+                        return (
+                          <tr key={mode} className="border-b border-slate-100 last:border-0">
+                            <td className="py-1.5 text-slate-800">{label}</td>
+                            <td className="py-1.5 text-right text-slate-700">{row.count}</td>
+                            <td className="py-1.5 text-right font-medium text-slate-900">₹{row.amount.toFixed(2)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-2">Sales trend</h4>
+                  <div className="h-32 w-full">
+                    {salesTrendData.length === 0 ? (
+                      <div className="flex h-full items-center justify-center rounded border border-dashed border-slate-200 bg-slate-50/50 text-slate-500 text-xs">No data</div>
+                    ) : (
+                      <svg viewBox="0 0 400 120" className="h-full w-full overflow-visible" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="salesTrendGradSalesTab" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#2563EB" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        {(() => {
+                          const maxVal = Math.max(...salesTrendData.map((d) => d.value), 1)
+                          const pts = salesTrendData.map((d, i) => {
+                            const x = (i / (salesTrendData.length - 1 || 1)) * 380 + 10
+                            const y = 100 - (d.value / maxVal) * 80
+                            return `${x},${y}`
+                          }).join(' ')
+                          const areaPoints = `${pts} 390,100 10,100`
+                          return (
+                            <>
+                              <polyline fill="url(#salesTrendGradSalesTab)" points={areaPoints} />
+                              <polyline fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+                            </>
+                          )
+                        })()}
+                      </svg>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-500">
+                    {salesTrendData.filter((_, i) => (overviewDateRange === '30d' ? i % 5 === 0 : true)).slice(0, 8).map((d, i) => (
+                      <span key={i}>{d.date}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {topSellingMedicines.length > 0 && (
+                <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-2">Top selling medicines</h4>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    {topSellingMedicines.map((m, i) => (
+                      <span key={i} className="text-slate-700"><span className="font-medium text-slate-900">{m.name}</span> <span className="text-slate-500">×{m.count}</span></span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
-              <h3 className="font-semibold text-slate-800 mb-3">Dispensation record (date, patient, medicines)</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                <h3 className="font-semibold text-slate-800">Dispensation records</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    value={salesDate}
+                    onChange={(e) => setSalesDate(e.target.value)}
+                    className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <select
+                    value={salesPaymentFilter}
+                    onChange={(e) => setSalesPaymentFilter(e.target.value)}
+                    className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="all">All payments</option>
+                    <option value="cash">Cash</option>
+                    <option value="upi">UPI</option>
+                    <option value="card">Card</option>
+                    <option value="credit">Credit</option>
+                    <option value="other">Other / Insurance</option>
+                  </select>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={salesMinAmount}
+                    onChange={(e) => setSalesMinAmount(e.target.value)}
+                    placeholder="Min amount"
+                    className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={salesMaxAmount}
+                    onChange={(e) => setSalesMaxAmount(e.target.value)}
+                    placeholder="Max amount"
+                    className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <input
+                    type="text"
+                    value={salesSearch}
+                    onChange={(e) => setSalesSearch(e.target.value)}
+                    placeholder="Search by invoice, name, phone, medicine…"
+                    className="w-full sm:w-64 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  {(salesDate || salesSearch || salesPaymentFilter !== 'all' || salesMinAmount || salesMaxAmount) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSalesDate('')
+                        setSalesSearch('')
+                        setSalesPaymentFilter('all')
+                        setSalesMinAmount('')
+                        setSalesMaxAmount('')
+                      }}
+                      className="text-[11px] text-slate-500 hover:text-slate-800"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
               {loading ? (
                 <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
               ) : (
@@ -5368,35 +6949,1542 @@ export default function PharmacyManagement() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)).map((s) => {
+                      {paginatedSales.map((s) => {
                         const dateRaw = s.dispensedAt
                         const dateStr = !dateRaw ? '—' : typeof dateRaw === 'string' ? dateRaw.slice(0, 10) : (dateRaw as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? '—'
                         const name = s.patientName || '—'
                         const phone = s.customerPhone || '—'
                         const type = s.saleType === 'walk_in' ? 'Walk-in' : 'Prescription'
                         const payment = s.paymentMode ? String(s.paymentMode).charAt(0).toUpperCase() + String(s.paymentMode).slice(1) : '—'
-                        const meds = s.lines?.map((l) => `${l.medicineName} × ${l.quantity}`).join('; ') || '—'
+                        const returnedMap = getSaleReturnedMap(s)
+                        const meds =
+                          s.lines
+                            ?.map((l) => {
+                              const sold = Number(l.quantity) || 0
+                              const returned = Number(returnedMap[l.medicineId] || 0)
+                              const remaining = Math.max(0, sold - returned)
+                              if (!remaining) return null
+                              return `${l.medicineName} × ${remaining}`
+                            })
+                            .filter(Boolean)
+                            .join('; ') || '—'
+                        const isSelected = selectedSaleDetail?.id === s.id
                         return (
-                          <tr key={s.id} className="border-t border-slate-200">
-                            <td className="p-3 font-mono text-xs">{s.invoiceNumber ?? '—'}</td>
-                            <td className="p-3">{dateStr}</td>
-                            <td className="p-3">{name}</td>
-                            <td className="p-3">{phone}</td>
-                            <td className="p-3">{type}</td>
-                            <td className="p-3">{payment}</td>
-                            <td className="p-3 max-w-xs truncate" title={meds}>{meds}</td>
-                            <td className="p-3 text-right">₹{s.totalAmount ?? 0}</td>
-                          </tr>
+                          <React.Fragment key={s.id}>
+                            <tr
+                              className={`border-t border-slate-200 cursor-pointer hover:bg-slate-50 ${
+                                isSelected ? 'bg-blue-50/40' : ''
+                              }`}
+                              onClick={() =>
+                                setSelectedSaleDetail((prev) => (prev?.id === s.id ? null : s))
+                              }
+                            >
+                              <td className="p-3 font-mono text-xs">{s.invoiceNumber ?? '—'}</td>
+                              <td className="p-3">{dateStr}</td>
+                              <td className="p-3">{name}</td>
+                              <td className="p-3">{phone}</td>
+                              <td className="p-3">{type}</td>
+                              <td className="p-3">{payment}</td>
+                              <td className="p-3 max-w-xs truncate" title={meds}>{meds}</td>
+                              <td className="p-3 text-right">₹{s.netAmount ?? s.totalAmount ?? 0}</td>
+                            </tr>
+                            <tr
+                              className={`border-t border-slate-200 transition-all duration-200 ease-out ${
+                                isSelected ? 'bg-blue-50/50' : 'bg-[#EEF3FF]'
+                              } ${isSelected ? 'animate-[fadeExpand_0.2s_ease-out] opacity-100' : 'hidden opacity-0'}`}
+                            >
+                              <td colSpan={8} className="p-0 align-top">
+                                <div
+                                  ref={isSelected ? saleDetailRef : undefined}
+                                  className="mx-3 mb-3 rounded-xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-md"
+                                  style={{ borderRadius: 12 }}
+                                >
+                                  {/* Header */}
+                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-slate-100">
+                                    <div>
+                                      <h4 className="text-base font-semibold text-slate-900">Sale Details</h4>
+                                      <p className="mt-1 text-sm text-slate-600 font-mono">{s.invoiceNumber ?? s.id}</p>
+                                      <p className="mt-0.5 text-sm text-slate-700">{s.patientName || 'Walk-in'}</p>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2 text-[11px] text-slate-600">
+                                      <div className="flex flex-wrap justify-end gap-2">
+                                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${s.saleType === 'walk_in' ? 'bg-violet-50 text-violet-700' : 'bg-blue-50 text-blue-700'}`}>
+                                          {s.saleType === 'walk_in' ? 'Walk-in' : 'Prescription'}
+                                        </span>
+                                        <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700">
+                                          {s.paymentMode ? String(s.paymentMode).charAt(0).toUpperCase() + String(s.paymentMode).slice(1) : '—'}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-1">
+                                        <div className="flex items-center gap-1">
+                                          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                                          <span>Payment:&nbsp;<span className="font-medium text-slate-800">{s.paymentMode ? String(s.paymentMode).charAt(0).toUpperCase() + String(s.paymentMode).slice(1) : '—'}</span></span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                          <span>Type:&nbsp;<span className="font-medium text-slate-800">{s.saleType === 'walk_in' ? 'Walk-in' : 'Prescription'}</span></span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                          <span>Phone:&nbsp;<span className="font-medium text-slate-800">{s.customerPhone || '—'}</span></span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* 2-column: Medicine table (70%) | Summary (30%) */}
+                                  <div className="mt-5 flex flex-col lg:flex-row gap-6">
+                                    {/* Left: Medicine table */}
+                                    <div className="flex-1 min-w-0 lg:max-w-[70%]">
+                                      <div className="rounded-lg border border-slate-100 overflow-hidden">
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="bg-slate-50/80 border-b border-slate-200">
+                                              <th className="text-left py-3 px-4 font-medium text-slate-600">Medicine</th>
+                                              <th className="text-left py-3 px-3 font-medium text-slate-600">Batch</th>
+                                              <th className="text-left py-3 px-3 font-medium text-slate-600">Expiry</th>
+                                              <th className="text-right py-3 px-3 font-medium text-slate-600">Qty</th>
+                                              <th className="text-right py-3 px-3 font-medium text-slate-600">Unit Price</th>
+                                              <th className="text-right py-3 px-4 font-medium text-slate-600">Line Total</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {s.lines?.map((l, idx) => {
+                                              const unit = Number(l.unitPrice) || 0
+                                              const sold = Number(l.quantity) || 0
+                                              const returned = Number(returnedMap[l.medicineId] || 0)
+                                              const remaining = Math.max(0, sold - returned)
+                                              const lineTotal = unit * remaining
+                                              return (
+                                                <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors">
+                                                  <td className="py-3 px-4 font-medium text-slate-900">{l.medicineName}</td>
+                                                  <td className="py-3 px-3 text-slate-600">{l.batchNumber || '—'}</td>
+                                                  <td className="py-3 px-3 text-slate-500 text-xs">{l.expiryDate || '—'}</td>
+                                                  <td className="py-3 px-3 text-right">
+                                                    {returned > 0 && (
+                                                      <span className="text-[10px] text-slate-400 mr-1">(sold {sold}, returned {returned})</span>
+                                                    )}
+                                                    <span className="font-medium text-slate-800">{remaining}</span>
+                                                  </td>
+                                                  <td className="py-3 px-3 text-right text-slate-700 tabular-nums">₹{unit.toFixed(2)}</td>
+                                                  <td className="py-3 px-4 text-right font-medium text-slate-900 tabular-nums">₹{lineTotal.toFixed(2)}</td>
+                                                </tr>
+                                              )
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+
+                                    {/* Right: Sale summary + metadata */}
+                                    <div className="lg:w-[30%] min-w-[240px] flex flex-col gap-4">
+                                      <div className="rounded-xl border border-slate-100 bg-slate-50/30 p-4">
+                                        <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Sale Summary</h5>
+                                        <div className="space-y-2 text-sm">
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-slate-600">Subtotal</span>
+                                            <span className="font-medium text-slate-900 tabular-nums">₹{s.totalAmount ?? 0}</span>
+                                          </div>
+                                          {s.refundedAmount != null && s.refundedAmount > 0 && (
+                                            <div className="flex justify-between items-center">
+                                              <span className="text-slate-600">Refunded</span>
+                                              <span className="font-medium text-rose-600 tabular-nums">₹{s.refundedAmount}</span>
+                                            </div>
+                                          )}
+                                          <div className="border-t border-slate-200 pt-2 mt-2">
+                                            <div className="flex justify-between items-center">
+                                              <span className="font-semibold text-slate-700">Net Amount</span>
+                                              <span className="text-lg font-bold text-emerald-600 tabular-nums">
+                                                ₹{s.netAmount ?? Math.max(0, (s.totalAmount || 0) - (s.refundedAmount || 0))}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          </React.Fragment>
                         )
                       })}
                     </tbody>
                   </table>
                 </div>
               )}
-              {!loading && (branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)).length === 0 && (
-                <p className="text-slate-500 py-6 text-center">No sales yet. Dispense from Prescription Queue or sell to walk-in customers above.</p>
+              {!loading && filteredSales.length === 0 && (
+                <p className="text-slate-500 py-6 text-center">No sales yet. Dispense from the Dispense & Billing tab or sell to walk-in customers above.</p>
               )}
             </div>
+
+            {filteredSales.length > 0 && (
+              <Pagination
+                currentPage={salesPage}
+                totalPages={salesTotalPages}
+                pageSize={salesPageSize}
+                totalItems={filteredSales.length}
+                onPageChange={goToSalesPage}
+                onPageSizeChange={setSalesPageSize}
+                itemLabel="sales"
+              />
+            )}
+          </div>
+        )}
+
+        {subTab === 'cash_and_expenses' && (
+          <div className="space-y-6">
+            {/* Daily income & expense summary */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Today&apos;s summary</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="rounded-lg border border-slate-200 bg-emerald-50/60 p-4">
+                  <p className="text-xs font-medium text-slate-600 mb-0.5">Daily income (sales)</p>
+                  <p className="text-lg font-semibold text-emerald-800">₹{dailySummary.todaySalesTotal.toFixed(2)}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-rose-50/60 p-4">
+                  <p className="text-xs font-medium text-slate-600 mb-0.5">Daily expenses</p>
+                  <p className="text-lg font-semibold text-rose-800">₹{dailySummary.todayExpenseTotal.toFixed(2)}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-medium text-slate-600 mb-0.5">Net (income − expense)</p>
+                  <p className={`text-lg font-semibold ${dailySummary.net >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
+                    ₹{dailySummary.net.toFixed(2)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex items-center">
+                  <span className="text-xs text-slate-500">{dailySummary.todayStr}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Billing counter */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Billing counter</h3>
+                  <p className="text-sm text-slate-500">
+                    Open and close your cash register for this branch. Tracks opening cash, cash sales, refunds and expected vs actual cash.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  {!cashSessionsLoading && activeCashSession && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        setHighlightCloseCounter(true)
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 transition-colors"
+                    >
+                      <span>Close shift</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  )}
+                  {!cashSessionsLoading && !activeCashSession && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        setHighlightOpenCounter(true)
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
+                    >
+                      <span>Start shift</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    </button>
+                  )}
+                  <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
+                    <span>
+                      Branch:&nbsp;
+                      <span className="font-medium text-slate-900">
+                        {branches.find((b) => b.id === branchFilter)?.name || (branchFilter === 'all' ? 'All branches' : '—')}
+                      </span>
+                    </span>
+                    <span>Today: {new Date().toLocaleDateString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {cashSessionsLoading ? (
+                <div className="flex justify-center py-6">
+                  <LoadingSpinner inline />
+                </div>
+              ) : activeCashSession ? (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-600">Opening cash</span>
+                      <span className="text-sm font-semibold text-slate-900">₹{activeCashSession.openingCashTotal.toFixed(2)}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Opened at{' '}
+                      {typeof activeCashSession.openedAt === 'string'
+                        ? new Date(activeCashSession.openedAt).toLocaleTimeString('en-IN')
+                        : ''}
+                    </p>
+                    <span className="inline-flex w-fit items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-100">
+                      Session status: Open
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4 space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Cash sales (today)</span>
+                      <span className="font-semibold text-slate-900">
+                        ₹
+                        {filteredSales
+                          .filter((s) => s.paymentMode === 'cash')
+                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">UPI sales (today)</span>
+                      <span className="font-semibold text-slate-900">
+                        ₹
+                        {filteredSales
+                          .filter((s) => s.paymentMode === 'upi')
+                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Card sales (today)</span>
+                      <span className="font-semibold text-slate-900">
+                        ₹
+                        {filteredSales
+                          .filter((s) => s.paymentMode === 'card')
+                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Refunds (total)</span>
+                      <span className="font-semibold text-rose-600">
+                        ₹
+                        {sales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    ref={closeCounterSectionRef}
+                    className={`rounded-lg border transition-all duration-300 ${
+                      highlightCloseCounter ? 'border-rose-400 ring-2 ring-rose-300 ring-offset-2 bg-rose-50/50' : 'border-slate-200 bg-slate-50/60'
+                    } p-4 space-y-3`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-600">Close counter</span>
+                      <span className="text-[11px] text-slate-500">Enter physical cash to reconcile</span>
+                    </div>
+                    {/* Other payment amounts (UPI, Card, etc.) shown on close */}
+                    <div className="rounded border border-slate-200 bg-white p-2 space-y-1 text-[11px]">
+                      <div className="font-medium text-slate-600 mb-1">Other payments (this session)</div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">UPI</span>
+                        <span className="font-semibold tabular-nums">
+                          ₹{filteredSales.filter((s) => s.paymentMode === 'upi').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Card</span>
+                        <span className="font-semibold tabular-nums">
+                          ₹{filteredSales.filter((s) => s.paymentMode === 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Other</span>
+                        <span className="font-semibold tabular-nums">
+                          ₹{filteredSales.filter((s) => s.paymentMode !== 'cash' && s.paymentMode !== 'upi' && s.paymentMode !== 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Change given (notes/coins given back to customers) */}
+                    {(Number(activeCashSession?.changeGiven) || 0) > 0 && (
+                      <div className="rounded border border-amber-200 bg-amber-50/80 p-2 space-y-1 text-[11px]">
+                        <div className="font-medium text-amber-800 mb-1">Change given (notes/coins given back)</div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-amber-700">Total</span>
+                          <span className="font-semibold tabular-nums text-amber-900">₹{Number(activeCashSession?.changeGiven ?? 0).toFixed(2)}</span>
+                        </div>
+                        {activeCashSession?.changeNotesTotal && Object.keys(activeCashSession.changeNotesTotal).some((d) => (activeCashSession!.changeNotesTotal![d] || 0) > 0) && (
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 pt-1 border-t border-amber-200/60">
+                            {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((d) => {
+                              const n = Number(activeCashSession?.changeNotesTotal?.[d]) || 0
+                              if (n === 0) return null
+                              return (
+                                <span key={d} className="text-amber-800 tabular-nums">₹{d} × {n}</span>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Combined note breakdown: Opening + Added from sales − Given as change = Total */}
+                    {activeCashSession?.openingNotes && (
+                      <div className="rounded border border-slate-200 bg-white overflow-hidden">
+                        <div className="text-[11px] font-medium text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">Combined record (Opening + Sales − Change)</div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="bg-slate-50/80 border-b border-slate-200">
+                                <th className="text-left py-1.5 px-2 font-medium text-slate-600">₹</th>
+                                <th className="text-right py-1.5 px-1 font-medium text-slate-600">Opening</th>
+                                <th className="text-right py-1.5 px-1 font-medium text-emerald-600">+ Added (sales)</th>
+                                <th className="text-right py-1.5 px-1 font-medium text-amber-600">− Given (change)</th>
+                                <th className="text-right py-1.5 px-2 font-medium text-slate-700">= Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((d) => {
+                                const open = Number(activeCashSession?.openingNotes?.[d]) || 0
+                                const run = Number(activeCashSession?.runningNotes?.[d]) || 0
+                                const change = Number(activeCashSession?.changeNotesTotal?.[d]) || 0
+                                const added = Math.max(0, run - open + change)
+                                return (
+                                  <tr key={d} className="border-b border-slate-100">
+                                    <td className="py-1 px-2 text-slate-700 font-medium">₹{d}</td>
+                                    <td className="text-right tabular-nums">{open}</td>
+                                    <td className="text-right tabular-nums text-emerald-700">+{added}</td>
+                                    <td className="text-right tabular-nums text-amber-700">−{change}</td>
+                                    <td className="text-right tabular-nums font-semibold text-slate-900">{run}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                    {/* Expected cash (auto from dispense/billing) */}
+                    {(() => {
+                      const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+                      const expectedTotal = denoms.reduce((sum, d) => sum + (Number(activeCashSession?.runningNotes?.[d]) || 0) * Number(d), 0)
+                      return (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] text-slate-600">Expected cash in drawer (auto from sales)</span>
+                          <span className="text-xs font-semibold text-slate-900 tabular-nums">₹{expectedTotal.toFixed(2)}</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const session = await fetchCashSessions()
+                              const run = session?.runningNotes
+                              if (run) {
+                                const next: Record<string, string> = {}
+                                denoms.forEach((d) => { next[d] = run[d] != null && run[d] > 0 ? String(run[d]) : '' })
+                                setCashClosingNotes(next)
+                              }
+                            }}
+                            className="text-[10px] font-medium text-blue-600 hover:text-blue-800 underline"
+                          >
+                            Refresh expected
+                          </button>
+                        </div>
+                      )
+                    })()}
+                    <p className="text-[11px] text-slate-500">Actual count — edit to match physical cash in drawer</p>
+                    <div className="grid grid-cols-3 gap-1 text-[11px]">
+                      {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((den) => (
+                        <label key={den} className="flex items-center gap-1">
+                          <span className="text-slate-600">₹{den}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={cashClosingNotes[den] ?? ''}
+                            onChange={(e) =>
+                              setCashClosingNotes((prev) => ({ ...prev, [den]: e.target.value }))
+                            }
+                            className="w-14 rounded border border-slate-300 px-1 py-0.5 text-right text-[11px]"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-700"
+                      onClick={() => setShowCloseShiftConfirm(true)}
+                    >
+                      Close counter & save report
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                  {lastClosedSummary && (
+                    <div className="md:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-emerald-900">Shift closed</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <span className="text-emerald-700 block text-xs">Opening amount</span>
+                          <span className="font-semibold text-emerald-900 tabular-nums">₹{lastClosedSummary.openingCashTotal.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-700 block text-xs">Closing amount</span>
+                          <span className="font-semibold text-emerald-900 tabular-nums">₹{lastClosedSummary.closingCashTotal.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-700 block text-xs">Profit (shift)</span>
+                          <span className="font-semibold text-emerald-900 tabular-nums">₹{lastClosedSummary.profit.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => { setLastClosedSummary(null); openCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setHighlightOpenCounter(true) }}
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                          >
+                            Start new shift
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-emerald-700">Enter opening cash below and open counter to start the next shift.</p>
+                    </div>
+                  )}
+                  <div
+                    ref={openCounterSectionRef}
+                    className={`rounded-xl border transition-all duration-300 ${
+                      highlightOpenCounter ? 'border-emerald-400 ring-2 ring-emerald-300 ring-offset-2 bg-emerald-50/30' : 'border-slate-200'
+                    } p-4`}
+                  >
+                    <h4 className="text-sm font-semibold text-slate-800 mb-2">Open counter (Start shift)</h4>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Enter opening cash breakdown at the start of the day. System will use this for reconciliation at close.
+                    </p>
+                    {recentCashSessions.filter((s) => s.status !== 'open').length > 0 && (() => {
+                      const lastClosed = recentCashSessions.find((s) => s.status !== 'open')
+                      const amt = lastClosed ? Number(lastClosed.closingCashTotal ?? 0) : 0
+                      return (
+                        <div className="mb-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!lastClosed?.closingNotes) return
+                              const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+                              const next: Record<string, string> = {}
+                              denoms.forEach((d) => {
+                                const n = lastClosed.closingNotes?.[d]
+                                next[d] = n != null && n > 0 ? String(n) : ''
+                              })
+                              setCashOpeningNotes(next)
+                            }}
+                            className="text-xs font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-1"
+                          >
+                            Load previous counter
+                          </button>
+                          <span className="text-[11px] text-slate-500 ml-2">
+                            (Use last closed shift’s cash as opening — ₹{amt.toFixed(2)})
+                          </span>
+                        </div>
+                      )
+                    })()}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3 max-w-xl">
+                      <label className="block">
+                        <span className="text-xs font-medium text-slate-600 block mb-1">Opened by (person name)</span>
+                        <select
+                          value={openedByName}
+                          onChange={(e) => setOpenedByName(e.target.value)}
+                          className="w-full max-w-xs rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900"
+                        >
+                          {CASHIER_OPTIONS.map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-[11px]">
+                        {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((den) => (
+                          <label key={den} className="flex flex-col gap-1">
+                            <span className="text-slate-600">₹{den}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={cashOpeningNotes[den] ?? ''}
+                              onChange={(e) =>
+                                setCashOpeningNotes((prev) => ({ ...prev, [den]: e.target.value }))
+                              }
+                              className="w-full rounded border border-slate-300 px-2 py-1 text-right text-[11px]"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-700">
+                        <span>Opening cash total</span>
+                        <span className="font-semibold text-slate-900">
+                          ₹
+                          {['500', '200', '100', '50', '20', '10', '5', '2', '1'].reduce((sum, den) => {
+                            const count = Math.max(0, Number(cashOpeningNotes[den] || 0))
+                            return sum + count * Number(den)
+                          }, 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700"
+                        onClick={async () => {
+                          const token = await getToken()
+                          if (!token || !activeHospitalId) return
+                          const notesNum: Record<string, number> = {}
+                          let openingTotal = 0
+                          ;['500', '200', '100', '50', '20', '10', '5', '2', '1'].forEach((den) => {
+                            const count = Math.max(0, Number(cashOpeningNotes[den] || 0))
+                            notesNum[den] = count
+                            openingTotal += count * Number(den)
+                          })
+                          try {
+                            const res = await fetch('/api/pharmacy/cash-session', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({
+                                action: 'open',
+                                hospitalId: activeHospitalId,
+                                branchId: branchFilter === 'all' ? undefined : branchFilter,
+                                openingNotes: notesNum,
+                                openingCashTotal: openingTotal,
+                                openedByName: openedByName || undefined,
+                              }),
+                            })
+                            const data = await res.json().catch(() => ({}))
+                            if (!res.ok || !data.success) {
+                              setError(data.error || 'Failed to open counter')
+                              return
+                            }
+                            setSuccess('Billing counter opened.')
+                            setActiveCashSession(data.session)
+                            setLastClosedSummary(null)
+                          } catch (e: any) {
+                            setError(e?.message || 'Failed to open counter')
+                          }
+                        }}
+                      >
+                        Open counter
+                      </button>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-xs text-slate-600 space-y-2">
+                    <h4 className="text-sm font-semibold text-slate-800 mb-1">How this works</h4>
+                    <p>1. At the start of your shift, enter the physical cash in the drawer and open the counter.</p>
+                    <p>2. During the day, the system tracks cash sales and refunds.</p>
+                    <p>3. At the end, count cash again, enter the breakdown and close the counter to see any short / extra.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Shift reports – closed sessions with name, times, amounts */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
+              <h3 className="text-lg font-semibold text-slate-900 mb-3">Shift reports</h3>
+              <p className="text-sm text-slate-500 mb-4">Closed shifts with who opened/closed, times, opening/closing amount and profit.</p>
+              {recentCashSessions.filter((s) => s.status !== 'open').length === 0 ? (
+                <p className="text-sm text-slate-500 py-4">No closed shifts yet. Close a shift to see it here.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left px-3 py-2">Opened by</th>
+                        <th className="text-left px-3 py-2">Opened at</th>
+                        <th className="text-left px-3 py-2">Closed by</th>
+                        <th className="text-left px-3 py-2">Closed at</th>
+                        <th className="text-right px-3 py-2">Opening</th>
+                        <th className="text-right px-3 py-2">Closing</th>
+                        <th className="text-right px-3 py-2">Profit</th>
+                        <th className="w-24" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentCashSessions
+                        .filter((s) => s.status !== 'open')
+                        .slice(0, 20)
+                        .map((s) => {
+                          const opened = typeof s.openedAt === 'string' ? s.openedAt : (s.openedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.()
+                          const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
+                          const cash = Number(s.cashSales ?? 0)
+                          const upi = Number(s.upiSales ?? 0)
+                          const card = Number(s.cardSales ?? 0)
+                          const refunds = Number(s.refunds ?? 0)
+                          const cashExp = Number(s.cashExpenses ?? 0)
+                          const totalCollection = cash + upi + card - refunds
+                          const profit = totalCollection - cashExp
+                          return (
+                            <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+                              <td className="px-3 py-2 font-medium text-slate-800">{s.openedByName ?? '—'}</td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {opened ? new Date(opened).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                              </td>
+                              <td className="px-3 py-2 font-medium text-slate-800">{s.closedByName ?? '—'}</td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {closed ? new Date(closed).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-right font-medium tabular-nums">₹{Number(s.openingCashTotal ?? 0).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right font-medium tabular-nums">₹{Number(s.closingCashTotal ?? 0).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">₹{profit.toFixed(2)}</td>
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewShiftReportSession(s)}
+                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                >
+                                  View report
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Expenses */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Expenses</h3>
+                <p className="text-sm text-slate-500">
+                  Record operational expenses for this branch and review expense history.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <label className="flex items-center gap-1">
+                  <span>From</span>
+                  <input
+                    type="date"
+                    value={expenseFilters.dateFrom}
+                    onChange={(e) => setExpenseFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+                    className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                  />
+                </label>
+                <label className="flex items-center gap-1">
+                  <span>To</span>
+                  <input
+                    type="date"
+                    value={expenseFilters.dateTo}
+                    onChange={(e) => setExpenseFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+                    className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                  />
+                </label>
+                <select
+                  value={expenseFilters.categoryId}
+                  onChange={(e) => setExpenseFilters((prev) => ({ ...prev, categoryId: e.target.value }))}
+                  className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                >
+                  <option value="all">All categories</option>
+                  {expenseCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={expenseFilters.paymentMethod}
+                  onChange={(e) => setExpenseFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                >
+                  <option value="all">All payments</option>
+                  <option value="cash">Cash</option>
+                  <option value="upi">UPI</option>
+                  <option value="card">Card</option>
+                  <option value="bank">Bank</option>
+                </select>
+                <button
+                  type="button"
+                  className="text-[11px] text-blue-600 hover:text-blue-800 underline"
+                  onClick={fetchExpensesAndCategories}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+              {/* Add expense form */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
+                <h4 className="text-sm font-semibold text-slate-800">Add expense</h4>
+                <div className="grid grid-cols-1 gap-3 text-xs text-slate-700">
+                  <label className="flex flex-col gap-1">
+                    <span>Date</span>
+                    <input
+                      type="date"
+                      value={expenseForm.date}
+                      onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value }))}
+                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span>Note <span className="text-rose-500">*</span></span>
+                    <textarea
+                      rows={2}
+                      value={expenseForm.note}
+                      onChange={(e) => setExpenseForm((prev) => ({ ...prev, note: e.target.value }))}
+                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs resize-none"
+                      placeholder="e.g. Buying new stand"
+                      required
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span>Amount (₹)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={expenseForm.amount}
+                      onChange={(e) => setExpenseForm((prev) => ({ ...prev, amount: e.target.value }))}
+                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span>Payment method</span>
+                    <select
+                      value={expenseForm.paymentMethod}
+                      onChange={(e) => setExpenseForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
+                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="upi">UPI</option>
+                      <option value="card">Card</option>
+                      <option value="bank">Bank</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-full bg-blue-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-700"
+                  onClick={async () => {
+                    if (!activeHospitalId) {
+                      setError('Active hospital is not set.')
+                      return
+                    }
+                    const note = expenseForm.note.trim()
+                    const amount = Number(expenseForm.amount)
+                    if (!expenseForm.date || !note) {
+                      setError('Please fill date and note (required).')
+                      return
+                    }
+                    if (!amount || amount <= 0) {
+                      setError('Please enter a valid amount.')
+                      return
+                    }
+                    if (branchFilter === 'all') {
+                      setError('Select a branch to add expense.')
+                      return
+                    }
+                    if (expenseForm.paymentMethod === 'cash') {
+                      if (!activeCashSession) {
+                        setError('Start a cash session first to record cash expense.')
+                        return
+                      }
+                      setPendingExpensePayload({
+                        amount,
+                        date: expenseForm.date,
+                        note,
+                        paymentMethod: expenseForm.paymentMethod,
+                      })
+                      setShowExpenseCashModal(true)
+                      return
+                    }
+                    try {
+                      setError(null)
+                      const token = await getToken()
+                      if (!token) throw new Error('Not authenticated')
+                      const res = await fetch('/api/pharmacy/expenses', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                          hospitalId: activeHospitalId,
+                          branchId: branchFilter,
+                          date: expenseForm.date,
+                          note,
+                          amount,
+                          paymentMethod: expenseForm.paymentMethod,
+                        }),
+                      })
+                      const data = await res.json().catch(() => ({}))
+                      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to add expense')
+                      setSuccess('Expense recorded.')
+                      setExpenseForm((prev) => ({ ...prev, amount: '', note: '' }))
+                      fetchExpensesAndCategories()
+                      fetchCashSessions()
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : 'Failed to add expense')
+                    }
+                  }}
+                >
+                  Save expense
+                </button>
+                {pendingExpensePayload && (
+                  <RefundCashModal
+                    isOpen={showExpenseCashModal}
+                    onClose={() => { setShowExpenseCashModal(false); setPendingExpensePayload(null) }}
+                    refundAmount={pendingExpensePayload.amount}
+                    onConfirm={async (expenseNotes) => {
+                      if (!pendingExpensePayload) return
+                      try {
+                        setError(null)
+                        const token = await getToken()
+                        if (!token) throw new Error('Not authenticated')
+                        const res = await fetch('/api/pharmacy/expenses', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({
+                            hospitalId: activeHospitalId,
+                            branchId: branchFilter,
+                            date: pendingExpensePayload.date,
+                            note: pendingExpensePayload.note,
+                            amount: pendingExpensePayload.amount,
+                            paymentMethod: 'cash',
+                            expenseNotes,
+                          }),
+                        })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to add expense')
+                        setSuccess('Expense recorded. Counter updated.')
+                        setExpenseForm((prev) => ({ ...prev, amount: '', note: '' }))
+                        setShowExpenseCashModal(false)
+                        setPendingExpensePayload(null)
+                        fetchExpensesAndCategories()
+                        fetchCashSessions()
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : 'Failed to add expense')
+                      }
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Expense list */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <h4 className="text-sm font-semibold text-slate-800">Expense history</h4>
+                    <span className="text-[11px] text-slate-500">
+                      {expenses.length} record(s), total ₹
+                      {expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs sm:text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left px-3 py-2">Date</th>
+                        <th className="text-left px-3 py-2">Note</th>
+                        <th className="text-right px-3 py-2">Amount</th>
+                        <th className="text-left px-3 py-2">Payment</th>
+                        <th className="text-left px-3 py-2">Branch</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenses.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-6 text-center text-slate-500 text-xs">
+                            No expenses in the selected range.
+                          </td>
+                        </tr>
+                      ) : (
+                        expenses.map((e) => (
+                          <tr key={e.id} className="border-t border-slate-100 hover:bg-slate-50/70">
+                            <td className="px-3 py-2">
+                              {typeof e.date === 'string'
+                                ? e.date.slice(0, 10)
+                                : (e.date as any)?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''}
+                            </td>
+                            <td className="px-3 py-2 max-w-xs truncate" title={e.description ?? e.categoryName ?? ''}>
+                              {e.description || e.categoryName || '—'}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium tabular-nums">
+                              ₹{Number(e.amount || 0).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2 capitalize">
+                              {e.paymentMethod}
+                            </td>
+                            <td className="px-3 py-2">
+                              {branches.find((b) => b.id === e.branchId)?.name || e.branchId}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {subTab === 'returns' && (
+          <div className="space-y-6">
+            {!cashSessionsLoading && !activeCashSession && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-2">
+                <span className="font-medium">Start a cash session to process returns.</span>
+                <span>Go to <strong>Cash & expenses</strong> and click <strong>Start shift</strong>.</span>
+              </div>
+            )}
+            {/* Selling data – same as Overview */}
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F7F9FC] p-4 sm:p-5">
+              <h3 className="text-lg font-semibold text-slate-800 mb-3">Selling data</h3>
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {(['today', '7d', '30d', '6m', 'year', 'all'] as OverviewDateRange[]).map((range) => (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => setOverviewDateRange(range)}
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                  >
+                    {range === 'today' ? 'Today' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '6m' ? '6m' : range === 'year' ? 'Year' : 'All'}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium text-slate-500">Sales</p>
+                  <p className="text-xl font-bold text-slate-900">₹{periodSalesTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-emerald-600">Revenue</p>
+                </div>
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium text-slate-500">Sales returns</p>
+                  <p className="text-xl font-bold text-rose-600">₹{periodRefundTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</p>
+                  <p className="text-[10px] text-rose-500">Refunded</p>
+                </div>
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium text-slate-500">Bills</p>
+                  <p className="text-xl font-bold text-slate-900">{periodSalesCount}</p>
+                  <p className="text-[10px] text-slate-500">In period</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-2">Payments by mode</h4>
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left py-1.5 font-medium text-slate-700">Mode</th>
+                        <th className="text-right py-1.5 font-medium text-slate-700">Bills</th>
+                        <th className="text-right py-1.5 font-medium text-slate-700">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {['cash', 'upi', 'card', 'credit', 'other', 'unknown'].map((mode) => {
+                        const row = paymentModeSummary[mode]
+                        if (!row) return null
+                        const label = mode === 'cash' ? 'Cash' : mode === 'upi' ? 'UPI' : mode === 'card' ? 'Card' : mode === 'credit' ? 'Credit' : mode === 'other' ? 'Other' : 'Not set'
+                        return (
+                          <tr key={mode} className="border-b border-slate-100 last:border-0">
+                            <td className="py-1.5 text-slate-800">{label}</td>
+                            <td className="py-1.5 text-right text-slate-700">{row.count}</td>
+                            <td className="py-1.5 text-right font-medium text-slate-900">₹{row.amount.toFixed(2)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-2">Sales trend</h4>
+                  <div className="h-32 w-full">
+                    {salesTrendData.length === 0 ? (
+                      <div className="flex h-full items-center justify-center rounded border border-dashed border-slate-200 bg-slate-50/50 text-slate-500 text-xs">No data</div>
+                    ) : (
+                      <svg viewBox="0 0 400 120" className="h-full w-full overflow-visible" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="salesTrendGradReturnsTab" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#2563EB" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        {(() => {
+                          const maxVal = Math.max(...salesTrendData.map((d) => d.value), 1)
+                          const pts = salesTrendData.map((d, i) => {
+                            const x = (i / (salesTrendData.length - 1 || 1)) * 380 + 10
+                            const y = 100 - (d.value / maxVal) * 80
+                            return `${x},${y}`
+                          }).join(' ')
+                          const areaPoints = `${pts} 390,100 10,100`
+                          return (
+                            <>
+                              <polyline fill="url(#salesTrendGradReturnsTab)" points={areaPoints} />
+                              <polyline fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+                            </>
+                          )
+                        })()}
+                      </svg>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-500">
+                    {salesTrendData.filter((_, i) => (overviewDateRange === '30d' ? i % 5 === 0 : true)).slice(0, 8).map((d, i) => (
+                      <span key={i}>{d.date}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {topSellingMedicines.length > 0 && (
+                <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-2">Top selling medicines</h4>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    {topSellingMedicines.map((m, i) => (
+                      <span key={i} className="text-slate-700"><span className="font-medium text-slate-900">{m.name}</span> <span className="text-slate-500">×{m.count}</span></span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-slate-800 mb-2">Sales returns</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                Click a sale to expand return details below that row, enter quantities to return, and the system will update stock and net sale amount automatically.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="border-b border-slate-200 px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-3">
+                      <h4 className="text-sm font-semibold text-slate-800">Sales returns</h4>
+                      {returnsInnerTab === 'by_return' && (
+                        <div className="inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-700 border border-rose-100">
+                          Total refunded: ₹{totalRefundForFilteredSales.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      {filteredReturnSales.length} sale(s) with returns in current filters
+                    </span>
+                    <div className="mt-1 inline-flex rounded-full bg-slate-50 p-1 text-[11px] font-medium text-slate-600">
+                      <button
+                        type="button"
+                        onClick={() => setReturnsInnerTab('by_sale')}
+                        className={`px-3 py-1.5 rounded-full transition ${returnsInnerTab === 'by_sale' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                      >
+                        By sale
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReturnsInnerTab('by_return')}
+                        className={`px-3 py-1.5 rounded-full transition ${returnsInnerTab === 'by_return' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                      >
+                        Return events
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={returnsDate}
+                      onChange={(e) => setReturnsDate(e.target.value)}
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <select
+                      value={returnsPaymentFilter}
+                      onChange={(e) => setReturnsPaymentFilter(e.target.value)}
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="all">All payments</option>
+                      <option value="cash">Cash</option>
+                      <option value="upi">UPI</option>
+                      <option value="card">Card</option>
+                      <option value="credit">Credit</option>
+                      <option value="other">Other / Insurance</option>
+                    </select>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={returnsMinAmount}
+                      onChange={(e) => setReturnsMinAmount(e.target.value)}
+                      placeholder="Min amount"
+                      className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={returnsMaxAmount}
+                      onChange={(e) => setReturnsMaxAmount(e.target.value)}
+                      placeholder="Max amount"
+                      className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <input
+                      type="text"
+                      value={returnsSearch}
+                      onChange={(e) => setReturnsSearch(e.target.value)}
+                      placeholder="Search by invoice, name, phone, medicine…"
+                      className="w-full sm:w-56 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {(returnsDate || returnsSearch || returnsPaymentFilter !== 'all' || returnsMinAmount || returnsMaxAmount) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReturnsDate('')
+                          setReturnsSearch('')
+                          setReturnsPaymentFilter('all')
+                          setReturnsMinAmount('')
+                          setReturnsMaxAmount('')
+                        }}
+                        className="text-[11px] text-slate-500 hover:text-slate-800"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {loading ? (
+                  <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
+                ) : returnsInnerTab === 'by_sale' ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs sm:text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left p-3">Invoice #</th>
+                          <th className="text-left p-3">Date</th>
+                          <th className="text-left p-3">Patient / Customer</th>
+                          <th className="text-right p-3">Amount</th>
+                          <th className="text-right p-3">Net after returns</th>
+                          <th className="text-right p-3">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedReturnSales.map((s) => {
+                          const dateRaw = s.dispensedAt
+                          const dateStr = !dateRaw
+                            ? '—'
+                            : typeof dateRaw === 'string'
+                            ? dateRaw.slice(0, 10)
+                            : (dateRaw as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? '—'
+                          const name = s.patientName || '—'
+                          const total = s.totalAmount ?? 0
+                          const refunded = s.refundedAmount ?? 0
+                          const net = s.netAmount ?? Math.max(0, total - refunded)
+                          const isSelected = selectedReturnSale?.id === s.id
+                          const returnedMap = getSaleReturnedMap(s)
+                          const saleLines = s.lines || []
+                          const estimatedRefund = isSelected
+                            ? saleLines.reduce((sum, l) => {
+                                const raw = returnQuantities[l.medicineId] || ''
+                                const qty = Math.floor(Number(raw) || 0)
+                                const unit = Number(l.unitPrice) || 0
+                                return sum + (qty > 0 ? qty * unit : 0)
+                              }, 0)
+                            : 0
+                          return (
+                            <React.Fragment key={s.id}>
+                              <tr
+                                className={`border-t border-slate-200 cursor-pointer hover:bg-slate-50 ${
+                                  isSelected ? 'bg-blue-50/40' : ''
+                                }`}
+                                onClick={() => {
+                                  if (selectedReturnSale?.id === s.id) {
+                                    setSelectedReturnSale(null)
+                                    setReturnQuantities({})
+                                  } else {
+                                    setSelectedReturnSale(s)
+                                    setReturnQuantities({})
+                                  }
+                                }}
+                              >
+                                <td className="p-3 font-mono text-xs">{s.invoiceNumber ?? '—'}</td>
+                                <td className="p-3">{dateStr}</td>
+                                <td className="p-3">{name}</td>
+                                <td className="p-3 text-right">₹{total}</td>
+                                <td className="p-3 text-right">₹{net}</td>
+                                <td className="p-3 text-right text-[11px] text-slate-500">
+                                  Click row to enter return
+                                </td>
+                              </tr>
+                              <tr
+                                className={`border-t border-slate-200 bg-[#EEF3FF] transition-all duration-200 ease-out ${
+                                  isSelected ? 'animate-[fadeExpand_0.18s_ease-out] opacity-100' : 'hidden opacity-0'
+                                }`}
+                              >
+                                <td colSpan={6} className="p-3">
+                                  <div className="rounded-xl bg-white shadow-sm border border-slate-200 p-3 sm:p-4">
+                                    <form
+                                      onSubmit={async (e) => {
+                                        e.preventDefault()
+                                        if (!activeCashSession) {
+                                          setError('Please start a cash session first to process returns (Cash & expenses → Start shift).')
+                                          return
+                                        }
+                                        const lines = saleLines
+                                        const retMap = getSaleReturnedMap(s)
+                                        const payloadLines = lines
+                                          .map((l) => {
+                                            const raw = returnQuantities[l.medicineId] || ''
+                                            const qty = Math.floor(Number(raw) || 0)
+                                            if (qty <= 0) return null
+                                            const sold = Number(l.quantity) || 0
+                                            const alreadyReturned = Number(retMap[l.medicineId] || 0)
+                                            const maxReturn = Math.max(0, sold - alreadyReturned)
+                                            const clampedQty = Math.min(qty, maxReturn)
+                                            return clampedQty > 0 ? { medicineId: l.medicineId, quantity: clampedQty } : null
+                                          })
+                                          .filter(Boolean) as { medicineId: string; quantity: number }[]
+                                        if (payloadLines.length === 0) {
+                                          setError('Enter at least one quantity to return.')
+                                          return
+                                        }
+                                        const refundAmount = payloadLines.reduce((sum, pl) => {
+                                          const line = saleLines.find((l) => l.medicineId === pl.medicineId)
+                                          return sum + (line ? pl.quantity * (Number(line.unitPrice) || 0) : 0)
+                                        }, 0)
+                                        setError(null)
+                                        setPendingReturnPayload({ saleId: s.id, lines: payloadLines, refundAmount })
+                                        setRefundPaymentMode('cash')
+                                        setShowRefundPaymentModal(true)
+                                      }}
+                                      className="space-y-3"
+                                    >
+                                      <div className="text-xs text-slate-600">
+                                        Invoice&nbsp;
+                                        <span className="font-mono">{s.invoiceNumber ?? s.id}</span>
+                                      </div>
+                                      <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-lg bg-white">
+                                        <table className="w-full text-[11px]">
+                                          <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                              <th className="text-left px-2 py-1.5">Medicine</th>
+                                              <th className="text-right px-2 py-1.5">Sold</th>
+                                              <th className="text-right px-2 py-1.5">Unit price</th>
+                                              <th className="text-right px-2 py-1.5">Return qty</th>
+                                              <th className="text-right px-2 py-1.5">Line refund</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {saleLines.map((l) => {
+                                              const key = l.medicineId
+                                              const raw = returnQuantities[key] || ''
+                                              const qty = Math.floor(Number(raw) || 0)
+                                              const unit = Number(l.unitPrice) || 0
+                                              const sold = Number(l.quantity) || 0
+                                              const alreadyReturned = Number(returnedMap[l.medicineId] || 0)
+                                              const remaining = Math.max(0, sold - alreadyReturned)
+                                              const lineRefund = qty > 0 ? qty * unit : 0
+                                              return (
+                                                <tr key={key} className="border-t border-slate-200">
+                                                  <td className="px-2 py-1.5 font-medium text-slate-900">
+                                                    {l.medicineName}
+                                                  </td>
+                                                  <td className="px-2 py-1.5 text-right text-slate-700">
+                                                    {alreadyReturned > 0 && (
+                                                      <span className="text-[10px] text-slate-400 mr-1">
+                                                        (sold {sold}, returned {alreadyReturned})
+                                                      </span>
+                                                    )}
+                                                    {remaining}
+                                                  </td>
+                                                  <td className="px-2 py-1.5 text-right text-slate-700">
+                                                    ₹{unit.toFixed(2)}
+                                                  </td>
+                                                  <td className="px-2 py-1.5 text-right">
+                                                    <input
+                                                      type="number"
+                                                      min={0}
+                                                      max={remaining}
+                                                      value={returnQuantities[key] ?? ''}
+                                                      onChange={(e) => {
+                                                        const v = e.target.value
+                                                        if (v === '') {
+                                                          setReturnQuantities((prev) => ({ ...prev, [key]: '' }))
+                                                          return
+                                                        }
+                                                        const num = Math.floor(Number(v)) || 0
+                                                        const clamped = Math.min(Math.max(0, num), remaining)
+                                                        setReturnQuantities((prev) => ({ ...prev, [key]: String(clamped) }))
+                                                      }}
+                                                      onBlur={(e) => {
+                                                        const v = e.target.value
+                                                        if (v === '') return
+                                                        const num = Math.floor(Number(v)) || 0
+                                                        const clamped = Math.min(Math.max(0, num), remaining)
+                                                        setReturnQuantities((prev) => ({ ...prev, [key]: clamped > 0 ? String(clamped) : '' }))
+                                                      }}
+                                                      className="w-16 rounded-full border border-slate-300 px-2 py-1 text-right focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                                    />
+                                                  </td>
+                                                  <td className="px-2 py-1.5 text-right text-slate-700">
+                                                    ₹{lineRefund.toFixed(2)}
+                                                  </td>
+                                                </tr>
+                                              )
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs text-slate-700">
+                                        <span>
+                                          Refund amount:&nbsp;
+                                          <span className="font-semibold text-rose-600">
+                                            ₹{estimatedRefund.toFixed(2)}
+                                          </span>
+                                        </span>
+                                        <button
+                                          type="submit"
+                                          disabled={returnSubmitting || !activeCashSession}
+                                          title={!activeCashSession ? 'Start a cash session first (Cash & expenses → Start shift)' : ''}
+                                          className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                          {returnSubmitting ? 'Processing…' : 'Process return & update stock'}
+                                        </button>
+                                      </div>
+                                    </form>
+                                  </div>
+                                  </td>
+                                </tr>
+                            </React.Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs sm:text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left p-3">Date</th>
+                          <th className="text-left p-3">Patient / Customer</th>
+                          <th className="text-left p-3">Invoice #</th>
+                          <th className="text-left p-3">Phone</th>
+                          <th className="text-left p-3">Payment</th>
+                          <th className="text-right p-3">Refund amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {returnEvents.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-6 text-center text-slate-500">No returns recorded yet.</td>
+                          </tr>
+                        ) : (
+                          returnEvents.map((r) => (
+                            <tr key={r.id} className="border-t border-slate-200 align-top">
+                              <td className="p-3">
+                                {r.createdAt ? r.createdAt.toISOString().slice(0, 10) : '—'}
+                              </td>
+                              <td className="p-3">
+                                <div className="text-slate-900 font-medium">{r.patientName}</div>
+                              </td>
+                              <td className="p-3 font-mono text-xs">{r.invoice}</td>
+                              <td className="p-3 text-slate-700">{r.phone || '—'}</td>
+                              <td className="p-3 text-slate-700">
+                                {r.paymentMode
+                                  ? r.paymentMode.charAt(0).toUpperCase() + r.paymentMode.slice(1)
+                                  : '—'}
+                              </td>
+                              <td className="p-3 text-right text-rose-600 font-semibold">
+                                ₹{r.amount.toFixed(2)}
+                                <div className="mt-1 text-[10px] text-slate-500">
+                                  {r.lines.map((l) => (
+                                    <div key={l.medicineId}>
+                                      {l.medicineName} × {l.quantity} @ ₹{l.unitPrice.toFixed(2)}
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {filteredReturnSales.length > 0 && (
+                  <Pagination
+                    currentPage={returnsPage}
+                    totalPages={returnsTotalPages}
+                    pageSize={returnsPageSize}
+                    totalItems={filteredReturnSales.length}
+                    onPageChange={goToReturnsPage}
+                    onPageSizeChange={setReturnsPageSize}
+                    itemLabel="sales"
+                    className="border-t border-slate-200"
+                  />
+                )}
+
+                {showRefundPaymentModal && pendingReturnPayload && (
+                  <RevealModal
+                    isOpen
+                    onClose={() => {
+                      setShowRefundPaymentModal(false)
+                      setPendingReturnPayload(null)
+                    }}
+                  >
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80">
+                      <div className="border-b border-slate-200 px-6 pt-6 pb-4">
+                        <h2 className="text-xl font-bold text-slate-800">Refund payment</h2>
+                        <p className="text-sm text-slate-500 mt-1">How are you giving the refund to the customer?</p>
+                      </div>
+                      <div className="p-6 space-y-4">
+                        <div className="rounded-xl bg-rose-50 border border-rose-200 p-4">
+                          <p className="text-sm font-medium text-rose-700">Refund amount</p>
+                          <p className="text-2xl font-bold text-rose-900">₹{pendingReturnPayload.refundAmount.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700 mb-2">Payment method</p>
+                          <div className="flex flex-wrap gap-2">
+                            {(['cash', 'upi', 'card', 'other'] as const).map((m) => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setRefundPaymentMode(m)}
+                                className={`px-4 py-2 rounded-xl text-sm font-medium capitalize ${
+                                  refundPaymentMode === m
+                                    ? 'bg-rose-600 text-white'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowRefundPaymentModal(false)
+                              setPendingReturnPayload(null)
+                            }}
+                            className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (refundPaymentMode === 'cash') {
+                                setShowRefundCashModal(true)
+                              } else {
+                                submitReturn(refundPaymentMode)
+                              }
+                            }}
+                            disabled={returnSubmitting}
+                            className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50"
+                          >
+                            {refundPaymentMode === 'cash' ? 'Enter notes…' : 'Confirm refund'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </RevealModal>
+                )}
+
+                {pendingReturnPayload && (
+                  <RefundCashModal
+                    isOpen={showRefundCashModal}
+                    onClose={() => setShowRefundCashModal(false)}
+                    refundAmount={pendingReturnPayload.refundAmount}
+                    onConfirm={(notes) => {
+                      submitReturn('cash', notes)
+                    }}
+                  />
+                )}
+              </div>
           </div>
         )}
 
@@ -5508,67 +8596,158 @@ export default function PharmacyManagement() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(() => {
-                        const q = supplierSearchQuery.trim().toLowerCase()
-                        let filtered = q ? suppliers.filter(s => (s.name?.toLowerCase().includes(q)) || (s.contactPerson?.toLowerCase().includes(q)) || (s.email?.toLowerCase().includes(q)) || (s.phone?.includes(q))) : suppliers
-                        if (isPharmacyPortal && headerSearchQuery.trim()) {
-                          const hq = headerSearchQuery.trim().toLowerCase()
-                          filtered = filtered.filter(s => (s.name?.toLowerCase().includes(hq)) || (s.contactPerson?.toLowerCase().includes(hq)) || (s.email?.toLowerCase().includes(hq)) || (s.phone?.includes(hq)))
-                        }
-                        if (filtered.length === 0) {
-                          return (
-                            <tr>
-                              <td colSpan={8} className="p-8 text-center text-sm text-[#607D8B]">
-                                {suppliers.length === 0 ? 'No suppliers. Add one using the button above.' : 'No suppliers match your search.'}
+                      {filteredSuppliers.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-sm text-[#607D8B]">
+                            {suppliers.length === 0
+                              ? 'No suppliers. Add one using the button above.'
+                              : 'No suppliers match your search.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        <>
+                          {paginatedSuppliers.map((s, i) => (
+                            <tr
+                              key={s.id}
+                              className={`border-b border-[#E0E0E0] transition-colors ${
+                                i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'
+                              } hover:bg-[#E3F2FD]`}
+                            >
+                              <td className="p-4 font-medium text-[#263238]">{s.name}</td>
+                              <td className="p-4 text-sm text-[#607D8B]">{s.contactPerson ?? '—'}</td>
+                              <td className="p-4 text-sm text-[#607D8B]">{s.phone ?? '—'}</td>
+                              <td className="p-4 text-sm text-[#607D8B]">{s.email ?? '—'}</td>
+                              <td className="p-4 text-sm text-[#607D8B]">—</td>
+                              <td className="p-4 text-sm text-[#607D8B]">—</td>
+                              <td className="p-4">
+                                <span className="inline-flex rounded-full bg-[#E8F5E9] px-2.5 py-0.5 text-xs font-medium text-[#2E7D32]">
+                                  Active
+                                </span>
+                              </td>
+                              <td className="p-4 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewSupplier(s)}
+                                    className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#E0E0E0] hover:text-[#263238]"
+                                    title="View"
+                                  >
+                                    <svg
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                      />
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                      />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditSupplier(s)}
+                                    className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#E0E0E0] hover:text-[#263238]"
+                                    title="Edit"
+                                  >
+                                    <svg
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828L8.464 13.464"
+                                      />
+                                    </svg>
+                                  </button>
+                                  <a
+                                    href={s.email ? `mailto:${s.email}` : '#'}
+                                    onClick={(e) => !s.email && e.preventDefault()}
+                                    className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#E0E0E0] hover:text-[#263238]"
+                                    title="Contact (email)"
+                                  >
+                                    <svg
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                      />
+                                    </svg>
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!window.confirm(`Delete supplier "${s.name}"?`)) return
+                                      const token = await getToken()
+                                      if (!token) {
+                                        setError('Not authenticated')
+                                        return
+                                      }
+                                      const res = await fetch(`/api/pharmacy/suppliers/${s.id}`, {
+                                        method: 'DELETE',
+                                        headers: { Authorization: `Bearer ${token}` },
+                                      })
+                                      const data = await res.json()
+                                      if (res.ok && data.success) {
+                                        setSuccess('Supplier deleted')
+                                        fetchPharmacy()
+                                      } else setError(data.error || 'Failed to delete')
+                                    }}
+                                    className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#FFEBEE] hover:text-[#C62828]"
+                                    title="Delete"
+                                  >
+                                    <svg
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
-                          )
-                        }
-                        return filtered.map((s, i) => (
-                          <tr
-                            key={s.id}
-                            className={`border-b border-[#E0E0E0] transition-colors ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'} hover:bg-[#E3F2FD]`}
-                          >
-                            <td className="p-4 font-medium text-[#263238]">{s.name}</td>
-                            <td className="p-4 text-sm text-[#607D8B]">{s.contactPerson ?? '—'}</td>
-                            <td className="p-4 text-sm text-[#607D8B]">{s.phone ?? '—'}</td>
-                            <td className="p-4 text-sm text-[#607D8B]">{s.email ?? '—'}</td>
-                            <td className="p-4 text-sm text-[#607D8B]">—</td>
-                            <td className="p-4 text-sm text-[#607D8B]">—</td>
-                            <td className="p-4">
-                              <span className="inline-flex rounded-full bg-[#E8F5E9] px-2.5 py-0.5 text-xs font-medium text-[#2E7D32]">Active</span>
-                            </td>
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <button type="button" onClick={() => setViewSupplier(s)} className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#E0E0E0] hover:text-[#263238]" title="View">
-                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                </button>
-                                <button type="button" onClick={() => setEditSupplier(s)} className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#E0E0E0] hover:text-[#263238]" title="Edit">
-                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828L8.464 13.464" /></svg>
-                                </button>
-                                <a href={s.email ? `mailto:${s.email}` : '#'} onClick={e => !s.email && e.preventDefault()} className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#E0E0E0] hover:text-[#263238]" title="Contact (email)">
-                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (!window.confirm(`Delete supplier "${s.name}"?`)) return
-                                    const token = await getToken()
-                                    if (!token) { setError('Not authenticated'); return }
-                                    const res = await fetch(`/api/pharmacy/suppliers/${s.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-                                    const data = await res.json()
-                                    if (res.ok && data.success) { setSuccess('Supplier deleted'); fetchPharmacy(); } else setError(data.error || 'Failed to delete')
-                                  }}
-                                  className="p-1.5 rounded-lg text-[#607D8B] hover:bg-[#FFEBEE] hover:text-[#C62828]"
-                                  title="Delete"
-                                >
-                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
-                              </div>
+                          ))}
+                          <tr>
+                            <td colSpan={8} className="p-0">
+                              <Pagination
+                                currentPage={supplierPage}
+                                totalPages={supplierTotalPages}
+                                pageSize={supplierPageSize}
+                                totalItems={filteredSuppliers.length}
+                                onPageChange={goToSupplierPage}
+                                onPageSizeChange={setSupplierPageSize}
+                                itemLabel="suppliers"
+                                className="border-t border-[#E0E0E0]"
+                              />
                             </td>
                           </tr>
-                        ))
-                      })()}
+                        </>
+                      )}
                     </tbody>
                   </table>
                 )}
@@ -5679,7 +8858,7 @@ export default function PharmacyManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(branchFilter === 'all' ? purchaseOrders : purchaseOrders.filter(o => o.branchId === branchFilter)).map((o) => {
+                    {paginatedOrders.map((o) => {
                       const supplierName = suppliers.find(s => s.id === o.supplierId)?.name ?? o.supplierId
                       const branchName = branches.find(b => b.id === o.branchId)?.name ?? o.branchId
                       const created = typeof o.createdAt === 'string' ? o.createdAt : (o.createdAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.() ?? ''
@@ -5729,6 +8908,18 @@ export default function PharmacyManagement() {
                 </table>
               )}
               {!loading && purchaseOrders.length === 0 && <p className="text-slate-500 py-6 text-center">No purchase orders yet. Place an order above.</p>}
+
+              {ordersForTable.length > 0 && (
+                <Pagination
+                  currentPage={ordersPage}
+                  totalPages={ordersTotalPages}
+                  pageSize={ordersPageSize}
+                  totalItems={ordersForTable.length}
+                  onPageChange={goToOrdersPage}
+                  onPageSizeChange={setOrdersPageSize}
+                  itemLabel="orders"
+                />
+              )}
             </div>
 
             {/* Receive order modal: enter batch/expiry/mfg from received goods */}
@@ -5963,7 +9154,7 @@ export default function PharmacyManagement() {
                 <span className="text-xs text-slate-500">Switch between expiry, valuation, sales and stock health views</span>
               </div>
               <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 p-0.5 text-xs font-medium text-slate-600">
-                {(['expiry', 'valuation', 'sales', 'over_under', 'reorder'] as ReportType[]).map((r) => (
+                {(['expiry', 'valuation', 'sales', 'stock_sold', 'over_under', 'reorder'] as ReportType[]).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -5980,6 +9171,8 @@ export default function PharmacyManagement() {
                       ? 'Stock valuation'
                       : r === 'sales'
                       ? 'Sales by product/branch'
+                      : r === 'stock_sold'
+                      ? 'Total stock & sold'
                       : r === 'over_under'
                       ? 'Over/Under stock'
                       : 'Reorder suggestions'}
@@ -6034,6 +9227,46 @@ export default function PharmacyManagement() {
                   </table>
                 </div>
                 {valuationReportRows.length === 0 && <p className="text-slate-500 py-4 text-center">No stock data for selected branch.</p>}
+              </div>
+            )}
+
+            {reportType === 'stock_sold' && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <h3 className="font-semibold text-slate-800">Total stock value & sold</h3>
+                  <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-medium text-slate-600">
+                    {(['day', 'week', 'month', 'year'] as const).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setStockSoldReportPeriod(p)}
+                        className={`px-3 py-1.5 rounded-md transition ${
+                          stockSoldReportPeriod === p ? 'bg-slate-700 text-white' : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {p === 'day' ? 'Today' : p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'Year'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">
+                  {stockSoldReportPeriod === 'day' && 'Sales from start of today.'}
+                  {stockSoldReportPeriod === 'week' && 'Sales in last 7 days.'}
+                  {stockSoldReportPeriod === 'month' && 'Sales in last 30 days.'}
+                  {stockSoldReportPeriod === 'year' && 'Sales in last 365 days.'}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                    <p className="text-sm font-medium text-slate-600 mb-1">Total stock value (current)</p>
+                    <p className="text-2xl font-bold text-slate-900">₹{stockSoldReportData.totalStockValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-slate-500 mt-1">Selling value of inventory{branchFilter !== 'all' ? ' in selected branch' : ''}</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
+                    <p className="text-sm font-medium text-emerald-700 mb-1">Sold in period</p>
+                    <p className="text-2xl font-bold text-emerald-900">₹{stockSoldReportData.soldAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-emerald-600 mt-1">{stockSoldReportData.soldCount} sale(s)</p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -6173,14 +9406,21 @@ export default function PharmacyManagement() {
 
         {subTab === 'users' && isAdmin && (
           <div className="space-y-6">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 w-full">
-              <h3 className="font-semibold text-slate-800 mb-3">Create pharmacy login</h3>
-              <CreatePharmacyUserForm
-                branches={branches}
-                onSuccess={(msg) => { setSuccess(msg); fetchPharmacy(); }}
-                onError={setError}
-                getToken={getToken}
-              />
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-1">Pharmacist accounts</h3>
+                <p className="text-sm text-slate-600">Create login IDs for pharmacists and assign them to branches.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPharmacistForm({ firstName: '', lastName: '', email: '', password: '', branchId: '' })
+                  setShowAddPharmacistModal(true)
+                }}
+                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+              >
+                + Create Pharmacist
+              </button>
             </div>
             <div className="rounded-xl border border-slate-200 overflow-hidden">
               <h3 className="font-semibold text-slate-800 p-3 border-b border-slate-200">Pharmacy users (login credentials)</h3>
@@ -6249,6 +9489,355 @@ export default function PharmacyManagement() {
               </div>
             </div>
           </div>
+        )}
+
+        {viewShiftReportSession && (
+          <RevealModal isOpen onClose={() => setViewShiftReportSession(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/80">
+              <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-5 rounded-t-2xl shrink-0">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800 tracking-tight">Shift report</h2>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {viewShiftReportSession.closedAt
+                        ? new Date(typeof viewShiftReportSession.closedAt === 'string' ? viewShiftReportSession.closedAt : (viewShiftReportSession.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.() ?? '').toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'short' })
+                        : 'Closed session'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewShiftReportSession(null)}
+                    className="p-2.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+                    aria-label="Close"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 sm:p-8 space-y-4">
+                {(() => {
+                  const s = viewShiftReportSession
+                  const cash = Number(s.cashSales ?? 0)
+                  const upi = Number(s.upiSales ?? 0)
+                  const card = Number(s.cardSales ?? 0)
+                  const refunds = Number(s.refunds ?? 0)
+                  const changeGiven = Number(s.changeGiven ?? 0)
+                  const cashExp = Number(s.cashExpenses ?? 0)
+                  const opening = Number(s.openingCashTotal ?? 0)
+                  const expected = Number(s.expectedCash ?? 0)
+                  const closing = Number(s.closingCashTotal ?? 0)
+                  const diff = Number(s.difference ?? 0)
+                  const totalCollection = cash + upi + card - refunds
+                  const totalIncome = cash + upi + card
+                  const totalExpense = cashExp
+                  const DENOMS = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+                  const runningNotes = s.runningNotes || {}
+                  const closingNotes = s.closingNotes || {}
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-slate-500 block text-xs">Opened by</span>
+                          <span className="font-medium text-slate-800">{s.openedByName ?? '—'}</span>
+                          <span className="text-slate-500 block text-xs mt-0.5">
+                            {s.openedAt ? new Date(typeof s.openedAt === 'string' ? s.openedAt : (s.openedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.() ?? '').toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-xs">Closed by</span>
+                          <span className="font-medium text-slate-800">{s.closedByName ?? '—'}</span>
+                          <span className="text-slate-500 block text-xs mt-0.5">
+                            {s.closedAt ? new Date(typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.() ?? '').toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+                        <p className="text-xs font-medium text-emerald-700 mb-1">Total income</p>
+                        <p className="text-xl font-bold text-emerald-900 tabular-nums">₹{totalIncome.toFixed(2)}</p>
+                        <p className="text-xs text-emerald-600 mt-0.5">Cash + UPI + Card sales</p>
+                      </div>
+                      {totalExpense > 0 && (
+                        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
+                          <p className="text-xs font-medium text-amber-700 mb-1">Total expense</p>
+                          <p className="text-xl font-bold text-amber-900 tabular-nums">₹{totalExpense.toFixed(2)}</p>
+                          <p className="text-xs text-amber-600 mt-0.5">Cash expenses from counter</p>
+                        </div>
+                      )}
+                      {shiftReportExpenses.length > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                          <h3 className="text-sm font-semibold text-slate-800 mb-2">Expenses in this shift</h3>
+                          <ul className="space-y-1.5 text-sm">
+                            {shiftReportExpenses.map((ex) => (
+                              <li key={ex.id} className="flex justify-between items-start gap-2">
+                                <span className="text-slate-700 truncate flex-1" title={ex.description ?? ex.categoryName ?? ''}>
+                                  {ex.description || ex.categoryName || 'Expense'}
+                                </span>
+                                <span className="font-medium tabular-nums text-slate-900 shrink-0">₹{Number(ex.amount || 0).toFixed(2)}</span>
+                                <span className="text-xs capitalize text-slate-500 shrink-0">({ex.paymentMethod})</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Opening cash</span>
+                          <span className="font-semibold tabular-nums">₹{opening.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Cash sales</span>
+                          <span className="font-medium tabular-nums">₹{cash.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">UPI sales</span>
+                          <span className="font-medium tabular-nums">₹{upi.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Card sales</span>
+                          <span className="font-medium tabular-nums">₹{card.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-rose-600">
+                          <span>Refunds</span>
+                          <span className="font-medium tabular-nums">−₹{refunds.toFixed(2)}</span>
+                        </div>
+                        {changeGiven > 0 && (
+                          <div className="flex justify-between text-slate-600">
+                            <span>Change given</span>
+                            <span className="tabular-nums">−₹{changeGiven.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {changeGiven > 0 && s.changeNotesTotal && (() => {
+                          const cnt = s.changeNotesTotal
+                          const hasBreakdown = DENOMS.some((d) => (Number(cnt[d]) || 0) > 0)
+                          if (!hasBreakdown) return null
+                          return (
+                            <div className="pl-2 text-xs text-slate-500 border-l-2 border-slate-200">
+                              <span className="font-medium text-slate-600">Change given (notes/coins): </span>
+                              {DENOMS.map((d) => {
+                                const n = Number(cnt[d]) || 0
+                                if (n === 0) return null
+                                return <span key={d} className="tabular-nums mr-2">₹{d}×{n}</span>
+                              })}
+                            </div>
+                          )
+                        })()}
+                        {cashExp > 0 && (
+                          <div className="flex justify-between text-slate-600">
+                            <span>Cash expenses</span>
+                            <span className="tabular-nums">−₹{cashExp.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="border-t border-slate-200 pt-2 flex justify-between">
+                          <span className="text-slate-600">Expected cash in drawer</span>
+                          <span className="font-semibold tabular-nums">₹{expected.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Actual closing cash</span>
+                          <span className="font-semibold tabular-nums">₹{closing.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-700 font-medium">Difference</span>
+                          <span className={`font-semibold tabular-nums ${diff === 0 ? 'text-slate-700' : diff < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {diff === 0 ? 'Balanced' : diff < 0 ? `Short ₹${Math.abs(diff).toFixed(2)}` : `Extra ₹${diff.toFixed(2)}`}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="border-t border-slate-200 pt-4">
+                        <h3 className="text-sm font-semibold text-slate-800 mb-2">Notes in counter</h3>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-200">
+                                <th className="text-left py-2 font-medium text-slate-600">Denomination</th>
+                                <th className="text-right py-2 font-medium text-slate-600">Expected</th>
+                                <th className="text-right py-2 font-medium text-slate-600">Actual</th>
+                                <th className="text-right py-2 font-medium text-slate-600">Diff</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {DENOMS.map((d) => {
+                                const exp = Number(runningNotes[d]) || 0
+                                const act = Number(closingNotes[d]) || 0
+                                const rowDiff = act - exp
+                                return (
+                                  <tr key={d} className="border-b border-slate-100">
+                                    <td className="py-1.5 text-slate-700">₹{d}</td>
+                                    <td className="text-right tabular-nums">{exp}</td>
+                                    <td className="text-right tabular-nums">{act}</td>
+                                    <td className={`text-right tabular-nums ${rowDiff === 0 ? 'text-slate-600' : rowDiff < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                      {rowDiff === 0 ? '—' : rowDiff > 0 ? `+${rowDiff}` : rowDiff}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">Expected = notes in drawer at close (from sales). Actual = count entered when closing.</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+                        <p className="text-xs font-medium text-slate-500 mb-1">Total collection (net sales)</p>
+                        <p className="text-xl font-bold text-slate-900 tabular-nums">₹{totalCollection.toFixed(2)}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Cash + UPI + Card − Refunds</p>
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
+            </div>
+          </RevealModal>
+        )}
+
+        {showCloseShiftConfirm && activeCashSession && (
+          <RevealModal isOpen onClose={() => setShowCloseShiftConfirm(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80">
+              <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-5 rounded-t-2xl shrink-0">
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight">Close shift</h2>
+                <p className="text-sm text-slate-500 mt-1">Confirm closing this shift. Start and close times are recorded.</p>
+              </div>
+              <div className="p-6 sm:p-8 space-y-5">
+                <p className="text-slate-700 font-medium">Are you sure you want to close this shift?</p>
+                <label className="block">
+                  <span className="block text-sm font-medium text-slate-700 mb-1.5">Closed by (person name)</span>
+                  <select
+                    value={closedByName}
+                    onChange={(e) => setClosedByName(e.target.value)}
+                    className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900"
+                  >
+                    {CASHIER_OPTIONS.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCloseShiftConfirm(false)}
+                    className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const token = await getToken()
+                      if (!token || !activeCashSession) return
+                      setShowCloseShiftConfirm(false)
+                      const closingNotesNum: Record<string, number> = {}
+                      let closingTotal = 0
+                      ;['500', '200', '100', '50', '20', '10', '5', '2', '1'].forEach((den) => {
+                        const count = Math.max(0, Number(cashClosingNotes[den] || 0))
+                        closingNotesNum[den] = count
+                        closingTotal += count * Number(den)
+                      })
+                      const body = {
+                        action: 'close',
+                        sessionId: activeCashSession.id,
+                        closingNotes: closingNotesNum,
+                        closingCashTotal: closingTotal,
+                        closedByName: closedByName || undefined,
+                        cashSales: filteredSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                        upiSales: filteredSales.filter((s) => s.paymentMode === 'upi').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                        cardSales: filteredSales.filter((s) => s.paymentMode === 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                        refunds: sales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
+                        cashRefunds: sales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
+                        changeGiven: 0,
+                        hospitalId: activeHospitalId,
+                        branchId: branchFilter === 'all' ? undefined : branchFilter,
+                      }
+                      try {
+                        const res = await fetch('/api/pharmacy/cash-session', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify(body),
+                        })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok || !data.success) {
+                          setError(data.error || 'Failed to close cash session')
+                          return
+                        }
+                        setSuccess('Counter closed and report saved.')
+                        setActiveCashSession(null)
+                        setCashClosingNotes({ '500': '', '200': '', '100': '', '50': '', '20': '', '10': '', '5': '', '2': '', '1': '' })
+                        const closed = data.session
+                        if (closed) {
+                          const cash = Number(closed.cashSales ?? 0)
+                          const upi = Number(closed.upiSales ?? 0)
+                          const card = Number(closed.cardSales ?? 0)
+                          const refunds = Number(closed.refunds ?? 0)
+                          const cashExp = Number(closed.cashExpenses ?? 0)
+                          const totalCollection = cash + upi + card - refunds
+                          setLastClosedSummary({
+                            openingCashTotal: Number(closed.openingCashTotal ?? 0),
+                            closingCashTotal: Number(closed.closingCashTotal ?? 0),
+                            cashSales: cash,
+                            upiSales: upi,
+                            cardSales: card,
+                            refunds,
+                            cashExpenses: cashExp,
+                            profit: totalCollection - cashExp,
+                          })
+                        }
+                        fetchCashSessions()
+                        openCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      } catch (e: any) {
+                        setError(e?.message || 'Failed to close cash session')
+                      }
+                    }}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700"
+                  >
+                    Yes, close shift
+                  </button>
+                </div>
+              </div>
+            </div>
+          </RevealModal>
+        )}
+
+        {showAddPharmacistModal && (
+          <RevealModal isOpen onClose={() => setShowAddPharmacistModal(false)}>
+            <AddPharmacistModalContent
+              form={pharmacistForm}
+              setForm={setPharmacistForm}
+              branches={branches}
+              saving={false}
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (!pharmacistForm.email.trim() || !pharmacistForm.password) {
+                  setError('Email and password are required')
+                  return
+                }
+                if (pharmacistForm.password.length < 6) {
+                  setError('Password must be at least 6 characters')
+                  return
+                }
+                try {
+                  const token = await getToken()
+                  if (!token) { setError('Not authenticated'); return }
+                  const res = await fetch('/api/admin/create-pharmacist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({
+                      email: pharmacistForm.email.trim().toLowerCase(),
+                      password: pharmacistForm.password,
+                      firstName: pharmacistForm.firstName.trim(),
+                      lastName: pharmacistForm.lastName.trim(),
+                      branchId: pharmacistForm.branchId || undefined,
+                    }),
+                  })
+                  const data = await res.json()
+                  if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create pharmacist')
+                  setShowAddPharmacistModal(false)
+                  setSuccess(`Pharmacist created. They can login at /auth/login?role=pharmacy with email: ${pharmacistForm.email.trim()} and the password you set.`)
+                  fetchPharmacy()
+                } catch (err: any) {
+                  setError(err?.message || 'Failed to create pharmacist')
+                }
+              }}
+            />
+          </RevealModal>
         )}
     </>
   )
