@@ -290,8 +290,8 @@ export default function ReceptionistDashboard() {
       {/* Professional Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-slate-200/50 transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
         {/* Header */}
-        <div className="relative h-20 px-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-between overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/90 to-purple-600/90"></div>
+        <div className="relative h-20 px-6 bg-sky-50/80 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
+          <div className="absolute inset-0 pointer-events-none"></div>
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full"></div>
           <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/5 rounded-full"></div>
           

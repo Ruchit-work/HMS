@@ -117,9 +117,9 @@ export default function BranchManagement() {
 
   if (!activeHospitalId) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-200">
-        <p className="text-red-600 font-medium">
-          No hospital selected. Please select a hospital first.
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-6 sm:p-8">
+        <p className="text-sm sm:text-base text-red-600 font-medium">
+          No hospital selected. Please select a hospital first from the top dropdown.
         </p>
       </div>
     )
@@ -142,109 +142,134 @@ export default function BranchManagement() {
         />
       )}
 
-      {/* Create Branch */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-        <h2 className="text-xl font-semibold text-slate-800 mb-4">Create New Branch</h2>
-        <form onSubmit={handleCreateBranch} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Branch Name *
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. Main Branch, City Light"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Location *
-              </label>
-              <input
-                type="text"
-                required
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. Surat, Navsari"
-              />
-            </div>
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-6 sm:p-8">
+        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Branch Management</h2>
+            <p className="text-sm text-slate-500">
+              Create and manage branches for this hospital. Branches are used across pharmacy, reception, and reporting.
+            </p>
           </div>
-
-          <p className="text-xs text-slate-500">
-            Default timings are set to Monday–Friday, 09:00–17:00. You can customize advanced timings later if needed.
-          </p>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Creating...' : 'Create Branch'}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Branch List */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-slate-800">Existing Branches</h2>
         </div>
 
-        {loading ? (
-          <LoadingSpinner message="Loading branches..." />
-        ) : branches.length === 0 ? (
-          <p className="text-slate-500 text-sm">
-            No branches found for this hospital. Use the form above to create your first branch.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Location
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-slate-200">
-                {branches.map((branch) => (
-                  <tr key={branch.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-2 text-sm text-slate-800">
-                      {branch.name}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-slate-600">
-                      {branch.location}
-                    </td>
-                    <td className="px-4 py-2 text-sm">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          branch.status === 'active'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {branch.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1.5fr)]">
+          {/* Create Branch */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-5 sm:p-6 space-y-4">
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold text-slate-800">Create new branch</h3>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                Add a branch with name and city/location. Default timings are Mon–Fri, 09:00–17:00; you can fine-tune later if needed.
+              </p>
+            </div>
+            <form onSubmit={handleCreateBranch} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">
+                    Branch name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g. Main Branch, City Light"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">
+                    Location *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g. Surat, Navsari"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Default timings are set to Monday–Friday, 09:00–17:00. You can customize advanced timings later if needed.
+              </p>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? 'Creating…' : 'Create branch'}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
+
+          {/* Branch List */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-semibold text-slate-800">Existing branches</h3>
+                <p className="text-xs text-slate-500">
+                  {branches.length} branch{branches.length === 1 ? '' : 'es'} configured for this hospital.
+                </p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="py-8 flex justify-center">
+                <LoadingSpinner inline message="Loading branches..." />
+              </div>
+            ) : branches.length === 0 ? (
+              <p className="text-slate-500 text-sm">
+                No branches found for this hospital. Use the form on the left to create your first branch.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="px-4 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        Location
+                      </th>
+                      <th className="px-4 py-2 text-left text[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-slate-200">
+                    {branches.map((branch) => (
+                      <tr key={branch.id} className="hover:bg-slate-50/80">
+                        <td className="px-4 py-2 text-slate-800">
+                          {branch.name}
+                        </td>
+                        <td className="px-4 py-2 text-slate-600">
+                          {branch.location}
+                        </td>
+                        <td className="px-4 py-2">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                              branch.status === 'active'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}
+                          >
+                            {branch.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

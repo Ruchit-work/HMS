@@ -20,6 +20,7 @@ import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
 import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
 import type { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
 import { getAnatomyModelDetails, getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
+import { ClipboardList, Ear, ScanFace, Mic, HeartPulse, Stethoscope, Bone } from "lucide-react"
 
 // Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
 const InlineAnatomyViewer = dynamic(
@@ -1475,10 +1476,10 @@ function DoctorAppointmentsContent() {
     <div className="min-h-screen bg-blue-50/40 pt-20 pb-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Page header block */}
-        <header className="mb-6 rounded-xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 sm:px-6 py-4">
+        <header className="mb-6 rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
+          <div className="px-4 sm:px-6 py-4 bg-sky-50/70 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)]">
             <PageHeader
-              variant="dark"
+              variant="light"
               onGenerateReport={() => setShowReportModal(true)}
               onRefresh={handleRefresh}
               refreshing={refreshing}
@@ -1587,6 +1588,27 @@ function DoctorAppointmentsContent() {
                           consultationMode[selectedAppointment.id] === "normal" ||
                           !consultationMode[selectedAppointment.id]
                         const added = selectedAnatomyTypes[selectedAppointment.id] || []
+                        const renderAnatomyIcon = (type: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes") => {
+                          switch (type) {
+                            case "ear":
+                              return <Ear className="w-5 h-5 text-sky-600" />
+                            case "nose":
+                              return <ScanFace className="w-5 h-5 text-indigo-600" />
+                            case "throat":
+                              return <Mic className="w-5 h-5 text-rose-600" />
+                            case "dental":
+                              return <Stethoscope className="w-5 h-5 text-emerald-600" />
+                            case "lungs":
+                              return <HeartPulse className="w-5 h-5 text-teal-600" />
+                            case "skeleton":
+                              return <Bone className="w-5 h-5 text-slate-700" />
+                            case "kidney":
+                            case "lymph_nodes":
+                            default:
+                              return <Stethoscope className="w-6 h-6 text-sky-600" />
+                          }
+                        }
+
                         return (
                           <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-1">
@@ -1596,14 +1618,14 @@ function DoctorAppointmentsContent() {
                               <button
                                 type="button"
                                 onClick={() => openNormalConsultation(selectedAppointment.id)}
-                                className={`flex-shrink-0 w-24 sm:w-28 rounded-xl border-2 p-3 flex flex-col items-center justify-center gap-1.5 transition-all hover:shadow-md ${
+                                className={`flex-shrink-0 w-20 sm:w-24 rounded-xl border-2 px-3 py-2.5 flex flex-col items-center justify-center gap-1 transition-all hover:shadow-md ${
                                   isNormal
                                     ? "border-blue-400 bg-blue-50/80 text-blue-800"
                                     : "border-slate-200 bg-slate-50/50 text-slate-800 hover:border-slate-300 hover:bg-slate-100"
                                 }`}
                               >
-                                <span className="text-2xl" aria-hidden>
-                                  📋
+                                <span aria-hidden>
+                                  <ClipboardList className="w-5 h-5 text-sky-600" />
                                 </span>
                                 <span className="text-xs font-semibold text-center leading-tight line-clamp-2">
                                   Normal consultation
@@ -1619,14 +1641,14 @@ function DoctorAppointmentsContent() {
                                     key={model.type}
                                     type="button"
                                     onClick={() => openAnatomyFromQuickCard(selectedAppointment.id, model.type as "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton")}
-                                    className={`flex-shrink-0 w-24 sm:w-28 rounded-xl border-2 p-3 flex flex-col items-center justify-center gap-1.5 transition-all hover:shadow-md ${
+                                    className={`flex-shrink-0 w-20 sm:w-24 rounded-xl border-2 px-3 py-2.5 flex flex-col items-center justify-center gap-1 transition-all hover:shadow-md ${
                                       isAdded
                                         ? "border-blue-400 bg-blue-50/80 text-blue-800"
                                         : "border-slate-200 bg-slate-50/50 text-slate-800 hover:border-slate-300 hover:bg-slate-100"
                                     }`}
                                   >
-                                    <span className="text-2xl" aria-hidden>
-                                      {model.icon}
+                                    <span aria-hidden>
+                                      {renderAnatomyIcon(model.type)}
                                     </span>
                                     <span className="text-xs font-semibold text-center leading-tight line-clamp-2">
                                       {model.label}
@@ -1813,114 +1835,11 @@ function DoctorAppointmentsContent() {
                               </div>
                             </div>
 
-                            {/* AI Diagnosis — collapsed by default */}
+                            {/* AI Diagnosis — temporarily disabled
                             <CollapsibleSection title="AI Diagnosis" defaultOpen={false} subdued>
-                            {!aiDiagnosis[selectedAppointment.id] &&
-                              selectedAppointment.status === "confirmed" && (
-                                <div className="bg-gradient-to-br from-indigo-50 via-purple-50/50 to-pink-50/30 rounded-lg p-4 border border-indigo-200 shadow-sm transition-all duration-300 hover:shadow-md hover:border-indigo-300 animate-fade-in card-hover">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center text-white flex-shrink-0">
-                                        <svg
-                                          className="w-4 h-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                                          />
-                                        </svg>
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <h4 className="font-semibold text-gray-900 text-sm truncate">
-                                          AI Diagnosis
-                                        </h4>
-                                      </div>
-                                    </div>
-                                    <button
-                                      onClick={() =>
-                                        getAIDiagnosisSuggestion(selectedAppointment)
-                                      }
-                                      disabled={
-                                        loadingAiDiagnosis[selectedAppointment.id] || false
-                                      }
-                                      className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95"
-                                    >
-                                      {loadingAiDiagnosis[selectedAppointment.id] ? (
-                                        <>
-                                          <svg
-                                            className="animate-spin h-4 w-4"
-                                            viewBox="0 0 24 24"
-                                          >
-                                            <circle
-                                              className="opacity-25"
-                                              cx="12"
-                                              cy="12"
-                                              r="10"
-                                              stroke="currentColor"
-                                              strokeWidth="4"
-                                              fill="none"
-                                            />
-                                            <path
-                                              className="opacity-75"
-                                              fill="currentColor"
-                                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                            />
-                                          </svg>
-                                          Analyzing...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <svg
-                                            className="w-4 h-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                          >
-                                            <path
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                              strokeWidth={2}
-                                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                                            />
-                                          </svg>
-                                          Get suggestion
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                            {aiDiagnosis[selectedAppointment.id] && (
-                              <AIDiagnosisSuggestion
-                                appointment={selectedAppointment}
-                                aiDiagnosisText={aiDiagnosis[selectedAppointment.id]}
-                                isLoading={
-                                  loadingAiDiagnosis[selectedAppointment.id] || false
-                                }
-                                showCompletionForm={
-                                  showCompletionForm[selectedAppointment.id] || false
-                                }
-                                updating={updating[selectedAppointment.id] || false}
-                                onClose={() => {
-                                  const newDiagnosis = { ...aiDiagnosis }
-                                  delete newDiagnosis[selectedAppointment.id]
-                                  setAiDiagnosis(newDiagnosis)
-                                }}
-                                onRegenerate={() =>
-                                  getAIDiagnosisSuggestion(selectedAppointment)
-                                }
-                                onCompleteConsultation={() =>
-                                  ensureNormalConsultationOpen(selectedAppointment.id)
-                                }
-                              />
-                            )}
+                              ...original AI diagnosis UI...
                             </CollapsibleSection>
+                            */}
 
                             {/* History timeline */}
                             {patientHistory.length > 0 && (
@@ -1954,16 +1873,16 @@ function DoctorAppointmentsContent() {
                     {activeTab !== "history" &&
                       showCompletionForm[selectedAppointment.id] &&
                       selectedAppointment.status === "confirmed" && (
-                        <div 
+                        <div
                           ref={completionFormRef}
-                          className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-blue-50/30 shadow-lg transition-all duration-300 hover:shadow-xl animate-fade-in card-hover"
+                          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200"
                         >
-                          <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-                            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                          <div className="border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+                            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
                           {consultationMode[selectedAppointment.id] === "anatomy" ? (
                             <>
                               <svg
-                                className="w-4 h-4 text-purple-600"
+                                className="w-4 h-4 text-sky-600"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -1980,7 +1899,7 @@ function DoctorAppointmentsContent() {
                           ) : (
                             <>
                               <svg
-                                className="w-4 h-4 text-blue-600"
+                                className="w-4 h-4 text-sky-600"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -1999,11 +1918,11 @@ function DoctorAppointmentsContent() {
                         {consultationMode[selectedAppointment.id] === "anatomy" ? (
                           <button
                             onClick={() => switchToNormalConsultation(selectedAppointment.id)}
-                            className="rounded p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                            className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200"
                             title="Back to consultation form"
                           >
                             <svg
-                              className="w-4 h-4"
+                              className="w-3.5 h-3.5 mr-1"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -2015,6 +1934,7 @@ function DoctorAppointmentsContent() {
                                 d="M6 18L18 6M6 6l12 12"
                               />
                             </svg>
+                            Back to form
                           </button>
                         ) : null}
                       </div>
@@ -2026,11 +1946,33 @@ function DoctorAppointmentsContent() {
                             <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50/80">
                               <span className="font-semibold text-sm text-slate-800">3D Anatomy Viewer</span>
                             </div>
-                            <div className="flex items-center gap-1 px-3 py-2 bg-slate-50 border-b border-slate-200 overflow-x-auto">
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border-b border-slate-200 overflow-x-auto">
                               {(selectedAnatomyTypes[selectedAppointment.id] || []).map((tab) => {
                                 const details = getAnatomyModelDetails(tab)
                                 const isActive =
                                   (activeAnatomyTab[selectedAppointment.id] ?? (selectedAnatomyTypes[selectedAppointment.id]?.[0] ?? "ear")) === tab
+
+                                const renderPillIcon = () => {
+                                  switch (tab) {
+                                    case "ear":
+                                      return <Ear className="w-4 h-4 text-white" />
+                                    case "nose":
+                                      return <ScanFace className="w-4 h-4 text-white" />
+                                    case "throat":
+                                      return <Mic className="w-4 h-4 text-white" />
+                                    case "dental":
+                                      return <Stethoscope className="w-4 h-4 text-white" />
+                                    case "lungs":
+                                      return <HeartPulse className="w-4 h-4 text-white" />
+                                    case "skeleton":
+                                      return <Bone className="w-4 h-4 text-white" />
+                                    case "kidney":
+                                    case "lymph_nodes":
+                                    default:
+                                      return <Stethoscope className="w-4 h-4 text-white" />
+                                  }
+                                }
+
                                 return (
                                   <button
                                     key={tab}
@@ -2041,13 +1983,13 @@ function DoctorAppointmentsContent() {
                                         [selectedAppointment.id]: tab,
                                       }))
                                     }
-                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all shrink-0 ${
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium text-xs transition-all shrink-0 ${
                                       isActive
                                         ? "bg-blue-600 text-white shadow-md"
                                         : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
                                     }`}
                                   >
-                                    <span className="text-base">{details?.icon ?? "🔬"}</span>
+                                    {renderPillIcon()}
                                     <span>{details?.label ?? tab}</span>
                                     <span
                                       role="button"

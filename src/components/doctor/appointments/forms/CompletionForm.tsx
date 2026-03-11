@@ -135,22 +135,23 @@ export default function CompletionForm({
   )
 
   return (
-    <form id={formId} onSubmit={onSubmit} className="p-3 space-y-4">
-      {/* Doctor's Notes Section — primary clinical field */}
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          Doctor&apos;s Notes <span className="text-red-500">*</span>
-        </label>
-        <div className="relative flex items-center">
+    <form id={formId} onSubmit={onSubmit} className="p-5">
+      {/* Section 1 — Consultation Notes */}
+      <section className="mb-6">
+        <h3 className="text-base font-semibold text-slate-900 mb-2.5">
+          Consultation Notes <span className="text-red-500">*</span>
+        </h3>
+        <div className="relative">
           <textarea
             value={completionData.notes || ""}
             onChange={(e) => handleNotesChange(e.target.value)}
-            rows={3}
-            placeholder="Enter observations, diagnosis, recommendations..."
-            className="w-full pl-2 pr-10 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-xs resize-none"
+            rows={2}
+            style={{ minHeight: "64px" }}
+            placeholder="Enter consultation notes"
+            className="w-full rounded-[10px] border border-[#CBD5E1] p-3 pr-24 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 resize-none"
             required
           />
-          <div className="absolute right-2 top-2 pointer-events-none flex items-end justify-end">
+          <div className="absolute right-3 top-3 pointer-events-none flex items-end justify-end">
             <div className="pointer-events-auto">
               <VoiceInput
                 onTranscript={(text) => handleNotesChange(text)}
@@ -163,32 +164,18 @@ export default function CompletionForm({
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Prescription Section */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="block text-xs font-medium text-gray-700">
-            Prescribed Medicines <span className="text-red-500">*</span>
-          </label>
-          <div className="flex items-center gap-2">
-            {sameDoctorHistory.length > 0 && (
-              <button
-                type="button"
-                onClick={onCopyPreviousPrescription}
-                className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition-all"
-                title="Copy previous prescription"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Use Previous
-              </button>
-            )}
-          </div>
-        </div>
+      {/* Divider */}
+      <div className="border-t border-slate-200 mb-6" />
 
-        {/* AI suggested medicines (distinct from added list below) */}
+      {/* Section 2 — Prescription */}
+      <section className="mb-6">
+        <h3 className="text-base font-semibold text-slate-900 mb-2.5">
+          Prescription <span className="text-red-500">*</span>
+        </h3>
+
+        {/* Suggested medicines */}
         <AIPrescriptionSuggestion
           isLoading={loadingAiPrescription}
           isVisible={showAiPrescriptionSuggestion}
@@ -200,114 +187,69 @@ export default function CompletionForm({
           onRemove={handleAiPrescriptionRemove}
           onRemoveAll={handleAiPrescriptionRemoveAll}
           onRegenerate={onAiPrescriptionRegenerate}
+          showUsePrevious={sameDoctorHistory.length > 0}
+          onCopyPrevious={onCopyPreviousPrescription}
         />
 
-        {/* Added to prescription — clearly distinct from suggestions above */}
-        <div className="mt-2 pt-2 border-t border-slate-200">
-          <p className="text-xs font-semibold text-slate-700 mb-1.5">Added to prescription</p>
+        {/* Added to prescription */}
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <p className="text-sm font-semibold text-slate-900 mb-3">Added to prescription</p>
           <MedicineForm
-          appointmentId={appointment.id}
-          medicines={completionData.medicines || []}
-          medicineSuggestions={medicineSuggestions}
-          medicineSuggestionsLoading={medicineSuggestionsLoading}
-          onMedicinesChange={handleMedicinesChange}
-        />
+            appointmentId={appointment.id}
+            medicines={completionData.medicines || []}
+            medicineSuggestions={medicineSuggestions}
+            medicineSuggestionsLoading={medicineSuggestionsLoading}
+            onMedicinesChange={handleMedicinesChange}
+          />
         </div>
-      </div>
+      </section>
 
-      {/* Recheckup Section + Documents actions */}
-      <div className="pt-1 border-t border-slate-200 mt-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2">
+      {/* Divider */}
+      <div className="border-t border-slate-200 mb-6" />
+
+      {/* Section 3 — Consultation Actions */}
+      <section>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+          <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               id={`recheckupRequired-${appointment.id}`}
               checked={completionData.recheckupRequired || false}
               onChange={(e) => handleRecheckupRequiredChange(e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+              className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
             />
-            <label
-              htmlFor={`recheckupRequired-${appointment.id}`}
-              className="text-xs font-medium text-gray-700 cursor-pointer"
-            >
-              🔄 Follow-up Required
-            </label>
-          </div>
-
-          <div className="flex items-center gap-2 sm:justify-end">
-            <button
-              type="button"
-              onClick={onDocumentUploadToggle}
-              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition-all flex items-center gap-1"
-            >
-              {showDocumentUpload ? (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Hide Documents
-                </>
-              ) : (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Documents
-                </>
-              )}
-            </button>
-          </div>
+            <span className="text-sm font-medium text-slate-700">Follow-up required</span>
+          </label>
+          <button
+            type="button"
+            onClick={onDocumentUploadToggle}
+            className="h-9 px-4 rounded-lg border border-[#CBD5E1] bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:opacity-90 transition-all"
+          >
+            {showDocumentUpload ? "Hide Documents" : "+ Add Documents"}
+          </button>
         </div>
         {completionData.recheckupRequired && (
-          <div className="mt-2 space-y-2">
+          <div className="mt-3 space-y-3 p-4 rounded-lg bg-slate-50/80 border border-slate-100">
             <div>
-              <label htmlFor={`recheckupDays-${appointment.id}`} className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor={`recheckupDays-${appointment.id}`} className="block text-sm font-medium text-slate-700 mb-1">
                 Follow-up after (days) — Sundays skipped
               </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  id={`recheckupDays-${appointment.id}`}
-                  value={
-                    [3, 5, 7, 10, 14, 21, 28].includes(completionData.recheckupDays ?? 7)
-                      ? String(completionData.recheckupDays ?? 7)
-                      : "custom"
-                  }
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (v === "custom") {
-                      const current = completionData.recheckupDays ?? 7
-                      handleRecheckupDaysChange(Number.isNaN(current) ? 7 : current)
-                    } else {
-                      handleRecheckupDaysChange(Number(v))
-                    }
-                  }}
-                  className="w-full max-w-[120px] px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-                >
-                  <option value={3}>3 days</option>
-                  <option value={5}>5 days</option>
-                  <option value={7}>7 days</option>
-                  <option value={10}>10 days</option>
-                  <option value={14}>14 days</option>
-                  <option value={21}>21 days</option>
-                  <option value={28}>28 days</option>
-                  <option value="custom">Custom</option>
-                </select>
-                {![3, 5, 7, 10, 14, 21, 28].includes(completionData.recheckupDays ?? 7) && (
-                  <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={completionData.recheckupDays ?? 7}
-                    onChange={(e) => handleRecheckupDaysChange(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="w-16 px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-                    placeholder="Days"
-                  />
-                )}
-              </div>
+              <input
+                id={`recheckupDays-${appointment.id}`}
+                type="number"
+                min={1}
+                max={365}
+                value={completionData.recheckupDays ?? 7}
+                onChange={(e) =>
+                  handleRecheckupDaysChange(Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 1)))
+                }
+                className="max-w-[120px] w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500"
+                placeholder="Days"
+              />
             </div>
             <div>
-              <label htmlFor={`recheckupNote-${appointment.id}`} className="block text-xs font-medium text-gray-700 mb-1">
-              Follow-up Note (Optional)
+              <label htmlFor={`recheckupNote-${appointment.id}`} className="block text-sm font-medium text-slate-700 mb-1">
+                Follow-up note (optional)
               </label>
               <textarea
                 id={`recheckupNote-${appointment.id}`}
@@ -315,16 +257,31 @@ export default function CompletionForm({
                 onChange={(e) => handleRecheckupNoteChange(e.target.value)}
                 rows={2}
                 placeholder="e.g., Follow-up for blood pressure"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs resize-none"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-sky-500/30"
               />
             </div>
           </div>
         )}
-      </div>
 
-      {/* Document Upload Section */}
+        {onAddAnatomy && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={onAddAnatomy}
+              className="inline-flex items-center gap-2 rounded-[10px] border border-dashed border-[#CBD5E1] bg-transparent px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add Anatomy
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Document Upload (when toggled) */}
       {showDocumentUpload && (
-        <div className="mt-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
           <DocumentUpload
             patientId={appointment.patientId}
             patientUid={appointment.patientUid || appointment.patientId || ""}
@@ -337,61 +294,32 @@ export default function CompletionForm({
         </div>
       )}
 
-      {/* Add Anatomy - above actions */}
-      {onAddAnatomy && (
-        <div className="pt-2 pb-1 border-t border-slate-200 mt-3">
-          <button
-            type="button"
-            onClick={onAddAnatomy}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm bg-white border-2 border-dashed border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Add Anatomy
-          </button>
-        </div>
-      )}
-
       {/* In-form submit buttons — hidden when sticky bar is used (formId provided) */}
       {!formId && (
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-3 pt-6 border-t border-slate-200 mt-6">
           <button
             type="submit"
             disabled={updating || !hasValidPrescriptionInput(completionData)}
-            className="btn-modern btn-modern-success btn-modern-sm flex-1"
+            className="flex-1 h-10 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {updating ? "Completing..." : "Complete Checkup"}
+            {updating ? "Completing…" : "Complete Checkup"}
           </button>
           <button
             type="button"
             onClick={onAdmitClick}
             disabled={updating || admitting || !hasValidPrescriptionInput(completionData)}
-            className="flex-1 px-4 py-2 bg-slate-900 hover:bg-black text-white rounded font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 h-10 rounded-lg border border-slate-300 bg-white text-slate-800 text-sm font-medium hover:bg-slate-50 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {admitting ? (
               <>
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                <span>Sending...</span>
+                Sending…
               </>
             ) : (
-              <>
-                <span>🏥</span>
-                <span>Admit Patient</span>
-              </>
+              <>Admit Patient</>
             )}
           </button>
         </div>

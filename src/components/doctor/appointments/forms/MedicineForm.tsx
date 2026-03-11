@@ -215,12 +215,15 @@ export default function MedicineForm({
   return (
     <div className="space-y-3">
       {medicines.length === 0 ? (
-        <div className="text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-          <p className="text-xs text-slate-600 mb-2">No medicines added yet</p>
+        <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center">
+          <p className="text-base font-semibold text-slate-900 mb-1">No medicines added</p>
+          <p className="text-sm text-slate-500 mb-4 max-w-sm mx-auto">
+            Start building the patient&apos;s prescription by adding medicines from suggestions or manually searching.
+          </p>
           <button
             type="button"
             onClick={addMedicine}
-            className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-xs transition-all"
+            className="h-9 px-4 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:opacity-90 transition-opacity"
           >
             + Add Medicine
           </button>
@@ -237,7 +240,7 @@ export default function MedicineForm({
 
             return (
               <div key={index} className="relative">
-                <div className="flex flex-wrap items-center gap-3 py-2.5 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50/80">
+                <div className="flex flex-wrap items-center gap-3 py-3 px-4 rounded-[10px] border border-[#E2E8F0] bg-white hover:bg-slate-50/80 transition-colors">
                   <div className="relative flex-1 min-w-[100px] max-w-[180px]">
                     <input
                       type="text"
@@ -379,39 +382,23 @@ export default function MedicineForm({
                     )}
                   </div>
                   {(() => {
-                    const { preset, customDays } = parseDurationDays(medicine.duration)
-                    const isCustom = preset === "custom"
+                    const { customDays } = parseDurationDays(medicine.duration)
+                    const days = customDays || 7
                     return (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <select
-                          value={isCustom ? "custom" : String(preset)}
-                          onChange={(e) => {
-                            const v = e.target.value
-                            if (v === "custom") updateMedicine(index, "duration", `${customDays || 7} days`)
-                            else updateMedicine(index, "duration", `${v} days`)
-                          }}
-                          className="rounded border border-gray-300 pl-1.5 pr-7 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500 w-20"
-                        >
-                          {PRESET_DAYS.map((d) => (
-                            <option key={d} value={d}>{d} days</option>
-                          ))}
-                          <option value="custom">Custom</option>
-                        </select>
-                        {isCustom && (
-                          <input
-                            type="number"
-                            min={1}
-                            max={365}
-                            value={customDays || ""}
-                            onChange={(e) => {
-                              const n = parseInt(e.target.value, 10)
-                              if (!Number.isNaN(n) && n >= 1) updateMedicine(index, "duration", `${n} days`)
-                            }}
-                            className="w-14 px-1.5 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
-                            placeholder="Days"
-                          />
-                        )}
-                      </div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={days}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value, 10)
+                          if (!Number.isNaN(n) && n >= 1) {
+                            updateMedicine(index, "duration", `${Math.min(365, n)} days`)
+                          }
+                        }}
+                        className="w-16 px-1.5 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                        placeholder="Days"
+                      />
                     )
                   })()}
                   <button
@@ -480,12 +467,12 @@ export default function MedicineForm({
             <button
               type="button"
               onClick={addMedicine}
-              className="px-3 py-1 bg-slate-100 text-slate-700 border border-slate-300 rounded-md text-xs font-medium hover:bg-slate-200 transition flex items-center gap-1"
+              className="h-9 px-4 rounded-lg border border-[#CBD5E1] bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:opacity-90 transition-opacity inline-flex items-center gap-2"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Add More
+              Add more
             </button>
           </div>
         </>

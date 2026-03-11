@@ -261,40 +261,37 @@ export default function DoctorDashboard() {
   const completedAppointments = appointments.filter((appointment: Appointment) => appointment.status === "completed").length
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 pt-20">
+    <div className="min-h-screen bg-slate-50 pt-20">
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-6 text-white relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">
-                  Welcome back, Dr. {userData.firstName}! 👋
-                </h2>
-                <p className="text-blue-100 mb-4">
-                  Ready to make a difference in your patients' lives today
-                </p>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span>System Online</span>
-                  </div>
-                  <div className="text-blue-200">
-                    {new Date().toLocaleDateString('en-US', { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                  </div>
+        <div className="relative rounded-2xl border border-slate-200 bg-sky-50/70 p-6 sm:p-7 overflow-hidden shadow-sm bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)]">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-1.5">
+                Welcome back, Dr. {userData.firstName}! <span aria-hidden>👋</span>
+              </h2>
+              <p className="text-sm text-slate-600 mb-3">
+                Ready to make a difference in your patients&apos; lives today.
+              </p>
+              <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-slate-600">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium text-emerald-700">System online</span>
+                </div>
+                <div className="text-slate-500">
+                  {new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
                 </div>
               </div>
-              <div className="hidden lg:block">
-                <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center text-4xl">
-                  🩺
-                </div>
+            </div>
+            <div className="hidden lg:block">
+              <div className="w-20 h-20 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center">
+                <span className="text-3xl" aria-hidden>🩺</span>
               </div>
             </div>
           </div>

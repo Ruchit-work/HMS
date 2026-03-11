@@ -167,6 +167,40 @@ export interface PharmacyCashSession {
   openedByName?: string
   /** Display name of person who closed the shift */
   closedByName?: string
+  /** Optional reference to configured cashier profile */
+  cashierProfileId?: string
+  /** Optional reference to configured billing counter */
+  counterId?: string
+  /** Human readable cashier name (from profile) */
+  cashierName?: string
+  /** Human readable counter name (e.g. "Counter 1") */
+  counterName?: string
+}
+
+// ----- Cashier profiles & billing counters -----
+
+export interface PharmacyCashierProfile {
+  id: string
+  hospitalId: string
+  /** Branch this cashier usually works at; "all" for hospital‑wide */
+  branchId: string
+  name: string
+  /** Optional phone or employee number */
+  phone?: string
+  active: boolean
+  createdAt: Timestamp | string
+  updatedAt?: Timestamp | string
+}
+
+export interface PharmacyCounter {
+  id: string
+  hospitalId: string
+  /** Branch this counter belongs to; "all" for shared counters */
+  branchId: string
+  name: string
+  active: boolean
+  createdAt: Timestamp | string
+  updatedAt?: Timestamp | string
 }
 
 // ----- Expenses -----

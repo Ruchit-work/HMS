@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   const ctxResult = await getPharmacyAuthContext(auth.user, {
     hospitalId: hospitalIdParam,
-    branchId: branchIdParam,
+    branchId: branchIdParam || undefined,
   })
   if (!ctxResult.success) {
     return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
@@ -26,10 +26,10 @@ export async function GET(request: NextRequest) {
   const { hospitalId, branchId } = ctxResult.context
   const db = admin.firestore()
   const sessionsPath = getPharmacyCollectionPath(hospitalId, 'cashSessions')
-  let q = db.collection(sessionsPath).where('cashierId', '==', auth.user.uid)
-  if (branchId) q = q.where('branchId', '==', branchId)
+  const base = db.collection(sessionsPath)
+  const query = branchId ? base.where('branchId', '==', branchId) : base
 
-  const snap = await q.limit(50).get()
+  const snap = await query.limit(50).get()
   const sessions = (snap.docs.map((d) => ({ id: d.id, ...d.data() })) as PharmacyCashSession[])
     .sort((a, b) => {
       const at = typeof a.openedAt === 'string' ? new Date(a.openedAt).getTime() : (a.openedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       return bt - at
     })
     .slice(0, 20)
-  const active = sessions.find((s) => s.status === 'open')
+  const active = sessions.find((s) => s.status === 'open' && s.cashierId === ctxResult.context.userId)
 
   return NextResponse.json({ success: true, activeSession: active ?? null, recentSessions: sessions })
 }
@@ -71,6 +71,31 @@ export async function POST(request: NextRequest) {
     const openingNotes = (body.openingNotes || {}) as Record<string, number>
     const openingCashTotal = Number(body.openingCashTotal) || 0
     const openedByName = typeof body.openedByName === 'string' ? body.openedByName.trim() || undefined : undefined
+    const cashierProfileId = typeof body.cashierProfileId === 'string' ? body.cashierProfileId.trim() || undefined : undefined
+    const cashierName = typeof body.cashierName === 'string' ? body.cashierName.trim() || undefined : undefined
+    const counterId = typeof body.counterId === 'string' ? body.counterId.trim() || undefined : undefined
+    const counterName = typeof body.counterName === 'string' ? body.counterName.trim() || undefined : undefined
+
+    // Prevent duplicate open sessions for same cashier or counter in this branch
+    const openSnap = await db
+      .collection(sessionsPath)
+      .where('branchId', '==', branchId || 'all')
+      .where('status', '==', 'open')
+      .limit(50)
+      .get()
+    const openSessions = openSnap.docs.map((d) => d.data() as PharmacyCashSession)
+    if (cashierProfileId && openSessions.some((s) => s.cashierProfileId === cashierProfileId)) {
+      return NextResponse.json(
+        { success: false, error: 'This cashier already has an open counter in this branch.' },
+        { status: 400 },
+      )
+    }
+    if (counterId && openSessions.some((s) => s.counterId === counterId)) {
+      return NextResponse.json(
+        { success: false, error: 'This counter is already in use for an open shift.' },
+        { status: 400 },
+      )
+    }
     const now = new Date().toISOString()
     const ref = db.collection(sessionsPath).doc()
     const session: PharmacyCashSession = {
@@ -88,8 +113,12 @@ export async function POST(request: NextRequest) {
       cardSales: 0,
       refunds: 0,
       changeGiven: 0,
+      ...(openedByName != null && { openedByName }),
+      ...(cashierProfileId != null && { cashierProfileId }),
+      ...(cashierName != null && { cashierName }),
+      ...(counterId != null && { counterId }),
+      ...(counterName != null && { counterName }),
     }
-    if (openedByName) session.openedByName = openedByName
     await ref.set(session)
     return NextResponse.json({ success: true, session })
   }

@@ -18,6 +18,8 @@ export const PHARMACY_COLLECTIONS = {
   expenseCategories: 'pharmacy_expense_categories',
   expenses: 'pharmacy_expenses',
   shifts: 'pharmacy_shifts',
+  cashiers: 'pharmacy_cashiers',
+  counters: 'pharmacy_counters',
 } as const
 
 export function getPharmacyCollectionPath(hospitalId: string, name: keyof typeof PHARMACY_COLLECTIONS): string {

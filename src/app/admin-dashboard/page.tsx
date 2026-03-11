@@ -36,6 +36,7 @@ import AdminProtected from "@/components/AdminProtected"
 import PieChart, { DEFAULT_COLORS, DEFAULT_COLORS_ALT } from "./components/PieChart"
 import StatCard from "./components/StatCard"
 import TabButton from "@/components/admin/TabButton"
+import AdminPageHeader from "@/components/admin/AdminPageHeader"
 import SubTabNavigation from "@/components/admin/SubTabNavigation"
 import {
   calculateAllTrends,
@@ -607,8 +608,8 @@ export default function AdminDashboard() {
       {/* Professional Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-slate-200/50 transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
         {/* Header */}
-        <div className="relative h-20 px-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-between overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/90 to-purple-600/90"></div>
+        <div className="relative h-20 px-6 bg-sky-50/80 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
+          <div className="absolute inset-0 pointer-events-none" />
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full"></div>
           <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/5 rounded-full"></div>
           
@@ -765,13 +766,13 @@ export default function AdminDashboard() {
               </>
             )}
 
-            {/* Management section: Branches & Staff */}
+            {/* Management section: Branches & Staff (hospital admins only for Staff) */}
             <div className="border-t border-slate-300/30 my-2"></div>
             <div className="px-3 py-1">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
             </div>
             {/* Pharmacy tab removed from admin sidebar; pharmacy users use dedicated /pharmacy portal */}
-            {(activeHospital as any)?.multipleBranchesEnabled !== false && (
+            {!isSuperAdmin && (activeHospital as any)?.multipleBranchesEnabled !== false && (
               <TabButton
                 id="branches"
                 activeTab={activeTab}
@@ -784,17 +785,19 @@ export default function AdminDashboard() {
                 label="Branches"
               />
             )}
-            <TabButton
-              id="staff"
-              activeTab={activeTab}
-              onClick={() => { setActiveTab("staff"); setStaffSubTab("receptionists"); setSidebarOpen(false) }}
-              icon={
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              }
-              label="Staff"
-            />
+            {!isSuperAdmin && (
+              <TabButton
+                id="staff"
+                activeTab={activeTab}
+                onClick={() => { setActiveTab("staff"); setStaffSubTab("receptionists"); setSidebarOpen(false) }}
+                icon={
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                }
+                label="Staff"
+              />
+            )}
             
           </div>
 
@@ -832,46 +835,42 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <div className="lg:ml-72">
-        {/* Professional Header */}
-        <header className="bg-white/80 backdrop-blur-xl shadow-xl border-b border-slate-200/50">
-          <div className={`py-6 px-6 sm:px-8 lg:px-6 ${!sidebarOpen ? 'pl-16 sm:pl-20 lg:pl-6' : ''}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex-1 text-center sm:text-left">
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent capitalize">
-                  {activeTab === "overview" ? "Dashboard Overview" :
-                   activeTab === "patients" ? "Patient Management" :
-                   activeTab === "doctors" ? "Doctor Management" :
-                   activeTab === "campaigns" ? "Campaigns" :
-                   activeTab === "appointments" ? "Appointment Management" :
-                   activeTab === "billing" ? "Revenue & Analytics" :
-                   activeTab === "analytics" ? "Analytics Hub" :
-                   activeTab === "hospitals" ? "Hospital Management" :
-                   activeTab === "admins" ? "Admin Assignment" :
-                   activeTab === "branches" ? "Branch Management" :
-                   activeTab === "staff" ? "Staff Management" :
-                   "Dashboard"}
-                </h1>
-                <p className="text-sm sm:text-base text-slate-600 mt-1">
-                  {activeTab === "overview" ? "Hospital management system overview" :
-                   activeTab === "patients" ? "Manage patient records and information" :
-                   activeTab === "doctors" ? "Manage doctor profiles and schedules" :
-                   activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
-                  activeTab === "appointments" ? "Monitor and manage all appointments" :
-                  activeTab === "billing" ? "Comprehensive revenue analytics, billing records, and financial insights" :
-                  activeTab === "analytics" ? "Unified analytics dashboard - patient, financial, and doctor performance insights" :
-                   activeTab === "hospitals" ? "Create and manage hospitals in the system" :
-                   activeTab === "admins" ? "Create and assign admins to hospitals" :
-                   activeTab === "branches" ? "Create and manage branches for your hospital" :
-                   activeTab === "staff" ? "Create and manage receptionists & pharmacists for your hospital" :
-                   "Administrative dashboard"}
-                </p>
-              </div>
-              
-              {/* Hospital Selector for Super Admins */}
-              <div className="flex items-center gap-3 justify-center sm:justify-end">
+        {/* Standard Admin Page Header */}
+        <header className={`px-4 sm:px-6 lg:px-6 pt-4 pb-0 ${!sidebarOpen ? 'pl-16 sm:pl-20 lg:pl-6' : ''}`}>
+          <AdminPageHeader
+            title={
+              activeTab === "overview" ? "Dashboard Overview" :
+              activeTab === "patients" ? "Patient Management" :
+              activeTab === "doctors" ? "Doctor Management" :
+              activeTab === "campaigns" ? "Campaigns" :
+              activeTab === "appointments" ? "Appointment Management" :
+              activeTab === "billing" ? "Revenue & Analytics" :
+              activeTab === "analytics" ? "Analytics Hub" :
+              activeTab === "hospitals" ? "Hospital Management" :
+              activeTab === "admins" ? "Admin Assignment" :
+              activeTab === "branches" ? "Branch Management" :
+              activeTab === "staff" ? "Staff Management" :
+              "Dashboard"
+            }
+            description={
+              activeTab === "overview" ? "Hospital management system overview" :
+              activeTab === "patients" ? "Manage patient records and information" :
+              activeTab === "doctors" ? "Manage doctor profiles and schedules" :
+              activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
+              activeTab === "appointments" ? "Monitor and manage all appointments" :
+              activeTab === "billing" ? "Comprehensive revenue analytics, billing records, and financial insights" :
+              activeTab === "analytics" ? "Unified analytics dashboard – patient, financial, and doctor performance insights" :
+              activeTab === "hospitals" ? "Create and manage hospitals in the system" :
+              activeTab === "admins" ? "Create and assign admins to hospitals" :
+              activeTab === "branches" ? "Create and manage branches for your hospital" :
+              activeTab === "staff" ? "Create and manage receptionists & pharmacists for your hospital" :
+              "Administrative dashboard"
+            }
+            controls={
+              <>
                 {isSuperAdmin && hasMultipleHospitals && (
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm font-medium text-slate-700">Hospital:</label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-slate-700">Hospital</label>
                     <select
                       value={activeHospitalId || ""}
                       onChange={async (e) => {
@@ -885,7 +884,7 @@ export default function AdminDashboard() {
                           }
                         }
                       }}
-                      className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
                     >
                       {userHospitals.map((hospital) => (
                         <option key={hospital.id} value={hospital.id}>
@@ -895,10 +894,27 @@ export default function AdminDashboard() {
                     </select>
                   </div>
                 )}
+                {branches.length > 0 && (activeHospital as any)?.multipleBranchesEnabled !== false && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-slate-700">Branch</label>
+                    <select
+                      value={selectedBranchId}
+                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]"
+                    >
+                      <option value="all">All branches</option>
+                      {branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {(activeHospital as any)?.enablePharmacy && (
                   <Link
                     href="/pharmacy"
-                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 h-10 text-sm font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
@@ -906,31 +922,9 @@ export default function AdminDashboard() {
                     <span>Open Pharmacy Portal</span>
                   </Link>
                 )}
-              </div>
-              
-              {/* Branch Filter - Visible only when hospital has multiple branches */}
-              {branches.length > 0 && (activeHospital as any)?.multipleBranchesEnabled !== false && (
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                    <span>🏥</span>
-                    <span>Filter by Branch:</span>
-                  </label>
-                  <select
-                    value={selectedBranchId}
-                    onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
-                  >
-                    <option value="all">All Branches</option>
-                    {branches.map((branch) => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          </div>
+              </>
+            }
+          />
         </header>
 
         {/* Content Area */}
@@ -1545,7 +1539,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
-          {activeTab === "branches" && (
+          {activeTab === "branches" && !isSuperAdmin && (
             (activeHospital as any)?.multipleBranchesEnabled !== false ? (
               <BranchManagement />
             ) : (
@@ -1607,7 +1601,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeTab === "staff" && (
+          {activeTab === "staff" && !isSuperAdmin && (
             <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
               <SubTabNavigation
                 tabs={[

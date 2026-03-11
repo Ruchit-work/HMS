@@ -28,6 +28,11 @@ import type {
   StockTransfer,
   PharmacyPurchaseOrder,
   PurchaseOrderLine,
+  PharmacyCashSession,
+  PharmacyCashierProfile,
+  PharmacyCounter,
+  PharmacyExpense,
+  PharmacyExpenseCategory,
 } from '@/types/pharmacy'
 import { generateBillPDFAndPrint } from '@/utils/pharmacy/billPrint'
 import { exportToExcel, exportToPdf, printReport } from '@/utils/pharmacy/exportReports'
@@ -4218,11 +4223,11 @@ export default function PharmacyManagement() {
   const [returnsMinAmount, setReturnsMinAmount] = useState<string>('')
   const [returnsMaxAmount, setReturnsMaxAmount] = useState<string>('')
   const [returnsInnerTab, setReturnsInnerTab] = useState<'by_sale' | 'by_return'>('by_sale')
-  const [activeCashSession, setActiveCashSession] = useState<import('@/types/pharmacy').PharmacyCashSession | null>(null)
-  const [recentCashSessions, setRecentCashSessions] = useState<import('@/types/pharmacy').PharmacyCashSession[]>([])
+  const [activeCashSession, setActiveCashSession] = useState<PharmacyCashSession | null>(null)
+  const [recentCashSessions, setRecentCashSessions] = useState<PharmacyCashSession[]>([])
   const [cashSessionsLoading, setCashSessionsLoading] = useState(false)
-  const [viewShiftReportSession, setViewShiftReportSession] = useState<import('@/types/pharmacy').PharmacyCashSession | null>(null)
-  const [shiftReportExpenses, setShiftReportExpenses] = useState<import('@/types/pharmacy').PharmacyExpense[]>([])
+  const [viewShiftReportSession, setViewShiftReportSession] = useState<PharmacyCashSession | null>(null)
+  const [shiftReportExpenses, setShiftReportExpenses] = useState<PharmacyExpense[]>([])
   const [cashOpeningNotes, setCashOpeningNotes] = useState<Record<string, string>>({ '500': '', '200': '', '100': '', '50': '', '20': '', '10': '', '5': '', '2': '', '1': '' })
   const [cashClosingNotes, setCashClosingNotes] = useState<Record<string, string>>({ '500': '', '200': '', '100': '', '50': '', '20': '', '10': '', '5': '', '2': '', '1': '' })
   const openCounterSectionRef = useRef<HTMLDivElement>(null)
@@ -4285,10 +4290,20 @@ export default function PharmacyManagement() {
   })
   const [showExpenseCashModal, setShowExpenseCashModal] = useState(false)
   const [pendingExpensePayload, setPendingExpensePayload] = useState<{ amount: number; date: string; note: string; paymentMethod: string } | null>(null)
-  const CASHIER_OPTIONS = ['Rahul', 'Priya']
-  const [openedByName, setOpenedByName] = useState<string>(CASHIER_OPTIONS[0])
+  const [openedByName, setOpenedByName] = useState<string>('')
+  const [selectedCashierId, setSelectedCashierId] = useState<string>('')
+  const [selectedCounterId, setSelectedCounterId] = useState<string>('')
+  const [cashiers, setCashiers] = useState<PharmacyCashierProfile[]>([])
+  const [counters, setCounters] = useState<PharmacyCounter[]>([])
+  const [showCreateCashierModal, setShowCreateCashierModal] = useState(false)
+  const [showCreateCounterModal, setShowCreateCounterModal] = useState(false)
+  const [newCashier, setNewCashier] = useState<{ name: string; phone: string }>({ name: '', phone: '' })
+  const [newCounterName, setNewCounterName] = useState<string>('')
+  const [editingCashierId, setEditingCashierId] = useState<string | null>(null)
+  const [editingCounterId, setEditingCounterId] = useState<string | null>(null)
+  const [manageCashierCounterTab, setManageCashierCounterTab] = useState<'cashier' | 'counter'>('cashier')
   const [showCloseShiftConfirm, setShowCloseShiftConfirm] = useState(false)
-  const [closedByName, setClosedByName] = useState<string>(CASHIER_OPTIONS[0])
+  const [closedByName, setClosedByName] = useState<string>('')
   const [showAddPharmacistModal, setShowAddPharmacistModal] = useState(false)
   const [pharmacistForm, setPharmacistForm] = useState<{ firstName: string; lastName: string; email: string; password: string; branchId: string }>({
     firstName: '',
@@ -4414,6 +4429,39 @@ export default function PharmacyManagement() {
     }
   }, [activeHospitalId, branchFilter, expenseFilters, getToken])
 
+  const fetchCashiersAndCounters = useCallback(async () => {
+    if (!activeHospitalId) return
+    try {
+      const token = await getToken()
+      if (!token) return
+      const params = new URLSearchParams()
+      params.set('hospitalId', activeHospitalId)
+      if (branchFilter && branchFilter !== 'all') params.set('branchId', branchFilter)
+      const [cashiersRes, countersRes] = await Promise.all([
+        fetch(`/api/pharmacy/cashiers?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/pharmacy/counters?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+      if (cashiersRes.ok) {
+        const data = await cashiersRes.json().catch(() => ({}))
+        if (data.success && Array.isArray(data.cashiers)) {
+          setCashiers(data.cashiers)
+        }
+      }
+      if (countersRes.ok) {
+        const data = await countersRes.json().catch(() => ({}))
+        if (data.success && Array.isArray(data.counters)) {
+          setCounters(data.counters)
+        }
+      }
+    } catch {
+      // ignore, UI will show empty dropdowns
+    }
+  }, [activeHospitalId, branchFilter, getToken])
+
+  useEffect(() => {
+    fetchCashiersAndCounters()
+  }, [fetchCashiersAndCounters])
+
   const fetchBranches = useCallback(async () => {
     if (!activeHospitalId) return
     const token = await getToken()
@@ -4430,7 +4478,7 @@ export default function PharmacyManagement() {
     }
   }, [activeHospitalId, getToken])
 
-  const FETCH_PHARMACY_TIMEOUT_MS = 28000
+  const FETCH_PHARMACY_TIMEOUT_MS = 60000
 
   const fetchPharmacy = useCallback(async (silent = false) => {
     if (!activeHospitalId) {
@@ -4517,7 +4565,12 @@ export default function PharmacyManagement() {
     try {
       await Promise.race([runFetches(), timeoutPromise])
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load pharmacy data')
+      const msg = e instanceof Error ? e.message : 'Failed to load pharmacy data'
+      if (msg.includes('Request timed out') && isPharmacyPortal) {
+        console.warn('Pharmacy portal initial load timed out; showing partial data.')
+      } else {
+        setError(msg)
+      }
     } finally {
       if (!silent) setLoading(false)
     }
@@ -7478,16 +7531,51 @@ export default function PharmacyManagement() {
                     })()}
                     <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3 max-w-xl">
                       <label className="block">
-                        <span className="text-xs font-medium text-slate-600 block mb-1">Opened by (person name)</span>
-                        <select
-                          value={openedByName}
-                          onChange={(e) => setOpenedByName(e.target.value)}
-                          className="w-full max-w-xs rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900"
-                        >
-                          {CASHIER_OPTIONS.map((name) => (
-                            <option key={name} value={name}>{name}</option>
-                          ))}
-                        </select>
+                        <span className="text-xs font-medium text-slate-600 block mb-1">Cashier</span>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedCashierId}
+                            onChange={(e) => setSelectedCashierId(e.target.value)}
+                            className="w-full max-w-xs rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900"
+                          >
+                            <option value="">Select cashier</option>
+                            {cashiers.map((c) => {
+                              const inUse = recentCashSessions.some(
+                                (s) => s.status === 'open' && s.cashierProfileId === c.id,
+                              )
+                              return (
+                                <option key={c.id} value={c.id} disabled={inUse}>
+                                  {c.name}
+                                  {c.phone ? ` (${c.phone})` : ''}
+                                  {inUse ? ' — in shift' : ''}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </div>
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-medium text-slate-600 block mb-1">Counter</span>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedCounterId}
+                            onChange={(e) => setSelectedCounterId(e.target.value)}
+                            className="w-full max-w-xs rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-900"
+                          >
+                            <option value="">Select counter</option>
+                            {counters.map((c) => {
+                              const inUse = recentCashSessions.some(
+                                (s) => s.status === 'open' && s.counterId === c.id,
+                              )
+                              return (
+                                <option key={c.id} value={c.id} disabled={inUse}>
+                                  {c.name}
+                                  {inUse ? ' — in use' : ''}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </div>
                       </label>
                       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-[11px]">
                         {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((den) => (
@@ -7521,6 +7609,12 @@ export default function PharmacyManagement() {
                         onClick={async () => {
                           const token = await getToken()
                           if (!token || !activeHospitalId) return
+                          if (!selectedCashierId || !selectedCounterId) {
+                            setError('Select both cashier and counter to open a shift.')
+                            return
+                          }
+                          const cashier = cashiers.find((c) => c.id === selectedCashierId)
+                          const counter = counters.find((c) => c.id === selectedCounterId)
                           const notesNum: Record<string, number> = {}
                           let openingTotal = 0
                           ;['500', '200', '100', '50', '20', '10', '5', '2', '1'].forEach((den) => {
@@ -7541,7 +7635,11 @@ export default function PharmacyManagement() {
                                 branchId: branchFilter === 'all' ? undefined : branchFilter,
                                 openingNotes: notesNum,
                                 openingCashTotal: openingTotal,
-                                openedByName: openedByName || undefined,
+                        openedByName: openedByName || cashier?.name || undefined,
+                                cashierProfileId: cashier?.id,
+                                cashierName: cashier?.name,
+                                counterId: counter?.id,
+                                counterName: counter?.name,
                               }),
                             })
                             const data = await res.json().catch(() => ({}))
@@ -7695,6 +7793,189 @@ export default function PharmacyManagement() {
                   Apply
                 </button>
               </div>
+            </div>
+
+            {/* Manage Cashier and Counter */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Manage Cashier and Counter</h3>
+              <div className="flex items-center gap-2 border-b border-slate-200 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setManageCashierCounterTab('cashier')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+                    manageCashierCounterTab === 'cashier'
+                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Cashier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManageCashierCounterTab('counter')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+                    manageCashierCounterTab === 'counter'
+                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Counter
+                </button>
+              </div>
+              {manageCashierCounterTab === 'cashier' && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <p className="text-sm text-slate-500">Add and manage cashiers for billing.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCashierId(null)
+                        setNewCashier({ name: '', phone: '' })
+                        setShowCreateCashierModal(true)
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                      Create
+                    </button>
+                  </div>
+                  {cashiers.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-4">No cashiers yet. Click Create to add one.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-slate-700">Name</th>
+                            <th className="text-left px-3 py-2 font-medium text-slate-700">Phone</th>
+                            <th className="w-28 text-right px-3 py-2 font-medium text-slate-700">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cashiers.map((c) => (
+                            <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <td className="px-3 py-2 text-slate-900">{c.name}</td>
+                              <td className="px-3 py-2 text-slate-600">{c.phone || '—'}</td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCashierId(c.id)
+                                    setNewCashier({ name: c.name, phone: c.phone || '' })
+                                    setShowCreateCashierModal(true)
+                                  }}
+                                  className="text-emerald-600 hover:text-emerald-800 font-medium text-xs mr-2"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!window.confirm(`Delete cashier "${c.name}"? They will be removed from the list.`)) return
+                                    const token = await getToken()
+                                    if (!token) return
+                                    try {
+                                      const res = await fetch(`/api/pharmacy/cashiers/${c.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+                                      const data = await res.json().catch(() => ({}))
+                                      if (!res.ok || !data.success) {
+                                        setError(data.error || 'Failed to delete cashier')
+                                        return
+                                      }
+                                      setCashiers((prev) => prev.filter((x) => x.id !== c.id))
+                                      setSuccess('Cashier removed.')
+                                    } catch (e: any) {
+                                      setError(e?.message || 'Failed to delete cashier')
+                                    }
+                                  }}
+                                  className="text-rose-600 hover:text-rose-800 font-medium text-xs"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+              {manageCashierCounterTab === 'counter' && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <p className="text-sm text-slate-500">Add and manage billing counters.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCounterId(null)
+                        setNewCounterName('')
+                        setShowCreateCounterModal(true)
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                      Create
+                    </button>
+                  </div>
+                  {counters.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-4">No counters yet. Click Create to add one.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-slate-700">Counter name</th>
+                            <th className="w-28 text-right px-3 py-2 font-medium text-slate-700">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {counters.map((c) => (
+                            <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <td className="px-3 py-2 text-slate-900">{c.name}</td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCounterId(c.id)
+                                    setNewCounterName(c.name)
+                                    setShowCreateCounterModal(true)
+                                  }}
+                                  className="text-emerald-600 hover:text-emerald-800 font-medium text-xs mr-2"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!window.confirm(`Delete counter "${c.name}"? It will be removed from the list.`)) return
+                                    const token = await getToken()
+                                    if (!token) return
+                                    try {
+                                      const res = await fetch(`/api/pharmacy/counters/${c.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+                                      const data = await res.json().catch(() => ({}))
+                                      if (!res.ok || !data.success) {
+                                        setError(data.error || 'Failed to delete counter')
+                                        return
+                                      }
+                                      setCounters((prev) => prev.filter((x) => x.id !== c.id))
+                                      setSuccess('Counter removed.')
+                                    } catch (e: any) {
+                                      setError(e?.message || 'Failed to delete counter')
+                                    }
+                                  }}
+                                  className="text-rose-600 hover:text-rose-800 font-medium text-xs"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -9701,15 +9982,13 @@ export default function PharmacyManagement() {
                 <p className="text-slate-700 font-medium">Are you sure you want to close this shift?</p>
                 <label className="block">
                   <span className="block text-sm font-medium text-slate-700 mb-1.5">Closed by (person name)</span>
-                  <select
+                  <input
+                    type="text"
                     value={closedByName}
                     onChange={(e) => setClosedByName(e.target.value)}
+                    placeholder="e.g. Counter 1 – Raj"
                     className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900"
-                  >
-                    {CASHIER_OPTIONS.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
+                  />
                 </label>
                 <div className="flex justify-end gap-3 pt-2">
                   <button
@@ -9732,17 +10011,43 @@ export default function PharmacyManagement() {
                         closingNotesNum[den] = count
                         closingTotal += count * Number(den)
                       })
+                      // Calculate sales/refunds only for this cash session (between open and close)
+                      let sessionSales = sales
+                      if (activeCashSession?.openedAt) {
+                        const openedAtMs =
+                          typeof activeCashSession.openedAt === 'string'
+                            ? new Date(activeCashSession.openedAt).getTime()
+                            : (activeCashSession.openedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+                        const nowMs = Date.now()
+                        sessionSales = sales.filter((s) => {
+                          const t =
+                            typeof s.dispensedAt === 'string'
+                              ? new Date(s.dispensedAt).getTime()
+                              : (s.dispensedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+                          if (!t || t < openedAtMs || t > nowMs) return false
+                          if (branchFilter !== 'all' && s.branchId && s.branchId !== branchFilter) return false
+                          return true
+                        })
+                      }
                       const body = {
                         action: 'close',
                         sessionId: activeCashSession.id,
                         closingNotes: closingNotesNum,
                         closingCashTotal: closingTotal,
                         closedByName: closedByName || undefined,
-                        cashSales: filteredSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
-                        upiSales: filteredSales.filter((s) => s.paymentMode === 'upi').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
-                        cardSales: filteredSales.filter((s) => s.paymentMode === 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
-                        refunds: sales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
-                        cashRefunds: sales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
+                        cashSales: sessionSales
+                          .filter((s) => s.paymentMode === 'cash')
+                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                        upiSales: sessionSales
+                          .filter((s) => s.paymentMode === 'upi')
+                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                        cardSales: sessionSales
+                          .filter((s) => s.paymentMode === 'card')
+                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                        refunds: sessionSales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
+                        cashRefunds: sessionSales
+                          .filter((s) => s.paymentMode === 'cash')
+                          .reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
                         changeGiven: 0,
                         hospitalId: activeHospitalId,
                         branchId: branchFilter === 'all' ? undefined : branchFilter,
@@ -9789,6 +10094,204 @@ export default function PharmacyManagement() {
                     className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700"
                   >
                     Yes, close shift
+                  </button>
+                </div>
+              </div>
+            </div>
+          </RevealModal>
+        )}
+
+        {showCreateCashierModal && (
+          <RevealModal isOpen onClose={() => setShowCreateCashierModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80">
+              <div className="px-6 pt-6 pb-4 border-b border-slate-200">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {editingCashierId ? 'Edit cashier' : 'Create cashier'}
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Add or update a cashier for assigning shifts.</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={newCashier.name}
+                    onChange={(e) => setNewCashier((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="e.g. Raj"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Phone / ID (optional)</label>
+                  <input
+                    type="text"
+                    value={newCashier.phone}
+                    onChange={(e) => setNewCashier((prev) => ({ ...prev, phone: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="e.g. +91 98765 43210"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateCashierModal(false)}
+                    className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!newCashier.name.trim()) {
+                        setError('Cashier name is required.')
+                        return
+                      }
+                      const token = await getToken()
+                      if (!token || !activeHospitalId) return
+                      try {
+                        if (editingCashierId) {
+                          const res = await fetch(`/api/pharmacy/cashiers/${editingCashierId}`, {
+                            method: 'PATCH',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              name: newCashier.name,
+                              phone: newCashier.phone,
+                            }),
+                          })
+                          const data = await res.json().catch(() => ({}))
+                          if (!res.ok || !data.success) {
+                            setError(data.error || 'Failed to update cashier')
+                            return
+                          }
+                          setCashiers((prev) =>
+                            prev.map((c) => (c.id === editingCashierId ? data.cashier : c)),
+                          )
+                        } else {
+                          const res = await fetch('/api/pharmacy/cashiers', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              name: newCashier.name,
+                              phone: newCashier.phone,
+                              branchId: branchFilter === 'all' ? undefined : branchFilter,
+                            }),
+                          })
+                          const data = await res.json().catch(() => ({}))
+                          if (!res.ok || !data.success) {
+                            setError(data.error || 'Failed to create cashier')
+                            return
+                          }
+                          setCashiers((prev) => [...prev, data.cashier])
+                        }
+                        setNewCashier({ name: '', phone: '' })
+                        setEditingCashierId(null)
+                        setShowCreateCashierModal(false)
+                      } catch (e: any) {
+                        setError(e?.message || 'Failed to save cashier')
+                      }
+                    }}
+                    className="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </RevealModal>
+        )}
+
+        {showCreateCounterModal && (
+          <RevealModal isOpen onClose={() => setShowCreateCounterModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80">
+              <div className="px-6 pt-6 pb-4 border-b border-slate-200">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {editingCounterId ? 'Edit counter' : 'Create counter'}
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Add or update a billing counter for assigning shifts.</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Counter name</label>
+                  <input
+                    type="text"
+                    value={newCounterName}
+                    onChange={(e) => setNewCounterName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="e.g. Counter 1, Night counter"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateCounterModal(false)}
+                    className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!newCounterName.trim()) {
+                        setError('Counter name is required.')
+                        return
+                      }
+                      const token = await getToken()
+                      if (!token || !activeHospitalId) return
+                      try {
+                        if (editingCounterId) {
+                          const res = await fetch(`/api/pharmacy/counters/${editingCounterId}`, {
+                            method: 'PATCH',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              name: newCounterName,
+                            }),
+                          })
+                          const data = await res.json().catch(() => ({}))
+                          if (!res.ok || !data.success) {
+                            setError(data.error || 'Failed to update counter')
+                            return
+                          }
+                          setCounters((prev) =>
+                            prev.map((c) => (c.id === editingCounterId ? data.counter : c)),
+                          )
+                        } else {
+                          const res = await fetch('/api/pharmacy/counters', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              name: newCounterName,
+                              branchId: branchFilter === 'all' ? undefined : branchFilter,
+                            }),
+                          })
+                          const data = await res.json().catch(() => ({}))
+                          if (!res.ok || !data.success) {
+                            setError(data.error || 'Failed to create counter')
+                            return
+                          }
+                          setCounters((prev) => [...prev, data.counter])
+                        }
+                        setNewCounterName('')
+                        setEditingCounterId(null)
+                        setShowCreateCounterModal(false)
+                      } catch (e: any) {
+                        setError(e?.message || 'Failed to save counter')
+                      }
+                    }}
+                    className="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700"
+                  >
+                    Save
                   </button>
                 </div>
               </div>

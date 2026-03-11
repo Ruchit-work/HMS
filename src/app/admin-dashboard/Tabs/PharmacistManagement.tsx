@@ -187,6 +187,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingPharmacist, setEditingPharmacist] = useState<Pharmacist | null>(null)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<PharmacistFormData>({
     firstName: '',
@@ -313,6 +314,65 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
     }
   }
 
+  const handleDelete = async (pharmacistId: string) => {
+    if (!window.confirm('Delete this pharmacist? They will no longer be able to log in.')) return
+    try {
+      setError(null)
+      setSuccess(null)
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error('You must be logged in')
+      const token = await currentUser.getIdToken()
+      if (!token) throw new Error('Authentication token not found')
+      const res = await fetch(`/api/admin/pharmacists/${pharmacistId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete pharmacist')
+      setSuccess('Pharmacist deleted.')
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete pharmacist. Please try again.')
+    }
+  }
+
+  const handleEditSave = async () => {
+    if (!editingPharmacist) return
+    try {
+      setSaving(true)
+      setError(null)
+      setSuccess(null)
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error('You must be logged in')
+      const token = await currentUser.getIdToken()
+      if (!token) throw new Error('Authentication token not found')
+      const res = await fetch(`/api/admin/pharmacists/${editingPharmacist.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          firstName: editingPharmacist.firstName,
+          lastName: editingPharmacist.lastName,
+          phone: editingPharmacist.phone ?? '',
+          branchId: editingPharmacist.branchId ?? undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update pharmacist')
+      setSuccess('Pharmacist updated.')
+      setEditingPharmacist(null)
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update pharmacist. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleCancel = () => {
     setShowAddModal(false)
     setFormData({
@@ -380,6 +440,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
                     <th className="px-4 py-2 text-left font-semibold text-slate-700">Phone</th>
                     <th className="px-4 py-2 text-left font-semibold text-slate-700">Branch</th>
                     <th className="px-4 py-2 text-left font-semibold text-slate-700">Hospital</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -390,6 +451,24 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
                       <td className="px-4 py-2">{p.phone || '—'}</td>
                       <td className="px-4 py-2">{p.branchName || '—'}</td>
                       <td className="px-4 py-2">{p.hospitalName || '—'}</td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingPharmacist(p)}
+                            className="px-3 py-1 rounded-full border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(p.id)}
+                            className="px-3 py-1 rounded-full border border-rose-300 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -413,6 +492,96 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
             branches={branches}
             saving={saving || branchesLoading}
           />
+        </RevealModal>
+      )}
+
+      {editingPharmacist && (
+        <RevealModal
+          isOpen={true}
+          onClose={() => setEditingPharmacist(null)}
+          contentClassName="p-0"
+          overlayClassName="mt-30 pt-20 sm:pt-24"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl min-w-[360px] max-h-[90vh] overflow-hidden flex flex-col border border-slate-200/80">
+            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-4 rounded-t-2xl shrink-0 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Edit Pharmacist</h3>
+                <p className="text-sm text-slate-500 mt-1">Update name, phone and branch. Email and password stay the same.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPharmacist(null)}
+                className="p-2.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">First name</label>
+                  <input
+                    type="text"
+                    value={editingPharmacist.firstName}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, firstName: e.target.value } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Last name</label>
+                  <input
+                    type="text"
+                    value={editingPharmacist.lastName}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, lastName: e.target.value } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={editingPharmacist.phone ?? ''}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, phone: e.target.value } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
+                  <select
+                    value={editingPharmacist.branchId ?? ''}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, branchId: e.target.value, branchName: branches.find(b => b.id === e.target.value)?.name ?? prev.branchName } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  >
+                    <option value="">Select branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-slate-200 px-6 py-4 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditingPharmacist(null)}
+                disabled={saving}
+                className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleEditSave}
+                disabled={saving}
+                className="px-5 py-2 text-sm rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
         </RevealModal>
       )}
     </div>

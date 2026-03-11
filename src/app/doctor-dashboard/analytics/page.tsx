@@ -376,19 +376,15 @@ export default function DoctorAnalyticsPage() {
     : 1
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 pt-20">
+    <div className="min-h-screen bg-slate-50 pt-20">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Enhanced Header */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 text-white relative overflow-hidden shadow-xl">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full -ml-24 -mb-24"></div>
-          
+       
+        <div className="relative rounded-2xl border border-slate-200 bg-sky-50/80 p-8 overflow-hidden shadow-sm bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)]">
           <div className="relative z-10">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-4xl font-bold mb-2">Analytics Dashboard</h1>
-                <p className="text-blue-100 text-lg">Comprehensive insights into your practice performance</p>
+                <h1 className="text-3xl font-bold mb-2 text-slate-900">Analytics Dashboard</h1>
+                <p className="text-base text-slate-600">Comprehensive insights into your practice performance</p>
               </div>
               <Link
                 href="/doctor-dashboard"
@@ -406,8 +402,8 @@ export default function DoctorAnalyticsPage() {
                   onClick={() => setDateRange(range)}
                   className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                     dateRange === range
-                      ? "bg-white text-blue-600 shadow-lg scale-105"
-                      : "bg-white/10 text-white/90 hover:bg-white/20 backdrop-blur-sm"
+                      ? "bg-sky-600 text-white shadow-md scale-105"
+                      : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200/70"
                   }`}
                 >
                   {range.charAt(0).toUpperCase() + range.slice(1)}
@@ -417,110 +413,122 @@ export default function DoctorAnalyticsPage() {
           </div>
         </div>
 
-        {/* Enhanced Performance Metrics */}
+        {/* Key performance metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div 
-            className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 relative overflow-hidden"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-11 h-11 bg-sky-50 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                  />
+                </svg>
               </div>
-              <p className="text-blue-100 text-sm font-medium mb-1">Total Patients</p>
-              <p className="text-4xl font-bold mb-2">{analytics.totalPatients}</p>
-              <div className="flex items-center gap-3 text-sm">
-                <span className="bg-white/20 px-2 py-1 rounded-lg backdrop-blur-sm">
-                  {analytics.newPatients} new
-                </span>
-                <span className="bg-white/20 px-2 py-1 rounded-lg backdrop-blur-sm">
-                  {analytics.returningPatients} returning
-                </span>
-              </div>
+            </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">
+              Total patients
+            </p>
+            <p className="text-3xl font-semibold text-slate-900 mb-2">
+              {analytics.totalPatients}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="inline-flex items-center rounded-full border border-slate-200 px-2 py-0.5">
+                {analytics.newPatients} new
+              </span>
+              <span className="inline-flex items-center rounded-full border border-slate-200 px-2 py-0.5">
+                {analytics.returningPatients} returning
+              </span>
             </div>
           </div>
 
-          <div 
-            className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 relative overflow-hidden"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
               </div>
-              <p className="text-emerald-100 text-sm font-medium mb-1">Appointments</p>
-              <p className="text-4xl font-bold mb-2">{analytics.totalAppointments}</p>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-white/20 rounded-full h-2 backdrop-blur-sm">
-                  <div 
-                    className="bg-white h-2 rounded-full"
-                    style={{ width: `${analytics.completionRate}%` }}
-                  ></div>
-                </div>
-                <span className="text-sm font-semibold">{analytics.completionRate}%</span>
+            </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">
+              Appointments
+            </p>
+            <p className="text-3xl font-semibold text-slate-900 mb-2">
+              {analytics.totalAppointments}
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-2 rounded-full"
+                  style={{ width: `${analytics.completionRate}%` }}
+                />
               </div>
+              <span className="text-sm font-semibold text-slate-700">
+                {analytics.completionRate}%
+              </span>
             </div>
           </div>
 
-          <div 
-            className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 relative overflow-hidden"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </div>
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-11 h-11 bg-indigo-50 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
               </div>
-              <p className="text-purple-100 text-sm font-medium mb-1">Follow-up Rate</p>
-              <p className="text-4xl font-bold mb-2">{analytics.followUpRate}%</p>
-              <p className="text-purple-100 text-xs">Patient retention</p>
             </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">
+              Follow-up rate
+            </p>
+            <p className="text-3xl font-semibold text-slate-900 mb-1">
+              {analytics.followUpRate}%
+            </p>
+            <p className="text-xs text-slate-500">Patient retention</p>
           </div>
 
-          <div 
-            className="bg-gradient-to-br from-red-500 to-orange-600 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 relative overflow-hidden"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </div>
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-11 h-11 bg-rose-50 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
               </div>
-              <p className="text-red-100 text-sm font-medium mb-1">Cancellations</p>
-              <p className="text-4xl font-bold mb-2">
-                {analytics.cancelledAppointments + analytics.noShowAppointments}
-              </p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="bg-white/20 px-2 py-1 rounded-lg backdrop-blur-sm">
-                  {analytics.cancelledAppointments} cancelled
-                </span>
-                <span className="bg-white/20 px-2 py-1 rounded-lg backdrop-blur-sm">
-                  {analytics.noShowAppointments} no-show
-                </span>
-              </div>
+            </div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">
+              Cancellations
+            </p>
+            <p className="text-3xl font-semibold text-slate-900 mb-2">
+              {analytics.cancelledAppointments + analytics.noShowAppointments}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="inline-flex rounded-full border border-slate-200 px-2 py-0.5">
+                {analytics.cancelledAppointments} cancelled
+              </span>
+              <span className="inline-flex rounded-full border border-slate-200 px-2 py-0.5">
+                {analytics.noShowAppointments} no-show
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Main Analytics Grid */}
+       
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Most Common Diagnoses */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">

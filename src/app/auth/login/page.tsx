@@ -32,6 +32,7 @@ function LoginContent() {
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
   const [pendingPhone, setPendingPhone] = useState<string>("")
   const [yatharthOpen, setYatharthOpen] = useState(false)
+  const [jivandeepOpen, setJivandeepOpen] = useState(false)
   const router = useRouter()
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
   
@@ -979,6 +980,128 @@ function LoginContent() {
                         <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600">Doctor</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Jivandeep Hospital – separate dropdown */}
+            <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden bg-slate-50/80">
+              <button
+                type="button"
+                onClick={() => setJivandeepOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100/80 transition-colors"
+              >
+                <span>Jivandeep Hospital credentials</span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform ${jivandeepOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {jivandeepOpen && (
+                <div className="border-t border-slate-200 bg-white">
+                  <table className="min-w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Email ID</th>
+                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Password</th>
+                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Role / Location</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        className="hover:bg-blue-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("Jivandeep@gmail.com")
+                          setPassword("Jivandeep@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Jivandeep@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Jivandeep@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
+                      </tr>
+                      <tr
+                        className="hover:bg-blue-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("Rajsinhrana1@gmail.com")
+                          setPassword("Rajsinhrana1@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajsinhrana1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajsinhrana1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor</td>
+                      </tr>
+                      <tr
+                        className="hover:bg-blue-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("Rajpipala@gmail.com")
+                          setPassword("Rajpipala@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajpipala@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajpipala@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Rajpipala</td>
+                      </tr>
+                      <tr
+                        className="hover:bg-blue-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("ahm@gmail.com")
+                          setPassword("ahm@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">ahm@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">ahm@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Ahmedabad</td>
+                      </tr>
+                      <tr
+                        className="hover:bg-blue-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("diyodar@gmail.com")
+                          setPassword("diyodar@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">diyodar@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">diyodar@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Diyodar</td>
+                      </tr>
+                      <tr
+                        className="hover:bg-blue-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("gardeshwar@gmail.com")
+                          setPassword("gardeshwar@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">gardeshwar@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">gardeshwar@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Gardeshwar</td>
+                      </tr>
+                      <tr
+                        className="hover:bg-blue-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("umalla@gmail.com")
+                          setPassword("umalla@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">umalla@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">umalla@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Umalla</td>
+                      </tr>
+                      <tr
+                        className="hover:bg-emerald-50 cursor-pointer"
+                        onClick={() => {
+                          setIdentifier("jivandeeppharma@gmail.com")
+                          setPassword("jivandeeppharma@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">jivandeeppharma@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">jivandeeppharma@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy – Rajpipala</td>
                       </tr>
                     </tbody>
                   </table>

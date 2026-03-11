@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, password, firstName, lastName, branchId } = body
+    const { email, password, firstName, lastName, branchId, phone } = body
 
     if (!email || !password) {
       return NextResponse.json(
@@ -133,6 +133,8 @@ export async function POST(request: NextRequest) {
       hospitalId: adminHospitalId,
       branchId: branchIdToUse || null,
       branchName: branchName || null,
+      phone: typeof phone === 'string' && phone.trim() ? phone.trim() : null,
+      phoneNumber: typeof phone === 'string' && phone.trim() ? phone.trim() : null,
       createdAt: now,
       updatedAt: now,
       createdBy: auth.user.uid,

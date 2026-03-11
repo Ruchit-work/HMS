@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRevealModalClose, RevealModal } from "@/components/ui/overlays/RevealModal"
 import { type AnatomyModel, type AnatomyType } from "@/utils/anatomyModelMapping"
 import { getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
+import { ClipboardList, Ear, ScanFace, Mic, HeartPulse, Stethoscope, Bone } from "lucide-react"
 
 type SelectedMode = "normal" | AnatomyType | null
 
@@ -74,6 +75,27 @@ function ConsultationModeModalContent({
   const allAvailableModels = getAvailableAnatomyModels(doctorSpecialization)
   const availableModels = allAvailableModels.filter(model => !alreadySelectedTypes.includes(model.type))
 
+  const renderAnatomyIcon = (type: AnatomyType) => {
+    switch (type) {
+      case "ear":
+        return <Ear className="w-6 h-6 text-sky-600" />
+      case "nose":
+        return <ScanFace className="w-6 h-6 text-indigo-600" />
+      case "throat":
+        return <Mic className="w-6 h-6 text-rose-600" />
+      case "dental":
+        return <Stethoscope className="w-6 h-6 text-emerald-600" />
+      case "lungs":
+        return <HeartPulse className="w-6 h-6 text-teal-600" />
+      case "skeleton":
+        return <Bone className="w-6 h-6 text-slate-700" />
+      case "kidney":
+      case "lymph_nodes":
+      default:
+        return <Stethoscope className="w-6 h-6 text-sky-600" />
+    }
+  }
+
   const modelColors: Record<string, { from: string; to: string; border: string; selectedBorder: string; bg: string }> = {
     ear: { from: 'from-sky-50', to: 'to-blue-50', border: 'border-slate-200', selectedBorder: 'border-blue-400', bg: 'bg-sky-500' },
     nose: { from: 'from-violet-50', to: 'to-purple-50', border: 'border-slate-200', selectedBorder: 'border-violet-400', bg: 'bg-violet-500' },
@@ -132,10 +154,8 @@ function ConsultationModeModalContent({
                 : "bg-slate-50/50 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
             }`}
           >
-            <div className="w-14 h-14 bg-primary rounded-xl flex items-center justify-center text-white shrink-0 shadow-md">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-primary shrink-0">
+              <ClipboardList className="w-6 h-6" />
             </div>
             <div className="flex-1 min-w-0">
               <h4 className="font-bold text-slate-800 text-base">Normal Consultation</h4>
@@ -154,7 +174,7 @@ function ConsultationModeModalContent({
         <section className="mb-8">
           <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Specialized Examination (3D / 2D Models)</h4>
           {availableModels.length > 0 ? (
-            <div className="overflow-x-auto snap-x snap-mandatory flex gap-4 pb-2 -mx-1 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+            <div className="overflow-x-auto snap-x snap-mandatory flex gap-2 pb-1 -mx-1 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
               {availableModels.map((model: AnatomyModel) => {
                 const colors = modelColors[model.type]
                 const isSelected = selectedMode === model.type
@@ -162,17 +182,17 @@ function ConsultationModeModalContent({
                   <button
                     key={model.type}
                     onClick={() => setSelectedMode(model.type)}
-                    className={`relative flex-shrink-0 w-36 sm:w-40 snap-center p-5 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all duration-200 min-h-[120px] ${
+                    className={`relative flex-shrink-0 w-24 sm:w-28 snap-center px-3.5 py-3 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all duration-200 min-h-[90px] ${
                       isSelected
                         ? `bg-gradient-to-b ${colors.from} ${colors.to} ${colors.selectedBorder} shadow-lg`
                         : `bg-white ${colors.border} hover:border-slate-300 hover:shadow-md`
                     }`}
                   >
-                    <div className={`w-14 h-14 ${colors.bg} rounded-xl flex items-center justify-center text-white text-2xl mb-3 shrink-0 shadow-md`}>
-                      {model.icon}
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white mb-2 shrink-0">
+                      {renderAnatomyIcon(model.type)}
                     </div>
-                    <h4 className="font-bold text-slate-800 text-sm leading-tight">{model.label}</h4>
-                    <p className="text-xs text-slate-500 mt-1">3D / 2D Model</p>
+                    <h4 className="font-semibold text-slate-800 text-xs leading-tight">{model.label}</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">3D / 2D Model</p>
                     {isSelected && (
                       <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
                         <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
