@@ -1018,79 +1018,13 @@ function LoginContent() {
                       <tr
                         className="hover:bg-blue-50 cursor-pointer"
                         onClick={() => {
-                          setIdentifier("Jivandeep@gmail.com")
-                          setPassword("Jivandeep@gmail.com")
+                          setIdentifier("Jivandeep@gmail.com");
+                          setPassword("Jivandeep@gmail.com");
                         }}
                       >
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Jivandeep@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Jivandeep@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
-                      </tr>
-                      <tr
-                        className="hover:bg-blue-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("Rajsinhrana1@gmail.com")
-                          setPassword("Rajsinhrana1@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajsinhrana1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajsinhrana1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor</td>
-                      </tr>
-                      <tr
-                        className="hover:bg-blue-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("Rajpipala@gmail.com")
-                          setPassword("Rajpipala@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajpipala@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Rajpipala@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Rajpipala</td>
-                      </tr>
-                      <tr
-                        className="hover:bg-blue-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("ahm@gmail.com")
-                          setPassword("ahm@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">ahm@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">ahm@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Ahmedabad</td>
-                      </tr>
-                      <tr
-                        className="hover:bg-blue-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("diyodar@gmail.com")
-                          setPassword("diyodar@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">diyodar@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">diyodar@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Diyodar</td>
-                      </tr>
-                      <tr
-                        className="hover:bg-blue-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("gardeshwar@gmail.com")
-                          setPassword("gardeshwar@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">gardeshwar@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">gardeshwar@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Gardeshwar</td>
-                      </tr>
-                      <tr
-                        className="hover:bg-blue-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("umalla@gmail.com")
-                          setPassword("umalla@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">umalla@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">umalla@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist – Umalla</td>
                       </tr>
                       <tr
                         className="hover:bg-emerald-50 cursor-pointer"
@@ -1102,6 +1036,116 @@ function LoginContent() {
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">jivandeeppharma@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">jivandeeppharma@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy – Rajpipala</td>
+                      </tr>
+                      <tr className="bg-teal-100/80">
+                        <td colSpan={3} className="px-2 py-1.5 text-teal-800 font-semibold text-[11px] uppercase tracking-wide">Doctors</td>
+                      </tr>
+                      {/* Doctors – teal background for easy identification */}
+                      <tr
+                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
+                        onClick={() => { setIdentifier("Priti1@gmail.com"); setPassword("Priti1@gmail.com"); }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Priti1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Priti1@gmail.com</td>
+                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      </tr>
+                      <tr
+                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
+                        onClick={() => { setIdentifier("Ram1@gmail.com"); setPassword("Ram1@gmail.com"); }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Ram1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Ram1@gmail.com</td>
+                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      </tr>
+                      <tr
+                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
+                        onClick={() => { setIdentifier("Gaurav1@gmail.com"); setPassword("Gaurav1@gmail.com"); }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Gaurav1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Gaurav1@gmail.com</td>
+                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      </tr>
+                      <tr
+                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
+                        onClick={() => { setIdentifier("Nikhilmehta1@gmiil.com"); setPassword("Nikhilmehta1@gmiil.com"); }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Nikhilmehta1@gmiil.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Nikhilmehta1@gmiil.com</td>
+                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      </tr>
+                      <tr
+                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
+                        onClick={() => { setIdentifier("Rajsinhrana1@gmail.com"); setPassword("Rajsinhrana1@gmail.com"); }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Rajsinhrana1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Rajsinhrana1@gmail.com</td>
+                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      </tr>
+                      <tr
+                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
+                        onClick={() => { setIdentifier("Sai1@gmail.com"); setPassword("Sai1@gmail.com"); }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Sai1@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Sai1@gmail.com</td>
+                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      </tr>
+                      <tr className="bg-amber-100/80">
+                        <td colSpan={3} className="px-2 py-1.5 text-amber-800 font-semibold text-[11px] uppercase tracking-wide">Receptionists</td>
+                      </tr>
+                      <tr
+                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
+                        onClick={() => {
+                          setIdentifier("Rajpipala@gmail.com")
+                          setPassword("Rajpipala@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">Rajpipala@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">Rajpipala@gmail.com</td>
+                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Rajpipala</td>
+                      </tr>
+                      <tr
+                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
+                        onClick={() => {
+                          setIdentifier("ahm@gmail.com")
+                          setPassword("ahm@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">ahm@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">ahm@gmail.com</td>
+                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Ahmedabad</td>
+                      </tr>
+                      <tr
+                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
+                        onClick={() => {
+                          setIdentifier("diyodar@gmail.com")
+                          setPassword("diyodar@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">diyodar@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">diyodar@gmail.com</td>
+                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Diyodar</td>
+                      </tr>
+                      <tr
+                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
+                        onClick={() => {
+                          setIdentifier("gardeshwar@gmail.com")
+                          setPassword("gardeshwar@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">gardeshwar@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">gardeshwar@gmail.com</td>
+                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Gardeshwar</td>
+                      </tr>
+                      <tr
+                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
+                        onClick={() => {
+                          setIdentifier("umalla@gmail.com")
+                          setPassword("umalla@gmail.com")
+                        }}
+                      >
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">umalla@gmail.com</td>
+                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">umalla@gmail.com</td>
+                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Umalla</td>
                       </tr>
                     </tbody>
                   </table>

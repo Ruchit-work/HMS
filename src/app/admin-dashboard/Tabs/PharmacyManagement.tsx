@@ -2577,6 +2577,25 @@ function PharmacyBillingPanel({
       setTimeout(() => setPhoneHighlight(false), 2500)
       return
     }
+    if (customerPhone.trim() && !noPhoneHospitalPatient) {
+      const digits = customerPhone.replace(/\D/g, '')
+      let normalized = digits
+      if (digits.length === 11 && digits.startsWith('0')) normalized = digits.slice(1)
+      else if (digits.length === 12 && digits.startsWith('91')) normalized = digits.slice(2)
+      if (normalized.length !== 10) {
+        onError('Enter a valid 10-digit Indian mobile number (e.g. 9876543210).')
+        setPhoneHighlight(true)
+        setTimeout(() => setPhoneHighlight(false), 2500)
+        return
+      }
+      const firstDigit = normalized.charAt(0)
+      if (!['6', '7', '8', '9'].includes(firstDigit)) {
+        onError('Indian mobile number must start with 6, 7, 8 or 9.')
+        setPhoneHighlight(true)
+        setTimeout(() => setPhoneHighlight(false), 2500)
+        return
+      }
+    }
     if (!effectiveBranchId) { onError('Select branch'); return }
     const validLines = lines.filter((l) => l.medicineId && Number(l.quantity) > 0)
     for (const l of validLines) {
@@ -2834,7 +2853,7 @@ function PharmacyBillingPanel({
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <label className="block text-xs text-slate-500">Phone Number</label>
+                <label className="block text-xs text-slate-500">Phone Number (India)</label>
                 <label htmlFor="noPhoneHospitalPatient" className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
               <span> Patient from hospital – without phone</span>
                 <input
@@ -2854,12 +2873,12 @@ function PharmacyBillingPanel({
             <input
               type="text"
               inputMode="tel"
-              placeholder="Phone number"
+              placeholder="10-digit Indian mobile (e.g. 9876543210)"
+              maxLength={14}
               value={customerPhone}
               onChange={(e) => {
                 const raw = e.target.value
-                // Allow digits, space, +, -, (, )
-                const cleaned = raw.replace(/[^0-9+\-\s()]/g, '')
+                const cleaned = raw.replace(/[^0-9+\s]/g, '').slice(0, 14)
                 setCustomerPhone(cleaned)
               }}
               disabled={noPhoneHospitalPatient}
@@ -4161,6 +4180,9 @@ export default function PharmacyManagement() {
     ? (id: PharmacySubTab) => portal.setActiveTab(id as PharmacyPortalTabId)
     : setSubTabLocal) as (id: PharmacySubTab) => void
   const [queueInnerTab, setQueueInnerTab] = useState<'walk_in' | 'prescriptions'>('walk_in')
+  const [isQueueFullscreen, setIsQueueFullscreen] = useState(false)
+  const queueFullscreenRef = useRef<HTMLDivElement>(null)
+  const keepFullscreenAfterSaleRef = useRef(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -5550,6 +5572,27 @@ export default function PharmacyManagement() {
     return () => window.removeEventListener('keydown', onKey)
   }, [subTab])
 
+  // Fullscreen for Dispense & Billing: listen for change and re-enter if it exited right after a sale
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const inFullscreen = !!(document.fullscreenElement && document.fullscreenElement === queueFullscreenRef.current)
+      setIsQueueFullscreen(inFullscreen)
+      if (!inFullscreen && keepFullscreenAfterSaleRef.current && queueFullscreenRef.current) {
+        keepFullscreenAfterSaleRef.current = false
+        queueFullscreenRef.current.requestFullscreen?.().catch(() => {})
+      }
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [])
+
+  const enterQueueFullscreen = useCallback(() => {
+    queueFullscreenRef.current?.requestFullscreen?.().catch(() => {})
+  }, [])
+  const exitQueueFullscreen = useCallback(() => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+  }, [])
+
   if (!activeHospitalId) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
@@ -5611,10 +5654,10 @@ export default function PharmacyManagement() {
           </div>
         )}
         <div className={isPharmacyPortal ? '' : 'p-6'}>
-        {error && (
+        {error && !(subTab === 'queue' && isQueueFullscreen) && (
           <Notification type="error" message={error} onClose={() => setError(null)} />
         )}
-        {success && (
+        {success && !(subTab === 'queue' && isQueueFullscreen) && (
           <Notification type="success" message={success} onClose={() => setSuccess(null)} />
         )}
         {/* Branch filter - only when not in pharmacy portal (portal has it in header) */}
@@ -6672,11 +6715,31 @@ export default function PharmacyManagement() {
         )}
 
         {subTab === 'queue' && (
-          <div className="space-y-4">
+          <div
+            ref={queueFullscreenRef}
+            className={`flex flex-col min-h-[480px] bg-white rounded-xl overflow-hidden ${isQueueFullscreen ? 'h-screen min-h-0 overflow-y-auto' : ''}`}
+            data-fullscreen={isQueueFullscreen ? '' : undefined}
+          >
+            {/* Toasts inside fullscreen so they are visible and focus stays in fullscreen */}
+            {isQueueFullscreen && error && (
+              <Notification type="error" message={error} onClose={() => setError(null)} />
+            )}
+            {isQueueFullscreen && success && (
+              <Notification type="success" message={success} onClose={() => setSuccess(null)} />
+            )}
+            <div className={isQueueFullscreen ? 'flex flex-col space-y-4 p-1' : 'flex-1 min-h-0 flex flex-col space-y-4 p-1 overflow-y-auto'}>
             {!cashSessionsLoading && !activeCashSession && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-2">
                 <span className="font-medium">Start a cash session to complete sales and returns.</span>
-                <span>Go to <strong>Cash & expenses</strong> and click <strong>Start shift</strong>.</span>
+                <span>Go to{' '}
+                  <button
+                    type="button"
+                    onClick={() => setSubTab('cash_and_expenses')}
+                    className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-400 rounded"
+                  >
+                    Cash & expenses
+                  </button>
+                  {' '}and click <strong>Start shift</strong>.</span>
               </div>
             )}
             {/* Inner tabs for queue: Walk-in vs Prescription list */}
@@ -6715,7 +6778,12 @@ export default function PharmacyManagement() {
                     selectedBranchId={!isViewOnly ? branchFilter : undefined}
                     selectedBranchName={!isViewOnly ? selectedBranchName : undefined}
                     hospitalId={activeHospitalId ?? ''}
-                    onSuccess={() => { setSuccess('Sale recorded; stock updated.'); fetchPharmacy(); fetchCashSessions(); }}
+                    onSuccess={() => {
+                      keepFullscreenAfterSaleRef.current = true
+                      setSuccess('Sale recorded; stock updated.')
+                      fetchPharmacy()
+                      fetchCashSessions()
+                    }}
                     onError={setError}
                     getToken={getToken}
                     onOpenAddMedicine={(b) => setAddMedicineModalBarcode(b)}
@@ -6739,7 +6807,13 @@ export default function PharmacyManagement() {
                     medicines={medicines}
                     stock={stock}
                     hospitalId={activeHospitalId ?? ''}
-                    onSuccess={() => { setSuccess('Medicine dispensed; stock updated.'); setDispenseQueueItem(null); fetchPharmacy(); fetchCashSessions(); }}
+                    onSuccess={() => {
+                      keepFullscreenAfterSaleRef.current = true
+                      setSuccess('Medicine dispensed; stock updated.')
+                      setDispenseQueueItem(null)
+                      fetchPharmacy()
+                      fetchCashSessions()
+                    }}
                     onError={setError}
                     onClose={() => setDispenseQueueItem(null)}
                     getToken={getToken}
@@ -6808,6 +6882,36 @@ export default function PharmacyManagement() {
                 )}
               </div>
             )}
+            </div>
+            {/* Full screen / Exit full screen bar at bottom — ESC also exits; left-aligned */}
+            <div className="shrink-0 flex items-center justify-start gap-2 py-2 pl-3 pr-2 border-t border-slate-200 bg-slate-50/80">
+              {!isQueueFullscreen ? (
+                <button
+                  type="button"
+                  onClick={enterQueueFullscreen}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition"
+                >
+                  <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                  Full screen
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={exitQueueFullscreen}
+                    className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 shadow-sm hover:bg-amber-100 transition"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Exit full screen
+                  </button>
+                  <span className="text-xs text-slate-500">Press <kbd className="px-1.5 py-0.5 rounded bg-slate-200 font-mono">Esc</kbd> to exit</span>
+                </>
+              )}
+            </div>
           </div>
         )}
 
@@ -8205,7 +8309,15 @@ export default function PharmacyManagement() {
             {!cashSessionsLoading && !activeCashSession && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center gap-2">
                 <span className="font-medium">Start a cash session to process returns.</span>
-                <span>Go to <strong>Cash & expenses</strong> and click <strong>Start shift</strong>.</span>
+                <span>Go to{' '}
+                  <button
+                    type="button"
+                    onClick={() => setSubTab('cash_and_expenses')}
+                    className="font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-400 rounded"
+                  >
+                    Cash & expenses
+                  </button>
+                  {' '}and click <strong>Start shift</strong>.</span>
               </div>
             )}
             {/* Selling data – same as Overview */}
@@ -9773,8 +9885,8 @@ export default function PharmacyManagement() {
         )}
 
         {viewShiftReportSession && (
-          <RevealModal isOpen onClose={() => setViewShiftReportSession(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/80">
+          <RevealModal isOpen onClose={() => setViewShiftReportSession(null)} zIndex={100} contentClassName="w-full max-w-2xl max-h-[90vh] flex flex-col min-h-0 mx-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full overflow-hidden border border-slate-200/80 flex flex-col min-h-0 flex-1">
               <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-5 rounded-t-2xl shrink-0">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -9797,7 +9909,7 @@ export default function PharmacyManagement() {
                   </button>
                 </div>
               </div>
-              <div className="p-6 sm:p-8 space-y-4">
+              <div className="p-6 sm:p-8 space-y-4 overflow-y-auto min-h-0 flex-1">
                 {(() => {
                   const s = viewShiftReportSession
                   const cash = Number(s.cashSales ?? 0)

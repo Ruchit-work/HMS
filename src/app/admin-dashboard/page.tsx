@@ -608,20 +608,20 @@ export default function AdminDashboard() {
       {/* Professional Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-slate-200/50 transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
         {/* Header */}
-        <div className="relative h-20 px-6 bg-sky-50/80 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
+        <div className="relative h-20 px-6 bg-sky-100/90 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
           <div className="absolute inset-0 pointer-events-none" />
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full"></div>
-          <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/5 rounded-full"></div>
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/40 rounded-full"></div>
+          <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/30 rounded-full"></div>
           
           <div className="relative flex items-center gap-4">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-sky-200 shadow-sm">
+              <svg className="w-6 h-6 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
             <div>
-              <h1 className="text-white text-lg font-bold">HMS Admin</h1>
-              <p className="text-white/80 text-xs font-medium">Administrative Portal</p>
+              <h1 className="text-slate-900 text-lg font-bold drop-shadow-sm">HMS Admin</h1>
+              <p className="text-slate-600 text-xs font-medium">Administrative Portal</p>
             </div>
           </div>
           

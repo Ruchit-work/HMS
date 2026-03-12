@@ -25,6 +25,7 @@ interface Doctor {
     experience: string
     consultationFee: number
     status: string
+    branchIds?: string[]
     createdAt: string
     updatedAt: string
 }
@@ -94,9 +95,19 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'active' | 'pending'>('active')
     const [showAddModal, setShowAddModal] = useState(false)
+    const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
 
     const { user, loading: authLoading } = useAuth()
     const { activeHospitalId, isSuperAdmin } = useMultiHospital()
+
+    const getBranchNames = (doctor: Doctor) => {
+        const ids = doctor.branchIds || []
+        if (ids.length === 0) return '—'
+        return ids
+            .map((id) => branches.find((b) => b.id === id)?.name ?? id)
+            .filter(Boolean)
+            .join(', ') || '—'
+    }
 
     const filteredActiveDoctors = useMemo(() => {
         if (!search.trim()) return doctors
@@ -567,6 +578,23 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         }
     }, [user, activeTab])
 
+    // Fetch branches for resolving branch names
+    useEffect(() => {
+        if (!activeHospitalId) return
+        let cancelled = false
+        ;(async () => {
+            try {
+                const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`)
+                const data = await response.json()
+                if (!cancelled && data.success && data.branches) {
+                    setBranches(data.branches.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name })))
+                }
+            } catch {
+                if (!cancelled) setBranches([])
+            }
+        })()
+        return () => { cancelled = true }
+    }, [activeHospitalId])
 
     // Gate rendering by auth state (placed after all hooks)
     if (authLoading) {
@@ -759,6 +787,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                             <th className="hidden px-3 py-3 text-left md:table-cell">Qualification</th>
                                             <th className="hidden px-3 py-3 text-left lg:table-cell">Experience</th>
                                             <th className="px-3 py-3 text-left">Status</th>
+                                            <th className="hidden px-3 py-3 text-left md:table-cell">Branches</th>
                                             <th className="hidden px-3 py-3 text-left lg:table-cell">Created</th>
                                             <th className="px-3 py-3 text-left">Actions</th>
                         </tr>
@@ -766,7 +795,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                     <tbody className="divide-y divide-slate-100 bg-white text-sm text-slate-700">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center">
+                                    <td colSpan={8} className="px-6 py-12 text-center">
                                         <div className="flex flex-col items-center">
                                                         <svg className="mb-2 h-8 w-8 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
                                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -778,7 +807,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                 </tr>
                             ) : error ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center">
+                                    <td colSpan={8} className="px-6 py-12 text-center">
                                                     <svg className="mb-2 h-12 w-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                                         </svg>
@@ -788,7 +817,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                 </tr>
                                         ) : displayedDoctors.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center">
+                                    <td colSpan={8} className="px-6 py-12 text-center">
                                                     <svg className="mb-2 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                         </svg>
@@ -848,6 +877,9 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                                                 ? 'Pending'
                                                                 : 'Inactive'}
                                             </span>
+                                        </td>
+                                                    <td className="hidden px-3 py-4 md:table-cell">
+                                                        <div className="text-sm text-slate-900 max-w-[140px] truncate" title={getBranchNames(doctor)}>{getBranchNames(doctor)}</div>
                                         </td>
                                                     <td className="hidden px-3 py-4 lg:table-cell">
                                                         <div className="text-sm font-medium text-slate-900">{formatDate(doctor.createdAt)}</div>
@@ -1008,6 +1040,10 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                 }`}>
                                     {selectedDoctor?.status === 'active' ? 'Active' : 'Inactive'}
                                 </span>
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Assigned Branches</label>
+                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor ? getBranchNames(selectedDoctor) : '—'}</p>
                             </div>
                         </div>
                     </div>

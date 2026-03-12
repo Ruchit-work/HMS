@@ -30,6 +30,8 @@ interface UserData {
   role: string;
   visitingHours?: VisitingHours;
   blockedDates?: BlockedDate[];
+  /** Branches this doctor is assigned to */
+  branchIds?: string[];
 }
 
 export default function DoctorDashboard() {
@@ -147,6 +149,12 @@ export default function DoctorDashboard() {
           // Load visiting hours and blocked dates
           setVisitingHours(data.visitingHours || DEFAULT_VISITING_HOURS)
           setBlockedDates(data.blockedDates || [])
+
+          // If doctor is linked to a single branch, lock selection to that branch
+          const branchIds = Array.isArray((data as any).branchIds) ? (data as any).branchIds as string[] : []
+          if (branchIds.length === 1) {
+            setSelectedBranchId(branchIds[0])
+          }
           
           // Set up real-time appointments listener with branch filter
           unsubscribeAppointments = setupAppointmentsListener(user.uid, selectedBranchId)
@@ -260,6 +268,15 @@ export default function DoctorDashboard() {
   ).length
   const completedAppointments = appointments.filter((appointment: Appointment) => appointment.status === "completed").length
 
+  // Derive branches the doctor is allowed to see
+  const doctorBranchIds = Array.isArray((userData as any)?.branchIds)
+    ? ((userData as any).branchIds as string[])
+    : []
+  const visibleBranches = doctorBranchIds.length > 0
+    ? branches.filter((b) => doctorBranchIds.includes(b.id))
+    : branches
+  const hasSingleVisibleBranch = visibleBranches.length === 1
+
   return (
     <div className="min-h-screen bg-slate-50 pt-20">
       {/* Main Content */}
@@ -298,7 +315,7 @@ export default function DoctorDashboard() {
         </div>
 
         {/* Branch Selection */}
-        {branches.length > 0 && (
+        {visibleBranches.length > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -317,8 +334,10 @@ export default function DoctorDashboard() {
                   disabled={loadingBranches}
                   className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="">All Branches</option>
-                  {branches.map((branch) => (
+                  {!hasSingleVisibleBranch && (
+                    <option value="">All Branches</option>
+                  )}
+                  {visibleBranches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}
                     </option>

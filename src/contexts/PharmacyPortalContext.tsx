@@ -36,7 +36,7 @@ export function PharmacyPortalProvider({ children }: { children: ReactNode }) {
   const [branchFilter, setBranchFilter] = useState('all')
   const [lowStockCount, setLowStockCount] = useState(0)
   const [expiringCount, setExpiringCount] = useState(0)
-  const [activeTab, setActiveTab] = useState<PharmacyPortalTabId>('overview')
+  const [activeTab, setActiveTab] = useState<PharmacyPortalTabId>('queue')
   const [headerSearchQuery, setHeaderSearchQuery] = useState('')
 
   const setAlertCounts = useCallback((low: number, expiring: number) => {

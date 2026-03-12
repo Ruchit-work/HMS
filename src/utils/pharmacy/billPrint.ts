@@ -75,17 +75,7 @@ function escapeHtml(s: string): string {
 
 export function generateBillPDFAndPrint(data: BillData): void {
   if (typeof window === 'undefined') return
-  const html = buildBillHTML(data)
-  const printWindow = window.open('', '_blank', 'width=800,height=600')
-  if (printWindow) {
-    printWindow.document.write(html)
-    printWindow.document.close()
-    printWindow.focus()
-    setTimeout(() => {
-      printWindow.print()
-      printWindow.onafterprint = () => printWindow.close()
-    }, 350)
-  }
+  // Download PDF only (no print window / no new tab) so fullscreen is not lost after billing
   generateBillPDF(data)
 }
 
@@ -134,7 +124,14 @@ export function generateBillPDF(data: BillData): void {
     doc.text(`Total: ₹${data.netTotal.toFixed(2)}`, 14, y)
     const blob = doc.output('blob')
     const url = URL.createObjectURL(blob)
-    window.open(url, '_blank')
-    setTimeout(() => URL.revokeObjectURL(url), 10000)
+    const fileName = `Pharmacy-Bill-${data.type}-${data.date.replace(/\//g, '-')}.pdf`
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   })
 }

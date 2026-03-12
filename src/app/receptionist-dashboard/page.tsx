@@ -290,20 +290,20 @@ export default function ReceptionistDashboard() {
       {/* Professional Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-slate-200/50 transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
         {/* Header */}
-        <div className="relative h-20 px-6 bg-sky-50/80 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
+        <div className="relative h-20 px-6 bg-sky-100/90 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
           <div className="absolute inset-0 pointer-events-none"></div>
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full"></div>
-          <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/5 rounded-full"></div>
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/40 rounded-full"></div>
+          <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/30 rounded-full"></div>
           
           <div className="relative flex items-center gap-4">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-sky-200 shadow-sm">
+              <svg className="w-6 h-6 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
             </div>
             <div>
-              <h1 className="text-white text-lg font-bold">HMS Reception</h1>
-              <p className="text-white/80 text-xs font-medium">Front Desk Portal</p>
+              <h1 className="text-slate-900 text-lg font-bold drop-shadow-sm">HMS Reception</h1>
+              <p className="text-slate-600 text-xs font-medium">Front Desk Portal</p>
             </div>
           </div>
           

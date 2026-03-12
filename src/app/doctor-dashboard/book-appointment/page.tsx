@@ -63,15 +63,17 @@ export default function DoctorBookAppointmentPage() {
 
   const IMMEDIATELY_VALUE = "__IMMEDIATELY__"
 
+  const hasSingleBranch = branches.length === 1
+
   // Initialize from localStorage or first branch; persist survives tab close/reopen
   useEffect(() => {
     if (branches.length === 0 || !activeHospitalId) return
-    const storageKey = `${BRANCH_STORAGE_KEY_PREFIX}-${activeHospitalId}`
+        const storageKey = `${BRANCH_STORAGE_KEY_PREFIX}-${activeHospitalId}`
     try {
       const saved = typeof window !== "undefined" ? localStorage.getItem(storageKey) : null
       const savedBranchId = saved?.trim() || ""
       const isValidSaved = savedBranchId && branches.some((b) => b.id === savedBranchId)
-      const branchIdToUse = isValidSaved ? savedBranchId : branches[0].id
+        const branchIdToUse = isValidSaved ? savedBranchId : branches[0].id
       setSelectedBranchId(branchIdToUse)
       if (!isValidSaved && typeof window !== "undefined") {
         localStorage.setItem(storageKey, branchIdToUse)
@@ -432,7 +434,7 @@ export default function DoctorBookAppointmentPage() {
                   className={`${inputBase} cursor-pointer pr-10`}
                   aria-label="Select branch"
                 >
-                  <option value="">Select branch</option>
+                  {!hasSingleBranch && <option value="">Select branch</option>}
                   {branches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}

@@ -36,20 +36,24 @@ export async function GET(request: NextRequest) {
   if (categoryIdParam) q = q.where('categoryId', '==', categoryIdParam)
   if (paymentMethodParam) q = q.where('paymentMethod', '==', paymentMethodParam)
 
-  if (dateFromParam) {
-    q = q.where('date', '>=', dateFromParam)
-  }
-  if (dateToParam) {
-    q = q.where('date', '<=', dateToParam)
+  // Do not add date range in Firestore query (avoids composite index). Filter by date in memory.
+  const snap = await q.limit(500).get()
+  let expenses = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as PharmacyExpense[]
+
+  if (dateFromParam || dateToParam) {
+    expenses = expenses.filter((e) => {
+      const d = typeof e.date === 'string' ? e.date.slice(0, 10) : (e.date as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''
+      if (dateFromParam && d < dateFromParam) return false
+      if (dateToParam && d > dateToParam) return false
+      return true
+    })
   }
 
-  const snap = await q.limit(500).get()
-  const expenses = (snap.docs.map((d) => ({ id: d.id, ...d.data() })) as PharmacyExpense[])
-    .sort((a, b) => {
-      const ad = typeof a.date === 'string' ? a.date.slice(0, 10) : (a.date as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''
-      const bd = typeof b.date === 'string' ? b.date.slice(0, 10) : (b.date as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''
-      return bd.localeCompare(ad)
-    })
+  expenses.sort((a, b) => {
+    const ad = typeof a.date === 'string' ? a.date.slice(0, 10) : (a.date as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''
+    const bd = typeof b.date === 'string' ? b.date.slice(0, 10) : (b.date as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''
+    return bd.localeCompare(ad)
+  })
 
   return NextResponse.json({ success: true, expenses })
 }

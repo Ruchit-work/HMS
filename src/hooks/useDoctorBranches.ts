@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { auth } from "@/firebase/config"
+import { auth, db } from "@/firebase/config"
+import { doc, getDoc } from "firebase/firestore"
 import type { Branch } from "@/types/branch"
 
 export function useDoctorBranches(activeHospitalId: string | null) {
@@ -25,8 +26,24 @@ export function useDoctorBranches(activeHospitalId: string | null) {
         })
         const data = await response.json()
 
-        if (data.success && data.branches) {
-          setBranches(data.branches)
+        if (data.success && Array.isArray(data.branches)) {
+          let result: Branch[] = data.branches
+
+          // If doctor has explicit branchIds, restrict branches to those
+          try {
+            const doctorSnap = await getDoc(doc(db, "doctors", currentUser.uid))
+            if (doctorSnap.exists()) {
+              const doctorData = doctorSnap.data() as any
+              const branchIds: string[] = Array.isArray(doctorData.branchIds) ? doctorData.branchIds : []
+              if (branchIds.length > 0) {
+                result = result.filter((b) => branchIds.includes(b.id))
+              }
+            }
+          } catch {
+            // ignore filtering errors; fall back to all hospital branches
+          }
+
+          setBranches(result)
         }
       } catch {
         // Silent fail
