@@ -16,6 +16,7 @@ interface ENTSceneProps {
   modelPath?: string
   zoomDelta?: number
   onZoomApplied?: () => void
+  controlCommand?: { type: 'reset' | 'rotateLeft' | 'rotateRight'; id: number } | null
 }
 
 export function ENTScene({
@@ -24,30 +25,53 @@ export function ENTScene({
   modelPath,
   zoomDelta = 0,
   onZoomApplied,
+  controlCommand = null,
 }: ENTSceneProps) {
   const controlsRef = useRef<any>(null)
   const lastZoomDeltaRef = useRef(0)
+  const lastCommandIdRef = useRef<number | null>(null)
   const { camera } = useThree()
 
   useFrame(() => {
+    const controls = controlsRef.current
+
+    // Handle zoom
     if (zoomDelta === 0) {
       lastZoomDeltaRef.current = 0
-      return
+    } else if (onZoomApplied && zoomDelta !== lastZoomDeltaRef.current) {
+      lastZoomDeltaRef.current = zoomDelta
+      if (!controls || !controls.target) return
+      const target = controls.target as THREE.Vector3
+      const distance = camera.position.distanceTo(target)
+      const factor = zoomDelta > 0 ? 0.75 : 1.33
+      const newDistance = THREE.MathUtils.clamp(distance * factor, MIN_DISTANCE, MAX_DISTANCE)
+      const direction = new THREE.Vector3()
+        .subVectors(camera.position, target)
+        .normalize()
+      camera.position.copy(target).add(direction.multiplyScalar(newDistance))
+      controls.update()
+      onZoomApplied()
     }
-    if (!onZoomApplied || zoomDelta === lastZoomDeltaRef.current) return
-    lastZoomDeltaRef.current = zoomDelta
-    const controls = controlsRef.current
-    if (!controls || !controls.target) return
-    const target = controls.target as THREE.Vector3
-    const distance = camera.position.distanceTo(target)
-    const factor = zoomDelta > 0 ? 0.75 : 1.33
-    const newDistance = THREE.MathUtils.clamp(distance * factor, MIN_DISTANCE, MAX_DISTANCE)
-    const direction = new THREE.Vector3()
-      .subVectors(camera.position, target)
-      .normalize()
-    camera.position.copy(target).add(direction.multiplyScalar(newDistance))
-    controls.update()
-    onZoomApplied()
+
+    // Handle rotate / reset commands
+    if (controlCommand && controlCommand.id !== lastCommandIdRef.current && controls) {
+      lastCommandIdRef.current = controlCommand.id
+      const target = (controls.target as THREE.Vector3) || new THREE.Vector3(0, 0, 0)
+
+      if (controlCommand.type === 'reset') {
+        camera.position.set(0, 0, 8)
+        controls.target.set(0, 0, 0)
+        controls.update()
+      } else {
+        const angle = (controlCommand.type === 'rotateLeft' ? -Math.PI / 12 : Math.PI / 12)
+        const offset = new THREE.Vector3().subVectors(camera.position, target)
+        const rotationMatrix = new THREE.Matrix4().makeRotationY(angle)
+        offset.applyMatrix4(rotationMatrix)
+        camera.position.copy(target).add(offset)
+        camera.lookAt(target)
+        controls.update()
+      }
+    }
   })
 
   const isLungs = modelPath ? getAnatomyTypeFromPath(modelPath) === 'lungs' : false

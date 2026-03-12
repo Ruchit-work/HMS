@@ -4,9 +4,51 @@ import { Appointment as AppointmentType } from "@/types/patient"
 
 interface MedicalInfoSectionProps {
   appointment: AppointmentType
+  /** Minimal EMR style: flat sections, no gradients */
+  minimal?: boolean
 }
 
-export default function MedicalInfoSection({ appointment }: MedicalInfoSectionProps) {
+export default function MedicalInfoSection({ appointment, minimal = false }: MedicalInfoSectionProps) {
+  const sections: { label: string; value: string | undefined; highlight?: boolean }[] = [
+    { label: "Additional details", value: appointment.patientAdditionalConcern },
+    { label: "Medical history", value: appointment.medicalHistory },
+    { label: "Current medications", value: appointment.patientCurrentMedications },
+    { label: "Family history", value: appointment.patientFamilyHistory },
+  ].filter((s) => s.value?.trim())
+
+  const allergies = appointment.patientAllergies?.trim()
+
+  if (minimal) {
+    return (
+      <div className="space-y-4">
+        {allergies && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 mb-0.5 flex items-center gap-1">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              Allergies
+            </p>
+            <p className="text-sm font-medium text-amber-900">{allergies}</p>
+          </div>
+        )}
+        {sections.map(({ label, value }) => (
+          <div key={label}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+              {label}
+            </p>
+            <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+              {value}
+            </p>
+          </div>
+        ))}
+        {!allergies && sections.length === 0 && (
+          <p className="text-sm text-slate-500">No additional medical information recorded.</p>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 border border-emerald-100/50 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center gap-2 mb-3 pb-2 border-b border-emerald-200">
@@ -15,9 +57,7 @@ export default function MedicalInfoSection({ appointment }: MedicalInfoSectionPr
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         </div>
-        <h4 className="font-semibold text-slate-800 text-sm">
-          Medical Information
-        </h4>
+        <h4 className="font-semibold text-slate-800 text-sm">Medical Information</h4>
       </div>
       <div className="space-y-2 text-xs">
         <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
@@ -75,4 +115,3 @@ export default function MedicalInfoSection({ appointment }: MedicalInfoSectionPr
     </div>
   )
 }
-

@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useRef, useEffect } from "react"
+
 import { Appointment as AppointmentType } from "@/types/patient"
 import { CompletionFormEntry } from "@/types/appointments"
 import { DocumentMetadata } from "@/types/document"
@@ -71,6 +73,25 @@ export default function CompletionForm({
   onAddAnatomy,
   formId,
 }: CompletionFormProps) {
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved">("idle")
+  const draftSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
+
+  const handleNotesChange = (notes: string) => {
+    onCompletionDataChange({
+      ...completionData,
+      notes,
+    })
+    setDraftStatus("saving")
+    if (draftSavedTimeoutRef.current) clearTimeout(draftSavedTimeoutRef.current)
+    draftSavedTimeoutRef.current = setTimeout(() => {
+      draftSavedTimeoutRef.current = null
+      setDraftStatus("saved")
+      const t = setTimeout(() => setDraftStatus("idle"), 2000)
+      return () => clearTimeout(t)
+    }, 400)
+  }
+
   const handleMedicinesChange = (medicines: CompletionFormEntry["medicines"]) => {
     onCompletionDataChange({
       ...completionData,
@@ -78,12 +99,11 @@ export default function CompletionForm({
     })
   }
 
-  const handleNotesChange = (notes: string) => {
-    onCompletionDataChange({
-      ...completionData,
-      notes,
-    })
-  }
+  useEffect(() => {
+    return () => {
+      if (draftSavedTimeoutRef.current) clearTimeout(draftSavedTimeoutRef.current)
+    }
+  }, [])
 
   const handleRecheckupRequiredChange = (recheckupRequired: boolean) => {
     onCompletionDataChange({
@@ -141,18 +161,26 @@ export default function CompletionForm({
         <h3 className="text-base font-semibold text-slate-900 mb-2.5">
           Consultation Notes <span className="text-red-500">*</span>
         </h3>
-        <div className="relative">
-          <textarea
-            value={completionData.notes || ""}
-            onChange={(e) => handleNotesChange(e.target.value)}
-            rows={2}
-            style={{ minHeight: "64px" }}
-            placeholder="Enter consultation notes"
-            className="w-full rounded-[10px] border border-[#CBD5E1] p-3 pr-24 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 resize-none"
-            required
-          />
-          <div className="absolute right-3 top-3 pointer-events-none flex items-end justify-end">
-            <div className="pointer-events-auto">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-400">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/60">
+            <span className="text-xs text-slate-500 flex items-center gap-1.5">
+              {draftStatus === "saving" && (
+                <>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Saving...
+                </>
+              )}
+              {draftStatus === "saved" && (
+                <>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Saved
+                </>
+              )}
+              {draftStatus === "idle" && (
+                <span className="text-slate-400">Draft</span>
+              )}
+            </span>
+            <div className="flex items-center gap-1">
               <VoiceInput
                 onTranscript={(text) => handleNotesChange(text)}
                 language="en-IN"
@@ -163,6 +191,15 @@ export default function CompletionForm({
               />
             </div>
           </div>
+          <textarea
+            value={completionData.notes || ""}
+            onChange={(e) => handleNotesChange(e.target.value)}
+            rows={3}
+            style={{ minHeight: "90px" }}
+            placeholder="Enter diagnosis, symptoms, or doctor observations..."
+            className="w-full rounded-b-xl border-0 p-4 pt-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 resize-y"
+            required
+          />
         </div>
       </section>
 
@@ -296,19 +333,35 @@ export default function CompletionForm({
 
       {/* In-form submit buttons — hidden when sticky bar is used (formId provided) */}
       {!formId && (
-        <div className="flex gap-3 pt-6 border-t border-slate-200 mt-6">
+        <div className="flex justify-end gap-3 pt-6 border-t border-slate-200 mt-6">
           <button
-            type="submit"
+            type="button"
             disabled={updating || !hasValidPrescriptionInput(completionData)}
-            className="flex-1 h-10 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setShowCompleteConfirm(true)}
+            className="inline-flex items-center justify-center gap-2 h-10 min-w-[150px] rounded-lg bg-emerald-600 text-white text-sm font-semibold shadow-sm hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {updating ? "Completing…" : "Complete Checkup"}
+            {updating ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Completing…
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Complete Checkup
+              </>
+            )}
           </button>
           <button
             type="button"
             onClick={onAdmitClick}
             disabled={updating || admitting || !hasValidPrescriptionInput(completionData)}
-            className="flex-1 h-10 rounded-lg border border-slate-300 bg-white text-slate-800 text-sm font-medium hover:bg-slate-50 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="inline-flex items-center justify-center gap-2 h-10 min-w-[150px] rounded-lg border border-slate-800 bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {admitting ? (
               <>
@@ -319,9 +372,48 @@ export default function CompletionForm({
                 Sending…
               </>
             ) : (
-              <>Admit Patient</>
+              <>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h14a2 2 0 012 2v8M3 7l2.5-3h5L13 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15h5m-2.5-2.5v5" />
+                </svg>
+                Admit Patient
+              </>
             )}
           </button>
+        </div>
+      )}
+
+      {/* Confirmation modal for completing checkup */}
+      {showCompleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-5">
+            <h3 className="text-base font-semibold text-slate-900 mb-2">
+              Complete this checkup?
+            </h3>
+            <p className="text-sm text-slate-600 mb-4">
+              This will finalize the doctor&apos;s notes and prescription for this visit. You can still view them later in history.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCompleteConfirm(false)}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300 px-3.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCompleteConfirm(false)
+                  onSubmit({} as React.FormEvent)
+                }}
+                className="inline-flex h-9 items-center justify-center rounded-lg bg-emerald-600 px-3.5 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Yes, complete checkup
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </form>

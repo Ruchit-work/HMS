@@ -46,6 +46,7 @@ export default function MedicineForm({
   medicineSuggestionsLoading,
   onMedicinesChange,
 }: MedicineFormProps) {
+  const [searchQuery, setSearchQuery] = useState("")
   const [nameDropdownOpenForIndex, setNameDropdownOpenForIndex] = useState<number | null>(null)
   const [frequencyOpenForIndex, setFrequencyOpenForIndex] = useState<number | null>(null)
   const frequencyRef = useRef<HTMLDivElement>(null)
@@ -120,33 +121,133 @@ export default function MedicineForm({
 
   return (
     <div className="space-y-3">
-      {medicines.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center">
-          <p className="text-base font-semibold text-slate-900 mb-1">No medicines added</p>
-          <p className="text-sm text-slate-500 mb-4 max-w-sm mx-auto">
-            Add a medicine below or type in the name field and pick from suggestions.
-          </p>
-          <button
-            type="button"
-            onClick={addMedicine}
-            className="h-9 px-4 rounded-lg bg-[#2563EB] text-white text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            + Add Medicine
-          </button>
+      {/* Global medicine search with autocomplete */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-xs font-medium text-slate-600">Search medicines</label>
         </div>
-      ) : (
-        <>
-          {medicines.map((medicine, index) => {
-            const nameQuery = medicine.name?.trim() ?? ""
-            const suggestions = getSuggestions(nameQuery)
-            const showNameDropdown =
-              nameDropdownOpenForIndex === index && (nameQuery.length >= 1 || suggestions.length > 0)
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                const q = searchQuery.trim()
+                if (!q) return
+                const matches = getSuggestions(q, 1)
+                let newMed
+                if (matches.length > 0) {
+                  const sugg = matches[0]
+                  const name = sanitizeMedicineName(sugg.name) || sugg.name
+                  newMed = {
+                    name,
+                    dosage: sugg.dosageOptions?.[0]?.value ?? "",
+                    frequency: sugg.frequencyOptions?.[0]?.value ?? "",
+                    duration: sugg.durationOptions?.[0]?.value ?? "7 days",
+                  }
+                } else {
+                  const name = sanitizeMedicineName(q) || q
+                  newMed = {
+                    name,
+                    dosage: "",
+                    frequency: "",
+                    duration: "7 days",
+                  }
+                }
+                onMedicinesChange([...medicines, newMed])
+                setSearchQuery("")
+              }
+            }}
+            placeholder="Search by medicine name and press Enter to add..."
+            className="w-full rounded-lg border border-slate-300 bg-white pl-3 pr-8 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+          />
+          <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-auto">
+            <VoiceInput
+              onTranscript={(text) => {
+                setSearchQuery(text)
+              }}
+              language="en-IN"
+              useGoogleCloud={false}
+              useMedicalModel={false}
+              variant="inline"
+            />
+          </div>
+          {searchQuery.trim() && (
+            <div className="absolute left-0 right-0 top-full z-[90] mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+              {medicineSuggestionsLoading ? (
+                <div className="px-3 py-2 text-xs text-slate-500">Searching…</div>
+              ) : (
+                (() => {
+                  const matches = getSuggestions(searchQuery, 8)
+                  if (!matches.length) {
+                    return (
+                      <div className="px-3 py-2 text-xs text-slate-500">
+                        No matches. Press Enter to add manually.
+                      </div>
+                    )
+                  }
+                  return matches.map((sugg) => (
+                    <button
+                      key={sugg.id}
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        const name = sanitizeMedicineName(sugg.name) || sugg.name
+                        const newMed = {
+                          name,
+                          dosage: sugg.dosageOptions?.[0]?.value ?? "",
+                          frequency: sugg.frequencyOptions?.[0]?.value ?? "",
+                          duration: sugg.durationOptions?.[0]?.value ?? "7 days",
+                        }
+                        onMedicinesChange([...medicines, newMed])
+                        setSearchQuery("")
+                      }}
+                    >
+                      <span className="font-medium">{sugg.name}</span>
+                      {sugg.dosageOptions?.[0] && (
+                        <span className="text-slate-500 ml-1">
+                          — {sugg.dosageOptions[0].value}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                })()
+              )}
+            </div>
+          )}
+        </div>
+        {medicines.length === 0 && (
+          <p className="text-[11px] text-slate-500 px-1">
+            Type a medicine name and press Enter to add.
+          </p>
+        )}
+      </div>
 
-            return (
-              <div key={index} className="relative">
-                <div className="flex flex-wrap items-center gap-3 py-3 px-4 rounded-[10px] border border-[#E2E8F0] bg-white hover:bg-slate-50/80 transition-colors">
-                  {/* Name + dropdown */}
-                  <div className="relative flex-1 min-w-[120px] max-w-[200px]">
+      {/* Header row for added medicines */}
+      {medicines.length > 0 && (
+        <div className="hidden sm:flex items-center text-[11px] font-medium text-slate-500 px-4 mt-1">
+          <div className="flex-1 min-w-[120px] max-w-[200px]">Medicine Name</div>
+          <div className="w-20 min-w-[72px]">Dose</div>
+          <div className="min-w-[140px]">Time</div>
+          <div className="w-16 text-right">Duration</div>
+          <div className="w-10 text-right">Remove</div>
+        </div>
+      )}
+
+      {medicines.map((medicine, index) => {
+        const nameQuery = medicine.name?.trim() ?? ""
+        const suggestions = getSuggestions(nameQuery)
+        const showNameDropdown =
+          nameDropdownOpenForIndex === index && (nameQuery.length >= 1 || suggestions.length > 0)
+
+        return (
+          <div key={index} className="relative">
+            <div className="flex flex-wrap items-center gap-3 py-3 px-4 rounded-[10px] border border-[#E2E8F0] bg-white hover:bg-slate-50/80 transition-colors">
+              {/* Name + dropdown */}
+              <div className="relative flex-1 min-w-[120px] max-w-[200px]">
                     <input
                       type="text"
                       id={`name-${appointmentId}-${index}`}
@@ -239,15 +340,27 @@ export default function MedicineForm({
                     <button
                       type="button"
                       onClick={() => setFrequencyOpenForIndex(frequencyOpenForIndex === index ? null : index)}
-                      className="flex items-center justify-between gap-2 min-w-[140px] px-2 py-1.5 border border-gray-300 rounded bg-white text-left text-xs focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                      className="flex items-center justify-between gap-2 min-w-[140px] px-2 py-1.5 border border-gray-300 rounded bg-white text-left text-[11px] focus:outline-none focus:ring-2 focus:ring-green-500/40"
                     >
-                      <span className="text-gray-700 truncate">
-                        {(() => {
+                      <div className="flex items-center gap-1">
+                        {TIMES.map((time) => {
                           const slots = parseFrequencyToSlots(medicine.frequency)
-                          const selected = TIMES.filter((t) => t in slots)
-                          return selected.length === 0 ? "Select time" : selected.join(", ")
-                        })()}
-                      </span>
+                          const checked = time in slots
+                          const label = time === "Evening" ? "Night" : time
+                          return (
+                            <span
+                              key={time}
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 border ${
+                                checked
+                                  ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                                  : "bg-slate-50 border-slate-200 text-slate-500"
+                              }`}
+                            >
+                              {label}
+                            </span>
+                          )
+                        })}
+                      </div>
                       <svg className="w-4 h-4 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
@@ -335,21 +448,21 @@ export default function MedicineForm({
                 </div>
               </div>
             )
-          })}
+      })}
 
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={addMedicine}
-              className="h-9 px-4 rounded-lg border border-[#CBD5E1] bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add more
-            </button>
-          </div>
-        </>
+      {medicines.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={addMedicine}
+            className="h-8 px-3 rounded-full border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Manual row
+          </button>
+        </div>
       )}
     </div>
   )

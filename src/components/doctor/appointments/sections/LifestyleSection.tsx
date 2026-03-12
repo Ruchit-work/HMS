@@ -4,11 +4,36 @@ import { Appointment as AppointmentType } from "@/types/patient"
 
 interface LifestyleSectionProps {
   appointment: AppointmentType
+  /** Minimal EMR style: flat list, no gradients */
+  minimal?: boolean
 }
 
-export default function LifestyleSection({ appointment }: LifestyleSectionProps) {
-  if (!appointment.patientDrinkingHabits && !appointment.patientSmokingHabits && !appointment.patientVegetarian) {
-    return null
+export default function LifestyleSection({ appointment, minimal = false }: LifestyleSectionProps) {
+  const hasAny =
+    appointment.patientDrinkingHabits ||
+    appointment.patientSmokingHabits ||
+    appointment.patientVegetarian ||
+    appointment.patientOccupation
+
+  if (!hasAny) return null
+
+  const items: { label: string; value: string }[] = []
+  if (appointment.patientDrinkingHabits) items.push({ label: "Drinking", value: appointment.patientDrinkingHabits })
+  if (appointment.patientSmokingHabits) items.push({ label: "Smoking", value: appointment.patientSmokingHabits })
+  if (appointment.patientOccupation) items.push({ label: "Occupation", value: appointment.patientOccupation })
+  if (appointment.patientVegetarian) items.push({ label: "Diet", value: String(appointment.patientVegetarian) })
+
+  if (minimal) {
+    return (
+      <div className="space-y-2">
+        {items.map(({ label, value }) => (
+          <div key={label} className="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-b-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+            <p className="text-sm font-medium text-slate-800 capitalize">{value}</p>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -19,9 +44,7 @@ export default function LifestyleSection({ appointment }: LifestyleSectionProps)
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
           </svg>
         </div>
-        <h4 className="font-semibold text-slate-800 text-sm">
-          Lifestyle
-        </h4>
+        <h4 className="font-semibold text-slate-800 text-sm">Lifestyle</h4>
       </div>
       <div className="space-y-2 text-xs">
         {appointment.patientDrinkingHabits && (
@@ -60,4 +83,3 @@ export default function LifestyleSection({ appointment }: LifestyleSectionProps)
     </div>
   )
 }
-

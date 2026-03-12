@@ -55,6 +55,7 @@ import EmptyState from "@/components/doctor/appointments/ui/EmptyState"
 import HistorySearch from "@/components/doctor/appointments/ui/HistorySearch"
 import PatientSummaryBar from "@/components/doctor/appointments/ui/PatientSummaryBar"
 import ClinicalSummaryCard from "@/components/doctor/appointments/ui/ClinicalSummaryCard"
+import ClinicalDetailsKeyInfo from "@/components/doctor/appointments/ui/ClinicalDetailsKeyInfo"
 import AppointmentsListPane from "@/components/doctor/appointments/ui/AppointmentsListPane"
 import CollapsibleSection from "@/components/doctor/appointments/ui/CollapsibleSection"
 import { useDoctorAppointments } from "@/hooks/useDoctorAppointments"
@@ -1473,11 +1474,11 @@ function DoctorAppointmentsContent() {
       : null
 
   return (
-    <div className="min-h-screen bg-blue-50/40 pt-20 pb-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 pt-20 pb-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-7">
         {/* Page header block */}
-        <header className="mb-6 rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
-          <div className="px-4 sm:px-6 py-4 bg-sky-50/70 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)]">
+        <header className="rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
+          <div className="px-4 sm:px-6 py-4 bg-sky-50/80 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.18),transparent)]">
             <PageHeader
               variant="light"
               onGenerateReport={() => setShowReportModal(true)}
@@ -1485,13 +1486,17 @@ function DoctorAppointmentsContent() {
               refreshing={refreshing}
             />
           </div>
-          <div className="px-4 sm:px-6 py-4 bg-white">
-            <StatsBar stats={stats} />
+          <div className="px-4 sm:px-6 py-5 bg-white border-t border-slate-100">
+            <StatsBar
+              stats={stats}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
           </div>
         </header>
 
         {/* Main content card */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
           <FilterBar
             activeTab={activeTab}
             tabs={tabItems}
@@ -1516,11 +1521,11 @@ function DoctorAppointmentsContent() {
               totalCount={historyAppointments.length}
             />
           )}
-          <main className="p-4 sm:p-6">
+          <main className="p-4 sm:p-6 lg:p-7">
         {paginatedAppointments.length === 0 ? (
           <EmptyState activeTab={activeTab} />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,340px),minmax(0,1fr)] gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,340px),minmax(0,1fr)] gap-5 md:gap-6 lg:gap-7 items-start">
             {/* Left: list — auto height, no scrollbars */}
             <div className="flex flex-col w-full">
               <AppointmentsListPane
@@ -1562,12 +1567,20 @@ function DoctorAppointmentsContent() {
 
             <div
               ref={appointmentDetailsRef}
-              className="h-full rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col border-l-4 border-l-blue-500"
+              className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden flex flex-col"
             >
               {selectedAppointment ? (
                 <>
                   <PatientSummaryBar
                     appointment={selectedAppointment}
+                    isReturningPatient={
+                      patientHistory.filter(
+                        (h: AppointmentType) =>
+                          h.patientId === selectedAppointment.patientId &&
+                          h.doctorId === selectedAppointment.doctorId &&
+                          h.id !== selectedAppointment.id
+                      ).length > 0
+                    }
                     onOpenDocuments={
                       activeTab !== "history"
                         ? () => setDocumentsModal({ open: true, appointment: selectedAppointment })
@@ -1811,13 +1824,26 @@ function DoctorAppointmentsContent() {
                           </>
                         ) : (
                           <>
-                            {/* Last visit + medical information side by side */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Key info: chief complaint + last visit date */}
+                            <ClinicalDetailsKeyInfo
+                              appointment={selectedAppointment}
+                              lastVisitDate={
+                                getLatestCheckupRecommendation(selectedAppointment)?.date ?? null
+                              }
+                            />
+
+                            <CollapsibleSection
+                              title="Last visit details"
+                              defaultOpen={true}
+                              compact
+                              minimal
+                            >
                               <ClinicalSummaryCard
                                 appointment={selectedAppointment}
                                 latestRecommendation={getLatestCheckupRecommendation(
                                   selectedAppointment
                                 )}
+                                minimal
                                 onClick={() => {
                                   const recommendation = getLatestCheckupRecommendation(selectedAppointment)
                                   if (recommendation) {
@@ -1829,40 +1855,48 @@ function DoctorAppointmentsContent() {
                                   }
                                 }}
                               />
-                              <div className="space-y-3">
-                                <MedicalInfoSection appointment={selectedAppointment} />
-                                <LifestyleSection appointment={selectedAppointment} />
-                              </div>
-                            </div>
-
-                            {/* AI Diagnosis — temporarily disabled
-                            <CollapsibleSection title="AI Diagnosis" defaultOpen={false} subdued>
-                              ...original AI diagnosis UI...
                             </CollapsibleSection>
-                            */}
 
-                            {/* History timeline */}
+                            <CollapsibleSection
+                              title="Medical information"
+                              defaultOpen={true}
+                              compact
+                              minimal
+                            >
+                              <div className="space-y-4">
+                                <MedicalInfoSection appointment={selectedAppointment} minimal />
+                                <LifestyleSection appointment={selectedAppointment} minimal />
+                              </div>
+                            </CollapsibleSection>
+
                             {patientHistory.length > 0 && (
-                              <PatientHistorySection
-                                appointment={selectedAppointment}
-                                patientHistory={patientHistory}
-                                historyDocuments={historyDocuments}
-                                historyFilters={
-                                  historySearchFilters[selectedAppointment.id] || {
-                                    text: "",
-                                    date: "",
+                              <CollapsibleSection
+                                title="Previous checkup history"
+                                defaultOpen={false}
+                                subdued
+                                compact
+                              >
+                                <PatientHistorySection
+                                  appointment={selectedAppointment}
+                                  patientHistory={patientHistory}
+                                  historyDocuments={historyDocuments}
+                                  historyFilters={
+                                    historySearchFilters[selectedAppointment.id] || {
+                                      text: "",
+                                      date: "",
+                                    }
                                   }
-                                }
-                                showHistory={showHistory[selectedAppointment.id] || false}
-                                onToggleHistory={() =>
-                                  setShowHistory((prev) => ({
-                                    ...prev,
-                                    [selectedAppointment.id]:
-                                      !prev[selectedAppointment.id],
-                                  }))
-                                }
-                                onDocumentClick={(doc) => setSelectedHistoryDocument(doc)}
-                              />
+                                  showHistory={showHistory[selectedAppointment.id] || false}
+                                  onToggleHistory={() =>
+                                    setShowHistory((prev) => ({
+                                      ...prev,
+                                      [selectedAppointment.id]:
+                                        !prev[selectedAppointment.id],
+                                    }))
+                                  }
+                                  onDocumentClick={(doc) => setSelectedHistoryDocument(doc)}
+                                />
+                              </CollapsibleSection>
                             )}
                           </>
                         )}
@@ -1942,10 +1976,29 @@ function DoctorAppointmentsContent() {
                       {consultationMode[selectedAppointment.id] === "anatomy" ? (
                         <>
                         <div className="p-4">
-                          <div className="w-full bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                            <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50/80">
-                              <span className="font-semibold text-sm text-slate-800">3D Anatomy Viewer</span>
+                          <div className="w-full bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm">
+                            {/* Header: breadcrumb + title */}
+                            <div className="px-4 pt-3 pb-2.5 border-b border-slate-200 bg-slate-50/80">
+                              <nav className="flex items-center gap-1 text-[11px] text-slate-500 mb-1">
+                                <span>Appointments</span>
+                                <span className="text-slate-400">›</span>
+                                <span>Consultation</span>
+                                <span className="text-slate-400">›</span>
+                                <span className="text-slate-700 font-medium">3D Anatomy</span>
+                              </nav>
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <h3 className="text-sm sm:text-base font-semibold text-slate-900">
+                                    3D Anatomy Examination
+                                  </h3>
+                                  <p className="hidden sm:block text-xs text-slate-500 mt-0.5">
+                                    Focus on specific anatomy while keeping notes and medicines in sync.
+                                  </p>
+                                </div>
+                              </div>
                             </div>
+
+                            {/* Anatomy type pills + Add Anatomy */}
                             <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border-b border-slate-200 overflow-x-auto">
                               {(selectedAnatomyTypes[selectedAppointment.id] || []).map((tab) => {
                                 const details = getAnatomyModelDetails(tab)
@@ -1983,10 +2036,10 @@ function DoctorAppointmentsContent() {
                                         [selectedAppointment.id]: tab,
                                       }))
                                     }
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium text-xs transition-all shrink-0 ${
+                                    className={`group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full font-medium text-xs transition-all shrink-0 ${
                                       isActive
-                                        ? "bg-blue-600 text-white shadow-md"
-                                        : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                                        ? "bg-blue-600 text-white shadow-sm"
+                                        : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
                                     }`}
                                   >
                                     {renderPillIcon()}
@@ -2012,7 +2065,7 @@ function DoctorAppointmentsContent() {
                                           }))
                                         }
                                       }}
-                                      className={`ml-1.5 flex items-center justify-center w-6 h-6 rounded-full cursor-pointer transition-colors ${
+                                      className={`ml-1.5 flex items-center justify-center w-5 h-5 rounded-full cursor-pointer transition-colors opacity-0 group-hover:opacity-100 ${
                                         isActive
                                           ? "hover:bg-blue-500/80 text-white"
                                           : "hover:bg-slate-200 text-slate-500"
@@ -2039,7 +2092,7 @@ function DoctorAppointmentsContent() {
                                 onClick={() =>
                                   handleAddAnotherAnatomy(selectedAppointment.id)
                                 }
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm bg-white border-2 border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all shrink-0"
                               >
                                 <svg
                                   className="w-4 h-4"
@@ -2167,9 +2220,7 @@ function DoctorAppointmentsContent() {
                           removedAiMedicines={
                             removedAiMedicines[selectedAppointment.id] || []
                           }
-                          showDocumentUpload={
-                            showDocumentUpload[selectedAppointment.id] || false
-                          }
+                          showDocumentUpload={showDocumentUpload[selectedAppointment.id] || false}
                           updating={updating[selectedAppointment.id] || false}
                           admitting={admitting[selectedAppointment.id] || false}
                           onCompletionDataChange={(data) => {

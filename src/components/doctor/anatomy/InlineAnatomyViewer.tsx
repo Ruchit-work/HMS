@@ -95,6 +95,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
     frequency: string
     duration: string
   }>>([])
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
 
   // Hydrate state from initialData when provided (for tab switching)
   useEffect(() => {
@@ -716,22 +717,14 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       return
     }
 
-    // If onDataChange is provided, let parent handle the completion modal
-    // Otherwise, show local modal (for backward compatibility)
-    if (onDataChange) {
-      // Trigger parent to show combined modal by calling onComplete
-      if (onComplete) {
-        onComplete()
-      }
-    } else {
-      // Show confirmation modal locally
-      setShowCompletionModal(true)
-    }
+    // Always show confirmation modal before completing
+    setShowCompletionModal(true)
   }
 
   const confirmCompleteCheckup = async () => {
     setShowCompletionModal(false)
     setCompleting(true)
+    setShowSuccessAnimation(false)
     setNotification(null)
 
     try {
@@ -839,6 +832,11 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         message: "Checkup completed successfully! Recommended medicines and prescriptions have been added to the appointment."
       })
 
+      setShowSuccessAnimation(true)
+      setTimeout(() => {
+        setShowSuccessAnimation(false)
+      }, 1500)
+
       if (onComplete) {
         setTimeout(() => {
           onComplete()
@@ -887,6 +885,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
   const confirmCompleteCheckup2D = async () => {
     setShowCompletionModal(false)
     setCompleting(true)
+    setShowSuccessAnimation(false)
     setNotification(null)
 
     try {
@@ -995,6 +994,11 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         }, 2000)
       }
 
+      setShowSuccessAnimation(true)
+      setTimeout(() => {
+        setShowSuccessAnimation(false)
+      }, 1500)
+
     } catch (error) {
 
       setNotification({
@@ -1023,43 +1027,57 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
       <div className="p-4">
         {/* View Toggle - hidden for kidney and nose (3D only) */}
         {show2DView && (
-          <div className="flex gap-2 bg-slate-100 p-1 rounded-lg w-fit mb-4">
-            <button
-              onClick={() => setActiveView('3d')}
-              className={`px-6 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${
-                activeView === '3d'
-                  ? 'bg-white text-blue-600 shadow-md'
-                  : 'text-slate-600 hover:text-slate-800'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              3D Model
-            </button>
-            <button
-              onClick={() => setActiveView('2d')}
-              className={`px-6 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${
-                activeView === '2d'
-                  ? 'bg-white text-blue-600 shadow-md'
-                  : 'text-slate-600 hover:text-slate-800'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              2D Diagram
-            </button>
+          <div className="mb-4">
+            <div className="inline-flex rounded-full bg-slate-100 p-1 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setActiveView('3d')}
+                className={`inline-flex items-center gap-2 px-5 py-1.5 text-xs sm:text-sm font-medium rounded-full transition-all duration-200 ${
+                  activeView === '3d'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <svg
+                  className={`w-4 h-4 ${activeView === '3d' ? 'text-white' : 'text-slate-500'}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                <span>3D Model</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView('2d')}
+                className={`inline-flex items-center gap-2 px-5 py-1.5 text-xs sm:text-sm font-medium rounded-full transition-all duration-200 ${
+                  activeView === '2d'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <svg
+                  className={`w-4 h-4 ${activeView === '2d' ? 'text-white' : 'text-slate-500'}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>2D Diagram</span>
+              </button>
+            </div>
           </div>
         )}
 
         {/* Main Content - Model and Info Panel */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6">
           {/* Left: Model Viewer */}
-          <div className="lg:col-span-6">
+          <div className="lg:col-span-7 space-y-2">
             {effectiveView === '3d' ? (
               <>
-                <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200" style={{ height: '600px', minHeight: '600px', position: 'relative' }}>
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: '680px', minHeight: '680px', position: 'relative' }}>
                   <DynamicENTAnatomyViewer
                     onPartSelect={handlePartSelect}
                     selectedPart={selectedPart}
@@ -1067,9 +1085,12 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                     className="w-full h-full"
                   />
                 </div>
+                <p className="text-[11px] text-slate-500 px-1">
+                  Click on any anatomical part to view details and related conditions.
+                </p>
               </>
             ) : (
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200" style={{ height: '600px', minHeight: '600px' }}>
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: '680px', minHeight: '680px' }}>
                 {anatomyType === 'skeleton' ? (
                   <InteractiveSkeletonSVG
                     onPartSelect={handlePartSelect2D}
@@ -1101,12 +1122,28 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
           </div>
 
           {/* Right: Information Panel */}
-          <div className="lg:col-span-6 space-y-4">
+          <div className="lg:col-span-5 space-y-4">
             {/* Selected Part Info Section */}
             {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D) ? (
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-5 shadow-lg">
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-lg font-bold text-blue-900">Selected Part Information</h3>
+              <div className="relative rounded-xl border border-slate-200 bg-white shadow-sm pl-3.5 pr-4 py-4">
+                <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-gradient-to-b from-sky-400 via-blue-500 to-indigo-500" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3 2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Selected Part Information
+                      </p>
+                      <p className="mt-0.5 text-base sm:text-lg font-semibold text-slate-900">
+                        {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     onClick={() => {
                       if (effectiveView === '3d') {
@@ -1121,20 +1158,30 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                         setSelectedMedicines2D([])
                       }
                     }}
-                    className="text-blue-600 hover:text-blue-800 text-lg font-bold hover:bg-blue-100 rounded-full p-1 transition-colors"
-                    title="Clear Selection"
+                    className="ml-2 text-slate-400 hover:text-slate-700 text-sm font-semibold hover:bg-slate-100 rounded-full p-1 transition-colors"
+                    title="Clear selection"
                   >
                     ✕
                   </button>
                 </div>
-                <div className="space-y-3">
+                <div className="mt-3 space-y-2.5">
                   <div>
-                    <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Part Name</label>
-                    <p className="text-base text-blue-900 font-bold mt-1">{(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}</p>
+                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                      Anatomical name
+                    </label>
+                    <p className="mt-0.5 text-sm text-slate-800 leading-snug">
+                      <span className="font-semibold">
+                        {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}
+                      </span>
+                    </p>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Description</label>
-                    <p className="text-sm text-blue-800 leading-relaxed mt-1">{(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.description}</p>
+                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                      Description
+                    </label>
+                    <p className="mt-1 text-sm text-slate-700 leading-relaxed">
+                      {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.description}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1154,41 +1201,88 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
               const partData = effectiveView === '3d' ? currentPartData : (selectedPart2D ? partsData[selectedPart2D] : null)
               return partInfo && partData && partData.diseases.length > 0
             })() && (
-              <div className="bg-white border-2 border-blue-200 rounded-xl p-4 shadow-md">
-                <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                <h4 className="text-sm font-semibold text-slate-900 mb-2.5 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  Related Diseases/Conditions
+                  Related diseases / conditions
                 </h4>
-                <div className="space-y-2">
-                  {((effectiveView === '3d' ? currentPartData : (selectedPart2D ? partsData[selectedPart2D] : null))?.diseases || []).map((disease) => (
-                    <button
-                      key={disease.id}
-                      onClick={() => effectiveView === '3d' ? handleDiseaseSelect(disease) : handleDiseaseSelect2D(disease)}
-                      className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                        (effectiveView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id
-                          ? 'bg-blue-100 border-blue-500 shadow-md'
-                          : 'bg-white border-blue-200 hover:bg-blue-50 hover:border-blue-300'
-                      }`}
-                    >
-                      <p className={`font-semibold mb-1 ${(effectiveView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-blue-900' : 'text-blue-800'}`}>
-                        {disease.name}
-                      </p>
-                      <p className={`text-xs leading-relaxed line-clamp-2 ${(effectiveView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-blue-700' : 'text-blue-600'}`}>
-                        {disease.description}
-                      </p>
-                    </button>
-                  ))}
+                <div className="space-y-1.5">
+                  {((effectiveView === '3d' ? currentPartData : (selectedPart2D ? partsData[selectedPart2D] : null))?.diseases || []).map((disease) => {
+                    const isSelected =
+                      (effectiveView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id
+                    return (
+                      <button
+                        key={disease.id}
+                        type="button"
+                        onClick={() =>
+                          effectiveView === '3d'
+                            ? handleDiseaseSelect(disease)
+                            : handleDiseaseSelect2D(disease)
+                        }
+                        className={`group w-full text-left rounded-lg border px-3 py-2 flex items-start justify-between gap-3 transition-all ${
+                          isSelected
+                            ? "border-blue-500 bg-blue-50/70 shadow-sm"
+                            : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/60"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <svg
+                              className={`w-3.5 h-3.5 ${
+                                isSelected ? "text-blue-700" : "text-slate-400 group-hover:text-blue-600"
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" />
+                            </svg>
+                            <span
+                              className={`text-xs sm:text-sm font-semibold truncate ${
+                                isSelected ? "text-blue-900" : "text-slate-900"
+                              }`}
+                            >
+                              {disease.name}
+                            </span>
+                            {isSelected && (
+                              <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                                Selected
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className={`text-[11px] sm:text-xs leading-snug line-clamp-2 ${
+                              isSelected ? "text-blue-800" : "text-slate-600"
+                            }`}
+                          >
+                            {disease.description}
+                          </p>
+                        </div>
+                        <div className="shrink-0">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                              isSelected
+                                ? "border-blue-600 text-blue-700 bg-white"
+                                : "border-slate-300 text-slate-600 bg-white group-hover:border-blue-500 group-hover:text-blue-700"
+                            }`}
+                          >
+                            Select
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
 
             {/* Selected Disease Info */}
             {(effectiveView === '3d' ? selectedDisease : selectedDisease2D) && (
-              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-bold text-green-900">Selected Disease</h3>
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3.5">
+                <div className="flex items-start justify-between mb-1.5">
+                  <h3 className="text-sm font-semibold text-green-900">Selected disease</h3>
                   <button
                     onClick={() => {
                       if (effectiveView === '3d') {
@@ -1199,62 +1293,132 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                         setSelectedMedicines2D([])
                       }
                     }}
-                    className="text-green-600 hover:text-green-800 text-sm font-bold"
+                    className="text-green-600 hover:text-green-800 text-xs font-semibold"
                     title="Clear Selection"
                   >
                     ✕
                   </button>
                 </div>
-                <p className="text-sm text-green-800 font-semibold mb-2">{(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.name}</p>
-                <p className="text-xs text-green-700 leading-relaxed mb-3">{(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.description}</p>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <p className="text-sm sm:text-base text-green-900 font-semibold">
+                    {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.name}
+                  </p>
+                  <span className="inline-flex items-center rounded-full border border-green-500 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-green-700">
+                    {((effectiveView === '3d'
+                      ? (selectedDisease as any)
+                      : (selectedDisease2D as any)
+                    )?.severity) || "Moderate"}
+                  </span>
+                </div>
+                <p className="text-xs text-green-800 leading-relaxed mb-2.5">
+                  {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.description}
+                </p>
                 
                 {/* Symptoms */}
-                {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.symptoms && (effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.symptoms.length > 0 && (
-                  <div className="mb-3">
-                    <h4 className="text-xs font-bold text-green-900 mb-1">Symptoms:</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.symptoms.map((symptom, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
-                          {symptom}
-                        </span>
-                      ))}
+                {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.symptoms &&
+                  (effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.symptoms.length > 0 && (
+                    <div className="mt-1.5">
+                      <h4 className="text-[11px] font-semibold text-green-900 mb-1">Symptoms</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.symptoms.map(
+                          (symptom, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center rounded-full bg-white/80 border border-green-200 px-2 py-0.5 text-[11px] text-green-800"
+                            >
+                              {symptom}
+                            </span>
+                          )
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
               </div>
             )}
 
             {/* Prescriptions */}
-            {(effectiveView === '3d' ? selectedDisease : selectedDisease2D) && (effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.prescriptions.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <h4 className="text-xs font-bold text-amber-900 mb-2">Prescriptions/Instructions:</h4>
-                <ul className="text-xs text-amber-800 space-y-1">
-                  {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.prescriptions.map((prescription, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="text-amber-600">•</span>
-                      <span>{prescription}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {(effectiveView === '3d' ? selectedDisease : selectedDisease2D) &&
+              (effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.prescriptions.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <h4 className="text-[11px] font-semibold text-amber-900 mb-1.5">
+                    Prescriptions / instructions
+                  </h4>
+                  <ul className="space-y-1">
+                    {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.prescriptions.map(
+                      (prescription, idx) => {
+                        const lower = prescription.toLowerCase()
+                        const isCritical =
+                          lower.includes("immediately") ||
+                          lower.includes("emergency") ||
+                          lower.includes("urgent") ||
+                          lower.includes("stop") ||
+                          lower.includes("bleeding")
+                        return (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 text-[11px] text-amber-900"
+                          >
+                            <span className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white/80 border border-amber-300">
+                              {isCritical ? (
+                                <svg
+                                  className="w-2.5 h-2.5 text-red-500"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M12 9v4" />
+                                  <path d="M12 17h.01" />
+                                  <path d="M10.29 3.86 1.82 18a1 1 0 0 0 .86 1.5h18.64a1 1 0 0 0 .86-1.5L13.71 3.86a1 1 0 0 0-1.72 0Z" />
+                                </svg>
+                              ) : (
+                                <svg
+                                  className="w-2.5 h-2.5 text-amber-600"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </span>
+                            <span className="leading-snug">{prescription}</span>
+                          </li>
+                        )
+                      }
+                    )}
+                  </ul>
+                </div>
+              )}
 
             {/* Medicines - Editable */}
             {(
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-bold text-purple-900">Medicines:</h4>
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-purple-900">
+                      Medicines Prescription
+                    </h4>
+                    <p className="text-[11px] text-purple-700/80 mt-0.5">
+                      Prescribed medications for the selected condition.
+                    </p>
+                  </div>
                   <button
                     onClick={effectiveView === '3d' ? addMedicine : addMedicine2D}
-                    className="btn-modern btn-modern-purple btn-modern-sm flex items-center gap-1"
+                    className="btn-modern btn-modern-purple btn-modern-sm flex items-center gap-1.5 px-3 py-1.5"
                   >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    Add
+                    <span className="text-xs font-medium">Add medicine</span>
                   </button>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {(effectiveView === '3d' ? selectedMedicines : selectedMedicines2D).length === 0 ? (
                     <p className="text-xs text-purple-700 italic py-1">No medicines. Click "Add" to add one.</p>
                   ) : (
@@ -1267,18 +1431,18 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                         nameSuggestions.length > 0
                       
                       return (
-                      <div key={idx} className="bg-white rounded p-2 border border-purple-200">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-purple-900">#{idx + 1}</span>
+                      <div key={idx} className="bg-white rounded-lg p-2.5 border border-purple-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-semibold text-purple-800">#{idx + 1}</span>
                           <button
                             onClick={() => currentSection === '3d' ? removeMedicine(idx) : removeMedicine2D(idx)}
-                            className="text-red-600 hover:text-red-800 text-xs font-bold"
-                            title="Remove"
+                            className="text-red-500 hover:text-red-700 text-xs font-bold"
+                            title="Remove medicine"
                           >
                             ✕
                           </button>
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 mt-0.5">
                             <div className="relative flex items-center">
                               <input
                                 type="text"
@@ -1328,7 +1492,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                                   }
                                 }}
                                 placeholder="Medicine name *"
-                                className="w-full pl-2 pr-9 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                className="w-full pl-2 pr-9 py-1.5 border border-purple-300 rounded text-xs sm:text-[13px] font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-purple-500"
                               />
                               <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
                                 <div className="pointer-events-auto">
@@ -1412,7 +1576,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                                 ))}
                               </div>
                             )}
-                          <div className="grid grid-cols-3 gap-1.5">
+                          <div className="grid grid-cols-3 gap-1.5 pt-0.5">
                             <input
                               type="text"
                               value={medicine.dosage}
@@ -1454,16 +1618,34 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
 
             {/* Notes Section */}
             <div className="bg-white border border-slate-200 rounded-xl p-3">
-              <label className="block font-semibold text-slate-800 mb-1.5 text-sm">
-                Doctor Notes
-              </label>
-              <div className="relative flex items-center">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block font-semibold text-slate-800 text-sm">
+                  Doctor Notes
+                </label>
+                <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                    <path d="M19 11a7 7 0 0 1-14 0" />
+                    <path d="M12 19v3" />
+                  </svg>
+                  <span>Voice dictation</span>
+                </div>
+              </div>
+              <div className="relative">
                 <textarea
                   value={effectiveView === '3d' ? notes : notes2D}
                   onChange={(e) => effectiveView === '3d' ? setNotes(e.target.value) : setNotes2D(e.target.value)}
-                  placeholder={`Document your findings from the ${effectiveView === '3d' ? '3D model' : '2D diagram'} examination... or use voice input`}
+                  placeholder="Quick observation from examination..."
                   className="w-full p-2 pl-2 pr-10 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  rows={3}
+                  rows={4}
                 />
                 <div className="absolute right-2 top-2 pointer-events-none flex items-end justify-end">
                   <div className="pointer-events-auto">
@@ -1481,6 +1663,9 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                   </div>
                 </div>
               </div>
+              <div className="mt-1 flex justify-end">
+                <span className="text-[11px] text-slate-400">Autosave enabled</span>
+              </div>
             </div>
 
             {/* Complete Checkup Button */}
@@ -1488,7 +1673,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
               <button
                 onClick={effectiveView === '3d' ? handleCompleteCheckup : handleCompleteCheckup2D}
                 disabled={completing}
-                className="btn-modern btn-modern-success w-full flex items-center justify-center gap-2"
+                className="btn-modern btn-modern-success w-full flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-shadow"
               >
                 {completing ? (
                   <>
@@ -1498,9 +1683,16 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                     </svg>
                     Completing...
                   </>
+                ) : showSuccessAnimation ? (
+                  <>
+                    <svg className="w-5 h-5 text-white animate-scale" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Completed
+                  </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     Complete Checkup
@@ -1512,7 +1704,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         </div>
       </div>
 
-      {/* Completion Confirmation Modal */}
+            {/* Completion Confirmation Modal */}
       {showCompletionModal && (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -1598,7 +1790,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 }
               }}
               disabled={completing}
-              className="btn-modern btn-modern-success flex-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-modern btn-modern-success flex-1 flex items-center justify-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-shadow"
             >
               {completing ? (
                 <>
@@ -1609,7 +1801,12 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                   Completing...
                 </>
               ) : (
-                'Confirm & Complete'
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Confirm & Complete
+                </>
               )}
             </button>
           </div>

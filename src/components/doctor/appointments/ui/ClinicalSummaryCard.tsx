@@ -11,17 +11,69 @@ interface ClinicalSummaryCardProps {
     date?: string
   } | null
   onClick?: () => void
+  /** Minimal EMR style (no card border, flat content) */
+  minimal?: boolean
 }
 
 export default function ClinicalSummaryCard({
   appointment,
   latestRecommendation,
   onClick,
+  minimal = false,
 }: ClinicalSummaryCardProps) {
   const primaryDiagnosis =
     latestRecommendation && latestRecommendation.finalDiagnosis.length > 0
       ? latestRecommendation.finalDiagnosis[0]
       : null
+
+  if (minimal) {
+    return (
+      <div className="space-y-3">
+        {latestRecommendation ? (
+          <>
+            {latestRecommendation.date && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                  Visit date
+                </p>
+                <p className="text-sm font-medium text-slate-800 tabular-nums">
+                  {latestRecommendation.date}
+                </p>
+              </div>
+            )}
+            {primaryDiagnosis && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Diagnosis
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    {primaryDiagnosis}
+                  </span>
+                  {latestRecommendation.finalDiagnosis.length > 1 && (
+                    <span className="text-xs text-slate-500">
+                      +{latestRecommendation.finalDiagnosis.length - 1} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {onClick && (
+              <button
+                type="button"
+                onClick={onClick}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                View full details →
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-slate-500">No previous visit recorded.</p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
