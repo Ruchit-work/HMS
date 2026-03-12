@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
-import { getDocs, where, query, doc, deleteDoc, onSnapshot } from 'firebase/firestore'
+import { getDocs, where, query, doc, deleteDoc, onSnapshot, collection } from 'firebase/firestore'
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
@@ -281,6 +281,7 @@ export default function PatientManagement({
     selectedBranchId = "all"
 }: PatientManagementProps = {}) {
     const [patients, setPatients] = useState<Patient[]>([])
+    const [legacyPatients, setLegacyPatients] = useState<Patient[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
@@ -305,6 +306,37 @@ export default function PatientManagement({
     const [customStartDate, setCustomStartDate] = useState('')
     const [customEndDate, setCustomEndDate] = useState('')
     const [generatingReport, setGeneratingReport] = useState(false)
+
+    // Load legacy patients (root 'patients' collection) once per hospital to avoid
+    // repeated network calls inside the realtime snapshot listener.
+    useEffect(() => {
+        if (!activeHospitalId) {
+            setLegacyPatients([])
+            return
+        }
+
+        const loadLegacyPatients = async () => {
+            try {
+                const legacyRef = collection(db, 'patients')
+                const legacyQuery = query(
+                    legacyRef,
+                    where('hospitalId', '==', activeHospitalId),
+                    where('status', 'in', ['active', 'inactive'])
+                )
+                const legacySnapshot = await getDocs(legacyQuery)
+                const mapped = legacySnapshot.docs.map((legacyDoc) => ({
+                    id: legacyDoc.id,
+                    ...legacyDoc.data()
+                })) as Patient[]
+                setLegacyPatients(mapped)
+            } catch {
+                // On error, just fall back to hospital-scoped patients
+                setLegacyPatients([])
+            }
+        }
+
+        loadLegacyPatients()
+    }, [activeHospitalId])
     const handleView = (patient: Patient) => {
         setSelectedPatient(patient)
         setShowViewModal(true)
@@ -397,6 +429,18 @@ export default function PatientManagement({
                     ...doc.data()
                 })) as Patient[]
 
+                // Merge in legacy patients (loaded once per hospital) and de-duplicate by id.
+                if (legacyPatients.length > 0) {
+                    const byId = new Map<string, Patient>()
+                    patientsList.forEach((p) => byId.set(p.id, p))
+                    legacyPatients.forEach((p) => {
+                        if (!byId.has(p.id)) {
+                            byId.set(p.id, p)
+                        }
+                    })
+                    patientsList = Array.from(byId.values())
+                }
+
                 // If used from receptionist dashboard, restrict to their branch
                 if (receptionistBranchId) {
                     patientsList = patientsList.filter(p => p.defaultBranchId === receptionistBranchId)
@@ -405,45 +449,6 @@ export default function PatientManagement({
                 // If used from admin dashboard with branch filter, filter by selected branch
                 if (!receptionistBranchId && selectedBranchId !== "all") {
                     patientsList = patientsList.filter(p => p.defaultBranchId === selectedBranchId)
-                }
-                
-                // Optimized: Only fetch appointment counts per patient instead of all appointments
-                // Use parallel queries for each patient to get counts
-                const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
-                
-                // Create queries for each patient in parallel (limited to avoid too many queries)
-                const patientIds = patientsList.map(p => p.id)
-                const patientIdStrings = patientsList.map(p => p.patientId).filter(Boolean) as string[]
-                const allPatientIdentifiers = [...new Set([...patientIds, ...patientIdStrings])]
-                
-                // Batch fetch appointment counts - limit to 30 patients at a time to avoid too many queries
-                const appointmentCounts = new Map<string, number>()
-                const batchSize = 30
-                
-                for (let i = 0; i < Math.min(allPatientIdentifiers.length, batchSize); i++) {
-                    const patientId = allPatientIdentifiers[i]
-                    try {
-                        // Query appointments for this patient
-                        const patientAppointmentsQuery = query(
-                            appointmentsRef,
-                            where('patientUid', '==', patientId)
-                        )
-                        const patientAppointmentsSnapshot = await getDocs(patientAppointmentsQuery)
-                        const count1 = patientAppointmentsSnapshot.size
-                        
-                        // Also check by patientId field
-                        const patientIdAppointmentsQuery = query(
-                            appointmentsRef,
-                            where('patientId', '==', patientId)
-                        )
-                        const patientIdAppointmentsSnapshot = await getDocs(patientIdAppointmentsQuery)
-                        const count2 = patientIdAppointmentsSnapshot.size
-                        
-                        appointmentCounts.set(patientId, count1 + count2)
-                    } catch {
-                        // If query fails, set count to 0
-                        appointmentCounts.set(patientId, 0)
-                    }
                 }
                 
                 // Add appointment counts to each patient (lazy load full appointments only when needed)
@@ -502,7 +507,7 @@ export default function PatientManagement({
         } finally {
             setLoading(false)
         }
-    }, [activeHospitalId, receptionistBranchId, selectedBranchId])
+    }, [activeHospitalId, receptionistBranchId, selectedBranchId, legacyPatients])
 
     useEffect(() => {   
         if (!user || authLoading || !activeHospitalId) return

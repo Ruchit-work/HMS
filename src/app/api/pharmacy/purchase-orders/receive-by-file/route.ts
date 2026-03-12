@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   const ctxResult = await getPharmacyAuthContext(auth.user, {})
   if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
 
-  let orderId: string
+  let orderId: string | null = null
   let file: File
   let supplierInvoiceNumber: string | null = null
   let parseOnly = false
@@ -79,10 +79,9 @@ export async function POST(request: NextRequest) {
     const inv = formData.get('supplierInvoiceNumber')
     const parseOnlyVal = formData.get('parseOnly')
     parseOnly = parseOnlyVal === '1' || parseOnlyVal === 'true'
-    if (typeof orderIdVal !== 'string' || !orderIdVal.trim()) {
-      return NextResponse.json({ success: false, error: 'orderId is required' }, { status: 400 })
+    if (typeof orderIdVal === 'string' && orderIdVal.trim()) {
+      orderId = orderIdVal.trim()
     }
-    orderId = orderIdVal.trim()
     if (typeof inv === 'string' && inv.trim()) supplierInvoiceNumber = inv.trim()
   } catch {
     return NextResponse.json({ success: false, error: 'Invalid form data' }, { status: 400 })
@@ -117,6 +116,14 @@ export async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json({ success: false, error: 'Failed to parse PDF. Try an Excel file for best results.' }, { status: 400 })
     }
+  }
+
+  // If no orderId was provided, support a generic "preview only" mode for simple uploads
+  if (!orderId) {
+    return NextResponse.json({
+      success: true,
+      rows: rows.filter((r) => (r.name || '').trim().length > 0),
+    })
   }
 
   const db = admin.firestore()

@@ -14,6 +14,7 @@ import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import Pagination from '@/components/ui/navigation/Pagination'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
+import { ConfirmDialog } from '@/components/ui/overlays/Modals'
 import { CashTenderModal } from '@/components/pharmacy/CashTenderModal'
 import { RefundCashModal } from '@/components/pharmacy/RefundCashModal'
 import type { Branch } from '@/types/branch'
@@ -3806,11 +3807,13 @@ function ReceiveByFileForm({
   onSuccess,
   onError,
   getToken,
+  branchIdForSimpleUpload,
 }: {
   pendingOrders: PharmacyPurchaseOrder[]
   onSuccess: () => void
   onError: (e: string) => void
   getToken: () => Promise<string | null>
+  branchIdForSimpleUpload?: string
 }) {
   const [orderId, setOrderId] = useState('')
   const [supplierInvoice, setSupplierInvoice] = useState('')
@@ -3822,15 +3825,12 @@ function ReceiveByFileForm({
 
   const selectedOrder = orderId ? pendingOrders.find((o) => o.id === orderId) : null
   const isPendingAndSelected = !!selectedOrder && selectedOrder.status === 'pending'
-  const uploadEnabled = isPendingAndSelected
+  // Keep validation in handleParse/handleConfirm, but always keep the file input and button enabled
+  const uploadEnabled = true
 
   const handleParse = async (e: React.FormEvent) => {
     e.preventDefault()
     const file = fileInputRef.current?.files?.[0]
-    if (!orderId || !uploadEnabled) {
-      onError('Select a pending order first')
-      return
-    }
     if (!file || file.size === 0) {
       onError('Select a PDF or Excel file from the supplier')
       return
@@ -3888,7 +3888,7 @@ function ReceiveByFileForm({
   }
 
   const handleConfirm = async () => {
-    if (!orderId || !parsedRows || parsedRows.length === 0) {
+    if (!parsedRows || parsedRows.length === 0) {
       onError('No data to confirm')
       return
     }
@@ -3900,17 +3900,44 @@ function ReceiveByFileForm({
         setConfirming(false)
         return
       }
-      const res = await fetch('/api/pharmacy/purchase-orders/receive-by-file/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          orderId,
-          rows: parsedRows,
-          supplierInvoiceNumber: supplierInvoice.trim() || undefined,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to confirm')
+
+      // If no orderId, treat this as a simple bulk upload: call upload-medicines API
+      if (!orderId) {
+        const file = fileInputRef.current?.files?.[0]
+        if (!file || file.size === 0) {
+          onError('Select a PDF or Excel file from the supplier')
+          setConfirming(false)
+          return
+        }
+        if (!branchIdForSimpleUpload) {
+          onError('Select a branch first to add stock to.')
+          setConfirming(false)
+          return
+        }
+        const form = new FormData()
+        form.append('file', file)
+        form.append('branchId', branchIdForSimpleUpload)
+        const res = await fetch('/api/pharmacy/upload-medicines', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to import medicines')
+      } else {
+        // Existing behavior: confirm receive for a specific order
+        const res = await fetch('/api/pharmacy/purchase-orders/receive-by-file/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            orderId,
+            rows: parsedRows,
+            supplierInvoiceNumber: supplierInvoice.trim() || undefined,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to confirm')
+      }
       onSuccess()
       setOrderId('')
       setSupplierInvoice('')
@@ -3923,8 +3950,6 @@ function ReceiveByFileForm({
       setConfirming(false)
     }
   }
-
-  if (pendingOrders.length === 0) return null
 
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
@@ -4164,6 +4189,8 @@ export default function PharmacyManagement() {
   const [inventoryViewBatchesStock, setInventoryViewBatchesStock] = useState<BranchMedicineStock | null>(null)
   const [inventoryDetailView, setInventoryDetailView] = useState<{ stock: BranchMedicineStock; medicine: PharmacyMedicine | null } | null>(null)
   const [inventoryRowActionsOpen, setInventoryRowActionsOpen] = useState<string | null>(null)
+  const [inventoryDeleteTarget, setInventoryDeleteTarget] = useState<BranchMedicineStock | null>(null)
+  const [inventoryDeleteLoading, setInventoryDeleteLoading] = useState(false)
   const [branches, setBranchesState] = useState<Array<{ id: string; name: string }>>([])
   const branchFilter = isPharmacyPortal && portal ? portal.branchFilter : branchFilterLocal
   const setBranchFilter = isPharmacyPortal && portal ? (id: string) => portal.setBranchFilter(id) : setBranchFilterLocal
@@ -4267,7 +4294,6 @@ export default function PharmacyManagement() {
     cashExpenses: number
     profit: number
   } | null>(null)
-
   useEffect(() => {
     if (!highlightOpenCounter && !highlightCloseCounter) return
     const t = setTimeout(() => {
@@ -5595,9 +5621,57 @@ export default function PharmacyManagement() {
 
   if (!activeHospitalId) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
-        <p className="text-slate-600">Select a hospital to manage pharmacy.</p>
-      </div>
+      <>
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
+          <p className="text-slate-600">Select a hospital to manage pharmacy.</p>
+        </div>
+        <ConfirmDialog
+          isOpen={!!inventoryDeleteTarget}
+          title="Remove from branch inventory?"
+          message={
+            inventoryDeleteTarget
+              ? `This will remove "${inventoryDeleteTarget.medicineName}" from this branch's inventory. Existing sales history will remain.`
+              : ''
+          }
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmLoading={inventoryDeleteLoading}
+          onCancel={() => {
+            if (inventoryDeleteLoading) return
+            setInventoryDeleteTarget(null)
+          }}
+          onConfirm={async () => {
+            if (!inventoryDeleteTarget) return
+            try {
+              setInventoryDeleteLoading(true)
+              const token = await getToken()
+              if (!token) {
+                setError('Not signed in')
+                return
+              }
+              const res = await fetch('/api/pharmacy/stock', {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ stockId: inventoryDeleteTarget.id }),
+              })
+              const data = await res.json().catch(() => ({}))
+              if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to delete stock')
+              }
+              setSuccess('Medicine removed from this branch inventory.')
+              fetchPharmacy()
+            } catch (err: unknown) {
+              setError(err instanceof Error ? err.message : 'Failed to delete stock')
+            } finally {
+              setInventoryDeleteLoading(false)
+              setInventoryDeleteTarget(null)
+            }
+          }}
+        />
+      </>
     )
   }
 
@@ -6274,6 +6348,17 @@ export default function PharmacyManagement() {
               </div>
             </div>
 
+            {/* Import inventory – receive from supplier file (move above barcode lookup) */}
+            {!isViewOnly && (
+              <ReceiveByFileForm
+                pendingOrders={purchaseOrders.filter((o) => o.status === 'pending')}
+                onSuccess={() => { setSuccess('Stock updated from supplier file.'); fetchPharmacy(); }}
+                onError={setError}
+                getToken={getToken}
+                branchIdForSimpleUpload={!isViewOnly ? branchFilter : undefined}
+              />
+            )}
+
             {/* Barcode lookup */}
             {activeHospitalId && (
               <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
@@ -6384,16 +6469,6 @@ export default function PharmacyManagement() {
             </>
             )}
 
-            {/* Receive stock from supplier file (PDF/Excel) – link to PO by order number */}
-            {!isViewOnly && (
-              <ReceiveByFileForm
-                pendingOrders={purchaseOrders.filter((o) => o.status === 'pending')}
-                onSuccess={() => { setSuccess('Order marked as Delivered; stock updated.'); fetchPharmacy(); }}
-                onError={setError}
-                getToken={getToken}
-              />
-            )}
-
             {/* Inventory table (desktop) + cards (mobile) */}
             {loading ? (
               <div className="flex justify-center py-12"><LoadingSpinner inline /></div>
@@ -6463,7 +6538,16 @@ export default function PharmacyManagement() {
                                         <button type="button" onClick={() => { setInventoryRowActionsOpen(null); setPendingAddToOrder({ medicineId: s.medicineId, medicineName: s.medicineName, quantity: med?.reorderQuantity ?? 10 }); setSubTab('orders'); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Add Stock</button>
                                         <button type="button" onClick={() => { setInventoryRowActionsOpen(null); setInventoryViewBatchesStock(s); }} className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">View Batches</button>
                                         <button type="button" className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-500 hover:bg-slate-50">Print Barcode</button>
-                                        <button type="button" className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">Delete</button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setInventoryRowActionsOpen(null)
+                                            setInventoryDeleteTarget(s)
+                                          }}
+                                          className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 font-semibold"
+                                        >
+                                          Delete
+                                        </button>
                                       </div>
                                     </>
                                   )}
@@ -6663,9 +6747,10 @@ export default function PharmacyManagement() {
                             <button type="button" onClick={() => { setInventoryDetailView(null); if (med) setEditMinLevelMedicine(med); }} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">Edit medicine</button>
                             <button type="button" onClick={() => { setInventoryDetailView(null); setInventoryViewBatchesStock(stock); }} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">View batches</button>
                             <button type="button" onClick={() => { setInventoryDetailView(null); setPendingAddToOrder({ medicineId: stock.medicineId, medicineName: stock.medicineName, quantity: med?.reorderQuantity ?? 10 }); setSubTab('orders'); }} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Add stock</button>
-                          </div>
-                        </>
-                      )
+      </div>
+
+    </>
+  )
                     })()}
                   </div>
                 </div>
@@ -10454,6 +10539,53 @@ export default function PharmacyManagement() {
             />
           </RevealModal>
         )}
+
+        <ConfirmDialog
+          isOpen={!!inventoryDeleteTarget}
+          title="Remove from branch inventory?"
+          message={
+            inventoryDeleteTarget
+              ? `This will remove "${inventoryDeleteTarget.medicineName}" from this branch's inventory. Existing sales history will remain.`
+              : ''
+          }
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmLoading={inventoryDeleteLoading}
+          onCancel={() => {
+            if (inventoryDeleteLoading) return
+            setInventoryDeleteTarget(null)
+          }}
+          onConfirm={async () => {
+            if (!inventoryDeleteTarget) return
+            try {
+              setInventoryDeleteLoading(true)
+              const token = await getToken()
+              if (!token) {
+                setError('Not signed in')
+                return
+              }
+              const res = await fetch('/api/pharmacy/stock', {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ stockId: inventoryDeleteTarget.id }),
+              })
+              const data = await res.json().catch(() => ({}))
+              if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to delete stock')
+              }
+              setSuccess('Medicine removed from this branch inventory.')
+              fetchPharmacy()
+            } catch (err: unknown) {
+              setError(err instanceof Error ? err.message : 'Failed to delete stock')
+            } finally {
+              setInventoryDeleteLoading(false)
+              setInventoryDeleteTarget(null)
+            }
+          }}
+        />
     </>
   )
 }

@@ -52,10 +52,6 @@ export async function POST(request: NextRequest) {
     ? body.supplierInvoiceNumber.trim()
     : null
 
-  if (!orderId) {
-    return NextResponse.json({ success: false, error: 'orderId is required' }, { status: 400 })
-  }
-
   const validRows = rows.filter((r) => (r.name || '').trim().length > 0)
   if (validRows.length === 0) {
     return NextResponse.json({ success: false, error: 'At least one row with medicine name is required' }, { status: 400 })
@@ -63,9 +59,113 @@ export async function POST(request: NextRequest) {
 
   const db = admin.firestore()
   const hospitalId = ctxResult.context.hospitalId
-  const ordersPath = getPharmacyCollectionPath(hospitalId, 'purchase_orders')
   const medicinesPath = getPharmacyCollectionPath(hospitalId, 'medicines')
   const stockPath = getPharmacyCollectionPath(hospitalId, 'stock')
+
+  // If no orderId is provided, behave like a generic bulk upload:
+  // create/update medicines and (if possible) stock, but do not touch any purchase order.
+  if (!orderId) {
+    const nowStr = new Date().toISOString()
+    const nowIso = nowStr
+    try {
+      await db.runTransaction(async (tx) => {
+        const medicinesSnap = await tx.get(db.collection(medicinesPath).limit(500))
+        const medicinesList = medicinesSnap.docs.map((d) => {
+          const data = d.data()
+          return {
+            id: d.id,
+            name: (data.name || '').trim(),
+            manufacturer: (data.manufacturer || '').trim(),
+            nameKey: norm(data.name),
+            manufacturerKey: norm(data.manufacturer),
+          }
+        })
+
+        type RowOp = {
+          row: (typeof validRows)[number]
+          quantity: number
+          medicineId: string
+          medicineName: string
+          isNewMedicine: boolean
+        }
+        const rowOps: RowOp[] = []
+        for (const row of validRows) {
+          const name = (row.name || '').trim()
+          const manufacturer = (row.manufacturer || '').trim()
+          const nameKey = norm(row.name)
+          const manufacturerKey = norm(row.manufacturer)
+          const quantity = Math.floor(Number(row.quantity) || 0)
+          if (quantity <= 0) continue
+
+          const existing = medicinesList.find(
+            (m) => m.nameKey === nameKey && m.manufacturerKey === manufacturerKey
+          )
+          if (existing) {
+            rowOps.push({ row, quantity, medicineId: existing.id, medicineName: existing.name, isNewMedicine: false })
+          } else {
+            const medicineId = nanoidLike()
+            medicinesList.push({
+              id: medicineId,
+              name,
+              manufacturer,
+              nameKey,
+              manufacturerKey,
+            })
+            rowOps.push({ row, quantity, medicineId, medicineName: name, isNewMedicine: true })
+          }
+        }
+
+        for (const op of rowOps) {
+          if (op.isNewMedicine) {
+            const row = op.row
+            const name = (row.name || '').trim()
+            const manufacturer = (row.manufacturer || '').trim()
+            const genericName = typeof row.genericName === 'string' ? row.genericName.trim() : ''
+            const category = typeof row.category === 'string' ? row.category.trim() : ''
+            const strength = typeof row.strength === 'string' && row.strength.trim() ? row.strength.trim() : null
+            const barcode = typeof row.barcode === 'string' && row.barcode.trim() ? row.barcode.trim() : null
+            const sellingPrice = Number(row.sellingPrice) || 0
+            const minStockLevel = Math.max(0, Number(row.minStockLevel) || 0)
+            const medRef = db.collection(medicinesPath).doc(op.medicineId)
+            tx.set(medRef, {
+              hospitalId,
+              medicineId: op.medicineId,
+              name,
+              genericName: genericName || null,
+              category: category || null,
+              manufacturer: manufacturer || null,
+              purchasePrice: Number(row.purchasePrice) || 0,
+              sellingPrice,
+              minStockLevel,
+              supplierId: null,
+              unit: 'tablets',
+              strength,
+              packSize: null,
+              schedule: null,
+              barcode,
+              hsnCode: null,
+              reorderQuantity: null,
+              leadTimeDays: null,
+              manufacturingDate: normalizeDate(row.manufacturingDate) || null,
+              expiryDate: normalizeDate(row.expiryDate) || null,
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            })
+          }
+        }
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import medicines'
+      return NextResponse.json({ success: false, error: message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Medicines imported from file. No purchase order was updated.',
+    })
+  }
+
+  const ordersPath = getPharmacyCollectionPath(hospitalId, 'purchase_orders')
 
   const orderRef = db.collection(ordersPath).doc(orderId)
   const orderSnap = await orderRef.get()

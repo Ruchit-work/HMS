@@ -123,3 +123,55 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ success: true, stock: result })
 }
+
+export async function DELETE(request: NextRequest) {
+  const auth = await authenticateRequest(request)
+  if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
+
+  const init = initFirebaseAdmin('pharmacy/stock')
+  if (!init.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+
+  const ctxResult = await getPharmacyAuthContext(auth.user, {})
+  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+
+  let stockId: string | undefined
+  try {
+    const body = await request.json()
+    if (body && typeof body.stockId === 'string') {
+      stockId = body.stockId.trim() || undefined
+    }
+  } catch {
+    // fall through to validation error below
+  }
+
+  if (!stockId) {
+    return NextResponse.json(
+      { success: false, error: 'stockId is required' },
+      { status: 400 }
+    )
+  }
+
+  const db = admin.firestore()
+  const stockPath = getPharmacyCollectionPath(ctxResult.context.hospitalId, 'stock')
+  const stockRef = db.collection(stockPath).doc(stockId)
+  const snap = await stockRef.get()
+  if (!snap.exists) {
+    return NextResponse.json(
+      { success: false, error: 'Stock record not found' },
+      { status: 404 }
+    )
+  }
+
+  // Optionally enforce branch restriction if context has a specific branchId
+  const data = snap.data() as { branchId?: string }
+  if (ctxResult.context.branchId && data.branchId && data.branchId !== ctxResult.context.branchId) {
+    return NextResponse.json(
+      { success: false, error: 'Not allowed to delete stock from another branch' },
+      { status: 403 }
+    )
+  }
+
+  await stockRef.delete()
+
+  return NextResponse.json({ success: true })
+}
