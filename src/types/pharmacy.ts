@@ -155,9 +155,12 @@ export interface PharmacyCashSession {
   changeGiven?: number
   /** Total cash expenses booked against this session */
   cashExpenses?: number
-  /** Expected cash at close and difference vs actual */
+  /** Expected cash at close (Opening + Cash Sales - Cash Refunds - Change - Cash Expenses) */
   expectedCash?: number
+  /** Cash difference: Actual closing cash - Expected (shortage if negative, excess if positive) */
   difference?: number
+  /** Total sales (revenue): Cash + UPI + Card for this shift */
+  totalSales?: number
   status?: CashSessionStatus
   /** Running count of notes in drawer: openingNotes + tenders - change (updated on each cash sale) */
   runningNotes?: Record<string, number>

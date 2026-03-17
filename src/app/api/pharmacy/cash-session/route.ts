@@ -150,6 +150,8 @@ export async function POST(request: NextRequest) {
     }
     const cashRefunds = body.cashRefunds !== undefined ? Number(body.cashRefunds) : metrics.refunds
     const cashExpenses = Number(data.cashExpenses) || 0
+    // Expected cash in drawer = Opening + Cash Sales - Cash Refunds - Change Given - Cash Expenses
+    // Difference = Actual (closingCashTotal) - Expected (shortage if negative, excess if positive)
     const expectedCash =
       (data.openingCashTotal || 0) +
       metrics.cashSales -
@@ -161,6 +163,7 @@ export async function POST(request: NextRequest) {
     if (Math.abs(difference) >= 0.01) {
       status = difference < 0 ? 'short' : 'extra'
     }
+    const totalSales = metrics.cashSales + metrics.upiSales + metrics.cardSales
     const now = new Date().toISOString()
 
     await ref.update({
@@ -170,6 +173,7 @@ export async function POST(request: NextRequest) {
       closingCashTotal,
       expectedCash,
       difference,
+      totalSales,
       status,
       closedAt: now,
       ...(closedByName != null && { closedByName }),
@@ -185,6 +189,7 @@ export async function POST(request: NextRequest) {
         closingCashTotal,
         expectedCash,
         difference,
+        totalSales,
         status,
         closedAt: now,
         ...(closedByName != null && { closedByName }),

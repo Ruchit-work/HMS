@@ -542,15 +542,20 @@ export default function PatientManagement({
 
     const filteredPatients = useMemo(() => {
         let filtered = [...patients]
-
-        if (debouncedSearch){
-            const searchLower = debouncedSearch.toLowerCase()
-            filtered = filtered.filter(patient =>
-                `${patient.firstName || ""} ${patient.lastName || ""}`.toLowerCase().includes(searchLower) ||
-                (patient.email || "").toLowerCase().includes(searchLower) ||
-                (patient.phone || "").toLowerCase().includes(searchLower) ||
-                (patient.patientId ? patient.patientId.toLowerCase().includes(searchLower) : false)
-            )
+        const searchTrimmed = (debouncedSearch || "").trim().toLowerCase()
+        if (searchTrimmed) {
+            filtered = filtered.filter(patient => {
+                const fullName = `${patient.firstName || ""} ${patient.lastName || ""}`.trim().toLowerCase()
+                const email = (patient.email || "").toLowerCase()
+                const phone = (patient.phone || "").replace(/\D/g, "")
+                const searchDigits = searchTrimmed.replace(/\D/g, "")
+                return (
+                    fullName.includes(searchTrimmed) ||
+                    email.includes(searchTrimmed) ||
+                    (patient.patientId && patient.patientId.toLowerCase().includes(searchTrimmed)) ||
+                    (searchDigits.length >= 2 && phone.includes(searchDigits))
+                )
+            })
         }
         
         if (statusFilter !== 'all') {

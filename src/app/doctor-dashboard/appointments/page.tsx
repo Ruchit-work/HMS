@@ -21,6 +21,7 @@ import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
 import type { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
 import { getAnatomyModelDetails, getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
 import { ClipboardList, Ear, ScanFace, Mic, HeartPulse, Stethoscope, Bone } from "lucide-react"
+import SketchfabAnatomyViewer from "@/components/doctor/anatomy/SketchfabAnatomyViewer"
 
 // Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
 const InlineAnatomyViewer = dynamic(
@@ -171,6 +172,14 @@ function DoctorAppointmentsContent() {
         message: "Failed to generate prescription PDF. Please try again.",
       })
     }
+  }
+
+  const getActiveAnatomyTypeForAppointment = (appointmentId: string) => {
+    return (
+      activeAnatomyTab[appointmentId] ??
+      selectedAnatomyTypes[appointmentId]?.[0] ??
+      "ear"
+    )
   }
 
   useEffect(() => {
@@ -2111,58 +2120,76 @@ function DoctorAppointmentsContent() {
                               </button>
                             </div>
                             <div className="p-4" style={{ minHeight: "680px" }}>
-                              {(selectedAnatomyTypes[selectedAppointment.id] || []).length >
-                              0 ? (
-                                <InlineAnatomyViewer
-                                  key={
-                                    activeAnatomyTab[selectedAppointment.id] ??
-                                    selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
-                                    "ear"
-                                  }
-                                  appointmentId={selectedAppointment.id}
-                                  patientName={
-                                    selectedAppointment.patientName || "Patient"
-                                  }
-                                  anatomyType={
-                                    activeAnatomyTab[selectedAppointment.id] ??
-                                    selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
-                                    "ear"
-                                  }
-                                  initialData={
-                                    anatomyViewerData[selectedAppointment.id]?.[
-                                      activeAnatomyTab[selectedAppointment.id] ??
+                              {(selectedAnatomyTypes[selectedAppointment.id] || []).length > 0 ? (
+                                <>
+                                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-25 p-0">
+                                    <InlineAnatomyViewer
+                                      key={
+                                        activeAnatomyTab[selectedAppointment.id] ??
                                         selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
                                         "ear"
-                                    ] ?? undefined
-                                  }
-                                  onDataChange={(data) => {
-                                    const t =
-                                      activeAnatomyTab[selectedAppointment.id] ??
-                                      selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
-                                      "ear"
-                                    setAnatomyViewerData((prev) => ({
-                                      ...prev,
-                                      [selectedAppointment.id]: {
-                                        ...(prev[selectedAppointment.id] || {}),
-                                        [t]: data,
-                                      },
-                                    }))
-                                  }}
-                                  onComplete={() => {
-                                    setShowCombinedCompletionModal((prev) => ({
-                                      ...prev,
-                                      [selectedAppointment.id]: true,
-                                    }))
-                                  }}
-                                />
+                                      }
+                                      appointmentId={selectedAppointment.id}
+                                      patientName={selectedAppointment.patientName || "Patient"}
+                                      anatomyType={
+                                        activeAnatomyTab[selectedAppointment.id] ??
+                                        selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
+                                        "ear"
+                                      }
+                                      initialData={
+                                        anatomyViewerData[selectedAppointment.id]?.[
+                                          activeAnatomyTab[selectedAppointment.id] ??
+                                            selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
+                                            "ear"
+                                        ] ?? undefined
+                                      }
+                                      onDataChange={(data) => {
+                                        const t =
+                                          activeAnatomyTab[selectedAppointment.id] ??
+                                          selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
+                                          "ear"
+                                        setAnatomyViewerData((prev) => ({
+                                          ...prev,
+                                          [selectedAppointment.id]: {
+                                            ...(prev[selectedAppointment.id] || {}),
+                                            [t]: data,
+                                          },
+                                        }))
+                                      }}
+                                      onComplete={() => {
+                                        setShowCombinedCompletionModal((prev) => ({
+                                          ...prev,
+                                          [selectedAppointment.id]: true,
+                                        }))
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="mt-2">
+                                    <SketchfabAnatomyViewer
+                                      disease={(() => {
+                                        const activeType = getActiveAnatomyTypeForAppointment(
+                                          selectedAppointment.id,
+                                        )
+                                        const currentData =
+                                          anatomyViewerData[selectedAppointment.id]?.[activeType] ??
+                                          null
+                                        const id = currentData?.selectedDisease?.id
+                                        if (!id) return null
+                                        if (id === "asthma" || id === "heart_attack" || id === "diabetes") {
+                                          return id
+                                        }
+                                        return null
+                                      })()}
+                                    />
+                                  </div>
+                                </>
                               ) : (
                                 <div
                                   className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50"
                                   style={{ height: "600px" }}
                                 >
                                   <p className="text-slate-500 font-medium">
-                                    No anatomy selected. Click &quot;Add
-                                    Anatomy&quot; to begin.
+                                    No anatomy selected. Click &quot;Add Anatomy&quot; to begin.
                                   </p>
                                 </div>
                               )}

@@ -16,8 +16,31 @@ interface PieChartProps {
   getCountLabel?: (item: PieChartData, count: number) => string
 }
 
-const DEFAULT_COLORS = ["#2563eb", "#10b981", "#f97316", "#8b5cf6", "#ef4444", "#14b8a6", "#f59e0b", "#6366f1", "#ec4899", "#6b7280"]
-const DEFAULT_COLORS_ALT = ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#14b8a6", "#f97316", "#6b7280"]
+/** Professional, hospital-friendly palette: calm blues, teals, and slate */
+const DEFAULT_COLORS = [
+  "#0ea5e9", /* sky-500 */
+  "#0d9488", /* teal-600 */
+  "#3b82f6", /* blue-500 */
+  "#64748b", /* slate-500 */
+  "#0891b2", /* cyan-600 */
+  "#475569", /* slate-600 */
+  "#0284c7", /* sky-600 */
+  "#0f766e", /* teal-700 */
+  "#6366f1", /* indigo-500 */
+  "#334155", /* slate-700 */
+]
+const DEFAULT_COLORS_ALT = [
+  "#0369a1", /* sky-700 */
+  "#047857", /* emerald-700 */
+  "#0d9488", /* teal-600 */
+  "#1e40af", /* blue-800 */
+  "#0e7490", /* cyan-700 */
+  "#4f46e5", /* indigo-600 */
+  "#0ea5e9", /* sky-500 */
+  "#059669", /* emerald-600 */
+  "#475569", /* slate-600 */
+  "#64748b", /* slate-500 */
+]
 
 const polarToCartesian = (cx: number, cy: number, r: number, angleInDegrees: number) => {
   const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180
@@ -106,46 +129,55 @@ export default function PieChart({
           const midAngle = startAngle + sliceAngle / 2
           const labelPosition = polarToCartesian(center, center, radius * 0.6, midAngle)
           const percentage = (item.value / totalCount) * 100
+          const showLabelOnSlice = percentage >= 6
 
           return (
             <g key={item.name}>
               <path d={path} fill={colors[index % colors.length]} className="transition-transform duration-300 hover:scale-[1.02]" />
-              <text
-                x={labelPosition.x}
-                y={labelPosition.y}
-                className="text-[10px] fill-gray-800 font-semibold"
-                textAnchor="middle"
-                dominantBaseline="middle"
-              >
-                {`${Math.round(percentage)}%`}
-              </text>
+              {showLabelOnSlice && (
+                <text
+                  x={labelPosition.x}
+                  y={labelPosition.y}
+                  className="text-[10px] fill-gray-800 font-semibold"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  {`${percentage.toFixed(1)}%`}
+                </text>
+              )}
             </g>
           )
         })}
       </svg>
 
-      <div className="w-full lg:w-56 space-y-1">
+      <div className="w-full lg:min-w-[11rem] lg:max-w-[14rem] space-y-2">
         {displayData.map((item, index) => {
           const percentage = (item.value / totalCount) * 100
+          const otherItems = item.isOther && item.mergedItems ? item.mergedItems : []
+          const otherPreview = otherItems.length > 3
+            ? [...otherItems.slice(0, 3), `+${otherItems.length - 3} more`].join(", ")
+            : otherItems.join(", ")
           return (
-            <div key={item.name} className="flex items-center gap-2">
+            <div key={item.name} className="flex items-start gap-2">
               <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5"
                 style={{ backgroundColor: colors[index % colors.length] }}
               />
-              <p className="text-[11px] leading-tight text-slate-600">
-                <span className="font-semibold text-slate-700">
-                  {item.isOther
-                    ? `Other (${item.mergedItems?.length || 0} items)`
-                    : getLabel(item)}
-                </span>{" "}
-                {getCountLabel(item, item.value)} • {percentage.toFixed(1)}%
-                {item.isOther && item.mergedItems && item.mergedItems.length > 0 && (
-                  <span className="block text-[10px] text-slate-400 mt-0.5">
-                    {item.mergedItems.join(", ")}
-                  </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] leading-snug text-slate-600">
+                  <span className="font-semibold text-slate-700">
+                    {item.isOther
+                      ? `Other (${item.mergedItems?.length || 0} items)`
+                      : getLabel(item)}
+                  </span>{" "}
+                  {getCountLabel(item, item.value)} • {percentage.toFixed(1)}%
+                </p>
+                {item.isOther && otherPreview && (
+                  <p className="text-[10px] text-slate-400 mt-0.5 truncate" title={otherItems.join(", ")}>
+                    {otherPreview}
+                  </p>
                 )}
-              </p>
+              </div>
             </div>
           )
         })}

@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { auth } from '@/firebase/config'
 
 type UserRole = 'patient' | 'doctor' | 'admin' | 'receptionist' | 'pharmacy' | null
 
@@ -34,6 +35,21 @@ export default function AdminProtected({ children, fallback, allowedRoles }: Adm
       router.replace(dashboardPath)
     }
   }, [user, loading, allowed, router])
+
+  // Handle browser back/forward cache: if user has logged out and navigates back,
+  // ensure admin pages immediately redirect to login instead of showing stale content.
+  useEffect(() => {
+    const handlePageShow = () => {
+      if (!auth.currentUser) {
+        router.replace('/auth/login?role=admin')
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pageshow', handlePageShow)
+      return () => window.removeEventListener('pageshow', handlePageShow)
+    }
+  }, [router])
 
   if (loading) {
     return <LoadingSpinner message="Verifying access..." />

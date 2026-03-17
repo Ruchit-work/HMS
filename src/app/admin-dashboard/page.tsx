@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState, useMemo } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
@@ -33,8 +33,7 @@ import BranchManagement from "./Tabs/BranchManagement"
 import PharmacyManagement from "./Tabs/PharmacyManagement"
 import { PharmacyPortalProvider } from "@/contexts/PharmacyPortalContext"
 import AdminProtected from "@/components/AdminProtected"
-import PieChart, { DEFAULT_COLORS, DEFAULT_COLORS_ALT } from "./components/PieChart"
-import StatCard from "./components/StatCard"
+import AdminDashboardOverview from "./components/AdminDashboardOverview"
 import TabButton from "@/components/admin/TabButton"
 import AdminPageHeader from "@/components/admin/AdminPageHeader"
 import SubTabNavigation from "@/components/admin/SubTabNavigation"
@@ -42,8 +41,12 @@ import {
   calculateAllTrends,
   calculateRevenue,
   calculateCommonConditions,
-  calculateMostPrescribedMedicines
+  calculateMostPrescribedMedicines,
+  calculateRevenueTrend,
+  calculateTopDepartments
 } from "@/utils/analytics/dashboardCalculations"
+import type { TrendPoint } from "@/utils/analytics/dashboardCalculations"
+import type { RevenueTrendPoint } from "@/utils/analytics/dashboardCalculations"
 
 interface UserData {
   id: string;
@@ -58,11 +61,13 @@ interface DashboardStats {
   totalDoctors: number;
   totalAppointments: number;
   todayAppointments: number;
+  todayRevenue: number;
   completedAppointments: number;
   pendingAppointments: number;
   totalRevenue: number;
   monthlyRevenue: number;
   weeklyRevenue: number;
+  activeDoctorsToday: number;
   appointmentTrends: {
     weekly: TrendPoint[];
     monthly: TrendPoint[];
@@ -79,12 +84,12 @@ interface DashboardStats {
     prescriptionCount: number;
     percentage: number;
   }>;
-}
-
-interface TrendPoint {
-  label: string;
-  fullLabel: string;
-  count: number;
+  revenueTrend: {
+    weekly: RevenueTrendPoint[];
+    monthly: RevenueTrendPoint[];
+    yearly: RevenueTrendPoint[];
+  };
+  topDepartments: Array<{ department: string; count: number }>;
 }
 
 export default function AdminDashboard() {
@@ -102,6 +107,8 @@ export default function AdminDashboard() {
     totalRevenue: 0,
     monthlyRevenue: 0,
     weeklyRevenue: 0,
+    todayRevenue: 0,
+    activeDoctorsToday: 0,
     appointmentTrends: {
       weekly: [],
       monthly: [],
@@ -113,7 +120,9 @@ export default function AdminDashboard() {
       yearly: 0
     },
     commonConditions: [],
-    mostPrescribedMedicines: []
+    mostPrescribedMedicines: [],
+    revenueTrend: { weekly: [], monthly: [], yearly: [] },
+    topDepartments: []
   })
   const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -166,6 +175,7 @@ export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
   const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
+  const router = useRouter()
 
   // Sync activeTab with URL (limited set)
   useEffect(() => {
@@ -177,6 +187,14 @@ export default function AdminDashboard() {
       setStaffSubTab(tabFromUrl)
     }
   }, [tabFromUrl, setStaffSubTab])
+
+  // If there is no authenticated user (e.g. after logout + browser back),
+  // immediately redirect to the admin login page and render nothing here.
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace("/auth/login?role=admin")
+    }
+  }, [authLoading, user, router])
 
   // Fetch branches on mount
   useEffect(() => {
@@ -304,21 +322,37 @@ export default function AdminDashboard() {
       const trends = calculateAllTrends(allAppointments)
       const commonConditions = calculateCommonConditions(allAppointments)
       const mostPrescribedMedicines = calculateMostPrescribedMedicines(allAppointments)
+      const revenueTrend = calculateRevenueTrend(allAppointments)
+      const topDepartments = calculateTopDepartments(allAppointments)
+
+      const todayDateStr = new Date().toDateString();
+      const todayRevenue = allAppointments
+        .filter((a) => a.status === 'completed' && new Date(a.appointmentDate).toDateString() === todayDateStr)
+        .reduce((s, a) => s + (a.paymentAmount || 0), 0);
+      const activeDoctorsToday = new Set(
+        allAppointments
+          .filter((a) => new Date(a.appointmentDate).toDateString() === todayDateStr && a.doctorId)
+          .map((a) => a.doctorId)
+      ).size;
 
       setStats({
         totalPatients,
         totalDoctors,
         totalAppointments,
         todayAppointments,
+        todayRevenue,
         completedAppointments,
         pendingAppointments,
         totalRevenue,
         monthlyRevenue,
         weeklyRevenue,
+        activeDoctorsToday,
         appointmentTrends: trends,
         appointmentTotals: trends.totals,
         commonConditions,
-        mostPrescribedMedicines
+        mostPrescribedMedicines,
+        revenueTrend,
+        topDepartments
       })
 
       setRecentAppointments(recent)
@@ -376,24 +410,39 @@ export default function AdminDashboard() {
     const totalRevenue = calculateRevenue(filteredAppointments, Infinity)
     const monthlyRevenue = calculateRevenue(filteredAppointments, 30)
     const weeklyRevenue = calculateRevenue(filteredAppointments, 7)
+    const todayDateStr = new Date().toDateString()
+    const todayRevenue = filteredAppointments
+      .filter((a) => a.status === 'completed' && new Date(a.appointmentDate).toDateString() === todayDateStr)
+      .reduce((s, a) => s + (a.paymentAmount || 0), 0)
+    const activeDoctorsToday = new Set(
+      filteredAppointments
+        .filter((a) => new Date(a.appointmentDate).toDateString() === todayDateStr && a.doctorId)
+        .map((a) => a.doctorId)
+    ).size
     const trends = calculateAllTrends(filteredAppointments)
     const commonConditions = calculateCommonConditions(filteredAppointments)
     const mostPrescribedMedicines = calculateMostPrescribedMedicines(filteredAppointments)
+    const revenueTrend = calculateRevenueTrend(filteredAppointments)
+    const topDepartments = calculateTopDepartments(filteredAppointments)
 
     return {
       totalPatients,
       totalDoctors: stats.totalDoctors,
       totalAppointments,
       todayAppointments,
+      todayRevenue,
       completedAppointments,
       pendingAppointments,
       totalRevenue,
       monthlyRevenue,
       weeklyRevenue,
+      activeDoctorsToday,
       appointmentTrends: trends,
       appointmentTotals: trends.totals,
       commonConditions,
-      mostPrescribedMedicines
+      mostPrescribedMedicines,
+      revenueTrend,
+      topDepartments
     }
   }, [rawPatients, rawAppointments, selectedBranchId, stats.totalDoctors])
 
@@ -408,16 +457,11 @@ export default function AdminDashboard() {
     return recentAppointments.filter((apt) => apt.branchId === selectedBranchId)
   }, [recentAppointments, selectedBranchId])
 
-  // Calculate trend data from filtered stats (moved here so displayStats is available)
-  const trendData = displayStats.appointmentTrends[trendView] || []
-  const trendTotal = displayStats.appointmentTotals[trendView] || 0
-  const maxTrendCount = trendData.reduce((max, point) => Math.max(max, point.count), 0)
-  const safeTrendCount = Math.max(maxTrendCount, 1)
-  const chartPadding = { left: 70, right: 50, top: 40, bottom: 50 }
-  const chartSize = { width: 600, height: 280 }
-  const innerWidth = chartSize.width - chartPadding.left - chartPadding.right
-  const innerHeight = chartSize.height - chartPadding.top - chartPadding.bottom
-  const xStep = trendData.length > 1 ? innerWidth / (trendData.length - 1) : 0
+  // Filter all appointments by branch (for overview analytics)
+  const filteredAppointmentsForOverview = useMemo(() => {
+    if (selectedBranchId === "all") return rawAppointments
+    return rawAppointments.filter((apt) => apt.branchId === selectedBranchId)
+  }, [rawAppointments, selectedBranchId])
 
   // Setup real-time listeners for badge counts
   const setupRealtimeBadgeListeners = () => {
@@ -580,12 +624,14 @@ export default function AdminDashboard() {
     }
   }
 
-  if (authLoading || hospitalLoading || loading) {
-    return <LoadingSpinner message="Loading admin dashboard..." />
+  // While redirecting away for unauthenticated users, render nothing.
+  if (!user) {
+    return null
   }
 
-  if (!user || !userData) {
-    return null
+  // When authenticated but data is still loading, show a neutral loading state.
+  if (authLoading || hospitalLoading || loading || !userData) {
+    return <LoadingSpinner message="Loading..." />
   }
 
   return (
@@ -930,614 +976,23 @@ export default function AdminDashboard() {
         {/* Content Area */}
         <main className="p-6">
           {activeTab === "overview" && (
-            <div className="space-y-6">
-              {/* Pending Refund Requests Notification */}
-              {pendingRefunds.length > 0 && (
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-orange-900 mb-1">Pending Requests Require Attention</h4>
-                      <div className="text-sm text-orange-800 space-y-1">
-                        <p>• <span className="font-medium">{pendingRefunds.length}</span> refund request{pendingRefunds.length !== 1 ? 's' : ''} awaiting approval</p>
-                      </div>
-                      <p className="text-xs text-orange-700 mt-2">Scroll down to review and approve/reject these requests.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="relative">
-                        <NotificationBadge 
-                          count={overviewBadge.displayCount}
-                          size="md"
-                          position="top-right"
-                          className="relative top-0 right-0"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs sm:text-sm font-medium text-gray-600">Total Patients</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{displayStats.totalPatients}</p>
-                      <p className="text-xs text-green-600 mt-1">+12% from last month</p>
-                    </div>
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs sm:text-sm font-medium text-gray-600">Total Doctors</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{displayStats.totalDoctors}</p>
-                      <p className="text-xs text-green-600 mt-1">+3 new this month</p>
-                    </div>
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs sm:text-sm font-medium text-gray-600">Today's Appointments</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{displayStats.todayAppointments}</p>
-                      <p className="text-xs text-blue-600 mt-1">Active today</p>
-                    </div>
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs sm:text-sm font-medium text-gray-600">Total Revenue</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">₹{displayStats.totalRevenue.toLocaleString()}</p>
-                      <p className="text-xs text-green-600 mt-1">+8% from last month</p>
-                    </div>
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Charts Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                {/* Appointments Trend - Line Chart */}
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                    <div>
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-900">Appointments Trend</h3>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {trendView === "weekly" && "Current week's appointments by day"}
-                        {trendView === "monthly" && "Current month's appointments grouped by date ranges"}
-                        {trendView === "yearly" && "This year's appointments by month"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <label htmlFor="trend-view" className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                          View
-                        </label>
-                        <select
-                          id="trend-view"
-                          value={trendView}
-                          onChange={(event) => setTrendView(event.target.value as "weekly" | "monthly" | "yearly")}
-                          className="text-sm border border-slate-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="weekly">This Week</option>
-                          <option value="monthly">This Month</option>
-                          <option value="yearly">This Year</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="h-56 sm:h-64 relative overflow-hidden">
-                    {trendData.length > 0 && (
-                      <div className="absolute right-6 top-4 bg-white/80 backdrop-blur-sm border border-blue-100 text-blue-600 rounded-md px-3 py-1 text-xs font-semibold z-10">
-                        Total: {trendTotal}
-                      </div>
-                    )}
-                    {trendData.length > 0 ? (
-                      <svg className="w-full h-full" viewBox={`0 0 ${chartSize.width} ${chartSize.height}`}>
-                        {/* Grid lines */}
-                        <defs>
-                          <pattern id="appointmentsGrid" width="50" height="25" patternUnits="userSpaceOnUse">
-                            <path d="M 50 0 L 0 0 0 25" fill="none" stroke="#f1f5f9" strokeWidth="1"/>
-                          </pattern>
-                        </defs>
-                        <rect width="100%" height="100%" fill="#fafafa" />
-                        <rect width="100%" height="100%" fill="url(#appointmentsGrid)" />
-                        
-                        {/* Y-axis labels */}
-                        {Array.from({ length: 5 }).map((_, index) => {
-                          const value = Math.round((safeTrendCount * index) / 4)
-                          const y = chartSize.height - chartPadding.bottom - (innerHeight * index) / 4
-                          return (
-                            <g key={index}>
-                              {/* Background for Y-axis labels */}
-                              <rect 
-                                x={chartPadding.left - 50} 
-                                y={y - 8} 
-                                width="40" 
-                                height="16" 
-                                fill="white" 
-                                fillOpacity="0.8"
-                              />
-                              <text x={chartPadding.left - 10} y={y + 4} className="text-xs font-medium fill-gray-600" textAnchor="end">
-                                {value}
-                              </text>
-                            </g>
-                          )
-                        })}
-                        
-                        {/* Line and points */}
-                        {(() => {
-                          const points = trendData.map((point, index) => {
-                            const x = chartPadding.left + index * xStep
-                            const y = chartSize.height - chartPadding.bottom - ((point.count / safeTrendCount) * innerHeight)
-                            return `${x},${y}`
-                          }).join(" ")
-
-                          return (
-                            <>
-                              <polyline
-                                points={points}
-                                fill="none"
-                                stroke="#3b82f6"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              {trendData.map((point, index) => {
-                                const x = chartPadding.left + index * xStep
-                                const y = chartSize.height - chartPadding.bottom - ((point.count / safeTrendCount) * innerHeight)
-                                return (
-                                  <g key={`${point.fullLabel}-${index}`}>
-                                    <circle cx={x} cy={y} r="4" fill="#3b82f6" />
-                                    <circle cx={x} cy={y} r="8" fill="#3b82f6" fillOpacity="0.2" />
-                                    {/* Background for number text */}
-                                    <rect 
-                                      x={x - 15} 
-                                      y={y - 25} 
-                                      width="30" 
-                                      height="16" 
-                                      rx="8" 
-                                      fill="white" 
-                                      stroke="#e2e8f0" 
-                                      strokeWidth="1"
-                                    />
-                                    <text x={x} y={y - 12} className="text-xs font-semibold fill-gray-700" textAnchor="middle">
-                                      {point.count}
-                                    </text>
-                                    <title>{`${point.fullLabel}: ${point.count} appointments`}</title>
-                                  </g>
-                                )
-                              })}
-                            </>
-                          )
-                        })()}
-                        
-                        {/* X-axis labels */}
-                        {trendData.map((point, index) => {
-                          const x = chartPadding.left + index * xStep
-                          
-                          // Smart label spacing based on number of data points
-                          let shouldShowLabel = true
-                          if (trendData.length > 12) {
-                            shouldShowLabel = index % 3 === 0 || index === trendData.length - 1 // Show every 3rd + last
-                          } else if (trendData.length > 7) {
-                            shouldShowLabel = index % 2 === 0 || index === trendData.length - 1 // Show every 2nd + last
-                          }
-                          
-                          if (!shouldShowLabel) return null
-                          
-                          // Calculate label width based on text length
-                          const labelWidth = Math.max(40, point.label.length * 8)
-                          
-                          return (
-                            <g key={`${point.label}-${index}`}>
-                              {/* Background for X-axis labels */}
-                              <rect 
-                                x={x - labelWidth/2} 
-                                y={chartSize.height - 28} 
-                                width={labelWidth} 
-                                height="18" 
-                                fill="white" 
-                                fillOpacity="0.9"
-                                rx="6"
-                                stroke="#e2e8f0"
-                                strokeWidth="1"
-                              />
-                              <text x={x} y={chartSize.height - 15} className="text-xs font-medium fill-gray-700" textAnchor="middle">
-                                {point.label}
-                              </text>
-                            </g>
-                          )
-                        })}
-                      </svg>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
-                        No appointment data to display.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Quick Appointment Stats */}
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Appointment Status</h3>
-                  <div className="space-y-4">
-                    <StatCard
-                      label="Today's Appointments"
-                      value={displayStats.todayAppointments}
-                      icon={
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      }
-                      bgColor="bg-blue-50"
-                      borderColor="border-blue-100"
-                      iconBgColor="bg-blue-500"
-                    />
-                    <StatCard
-                      label="Pending"
-                      value={displayStats.pendingAppointments}
-                      icon={
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      }
-                      bgColor="bg-yellow-50"
-                      borderColor="border-yellow-100"
-                      iconBgColor="bg-yellow-500"
-                    />
-                    <StatCard
-                      label="Completed"
-                      value={displayStats.completedAppointments}
-                      icon={
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      }
-                      bgColor="bg-green-50"
-                      borderColor="border-green-100"
-                      iconBgColor="bg-green-500"
-                    />
-                    <StatCard
-                      label="Total Appointments"
-                      value={displayStats.totalAppointments}
-                      icon={
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                      }
-                      bgColor="bg-purple-50"
-                      borderColor="border-purple-100"
-                      iconBgColor="bg-purple-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Common Conditions - Pie Chart */}
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Common Patient Conditions</h3>
-                  <div className="h-72 sm:h-80">
-                    <PieChart
-                      data={displayStats.commonConditions.map(c => ({ name: c.condition, value: c.count }))}
-                      colors={DEFAULT_COLORS}
-                      emptyMessage="No condition data available"
-                      getLabel={(item) => item.name.replace(/_/g, " ")}
-                      getCountLabel={(item, count) => `${count} ${count === 1 ? "patient" : "patients"}`}
-                    />
-                  </div>
-                </div>
-
-                {/* Most Prescribed Medicines Chart */}
-                {displayStats.mostPrescribedMedicines.length > 0 && (
-                  <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Most Prescribed Medicines</h3>
-                    <div className="h-72 sm:h-80">
-                      <PieChart
-                        data={displayStats.mostPrescribedMedicines.map(m => ({ name: m.medicineName, value: m.prescriptionCount }))}
-                        colors={DEFAULT_COLORS_ALT}
-                        emptyMessage="No medicine data available"
-                        getLabel={(item) => item.name}
-                        getCountLabel={(item, count) => `${count} ${count === 1 ? "prescription" : "prescriptions"}`}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Revenue Overview */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Revenue Overview</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">This Week</span>
-                      <span className="font-semibold text-gray-900">₹{displayStats.weeklyRevenue.toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">This Month</span>
-                      <span className="font-semibold text-gray-900">₹{displayStats.monthlyRevenue.toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">All Time</span>
-                      <span className="font-semibold text-gray-900">₹{displayStats.totalRevenue.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Appointment Status</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Completed</span>
-                      <span className="font-semibold text-green-600">{displayStats.completedAppointments}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Pending</span>
-                      <span className="font-semibold text-orange-600">{displayStats.pendingAppointments}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Total</span>
-                      <span className="font-semibold text-gray-900">{displayStats.totalAppointments}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 border border-gray-200">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                  <div className="space-y-3">
-                    <button className="w-full text-left p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors" onClick={() => {
-                      setActiveTab("patients")
-                      setSidebarOpen(false)
-                    }}>
-                      <div className="flex items-center gap-3">
-                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        <span className="font-medium text-blue-800 text-sm sm:text-base">
-                          Manage Patients 
-                        </span>
-                      </div>
-                    </button>
-                    <button className="w-full text-left p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors" onClick={() => {
-                      setActiveTab("doctors")
-                      setSidebarOpen(false)
-                    }}>
-                      <div className="flex items-center gap-3">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <span className="font-medium text-green-800 text-sm sm:text-base">Manage Doctors</span>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Refund Requests (Approval) */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">Refund Requests</h3>
-                  <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">{pendingRefunds.length} pending</span>
-                </div>
-                {pendingRefunds.length === 0 ? (
-                  <div className="text-sm text-gray-500">No pending refund requests</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[700px] text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Patient</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Doctor</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Amount</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Payment Method</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Requested At</th>
-                          <th className="px-3 py-2" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {pendingRefunds.map((r) => (
-                          <tr key={r.id} className="hover:bg-gray-50">
-                            <td className="px-3 py-2">
-                              <div className="font-semibold text-gray-900">{r.patientName || r.patientId}</div>
-                              <div className="text-xs text-gray-500 font-mono">{r.patientId}</div>
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="font-semibold text-gray-900">{r.doctorName || r.doctorId}</div>
-                              <div className="text-xs text-gray-500 font-mono">{r.doctorId}</div>
-                            </td>
-                            <td className="px-3 py-2">₹{Number(r.paymentAmount || 0)}</td>
-                            <td className="px-3 py-2 capitalize">{String(r.paymentMethod || '—')}</td>
-                            <td className="px-3 py-2 text-xs text-gray-600">{new Date(r.createdAt).toLocaleString()}</td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => approveRefund(r)}
-                                  disabled={processingRefundId === r.id}
-                                  className="btn-modern btn-modern-success btn-modern-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                  Approve
-                                </button>
-                              </div>
-                            </td>
-                          </tr>)
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Recent Appointments */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-white">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h3 className="text-lg sm:text-xl font-bold text-gray-900">Recent Appointments</h3>
-                        <p className="text-xs sm:text-sm text-gray-600 mt-0.5">{filteredRecentAppointments.length} appointment{filteredRecentAppointments.length !== 1 ? 's' : ''}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setShowRecentAppointments(!showRecentAppointments)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-                    >
-                      <span>{showRecentAppointments ? 'Hide' : 'Show'}</span>
-                      <svg 
-                        className={`w-4 h-4 transition-transform duration-200 ${showRecentAppointments ? 'rotate-180' : ''}`} 
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                
-                {showRecentAppointments && (
-                  <div className="p-4 sm:p-6">
-                    {filteredRecentAppointments.length === 0 ? (
-                      <div className="text-center py-12">
-                        <svg className="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <p className="text-gray-500 font-medium">No recent appointments</p>
-                        <p className="text-sm text-gray-400 mt-1">Appointments will appear here once they are created</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[700px]">
-                          <thead>
-                            <tr className="border-b-2 border-gray-200">
-                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Patient</th>
-                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider hidden sm:table-cell">Doctor</th>
-                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date & Time</th>
-                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
-                              <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider hidden md:table-cell">Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {filteredRecentAppointments.map((appointment) => (
-                              <tr key={appointment.id} className="hover:bg-gray-50 transition-colors duration-150">
-                                <td className="px-4 py-5">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-shrink-0">
-                                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                                        <span className="text-blue-600 font-semibold text-sm">
-                                          {appointment.patientName?.charAt(0)?.toUpperCase() || 'P'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm font-semibold text-gray-900">{appointment.patientName}</div>
-                                      <div className="text-xs text-gray-500 mt-0.5">{appointment.patientEmail}</div>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-5 hidden sm:table-cell">
-                                  <div>
-                                    <div className="text-sm font-medium text-gray-900">{appointment.doctorName}</div>
-                                    <div className="text-xs text-gray-500 mt-0.5">{appointment.doctorSpecialization}</div>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-5">
-                                  <div>
-                                    <div className="text-sm font-medium text-gray-900">
-                                      {new Date(appointment.appointmentDate).toLocaleDateString('en-US', { 
-                                        weekday: 'short',
-                                        year: 'numeric', 
-                                        month: 'short', 
-                                        day: 'numeric' 
-                                      })}
-                                    </div>
-                                    <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                      </svg>
-                                      {appointment.appointmentTime}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-5">
-                                  <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full ${
-                                    appointment.status === "completed" ? "bg-green-100 text-green-800" :
-                                    appointment.status === "confirmed" ? "bg-blue-100 text-blue-800" :
-                                    appointment.status === "not_attended" ? "bg-orange-100 text-orange-800" :
-                                    (appointment as any).status === 'resrescheduled' ? "bg-purple-100 text-purple-800" :
-                                    "bg-red-100 text-red-800"
-                                  }`}>
-                                    {(appointment as any).status === 'resrescheduled' ? 'rescheduled' : 
-                                     appointment.status === 'not_attended' ? 'not attended' :
-                                     appointment.status}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-5 hidden md:table-cell">
-                                  <div className="text-sm font-semibold text-gray-900">
-                                    ₹{appointment.paymentAmount?.toLocaleString() || 0}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    {filteredRecentAppointments.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-center">
-                        <button
-                          onClick={() => setActiveTab("appointments")}
-                          className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
-                        >
-                          <span>View all appointments</span>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Doctor Performance Analytics */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                <DoctorPerformanceAnalytics selectedBranchId={selectedBranchId} />
-              </div>
-            </div>
+            <AdminDashboardOverview
+              displayStats={displayStats}
+              trendView={trendView}
+              setTrendView={setTrendView}
+              filteredAppointments={filteredAppointmentsForOverview}
+              branches={branches}
+              selectedBranchId={selectedBranchId}
+              filteredRecentAppointments={filteredRecentAppointments}
+              showRecentAppointments={showRecentAppointments}
+              setShowRecentAppointments={setShowRecentAppointments}
+              pendingRefunds={pendingRefunds}
+              onApproveRefund={approveRefund}
+              processingRefundId={processingRefundId}
+              setActiveTab={setActiveTab}
+              setSidebarOpen={setSidebarOpen}
+              overviewBadge={overviewBadge}
+            />
           )}
           {activeTab === "branches" && !isSuperAdmin && (
             (activeHospital as any)?.multipleBranchesEnabled !== false ? (

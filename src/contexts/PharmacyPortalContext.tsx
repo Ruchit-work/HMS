@@ -14,6 +14,7 @@ export type PharmacyPortalTabId =
   | 'reports'
   | 'users'
   | 'suppliers'
+  | 'settings'
 
 export interface PharmacyPortalContextValue {
   branches: Array<{ id: string; name: string }>

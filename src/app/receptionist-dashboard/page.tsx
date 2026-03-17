@@ -562,7 +562,9 @@ export default function ReceptionistDashboard() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
               <div className="flex-1 text-center sm:text-left">
                 <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent capitalize">
-                  {activeTab === "patients"
+                  {activeTab === "dashboard"
+                    ? "Reception Dashboard"
+                    : activeTab === "patients"
                     ? "Patient Management"
                     : activeTab === "doctors"
                     ? "Doctor Management"
@@ -578,7 +580,7 @@ export default function ReceptionistDashboard() {
                 </h1>
                 <p className="text-slate-600 mt-2 text-sm sm:text-base">
                   {activeTab === "dashboard"
-                    ? "Overview of daily operations and key metrics"
+                    ? "Action-focused overview: appointments, queue, doctors, and quick tasks"
                     : activeTab === "patients"
                     ? "Manage patient records and information"
                     : activeTab === "doctors"

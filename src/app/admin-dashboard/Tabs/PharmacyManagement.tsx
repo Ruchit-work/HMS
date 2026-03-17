@@ -42,7 +42,7 @@ import { playScanBeep } from '@/utils/scanBeep'
 import { BarcodeCameraScanner } from '@/components/pharmacy/BarcodeCameraScanner'
 import jsPDF from 'jspdf'
 
-type PharmacySubTab = 'overview' | 'inventory' | 'queue' | 'sales' | 'returns' | 'suppliers' | 'orders' | 'transfers' | 'analytics' | 'reports' | 'users' | 'cash_and_expenses'
+type PharmacySubTab = 'overview' | 'inventory' | 'queue' | 'sales' | 'returns' | 'suppliers' | 'orders' | 'transfers' | 'analytics' | 'reports' | 'users' | 'cash_and_expenses' | 'settings'
 
 const PDF_CURRENCY = 'Rs. '
 
@@ -4283,6 +4283,7 @@ export default function PharmacyManagement() {
   const closeCounterSectionRef = useRef<HTMLDivElement>(null)
   const [highlightOpenCounter, setHighlightOpenCounter] = useState(false)
   const [highlightCloseCounter, setHighlightCloseCounter] = useState(false)
+  const [closeCounterButtonClicked, setCloseCounterButtonClicked] = useState(false)
   const lastPreFilledSessionIdRef = useRef<string | null>(null)
   const [lastClosedSummary, setLastClosedSummary] = useState<{
     openingCashTotal: number
@@ -4336,6 +4337,19 @@ export default function PharmacyManagement() {
     paymentMethod: 'cash',
     note: '',
   })
+  type CashExpensePeriod = 'today' | 'week' | 'month' | 'year'
+  const [cashExpensePeriod, setCashExpensePeriod] = useState<CashExpensePeriod>('today')
+  type CashExpenseSubTab = 'shift' | 'daily'
+  const [cashExpenseSubTab, setCashExpenseSubTab] = useState<CashExpenseSubTab>('shift')
+  const [dailySummarySearch, setDailySummarySearch] = useState('')
+  const [dailySummaryDateFrom, setDailySummaryDateFrom] = useState('')
+  const [dailySummaryDateTo, setDailySummaryDateTo] = useState('')
+  type DailySummarySalesSort = 'default' | 'highest' | 'lowest'
+  const [dailySummarySalesSort, setDailySummarySalesSort] = useState<DailySummarySalesSort>('default')
+  const [shiftReportsSearch, setShiftReportsSearch] = useState('')
+  const [shiftReportsDateFrom, setShiftReportsDateFrom] = useState('')
+  const [shiftReportsDateTo, setShiftReportsDateTo] = useState('')
+  const [expandedDailySummaryDates, setExpandedDailySummaryDates] = useState<Set<string>>(new Set())
   const [showExpenseCashModal, setShowExpenseCashModal] = useState(false)
   const [pendingExpensePayload, setPendingExpensePayload] = useState<{ amount: number; date: string; note: string; paymentMethod: string } | null>(null)
   const [openedByName, setOpenedByName] = useState<string>('')
@@ -5075,6 +5089,251 @@ export default function PharmacyManagement() {
     }, 0)
     return { todayStr, todaySalesTotal, todayExpenseTotal, net: todaySalesTotal - todayExpenseTotal }
   }, [sales, expenses, branchFilter])
+
+  // Sales that occurred today (by dispensedAt date) – used for Active Shift Info totals and Recent Sales table
+  const recentSalesToday = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    return filteredSales
+      .filter((s) => {
+        const raw = s.dispensedAt
+        const d = typeof raw === 'string' ? new Date(raw) : (raw as { toDate?: () => Date })?.toDate?.() ?? null
+        if (!d) return false
+        return d.toISOString().slice(0, 10) === todayStr
+      })
+      .sort((a, b) => {
+        const da = typeof a.dispensedAt === 'string' ? new Date(a.dispensedAt).getTime() : (a.dispensedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+        const db = typeof b.dispensedAt === 'string' ? new Date(b.dispensedAt).getTime() : (b.dispensedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+        return db - da
+      })
+  }, [filteredSales])
+
+  // Sales in the current open shift (since openedAt) – for correct expected cash and payment breakdown
+  const sessionSales = useMemo(() => {
+    if (!activeCashSession?.openedAt) return []
+    const openedAtMs =
+      typeof activeCashSession.openedAt === 'string'
+        ? new Date(activeCashSession.openedAt).getTime()
+        : (activeCashSession.openedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+    const nowMs = Date.now()
+    return filteredSales.filter((s) => {
+      const t =
+        typeof s.dispensedAt === 'string'
+          ? new Date(s.dispensedAt).getTime()
+          : (s.dispensedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+      return t >= openedAtMs && t <= nowMs
+    })
+  }, [activeCashSession?.openedAt, filteredSales])
+
+  // Period date range helpers (combined across all counters – filter by branch only)
+  const periodSummaries = useMemo(() => {
+    const now = new Date()
+    const todayStr = now.toISOString().slice(0, 10)
+    const getSaleDateStr = (s: PharmacySale) => {
+      const raw = s.dispensedAt
+      const d = typeof raw === 'string' ? new Date(raw) : (raw as { toDate?: () => Date })?.toDate?.() ?? null
+      return d ? d.toISOString().slice(0, 10) : ''
+    }
+    const getExpenseDateStr = (e: import('@/types/pharmacy').PharmacyExpense) => {
+      if (typeof e.date === 'string') return e.date.slice(0, 10)
+      const d = (e.date as { toDate?: () => Date })?.toDate?.()
+      return d ? d.toISOString().slice(0, 10) : ''
+    }
+    const startOfWeek = new Date(now)
+    const day = startOfWeek.getDay()
+    const diff = day === 0 ? 6 : day - 1
+    startOfWeek.setDate(startOfWeek.getDate() - diff)
+    const weekStartStr = startOfWeek.toISOString().slice(0, 10)
+    const monthStartStr = todayStr.slice(0, 7) + '-01'
+    const yearStartStr = todayStr.slice(0, 4) + '-01-01'
+
+    const salesInPeriod = (start: string, end: string) =>
+      filteredSales.filter((s) => {
+        const d = getSaleDateStr(s)
+        return d >= start && d <= end
+      })
+    const expensesInPeriod = (start: string, end: string) =>
+      expenses.filter((e) => {
+        const d = getExpenseDateStr(e)
+        return d >= start && d <= end
+      })
+
+    const build = (start: string, end: string) => {
+      const periodSales = salesInPeriod(start, end)
+      const periodExpenses = expensesInPeriod(start, end)
+      const salesTotal = periodSales.reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+      const refundsTotal = periodSales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0)
+      const expenseTotal = periodExpenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0)
+      return {
+        salesTotal,
+        refundsTotal,
+        expenseTotal,
+        net: salesTotal - expenseTotal,
+        count: periodSales.length,
+        sales: periodSales,
+        start,
+        end,
+      }
+    }
+
+    return {
+      today: build(todayStr, todayStr),
+      week: build(weekStartStr, todayStr),
+      month: build(monthStartStr, todayStr),
+      year: build(yearStartStr, todayStr),
+    }
+  }, [filteredSales, expenses])
+
+  /** Daily summary: one row per closed shift (so multiple open/close on same day = multiple rows), plus one row per day that has sales/expenses but no closed shift */
+  const dailySummaryRows = useMemo(() => {
+    const baseSales = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
+    const baseExpenses = branchFilter === 'all' ? expenses : expenses.filter((e) => e.branchId === branchFilter)
+    const getSaleDateStr = (s: PharmacySale) => {
+      const raw = s.dispensedAt
+      const d = typeof raw === 'string' ? new Date(raw) : (raw as { toDate?: () => Date })?.toDate?.() ?? null
+      return d ? d.toISOString().slice(0, 10) : ''
+    }
+    const getExpenseDateStr = (e: { date?: unknown }) => {
+      if (typeof e.date === 'string') return e.date.slice(0, 10)
+      const d = (e.date as { toDate?: () => Date })?.toDate?.()
+      return d ? d.toISOString().slice(0, 10) : ''
+    }
+    const toTimeStr = (v: unknown): string => {
+      if (!v) return '—'
+      const iso = typeof v === 'string' ? v : (v as { toDate?: () => Date })?.toDate?.()?.toISOString?.()
+      if (!iso) return '—'
+      return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    }
+    type Row = { id: string; dateStr: string; counterInfo: string; salesTotal: number; expenseTotal: number; profit: number }
+    const rows: Row[] = []
+
+    // 1. One row per closed shift (multiple open/close on same day = multiple rows)
+    const closedSessions = recentCashSessions.filter((s) => s.status !== 'open' && s.closedAt)
+    closedSessions.forEach((s) => {
+      const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
+      if (!closed) return
+      const dateStr = closed.slice(0, 10)
+      const opened = typeof s.openedAt === 'string' ? s.openedAt : (s.openedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.()
+      const openTime = toTimeStr(s.openedAt)
+      const closeTime = toTimeStr(s.closedAt)
+      const cashier = s.openedByName || s.closedByName || 'Cashier'
+      const counterInfo = `${cashier} – ${openTime}–${closeTime}`
+      const cash = Number(s.cashSales ?? 0)
+      const upi = Number(s.upiSales ?? 0)
+      const card = Number(s.cardSales ?? 0)
+      const refunds = Number(s.refunds ?? 0)
+      const cashExp = Number(s.cashExpenses ?? 0)
+      const salesTotal = cash + upi + card - refunds
+      const expenseTotal = cashExp
+      const profit = salesTotal - expenseTotal
+      rows.push({ id: s.id, dateStr, counterInfo, salesTotal, expenseTotal, profit })
+    })
+
+    // 2. Days that have sales or expenses but no closed shift (e.g. before shift tracking)
+    const datesWithShifts = new Set(rows.map((r) => r.dateStr))
+    const dateSet = new Set<string>()
+    baseSales.forEach((s) => { const d = getSaleDateStr(s); if (d) dateSet.add(d) })
+    baseExpenses.forEach((e) => { const d = getExpenseDateStr(e); if (d) dateSet.add(d) })
+    dateSet.forEach((dateStr) => {
+      if (datesWithShifts.has(dateStr)) return
+      const daySales = baseSales.filter((s) => getSaleDateStr(s) === dateStr)
+      const salesTotal = daySales.reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+      const dayExpenses = baseExpenses.filter((e) => getExpenseDateStr(e) === dateStr)
+      const expenseTotal = dayExpenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0)
+      const profit = salesTotal - expenseTotal
+      rows.push({ id: `day-${dateStr}`, dateStr, counterInfo: '—', salesTotal, expenseTotal, profit })
+    })
+
+    rows.sort((a, b) => {
+      if (a.dateStr !== b.dateStr) return b.dateStr.localeCompare(a.dateStr)
+      if (a.id.startsWith('day-') && !b.id.startsWith('day-')) return 1
+      if (!a.id.startsWith('day-') && b.id.startsWith('day-')) return -1
+      return 0
+    })
+    return rows.slice(0, 200)
+  }, [sales, expenses, branchFilter, recentCashSessions])
+
+  /** Daily Summary: grouped by date for accordion (one row per day with totals + child shifts) */
+  type DailySummaryShiftRow = { id: string; dateStr: string; counterInfo: string; salesTotal: number; expenseTotal: number; profit: number }
+  type DailySummaryDayRow = { dateStr: string; salesTotal: number; expenseTotal: number; profit: number; shiftCount: number; shifts: DailySummaryShiftRow[] }
+  const dailySummaryDayRows = useMemo(() => {
+    const byDate = new Map<string, DailySummaryShiftRow[]>()
+    dailySummaryRows.forEach((r) => {
+      const list = byDate.get(r.dateStr) ?? []
+      list.push(r)
+      byDate.set(r.dateStr, list)
+    })
+    const days: DailySummaryDayRow[] = []
+    byDate.forEach((shifts, dateStr) => {
+      const salesTotal = shifts.reduce((s, r) => s + r.salesTotal, 0)
+      const expenseTotal = shifts.reduce((s, r) => s + r.expenseTotal, 0)
+      const profit = shifts.reduce((s, r) => s + r.profit, 0)
+      days.push({ dateStr, salesTotal, expenseTotal, profit, shiftCount: shifts.length, shifts })
+    })
+    days.sort((a, b) => b.dateStr.localeCompare(a.dateStr))
+    return days
+  }, [dailySummaryRows])
+
+  /** Daily Summary: filtered and sorted by search, date range, and sales sort (at day level) */
+  const filteredDailySummaryRows = useMemo(() => {
+    let rows = [...dailySummaryDayRows]
+    const search = dailySummarySearch.trim().toLowerCase()
+    if (search) {
+      rows = rows.filter((d) => d.dateStr.includes(search) || d.shifts.some((s) => s.counterInfo.toLowerCase().includes(search)))
+    }
+    if (dailySummaryDateFrom) rows = rows.filter((d) => d.dateStr >= dailySummaryDateFrom)
+    if (dailySummaryDateTo) rows = rows.filter((d) => d.dateStr <= dailySummaryDateTo)
+    if (dailySummarySalesSort === 'highest') rows = [...rows].sort((a, b) => b.salesTotal - a.salesTotal)
+    else if (dailySummarySalesSort === 'lowest') rows = [...rows].sort((a, b) => a.salesTotal - b.salesTotal)
+    return rows
+  }, [dailySummaryDayRows, dailySummarySearch, dailySummaryDateFrom, dailySummaryDateTo, dailySummarySalesSort])
+
+  const closedShiftSessions = useMemo(
+    () => recentCashSessions.filter((s) => s.status !== 'open'),
+    [recentCashSessions]
+  )
+  /** Shift Reports: filtered by search (cashier name, date text) and date range (closed date) */
+  const filteredShiftReports = useMemo(() => {
+    let list = [...closedShiftSessions]
+    const search = shiftReportsSearch.trim().toLowerCase()
+    if (search) {
+      list = list.filter((s) => {
+        const cashier = (s.openedByName ?? s.closedByName ?? '').toLowerCase()
+        const opened = typeof s.openedAt === 'string' ? s.openedAt : (s.openedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.() ?? ''
+        const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
+        const dateStr = closed ? closed.slice(0, 10) : ''
+        return cashier.includes(search) || opened.includes(search) || (closed && closed.toLowerCase().includes(search)) || dateStr.includes(search)
+      })
+    }
+    if (shiftReportsDateFrom) {
+      list = list.filter((s) => {
+        const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
+        return closed && closed.slice(0, 10) >= shiftReportsDateFrom
+      })
+    }
+    if (shiftReportsDateTo) {
+      list = list.filter((s) => {
+        const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
+        return closed && closed.slice(0, 10) <= shiftReportsDateTo
+      })
+    }
+    return list
+  }, [closedShiftSessions, shiftReportsSearch, shiftReportsDateFrom, shiftReportsDateTo])
+  const {
+    currentPage: dailySummaryPage,
+    totalPages: dailySummaryTotalPages,
+    pageSize: dailySummaryPageSize,
+    paginatedItems: paginatedDailySummaryRows,
+    goToPage: goToDailySummaryPage,
+    setPageSize: setDailySummaryPageSize,
+  } = useTablePagination(filteredDailySummaryRows, { initialPageSize: 10 })
+  const {
+    currentPage: shiftReportsPage,
+    totalPages: shiftReportsTotalPages,
+    pageSize: shiftReportsPageSize,
+    paginatedItems: paginatedShiftReports,
+    goToPage: goToShiftReportsPage,
+    setPageSize: setShiftReportsPageSize,
+  } = useTablePagination(filteredShiftReports, { initialPageSize: 10 })
 
   // Filtered sales for returns tab (can share logic, separate search term)
   const filteredReturnSales = useMemo(() => {
@@ -7376,276 +7635,573 @@ export default function PharmacyManagement() {
 
         {subTab === 'cash_and_expenses' && (
           <div className="space-y-6">
-            {/* Daily income & expense summary */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Today&apos;s summary</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="rounded-lg border border-slate-200 bg-emerald-50/60 p-4">
-                  <p className="text-xs font-medium text-slate-600 mb-0.5">Daily income (sales)</p>
-                  <p className="text-lg font-semibold text-emerald-800">₹{dailySummary.todaySalesTotal.toFixed(2)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-rose-50/60 p-4">
-                  <p className="text-xs font-medium text-slate-600 mb-0.5">Daily expenses</p>
-                  <p className="text-lg font-semibold text-rose-800">₹{dailySummary.todayExpenseTotal.toFixed(2)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-medium text-slate-600 mb-0.5">Net (income − expense)</p>
-                  <p className={`text-lg font-semibold ${dailySummary.net >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
-                    ₹{dailySummary.net.toFixed(2)}
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex items-center">
-                  <span className="text-xs text-slate-500">{dailySummary.todayStr}</span>
-                </div>
+            {/* Cash & Expenses sub-tabs – professional tab bar */}
+            <div className="border-b border-slate-200 bg-white">
+              <div className="flex gap-0" role="tablist" aria-label="Cash & Expenses views">
+                {(['shift', 'daily'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={cashExpenseSubTab === tab}
+                    onClick={() => setCashExpenseSubTab(tab)}
+                    className={`relative min-w-[160px] px-5 py-3.5 text-sm font-semibold transition-colors duration-200 border-b-2 -mb-px ${
+                      cashExpenseSubTab === tab
+                        ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200'
+                    }`}
+                  >
+                    {tab === 'shift' ? 'Shift Dashboard' : 'Daily Summary'}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Billing counter */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">Billing counter</h3>
-                  <p className="text-sm text-slate-500">
-                    Open and close your cash register for this branch. Tracks opening cash, cash sales, refunds and expected vs actual cash.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  {!cashSessionsLoading && activeCashSession && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        closeCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                        setHighlightCloseCounter(true)
-                      }}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 transition-colors"
-                    >
-                      <span>Close shift</span>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  )}
-                  {!cashSessionsLoading && !activeCashSession && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        openCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                        setHighlightOpenCounter(true)
-                      }}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
-                    >
-                      <span>Start shift</span>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                    </button>
-                  )}
-                  <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
-                    <span>
-                      Branch:&nbsp;
-                      <span className="font-medium text-slate-900">
-                        {branches.find((b) => b.id === branchFilter)?.name || (branchFilter === 'all' ? 'All branches' : '—')}
-                      </span>
-                    </span>
-                    <span>Today: {new Date().toLocaleDateString('en-IN')}</span>
+            {cashExpenseSubTab === 'daily' ? (
+              /* Daily Summary tab: two separate table sections with pagination */
+              <div className="space-y-6">
+                {/* Section 1: Daily Summary – Counter & Profit by Day */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Daily Summary – Counter & Profit by Day</h3>
+                    <p className="text-sm text-slate-500 mb-4">Single-shift days show one row. Days with multiple counters/shifts show a summary row—click it to expand and see each shift.</p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="relative flex-1 min-w-[180px] max-w-xs">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Search by date or counter..."
+                          value={dailySummarySearch}
+                          onChange={(e) => setDailySummarySearch(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-medium text-slate-500">From</label>
+                        <input
+                          type="date"
+                          value={dailySummaryDateFrom}
+                          onChange={(e) => setDailySummaryDateFrom(e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-medium text-slate-500">To</label>
+                        <input
+                          type="date"
+                          value={dailySummaryDateTo}
+                          onChange={(e) => setDailySummaryDateTo(e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
+                        <span className="px-2 text-xs font-medium text-slate-500">Sales:</span>
+                        <button
+                          type="button"
+                          onClick={() => setDailySummarySalesSort(dailySummarySalesSort === 'highest' ? 'default' : 'highest')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                            dailySummarySalesSort === 'highest' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Highest first
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDailySummarySalesSort(dailySummarySalesSort === 'lowest' ? 'default' : 'lowest')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                            dailySummarySalesSort === 'lowest' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Lowest first
+                        </button>
+                      </div>
+                      {(dailySummarySearch || dailySummaryDateFrom || dailySummaryDateTo || dailySummarySalesSort !== 'default') && (
+                        <button
+                          type="button"
+                          onClick={() => { setDailySummarySearch(''); setDailySummaryDateFrom(''); setDailySummaryDateTo(''); setDailySummarySalesSort('default') }}
+                          className="text-xs font-medium text-slate-500 hover:text-slate-700 underline underline-offset-1"
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Date</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Counters / Shifts</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Sales</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Expenses</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Profit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {filteredDailySummaryRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
+                              No days match your filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedDailySummaryRows.map((day, idx) => {
+                            const isMultiShift = day.shiftCount > 1
+                            const isExpanded = expandedDailySummaryDates.has(day.dateStr)
+                            const toggleExpand = () => {
+                              if (!isMultiShift) return
+                              setExpandedDailySummaryDates((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(day.dateStr)) next.delete(day.dateStr)
+                                else next.add(day.dateStr)
+                                return next
+                              })
+                            }
+                            const rowClass = `${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} transition-colors hover:bg-slate-50/80 ${isMultiShift ? 'cursor-pointer select-none' : ''}`
+                            return (
+                              <React.Fragment key={day.dateStr}>
+                                <tr onClick={isMultiShift ? toggleExpand : undefined} className={rowClass}>
+                                  <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{day.dateStr}</td>
+                                  <td className="px-4 py-3 text-slate-600">
+                                    {day.shiftCount === 0 ? '—' : day.shiftCount === 1 ? day.shifts[0].counterInfo : `${day.shiftCount} shifts`}
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-medium text-slate-800">
+                                    ₹{(day.shiftCount === 1 ? day.shifts[0].salesTotal : day.salesTotal).toFixed(2)}
+                                  </td>
+                                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-medium text-slate-800">
+                                    ₹{(day.shiftCount === 1 ? day.shifts[0].expenseTotal : day.expenseTotal).toFixed(2)}
+                                  </td>
+                                  <td className={`whitespace-nowrap px-4 py-3 text-right tabular-nums font-semibold ${(day.shiftCount === 1 ? day.shifts[0].profit : day.profit) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    ₹{(day.shiftCount === 1 ? day.shifts[0].profit : day.profit).toFixed(2)}
+                                  </td>
+                                </tr>
+                                {isMultiShift && isExpanded && (
+                                  <tr key={`${day.dateStr}-expanded`} className="bg-slate-50/50">
+                                    <td colSpan={5} className="px-0 py-0 align-top">
+                                      <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3">
+                                        <p className="text-xs font-medium text-slate-500 mb-2">Shifts on {day.dateStr}</p>
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="text-slate-500">
+                                              <th className="text-left py-2 pr-4 font-medium">Counter / Shift</th>
+                                              <th className="text-right py-2 font-medium">Sales</th>
+                                              <th className="text-right py-2 font-medium">Expenses</th>
+                                              <th className="text-right py-2 font-medium">Profit</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100">
+                                            {day.shifts.map((shift) => (
+                                              <tr key={shift.id} className="hover:bg-white/50">
+                                                <td className="py-2 pr-4 text-slate-700">{shift.counterInfo}</td>
+                                                <td className="py-2 text-right tabular-nums text-slate-800">₹{shift.salesTotal.toFixed(2)}</td>
+                                                <td className="py-2 text-right tabular-nums text-slate-800">₹{shift.expenseTotal.toFixed(2)}</td>
+                                                <td className={`py-2 text-right tabular-nums font-medium ${shift.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>₹{shift.profit.toFixed(2)}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Pagination
+                    currentPage={dailySummaryPage}
+                    totalPages={dailySummaryTotalPages}
+                    pageSize={dailySummaryPageSize}
+                    totalItems={filteredDailySummaryRows.length}
+                    onPageChange={goToDailySummaryPage}
+                    onPageSizeChange={setDailySummaryPageSize}
+                    itemLabel="days"
+                    className="border-t border-slate-200"
+                  />
+                </div>
+
+                {/* Section 2: Shift Reports */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-4">Shift Reports</h3>
+                    <p className="text-sm text-slate-500 mt-0.5 mb-4">Closed shifts with cashier, times and amounts.</p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="relative flex-1 min-w-[180px] max-w-xs">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Search by cashier or date..."
+                          value={shiftReportsSearch}
+                          onChange={(e) => setShiftReportsSearch(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-medium text-slate-500">From</label>
+                        <input
+                          type="date"
+                          value={shiftReportsDateFrom}
+                          onChange={(e) => setShiftReportsDateFrom(e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-medium text-slate-500">To</label>
+                        <input
+                          type="date"
+                          value={shiftReportsDateTo}
+                          onChange={(e) => setShiftReportsDateTo(e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      {(shiftReportsSearch || shiftReportsDateFrom || shiftReportsDateTo) && (
+                        <button
+                          type="button"
+                          onClick={() => { setShiftReportsSearch(''); setShiftReportsDateFrom(''); setShiftReportsDateTo('') }}
+                          className="text-xs font-medium text-slate-500 hover:text-slate-700 underline underline-offset-1"
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {filteredShiftReports.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-8 px-5 text-center">
+                      {closedShiftSessions.length === 0 ? 'No closed shifts yet. Close a shift to see it here.' : 'No shifts match your filters.'}
+                    </p>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Cashier</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Opened At</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Closed At</th>
+                              <th className="text-right px-4 py-3 font-medium text-slate-600">Opening Cash</th>
+                              <th className="text-right px-4 py-3 font-medium text-slate-600">Closing Cash</th>
+                              <th className="text-right px-4 py-3 font-medium text-slate-600">Profit</th>
+                              <th className="text-right px-4 py-3 font-medium text-slate-600">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedShiftReports.map((s) => {
+                              const opened = typeof s.openedAt === 'string' ? s.openedAt : (s.openedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.()
+                              const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
+                              const cash = Number(s.cashSales ?? 0)
+                              const upi = Number(s.upiSales ?? 0)
+                              const card = Number(s.cardSales ?? 0)
+                              const refunds = Number(s.refunds ?? 0)
+                              const cashExp = Number(s.cashExpenses ?? 0)
+                              const totalCollection = cash + upi + card - refunds
+                              const profit = totalCollection - cashExp
+                              return (
+                                <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+                                  <td className="px-4 py-3 font-medium text-slate-800">{s.openedByName ?? '—'}</td>
+                                  <td className="px-4 py-3 text-slate-600">
+                                    {opened ? new Date(opened).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                                  </td>
+                                  <td className="px-4 py-3 text-slate-600">
+                                    {closed ? new Date(closed).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-medium tabular-nums">₹{Number(s.openingCashTotal ?? 0).toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-right font-medium tabular-nums">₹{Number(s.closingCashTotal ?? 0).toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">₹{profit.toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewShiftReportSession(s)}
+                                      className="text-emerald-600 hover:text-emerald-800 text-xs font-medium"
+                                    >
+                                      View report
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <Pagination
+                        currentPage={shiftReportsPage}
+                        totalPages={shiftReportsTotalPages}
+                        pageSize={shiftReportsPageSize}
+                        totalItems={filteredShiftReports.length}
+                        onPageChange={goToShiftReportsPage}
+                        onPageSizeChange={setShiftReportsPageSize}
+                        itemLabel="shifts"
+                        className="border-t border-slate-200"
+                      />
+                    </>
+                  )}
                 </div>
               </div>
+            ) : (
+              <>
+            {/* 1. Top Summary Cards – today (combined all counters) */}
+            {(() => {
+              const p = periodSummaries[cashExpensePeriod]
+              const periodLabel = cashExpensePeriod === 'today' ? 'Today' : cashExpensePeriod === 'week' ? 'This Week' : cashExpensePeriod === 'month' ? 'This Month' : 'This Year'
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-lg font-bold text-slate-900 tabular-nums">₹{p.salesTotal.toFixed(2)}</p>
+                      <p className="text-xs font-medium text-slate-500">Total Sales {periodLabel}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-600">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2h-2a2 2 0 00-2 2v6a2 2 0 002 2zm-6-4h.01M17 17h.01" /></svg>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-lg font-bold text-slate-900 tabular-nums">₹{p.expenseTotal.toFixed(2)}</p>
+                      <p className="text-xs font-medium text-slate-500">Expenses {periodLabel}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex items-start gap-3">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${p.net >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-lg font-bold tabular-nums ${p.net >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>₹{p.net.toFixed(2)}</p>
+                      <p className="text-xs font-medium text-slate-500">Net Profit {periodLabel}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex items-start gap-3">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${activeCashSession ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-bold text-slate-900">{activeCashSession ? 'Open' : 'Closed'}</p>
+                      <p className="text-xs font-medium text-slate-500">Shift Status</p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-bold text-slate-900 tabular-nums">{p.count}</p>
+                      <p className="text-xs font-medium text-slate-500">Invoices {periodLabel}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
+            {/* 2. Shift Dashboard (Today only) OR Period sales table (Week/Month/Year) */}
+            {cashExpensePeriod === 'today' ? (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
               {cashSessionsLoading ? (
-                <div className="flex justify-center py-6">
+                <div className="flex justify-center py-12">
                   <LoadingSpinner inline />
                 </div>
               ) : activeCashSession ? (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-600">Opening cash</span>
-                      <span className="text-sm font-semibold text-slate-900">₹{activeCashSession.openingCashTotal.toFixed(2)}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-5">
+                  {/* Left: Active Shift Info + Live Drawer + Recent Sales */}
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-slate-800">Active Shift Info</h4>
+                      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <dt className="text-slate-500">Cashier</dt>
+                        <dd className="font-medium text-slate-900">{activeCashSession.openedByName ?? '—'}</dd>
+                        <dt className="text-slate-500">Opening time</dt>
+                        <dd className="font-medium text-slate-900">
+                          {typeof activeCashSession.openedAt === 'string' ? new Date(activeCashSession.openedAt).toLocaleTimeString('en-IN') : '—'}
+                        </dd>
+                        <dt className="text-slate-500">Opening cash</dt>
+                        <dd className="font-semibold tabular-nums text-slate-900">₹{activeCashSession.openingCashTotal.toFixed(2)}</dd>
+                        <dt className="text-slate-500">Cash sales</dt>
+                        <dd className="font-semibold tabular-nums text-slate-900">
+                          ₹{(Number(activeCashSession.cashSales) ?? sessionSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)).toFixed(2)}
+                        </dd>
+                        <dt className="text-slate-500">UPI sales</dt>
+                        <dd className="font-medium tabular-nums text-slate-900">
+                          ₹{sessionSales.filter((s) => s.paymentMode === 'upi').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
+                        </dd>
+                        <dt className="text-slate-500">Card sales</dt>
+                        <dd className="font-medium tabular-nums text-slate-900">
+                          ₹{sessionSales.filter((s) => s.paymentMode === 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
+                        </dd>
+                        <dt className="text-slate-500">Cash expenses</dt>
+                        <dd className="font-medium tabular-nums text-amber-700">₹{Number(activeCashSession?.cashExpenses ?? 0).toFixed(2)}</dd>
+                        <dt className="text-slate-500">Total sales (profit)</dt>
+                        <dd className="font-semibold tabular-nums text-emerald-700" title="Revenue − Cash expenses">
+                          ₹{(
+                            (Number(activeCashSession.cashSales) ?? sessionSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)) +
+                            sessionSales.filter((s) => s.paymentMode === 'upi').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0) +
+                            sessionSales.filter((s) => s.paymentMode === 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0) -
+                            Number(activeCashSession?.cashExpenses ?? 0)
+                          ).toFixed(2)}
+                        </dd>
+                      </dl>
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">Shift open</span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Opened at{' '}
-                      {typeof activeCashSession.openedAt === 'string'
-                        ? new Date(activeCashSession.openedAt).toLocaleTimeString('en-IN')
-                        : ''}
-                    </p>
-                    <span className="inline-flex w-fit items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-100">
-                      Session status: Open
-                    </span>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4 space-y-1 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Cash sales (today)</span>
-                      <span className="font-semibold text-slate-900">
-                        ₹
-                        {filteredSales
-                          .filter((s) => s.paymentMode === 'cash')
-                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
-                          .toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">UPI sales (today)</span>
-                      <span className="font-semibold text-slate-900">
-                        ₹
-                        {filteredSales
-                          .filter((s) => s.paymentMode === 'upi')
-                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
-                          .toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Card sales (today)</span>
-                      <span className="font-semibold text-slate-900">
-                        ₹
-                        {filteredSales
-                          .filter((s) => s.paymentMode === 'card')
-                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
-                          .toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Refunds (total)</span>
-                      <span className="font-semibold text-rose-600">
-                        ₹
-                        {sales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    ref={closeCounterSectionRef}
-                    className={`rounded-lg border transition-all duration-300 ${
-                      highlightCloseCounter ? 'border-rose-400 ring-2 ring-rose-300 ring-offset-2 bg-rose-50/50' : 'border-slate-200 bg-slate-50/60'
-                    } p-4 space-y-3`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-600">Close counter</span>
-                      <span className="text-[11px] text-slate-500">Enter physical cash to reconcile</span>
-                    </div>
-                    {/* Other payment amounts (UPI, Card, etc.) shown on close */}
-                    <div className="rounded border border-slate-200 bg-white p-2 space-y-1 text-[11px]">
-                      <div className="font-medium text-slate-600 mb-1">Other payments (this session)</div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">UPI</span>
-                        <span className="font-semibold tabular-nums">
-                          ₹{filteredSales.filter((s) => s.paymentMode === 'upi').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Card</span>
-                        <span className="font-semibold tabular-nums">
-                          ₹{filteredSales.filter((s) => s.paymentMode === 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Other</span>
-                        <span className="font-semibold tabular-nums">
-                          ₹{filteredSales.filter((s) => s.paymentMode !== 'cash' && s.paymentMode !== 'upi' && s.paymentMode !== 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Change given (notes/coins given back to customers) */}
-                    {(Number(activeCashSession?.changeGiven) || 0) > 0 && (
-                      <div className="rounded border border-amber-200 bg-amber-50/80 p-2 space-y-1 text-[11px]">
-                        <div className="font-medium text-amber-800 mb-1">Change given (notes/coins given back)</div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-amber-700">Total</span>
-                          <span className="font-semibold tabular-nums text-amber-900">₹{Number(activeCashSession?.changeGiven ?? 0).toFixed(2)}</span>
-                        </div>
-                        {activeCashSession?.changeNotesTotal && Object.keys(activeCashSession.changeNotesTotal).some((d) => (activeCashSession!.changeNotesTotal![d] || 0) > 0) && (
-                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 pt-1 border-t border-amber-200/60">
-                            {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((d) => {
-                              const n = Number(activeCashSession?.changeNotesTotal?.[d]) || 0
-                              if (n === 0) return null
-                              return (
-                                <span key={d} className="text-amber-800 tabular-nums">₹{d} × {n}</span>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {/* Combined note breakdown: Opening + Added from sales − Given as change = Total */}
-                    {activeCashSession?.openingNotes && (
-                      <div className="rounded border border-slate-200 bg-white overflow-hidden">
-                        <div className="text-[11px] font-medium text-slate-600 bg-slate-50 px-2 py-1.5 border-b border-slate-200">Combined record (Opening + Sales − Change)</div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-[11px]">
-                            <thead>
-                              <tr className="bg-slate-50/80 border-b border-slate-200">
-                                <th className="text-left py-1.5 px-2 font-medium text-slate-600">₹</th>
-                                <th className="text-right py-1.5 px-1 font-medium text-slate-600">Opening</th>
-                                <th className="text-right py-1.5 px-1 font-medium text-emerald-600">+ Added (sales)</th>
-                                <th className="text-right py-1.5 px-1 font-medium text-amber-600">− Given (change)</th>
-                                <th className="text-right py-1.5 px-2 font-medium text-slate-700">= Total</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((d) => {
-                                const open = Number(activeCashSession?.openingNotes?.[d]) || 0
-                                const run = Number(activeCashSession?.runningNotes?.[d]) || 0
-                                const change = Number(activeCashSession?.changeNotesTotal?.[d]) || 0
-                                const added = Math.max(0, run - open + change)
-                                return (
-                                  <tr key={d} className="border-b border-slate-100">
-                                    <td className="py-1 px-2 text-slate-700 font-medium">₹{d}</td>
-                                    <td className="text-right tabular-nums">{open}</td>
-                                    <td className="text-right tabular-nums text-emerald-700">+{added}</td>
-                                    <td className="text-right tabular-nums text-amber-700">−{change}</td>
-                                    <td className="text-right tabular-nums font-semibold text-slate-900">{run}</td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                    {/* Expected cash (auto from dispense/billing) */}
+                    {/* Live Cash Drawer Summary: Opening + Cash Sales = drawer; Total Sales = profit; difference only for actual vs expected cash */}
                     {(() => {
+                      const openingCash = Number(activeCashSession?.openingCashTotal ?? 0)
+                      const cashSalesSession = Number(activeCashSession?.cashSales ?? 0) || sessionSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+                      const cashRefundsSession = sessionSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.refundedAmount ?? 0), 0)
+                      const changeGiven = Number(activeCashSession?.changeGiven ?? 0)
+                      const cashExpenses = Number(activeCashSession?.cashExpenses ?? 0)
+                      const expectedCashInDrawer = openingCash + cashSalesSession - cashRefundsSession - changeGiven - cashExpenses
+                      const upiSession = sessionSales.filter((s) => s.paymentMode === 'upi').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+                      const cardSession = sessionSales.filter((s) => s.paymentMode === 'card').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+                      const totalSalesAllPayments = cashSalesSession + upiSession + cardSession
                       const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
-                      const expectedTotal = denoms.reduce((sum, d) => sum + (Number(activeCashSession?.runningNotes?.[d]) || 0) * Number(d), 0)
+                      const countedCash = denoms.reduce((sum, d) => sum + Math.max(0, Number(cashClosingNotes[d] || 0)) * Number(d), 0)
+                      const cashDifference = countedCash - expectedCashInDrawer
                       return (
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-[11px] text-slate-600">Expected cash in drawer (auto from sales)</span>
-                          <span className="text-xs font-semibold text-slate-900 tabular-nums">₹{expectedTotal.toFixed(2)}</span>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const session = await fetchCashSessions()
-                              const run = session?.runningNotes
-                              if (run) {
-                                const next: Record<string, string> = {}
-                                denoms.forEach((d) => { next[d] = run[d] != null && run[d] > 0 ? String(run[d]) : '' })
-                                setCashClosingNotes(next)
-                              }
-                            }}
-                            className="text-[10px] font-medium text-blue-600 hover:text-blue-800 underline"
-                          >
-                            Refresh expected
-                          </button>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                          <h4 className="text-sm font-semibold text-slate-800 mb-3">Live Cash Drawer Summary</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Opening cash</span>
+                              <span className="font-semibold tabular-nums text-slate-900">₹{openingCash.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Cash sales</span>
+                              <span className="font-semibold tabular-nums text-slate-900">₹{cashSalesSession.toFixed(2)}</span>
+                            </div>
+                            {cashExpenses > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">Cash expenses</span>
+                                <span className="font-medium tabular-nums text-amber-700">−₹{cashExpenses.toFixed(2)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Current cash in drawer (expected)</span>
+                              <span className="font-semibold tabular-nums text-slate-900">₹{expectedCashInDrawer.toFixed(2)}</span>
+                            </div>
+                            <div className="border-t border-slate-100 pt-2 mt-2">
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">Total sales (all payments)</span>
+                                <span className="font-semibold tabular-nums text-emerald-700">₹{totalSalesAllPayments.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs text-slate-500 mt-1">
+                                <span>Cash ₹{cashSalesSession.toFixed(2)} · UPI ₹{upiSession.toFixed(2)} · Card ₹{cardSession.toFixed(2)}</span>
+                              </div>
+                            </div>
+                            {countedCash > 0 && (
+                              <>
+                                <div className="flex justify-between border-t border-slate-100 pt-2">
+                                  <span className="text-slate-500">Actual counted cash</span>
+                                  <span className="font-semibold tabular-nums text-slate-900">₹{countedCash.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center pt-1">
+                                  <span className="text-slate-600 font-medium">Cash difference (shortage / excess)</span>
+                                  <span className={`font-semibold tabular-nums ${cashDifference === 0 ? 'text-slate-700' : cashDifference > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {cashDifference === 0 ? 'Balanced' : cashDifference > 0 ? `+₹${cashDifference.toFixed(2)} excess` : `−₹${Math.abs(cashDifference).toFixed(2)} shortage`}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
                       )
                     })()}
-                    <p className="text-[11px] text-slate-500">Actual count — edit to match physical cash in drawer</p>
-                    <div className="grid grid-cols-3 gap-1 text-[11px]">
+                    {/* Recent Sales Today */}
+                    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                      <h4 className="text-sm font-semibold text-slate-800 px-4 py-3 border-b border-slate-200">Recent Sales Today</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs sm:text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-medium text-slate-600">Invoice</th>
+                              <th className="text-left px-3 py-2 font-medium text-slate-600">Customer</th>
+                              <th className="text-right px-3 py-2 font-medium text-slate-600">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {recentSalesToday.length === 0 ? (
+                              <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-500">No sales today yet</td></tr>
+                            ) : (
+                              recentSalesToday.slice(0, 5).map((s) => (
+                                <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+                                  <td className="px-3 py-2 font-medium text-slate-800">{s.invoiceNumber || s.id}</td>
+                                  <td className="px-3 py-2 text-slate-600">{s.patientName || 'Walk-in'}</td>
+                                  <td className="px-3 py-2 text-right font-medium tabular-nums">₹{Number(s.netAmount ?? s.totalAmount ?? 0).toFixed(2)}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Right: Close Counter Panel */}
+                  <div
+                    ref={closeCounterSectionRef}
+                    className={`rounded-xl border-2 transition-all duration-300 ${
+                      highlightCloseCounter ? 'border-rose-400 ring-2 ring-rose-200 ring-offset-2 bg-rose-50/30' : 'border-slate-200 bg-slate-50/30'
+                    } p-5 space-y-4`}
+                  >
+                    <h4 className="text-sm font-semibold text-slate-800">Close Counter Panel</h4>
+                    <p className="text-xs text-slate-500">Enter physical cash count by denomination.</p>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                       {['500', '200', '100', '50', '20', '10', '5', '2', '1'].map((den) => (
-                        <label key={den} className="flex items-center gap-1">
-                          <span className="text-slate-600">₹{den}</span>
+                        <label key={den} className="flex flex-col gap-1">
+                          <span className="text-xs font-medium text-slate-600">₹{den}</span>
                           <input
                             type="number"
                             min={0}
                             value={cashClosingNotes[den] ?? ''}
-                            onChange={(e) =>
-                              setCashClosingNotes((prev) => ({ ...prev, [den]: e.target.value }))
-                            }
-                            className="w-14 rounded border border-slate-300 px-1 py-0.5 text-right text-[11px]"
+                            onChange={(e) => setCashClosingNotes((prev) => ({ ...prev, [den]: e.target.value }))}
+                            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-right tabular-nums focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                           />
                         </label>
                       ))}
                     </div>
+                    {(() => {
+                      const openingCash = Number(activeCashSession?.openingCashTotal ?? 0)
+                      const cashSalesSession = Number(activeCashSession?.cashSales ?? 0) || sessionSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0)
+                      const cashRefundsSession = sessionSales.filter((s) => s.paymentMode === 'cash').reduce((sum, s) => sum + Number(s.refundedAmount ?? 0), 0)
+                      const changeGiven = Number(activeCashSession?.changeGiven ?? 0)
+                      const cashExpenses = Number(activeCashSession?.cashExpenses ?? 0)
+                      const expectedCash = openingCash + cashSalesSession - cashRefundsSession - changeGiven - cashExpenses
+                      const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+                      const actualCash = denoms.reduce((sum, d) => sum + Math.max(0, Number(cashClosingNotes[d] || 0)) * Number(d), 0)
+                      const cashDifference = actualCash - expectedCash
+                      return (
+                        <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2 text-sm">
+                          <div className="flex justify-between"><span className="text-slate-500">Opening cash</span><span className="font-semibold tabular-nums">₹{openingCash.toFixed(2)}</span></div>
+                          <div className="flex justify-between"><span className="text-slate-500">Cash sales</span><span className="font-semibold tabular-nums">₹{cashSalesSession.toFixed(2)}</span></div>
+                          {cashExpenses > 0 && (
+                            <div className="flex justify-between"><span className="text-slate-500">Cash expenses</span><span className="font-medium tabular-nums text-amber-700">−₹{cashExpenses.toFixed(2)}</span></div>
+                          )}
+                          <div className="flex justify-between"><span className="text-slate-500">Expected cash in drawer</span><span className="font-semibold tabular-nums">₹{expectedCash.toFixed(2)}</span></div>
+                          <div className="flex justify-between border-t border-slate-100 pt-2"><span className="text-slate-500">Actual cash (counted)</span><span className="font-semibold tabular-nums">₹{actualCash.toFixed(2)}</span></div>
+                          <div className="flex justify-between pt-1">
+                            <span className="text-slate-600 font-medium">Cash difference (shortage / excess)</span>
+                            <span className={`font-semibold tabular-nums ${cashDifference === 0 ? 'text-slate-700' : cashDifference > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {cashDifference === 0 ? 'Balanced' : cashDifference > 0 ? `+₹${cashDifference.toFixed(2)}` : `−₹${Math.abs(cashDifference).toFixed(2)}`}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })()}
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-700"
-                      onClick={() => setShowCloseShiftConfirm(true)}
+                      className={`w-full inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-[0.98] active:shadow-inner focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 transition-all duration-150 ease-out ${closeCounterButtonClicked ? 'ring-2 ring-rose-300 ring-offset-2 ring-offset-white' : ''}`}
+                      onClick={() => {
+                        setCloseCounterButtonClicked(true)
+                        window.setTimeout(() => setCloseCounterButtonClicked(false), 350)
+                        setShowCloseShiftConfirm(true)
+                      }}
                     >
-                      Close counter & save report
+                      <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      Close Shift & Generate Report
                     </button>
                   </div>
                 </div>
@@ -7857,358 +8413,99 @@ export default function PharmacyManagement() {
                 </div>
               )}
             </div>
-
-            {/* Shift reports – closed sessions with name, times, amounts */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-slate-900 mb-3">Shift reports</h3>
-              <p className="text-sm text-slate-500 mb-4">Closed shifts with who opened/closed, times, opening/closing amount and profit.</p>
-              {recentCashSessions.filter((s) => s.status !== 'open').length === 0 ? (
-                <p className="text-sm text-slate-500 py-4">No closed shifts yet. Close a shift to see it here.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="text-left px-3 py-2">Opened by</th>
-                        <th className="text-left px-3 py-2">Opened at</th>
-                        <th className="text-left px-3 py-2">Closed by</th>
-                        <th className="text-left px-3 py-2">Closed at</th>
-                        <th className="text-right px-3 py-2">Opening</th>
-                        <th className="text-right px-3 py-2">Closing</th>
-                        <th className="text-right px-3 py-2">Profit</th>
-                        <th className="w-24" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentCashSessions
-                        .filter((s) => s.status !== 'open')
-                        .slice(0, 20)
-                        .map((s) => {
-                          const opened = typeof s.openedAt === 'string' ? s.openedAt : (s.openedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.()
-                          const closed = s.closedAt && (typeof s.closedAt === 'string' ? s.closedAt : (s.closedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.())
-                          const cash = Number(s.cashSales ?? 0)
-                          const upi = Number(s.upiSales ?? 0)
-                          const card = Number(s.cardSales ?? 0)
-                          const refunds = Number(s.refunds ?? 0)
-                          const cashExp = Number(s.cashExpenses ?? 0)
-                          const totalCollection = cash + upi + card - refunds
-                          const profit = totalCollection - cashExp
-                          return (
-                            <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50/50">
-                              <td className="px-3 py-2 font-medium text-slate-800">{s.openedByName ?? '—'}</td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {opened ? new Date(opened).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
-                              </td>
-                              <td className="px-3 py-2 font-medium text-slate-800">{s.closedByName ?? '—'}</td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {closed ? new Date(closed).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-right font-medium tabular-nums">₹{Number(s.openingCashTotal ?? 0).toFixed(2)}</td>
-                              <td className="px-3 py-2 text-right font-medium tabular-nums">₹{Number(s.closingCashTotal ?? 0).toFixed(2)}</td>
-                              <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">₹{profit.toFixed(2)}</td>
-                              <td className="px-3 py-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setViewShiftReportSession(s)}
-                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                                >
-                                  View report
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Expenses */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Expenses</h3>
-                <p className="text-sm text-slate-500">
-                  Record operational expenses for this branch and review expense history.
+            ) : (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Combined Sales {cashExpensePeriod === 'week' ? 'This Week' : cashExpensePeriod === 'month' ? 'This Month' : 'This Year'}
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  All counters combined · {periodSummaries[cashExpensePeriod].start} to {periodSummaries[cashExpensePeriod].end} · {periodSummaries[cashExpensePeriod].count} invoice(s)
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <label className="flex items-center gap-1">
-                  <span>From</span>
-                  <input
-                    type="date"
-                    value={expenseFilters.dateFrom}
-                    onChange={(e) => setExpenseFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-                  />
-                </label>
-                <label className="flex items-center gap-1">
-                  <span>To</span>
-                  <input
-                    type="date"
-                    value={expenseFilters.dateTo}
-                    onChange={(e) => setExpenseFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
-                    className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-                  />
-                </label>
-                <select
-                  value={expenseFilters.categoryId}
-                  onChange={(e) => setExpenseFilters((prev) => ({ ...prev, categoryId: e.target.value }))}
-                  className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-                >
-                  <option value="all">All categories</option>
-                  {expenseCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={expenseFilters.paymentMethod}
-                  onChange={(e) => setExpenseFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="rounded-full border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-                >
-                  <option value="all">All payments</option>
-                  <option value="cash">Cash</option>
-                  <option value="upi">UPI</option>
-                  <option value="card">Card</option>
-                  <option value="bank">Bank</option>
-                </select>
-                <button
-                  type="button"
-                  className="text-[11px] text-blue-600 hover:text-blue-800 underline"
-                  onClick={fetchExpensesAndCategories}
-                >
-                  Apply
-                </button>
+              <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600">Date</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600">Invoice</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600">Customer</th>
+                      <th className="text-right px-4 py-3 font-medium text-slate-600">Amount</th>
+                      <th className="text-left px-4 py-3 font-medium text-slate-600">Payment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {periodSummaries[cashExpensePeriod].sales.length === 0 ? (
+                      <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No sales in this period.</td></tr>
+                    ) : (
+                      [...periodSummaries[cashExpensePeriod].sales]
+                        .sort((a, b) => {
+                          const da = typeof a.dispensedAt === 'string' ? new Date(a.dispensedAt).getTime() : (a.dispensedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+                          const db = typeof b.dispensedAt === 'string' ? new Date(b.dispensedAt).getTime() : (b.dispensedAt as { toDate?: () => Date })?.toDate?.()?.getTime() ?? 0
+                          return db - da
+                        })
+                        .map((s) => (
+                          <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+                            <td className="px-4 py-2 text-slate-700">
+                              {typeof s.dispensedAt === 'string' ? s.dispensedAt.slice(0, 10) : (s.dispensedAt as { toDate?: () => Date })?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? '—'}
+                            </td>
+                            <td className="px-4 py-2 font-medium text-slate-800">{s.invoiceNumber || s.id}</td>
+                            <td className="px-4 py-2 text-slate-600">{s.patientName || 'Walk-in'}</td>
+                            <td className="px-4 py-2 text-right font-medium tabular-nums">₹{Number(s.netAmount ?? s.totalAmount ?? 0).toFixed(2)}</td>
+                            <td className="px-4 py-2 text-slate-600 capitalize">{s.paymentMode || '—'}</td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
+            )}
 
-            {/* Manage Cashier and Counter */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Manage Cashier and Counter</h3>
-              <div className="flex items-center gap-2 border-b border-slate-200 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setManageCashierCounterTab('cashier')}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
-                    manageCashierCounterTab === 'cashier'
-                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
-                      : 'border-transparent text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Cashier
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManageCashierCounterTab('counter')}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
-                    manageCashierCounterTab === 'counter'
-                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
-                      : 'border-transparent text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Counter
-                </button>
-              </div>
-              {manageCashierCounterTab === 'cashier' && (
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <p className="text-sm text-slate-500">Add and manage cashiers for billing.</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingCashierId(null)
-                        setNewCashier({ name: '', phone: '' })
-                        setShowCreateCashierModal(true)
-                      }}
-                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                      Create
-                    </button>
-                  </div>
-                  {cashiers.length === 0 ? (
-                    <p className="text-sm text-slate-500 py-4">No cashiers yet. Click Create to add one.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            <th className="text-left px-3 py-2 font-medium text-slate-700">Name</th>
-                            <th className="text-left px-3 py-2 font-medium text-slate-700">Phone</th>
-                            <th className="w-28 text-right px-3 py-2 font-medium text-slate-700">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cashiers.map((c) => (
-                            <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                              <td className="px-3 py-2 text-slate-900">{c.name}</td>
-                              <td className="px-3 py-2 text-slate-600">{c.phone || '—'}</td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingCashierId(c.id)
-                                    setNewCashier({ name: c.name, phone: c.phone || '' })
-                                    setShowCreateCashierModal(true)
-                                  }}
-                                  className="text-emerald-600 hover:text-emerald-800 font-medium text-xs mr-2"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (!window.confirm(`Delete cashier "${c.name}"? They will be removed from the list.`)) return
-                                    const token = await getToken()
-                                    if (!token) return
-                                    try {
-                                      const res = await fetch(`/api/pharmacy/cashiers/${c.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-                                      const data = await res.json().catch(() => ({}))
-                                      if (!res.ok || !data.success) {
-                                        setError(data.error || 'Failed to delete cashier')
-                                        return
-                                      }
-                                      setCashiers((prev) => prev.filter((x) => x.id !== c.id))
-                                      setSuccess('Cashier removed.')
-                                    } catch (e: any) {
-                                      setError(e?.message || 'Failed to delete cashier')
-                                    }
-                                  }}
-                                  className="text-rose-600 hover:text-rose-800 font-medium text-xs"
-                                >
-                                  Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-              {manageCashierCounterTab === 'counter' && (
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <p className="text-sm text-slate-500">Add and manage billing counters.</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingCounterId(null)
-                        setNewCounterName('')
-                        setShowCreateCounterModal(true)
-                      }}
-                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                      Create
-                    </button>
-                  </div>
-                  {counters.length === 0 ? (
-                    <p className="text-sm text-slate-500 py-4">No counters yet. Click Create to add one.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            <th className="text-left px-3 py-2 font-medium text-slate-700">Counter name</th>
-                            <th className="w-28 text-right px-3 py-2 font-medium text-slate-700">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {counters.map((c) => (
-                            <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                              <td className="px-3 py-2 text-slate-900">{c.name}</td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingCounterId(c.id)
-                                    setNewCounterName(c.name)
-                                    setShowCreateCounterModal(true)
-                                  }}
-                                  className="text-emerald-600 hover:text-emerald-800 font-medium text-xs mr-2"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (!window.confirm(`Delete counter "${c.name}"? It will be removed from the list.`)) return
-                                    const token = await getToken()
-                                    if (!token) return
-                                    try {
-                                      const res = await fetch(`/api/pharmacy/counters/${c.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
-                                      const data = await res.json().catch(() => ({}))
-                                      if (!res.ok || !data.success) {
-                                        setError(data.error || 'Failed to delete counter')
-                                        return
-                                      }
-                                      setCounters((prev) => prev.filter((x) => x.id !== c.id))
-                                      setSuccess('Counter removed.')
-                                    } catch (e: any) {
-                                      setError(e?.message || 'Failed to delete counter')
-                                    }
-                                  }}
-                                  className="text-rose-600 hover:text-rose-800 font-medium text-xs"
-                                >
-                                  Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-              {/* Add expense form */}
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
-                <h4 className="text-sm font-semibold text-slate-800">Add expense</h4>
-                <div className="grid grid-cols-1 gap-3 text-xs text-slate-700">
+            {/* Expenses */}
+            {/* 4. Expenses Section – two column */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Add Expense Form */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
+                <h3 className="text-base font-semibold text-slate-900">Add Expense</h3>
+                <div className="grid grid-cols-1 gap-3 text-sm">
                   <label className="flex flex-col gap-1">
-                    <span>Date</span>
+                    <span className="text-slate-600 font-medium">Date</span>
                     <input
                       type="date"
                       value={expenseForm.date}
                       onChange={(e) => setExpenseForm((prev) => ({ ...prev, date: e.target.value }))}
-                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span>Note <span className="text-rose-500">*</span></span>
+                    <span className="text-slate-600 font-medium">Note <span className="text-rose-500">*</span></span>
                     <textarea
                       rows={2}
                       value={expenseForm.note}
                       onChange={(e) => setExpenseForm((prev) => ({ ...prev, note: e.target.value }))}
-                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs resize-none"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 resize-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                       placeholder="e.g. Buying new stand"
                       required
                     />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span>Amount (₹)</span>
+                    <span className="text-slate-600 font-medium">Amount (₹)</span>
                     <input
                       type="number"
                       min={0}
                       step={0.01}
                       value={expenseForm.amount}
                       onChange={(e) => setExpenseForm((prev) => ({ ...prev, amount: e.target.value }))}
-                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     />
                   </label>
                   <label className="flex flex-col gap-1">
-                    <span>Payment method</span>
+                    <span className="text-slate-600 font-medium">Payment Method</span>
                     <select
                       value={expenseForm.paymentMethod}
                       onChange={(e) => setExpenseForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     >
                       <option value="cash">Cash</option>
                       <option value="upi">UPI</option>
@@ -8220,7 +8517,7 @@ export default function PharmacyManagement() {
                 </div>
                 <button
                   type="button"
-                  className="inline-flex items-center justify-center rounded-full bg-blue-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-700"
+                  className="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
                   onClick={async () => {
                     if (!activeHospitalId) {
                       setError('Active hospital is not set.')
@@ -8329,53 +8626,62 @@ export default function PharmacyManagement() {
                 )}
               </div>
 
-              {/* Expense list */}
+              {/* Expense History Table */}
               <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <h4 className="text-sm font-semibold text-slate-800">Expense history</h4>
-                    <span className="text-[11px] text-slate-500">
-                      {expenses.length} record(s), total ₹
-                      {expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0).toFixed(2)}
-                    </span>
+                <div className="border-b border-slate-200 px-5 py-4">
+                  <h3 className="text-base font-semibold text-slate-900">Expense History</h3>
+                  <p className="text-sm text-slate-500 mt-0.5">{expenses.length} record(s) · Total ₹{expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0).toFixed(2)}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <input type="date" value={expenseFilters.dateFrom} onChange={(e) => setExpenseFilters((prev) => ({ ...prev, dateFrom: e.target.value }))} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs" />
+                    <input type="date" value={expenseFilters.dateTo} onChange={(e) => setExpenseFilters((prev) => ({ ...prev, dateTo: e.target.value }))} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs" />
+                    <select value={expenseFilters.categoryId} onChange={(e) => setExpenseFilters((prev) => ({ ...prev, categoryId: e.target.value }))} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs">
+                      <option value="all">All categories</option>
+                      {expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <select value={expenseFilters.paymentMethod} onChange={(e) => setExpenseFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs">
+                      <option value="all">All payments</option>
+                      <option value="cash">Cash</option>
+                      <option value="upi">UPI</option>
+                      <option value="card">Card</option>
+                      <option value="bank">Bank</option>
+                    </select>
+                    <button type="button" onClick={fetchExpensesAndCategories} className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200">Apply</button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs sm:text-sm">
+                  <table className="w-full text-sm">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="text-left px-3 py-2">Date</th>
-                        <th className="text-left px-3 py-2">Note</th>
-                        <th className="text-right px-3 py-2">Amount</th>
-                        <th className="text-left px-3 py-2">Payment</th>
-                        <th className="text-left px-3 py-2">Branch</th>
+                        <th className="text-left px-4 py-3 font-medium text-slate-600">Date</th>
+                        <th className="text-left px-4 py-3 font-medium text-slate-600">Note</th>
+                        <th className="text-right px-4 py-3 font-medium text-slate-600">Amount</th>
+                        <th className="text-left px-4 py-3 font-medium text-slate-600">Payment Method</th>
+                        <th className="text-left px-4 py-3 font-medium text-slate-600">Branch</th>
                       </tr>
                     </thead>
                     <tbody>
                       {expenses.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-3 py-6 text-center text-slate-500 text-xs">
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">
                             No expenses in the selected range.
                           </td>
                         </tr>
                       ) : (
                         expenses.map((e) => (
                           <tr key={e.id} className="border-t border-slate-100 hover:bg-slate-50/70">
-                            <td className="px-3 py-2">
-                              {typeof e.date === 'string'
-                                ? e.date.slice(0, 10)
-                                : (e.date as any)?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''}
+                            <td className="px-4 py-3 text-slate-700">
+                              {typeof e.date === 'string' ? e.date.slice(0, 10) : (e.date as any)?.toDate?.()?.toISOString?.()?.slice(0, 10) ?? ''}
                             </td>
-                            <td className="px-3 py-2 max-w-xs truncate" title={e.description ?? e.categoryName ?? ''}>
+                            <td className="px-4 py-3 max-w-xs truncate text-slate-800" title={e.description ?? e.categoryName ?? ''}>
                               {e.description || e.categoryName || '—'}
                             </td>
-                            <td className="px-3 py-2 text-right font-medium tabular-nums">
+                            <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">
                               ₹{Number(e.amount || 0).toFixed(2)}
                             </td>
-                            <td className="px-3 py-2 capitalize">
+                            <td className="px-4 py-3 capitalize text-slate-600">
                               {e.paymentMethod}
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-4 py-3 text-slate-600">
                               {branches.find((b) => b.id === e.branchId)?.name || e.branchId}
                             </td>
                           </tr>
@@ -8385,6 +8691,100 @@ export default function PharmacyManagement() {
                     </table>
                 </div>
               </div>
+            </div>
+            </>
+            )}
+          </div>
+        )}
+
+        {subTab === 'settings' && (
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Manage Cashier & Counter</h3>
+              <p className="text-sm text-slate-500 mt-0.5">Add and manage cashiers and billing counters. Used when starting a shift in Cash & Expenses.</p>
+            </div>
+            <div className="p-5">
+              <div className="flex items-center gap-2 border-b border-slate-200 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setManageCashierCounterTab('cashier')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+                    manageCashierCounterTab === 'cashier' ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50' : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Cashier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManageCashierCounterTab('counter')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+                    manageCashierCounterTab === 'counter' ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50' : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Counter
+                </button>
+              </div>
+              {manageCashierCounterTab === 'cashier' && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <p className="text-sm text-slate-500">Add and manage cashiers for billing.</p>
+                    <button type="button" onClick={() => { setEditingCashierId(null); setNewCashier({ name: '', phone: '' }); setShowCreateCashierModal(true) }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg> Create
+                    </button>
+                  </div>
+                  {cashiers.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-6">No cashiers yet. Click Create to add one.</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="text-left px-4 py-3 font-medium text-slate-600">Name</th><th className="text-left px-4 py-3 font-medium text-slate-600">Phone</th><th className="w-28 text-right px-4 py-3 font-medium text-slate-600">Actions</th></tr></thead>
+                        <tbody>
+                          {cashiers.map((c) => (
+                            <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+                              <td className="px-4 py-3 text-slate-900">{c.name}</td>
+                              <td className="px-4 py-3 text-slate-600">{c.phone || '—'}</td>
+                              <td className="px-4 py-3 text-right">
+                                <button type="button" onClick={() => { setEditingCashierId(c.id); setNewCashier({ name: c.name, phone: c.phone || '' }); setShowCreateCashierModal(true) }} className="text-emerald-600 hover:text-emerald-800 font-medium text-xs mr-2">Edit</button>
+                                <button type="button" onClick={async () => { if (!window.confirm(`Delete cashier "${c.name}"?`)) return; const token = await getToken(); if (!token) return; try { const res = await fetch(`/api/pharmacy/cashiers/${c.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }); const data = await res.json().catch(() => ({})); if (!res.ok || !data.success) { setError(data.error || 'Failed to delete cashier'); return } setCashiers((prev) => prev.filter((x) => x.id !== c.id)); setSuccess('Cashier removed.'); } catch (e: any) { setError(e?.message || 'Failed to delete cashier') } }} className="text-rose-600 hover:text-rose-800 font-medium text-xs">Delete</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+              {manageCashierCounterTab === 'counter' && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <p className="text-sm text-slate-500">Add and manage billing counters.</p>
+                    <button type="button" onClick={() => { setEditingCounterId(null); setNewCounterName(''); setShowCreateCounterModal(true) }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg> Create
+                    </button>
+                  </div>
+                  {counters.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-6">No counters yet. Click Create to add one.</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="text-left px-4 py-3 font-medium text-slate-600">Counter name</th><th className="w-28 text-right px-4 py-3 font-medium text-slate-600">Actions</th></tr></thead>
+                        <tbody>
+                          {counters.map((c) => (
+                            <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+                              <td className="px-4 py-3 text-slate-900">{c.name}</td>
+                              <td className="px-4 py-3 text-right">
+                                <button type="button" onClick={() => { setEditingCounterId(c.id); setNewCounterName(c.name); setShowCreateCounterModal(true) }} className="text-emerald-600 hover:text-emerald-800 font-medium text-xs mr-2">Edit</button>
+                                <button type="button" onClick={async () => { if (!window.confirm(`Delete counter "${c.name}"?`)) return; const token = await getToken(); if (!token) return; try { const res = await fetch(`/api/pharmacy/counters/${c.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }); const data = await res.json().catch(() => ({})); if (!res.ok || !data.success) { setError(data.error || 'Failed to delete counter'); return } setCounters((prev) => prev.filter((x) => x.id !== c.id)); setSuccess('Counter removed.'); } catch (e: any) { setError(e?.message || 'Failed to delete counter') } }} className="text-rose-600 hover:text-rose-800 font-medium text-xs">Delete</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -10245,7 +10645,7 @@ export default function PharmacyManagement() {
                         cashRefunds: sessionSales
                           .filter((s) => s.paymentMode === 'cash')
                           .reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
-                        changeGiven: 0,
+                        changeGiven: Number(activeCashSession?.changeGiven ?? 0),
                         hospitalId: activeHospitalId,
                         branchId: branchFilter === 'all' ? undefined : branchFilter,
                       }

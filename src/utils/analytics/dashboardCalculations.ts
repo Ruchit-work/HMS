@@ -146,6 +146,117 @@ export function calculateRevenue(
     .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
 }
 
+export interface RevenueTrendPoint {
+  label: string
+  fullLabel: string
+  revenue: number
+}
+
+/**
+ * Revenue trend: weekly (last 7 days), monthly (last 6 buckets), yearly (12 months)
+ */
+export function calculateRevenueTrend(
+  appointments: Array<{ status: string; appointmentDate: string; paymentAmount?: number }>
+): {
+  weekly: RevenueTrendPoint[]
+  monthly: RevenueTrendPoint[]
+  yearly: RevenueTrendPoint[]
+} {
+  const completed = appointments.filter(
+    (apt) => apt.status === "completed" && apt.paymentAmount != null && apt.paymentAmount > 0
+  )
+
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+
+  // Weekly: last 7 days
+  const weekly: RevenueTrendPoint[] = []
+  for (let offset = 6; offset >= 0; offset--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - offset)
+    const next = new Date(d)
+    next.setDate(next.getDate() + 1)
+    const revenue = completed
+      .filter((apt) => {
+        const dt = new Date(apt.appointmentDate)
+        dt.setHours(0, 0, 0, 0)
+        return dt >= d && dt < next
+      })
+      .reduce((s, apt) => s + (apt.paymentAmount || 0), 0)
+    weekly.push({
+      label: d.toLocaleDateString("en-US", { weekday: "short" }),
+      fullLabel: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      revenue
+    })
+  }
+
+  // Monthly: current month in 5-day buckets
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth()
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+  const bucketRanges: Array<[number, number]> = [
+    [1, 5],
+    [6, 10],
+    [11, 15],
+    [16, 20],
+    [21, 25],
+    [26, daysInMonth]
+  ]
+  const monthly: RevenueTrendPoint[] = bucketRanges.map(([startDay, endDay]) => {
+    const adjustedEndDay = Math.min(endDay, daysInMonth)
+    const startDate = new Date(currentYear, currentMonth, startDay)
+    const endDate = new Date(currentYear, currentMonth, adjustedEndDay + 1)
+    const revenue = completed
+      .filter((apt) => {
+        const dt = new Date(apt.appointmentDate)
+        return dt >= startDate && dt < endDate
+      })
+      .reduce((s, apt) => s + (apt.paymentAmount || 0), 0)
+    return {
+      label: `${startDay}-${adjustedEndDay}`,
+      fullLabel: `${startDay}-${adjustedEndDay} ${startDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`,
+      revenue
+    }
+  })
+
+  // Yearly: 12 months
+  const yearly: RevenueTrendPoint[] = []
+  for (let month = 0; month < 12; month++) {
+    const startDate = new Date(currentYear, month, 1)
+    const endDate = new Date(currentYear, month + 1, 1)
+    const revenue = completed
+      .filter((apt) => {
+        const dt = new Date(apt.appointmentDate)
+        return dt >= startDate && dt < endDate
+      })
+      .reduce((s, apt) => s + (apt.paymentAmount || 0), 0)
+    yearly.push({
+      label: startDate.toLocaleDateString("en-US", { month: "short" }),
+      fullLabel: startDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      revenue
+    })
+  }
+
+  return { weekly, monthly, yearly }
+}
+
+/**
+ * Top departments by appointment count (using doctorSpecialization)
+ */
+export function calculateTopDepartments(
+  appointments: Array<{ doctorSpecialization?: string }>
+): Array<{ department: string; count: number }> {
+  const counts: Record<string, number> = {}
+  appointments.forEach((apt) => {
+    const dept = (apt.doctorSpecialization || "General").trim() || "General"
+    counts[dept] = (counts[dept] || 0) + 1
+  })
+  return Object.entries(counts)
+    .map(([department, count]) => ({ department, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8)
+}
+
 /**
  * Extract medicine names from prescription text
  */
