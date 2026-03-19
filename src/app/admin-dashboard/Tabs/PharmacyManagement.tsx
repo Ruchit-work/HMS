@@ -15,7 +15,7 @@ import Pagination from '@/components/ui/navigation/Pagination'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 import { ConfirmDialog } from '@/components/ui/overlays/Modals'
-import { CashTenderModal } from '@/components/pharmacy/CashTenderModal'
+import { CashPaymentPanel } from '@/components/pharmacy/CashTenderModal'
 import { RefundCashModal } from '@/components/pharmacy/RefundCashModal'
 import type { Branch } from '@/types/branch'
 import type {
@@ -1896,7 +1896,6 @@ function DispenseModal({
   const branchId = queueItem.branchId || ''
   const branchStock = stock.filter((s) => s.branchId === branchId)
   const [saving, setSaving] = useState(false)
-  const [showCashTenderModal, setShowCashTenderModal] = useState(false)
   const [pendingDispensePayload, setPendingDispensePayload] = useState<Array<{ medicineId: string; quantity: number }> | null>(null)
   const [pendingBillAmount, setPendingBillAmount] = useState(0)
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
@@ -2006,7 +2005,6 @@ function DispenseModal({
     const netTotalBill = taxable + taxable * taxPct
     setPendingDispensePayload(payload)
     setPendingBillAmount(netTotalBill)
-    setShowCashTenderModal(true)
   }
 
   const doDispenseWithCash = async (
@@ -2048,12 +2046,13 @@ function DispenseModal({
       const billTaxable = Math.max(0, billGross - billDiscount)
       const billTax = billTaxable * (taxPercent / 100)
       const billNet = billTaxable + billTax
+      const dispensedAtIso = new Date().toISOString()
       generateBillPDFAndPrint({
         type: 'prescription',
         patientName: queueItem.patientName,
         customerPhone: undefined,
         doctorName: queueItem.doctorName,
-        date: queueItem.appointmentDate,
+        date: dispensedAtIso,
         branchName: queueItem.branchName ?? queueItem.branchId ?? '',
         lines: billLines,
         grossTotal: billGross,
@@ -2061,9 +2060,9 @@ function DispenseModal({
         taxTotal: billTax,
         taxPercent,
         netTotal: billNet,
+        paymentMethod: 'cash',
       })
       setPendingDispensePayload(null)
-      setShowCashTenderModal(false)
       onSuccess()
       onClose()
     } catch (err: any) {
@@ -2096,12 +2095,6 @@ function DispenseModal({
 
   const content = (
     <>
-      <CashTenderModal
-        isOpen={showCashTenderModal}
-        onClose={() => { setShowCashTenderModal(false); setPendingDispensePayload(null) }}
-        billAmount={pendingBillAmount}
-        onConfirm={doDispenseWithCash}
-      />
       <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
         <div className="flex items-center gap-3">
           {inline && (
@@ -2120,7 +2113,7 @@ function DispenseModal({
           <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700 p-1 text-xl leading-none">✕</button>
         )}
       </div>
-        <div className="p-5 overflow-y-auto flex-1 min-h-0">
+      <div className="p-5 overflow-y-auto flex-1 min-h-0">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5 p-4 rounded-lg bg-slate-50 border border-slate-200">
           <div>
             <div className="text-xs text-slate-500 uppercase tracking-wide">Patient</div>
@@ -2455,7 +2448,6 @@ function PharmacyBillingPanel({
   const [lines, setLines] = useState<Array<{ medicineId: string; quantity: string; batchId?: string }>>([])
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
   const [scanMode, setScanMode] = useState<'scanner' | 'camera'>('scanner')
-  const [showCashTenderModal, setShowCashTenderModal] = useState(false)
   const [pendingDispensePayload, setPendingDispensePayload] = useState<{
     branchId: string
     customerName: string
@@ -2631,7 +2623,6 @@ function PharmacyBillingPanel({
         lines: payload,
       })
       setPendingBillAmount(net)
-      setShowCashTenderModal(true)
       return
     }
     setSaving(true)
@@ -2652,7 +2643,7 @@ function PharmacyBillingPanel({
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Sale failed')
       const branchName = selectedBranchName ?? branches.find((b) => b.id === effectiveBranchId)?.name ?? ''
-      const today = new Date().toISOString().slice(0, 10)
+      const billedAtIso = new Date().toISOString()
       const billLines = payload.map((p) => {
         const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
         const qty = p.quantity
@@ -2670,7 +2661,7 @@ function PharmacyBillingPanel({
         type: 'walk_in',
         patientName: customerName.trim(),
         customerPhone: customerPhone.trim(),
-        date: today,
+        date: billedAtIso,
         branchName,
         lines: billLines,
         grossTotal: gross,
@@ -2678,6 +2669,7 @@ function PharmacyBillingPanel({
         taxTotal: billTax,
         taxPercent,
         netTotal: net,
+        paymentMethod: paymentMode,
       })
       onSuccess()
       setCustomerName('')
@@ -2720,7 +2712,7 @@ function PharmacyBillingPanel({
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Sale failed')
       const branchName = selectedBranchName ?? branches.find((b) => b.id === pending.branchId)?.name ?? ''
-      const today = new Date().toISOString().slice(0, 10)
+      const billedAtIso = new Date().toISOString()
       const billLines = pending.lines.map((p) => {
         const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
         const qty = p.quantity
@@ -2738,7 +2730,7 @@ function PharmacyBillingPanel({
         type: 'walk_in',
         patientName: pending.customerName,
         customerPhone: pending.customerPhone,
-        date: today,
+        date: billedAtIso,
         branchName,
         lines: billLines,
         grossTotal: gross,
@@ -2746,9 +2738,9 @@ function PharmacyBillingPanel({
         taxTotal: billTax,
         taxPercent,
         netTotal: net,
+        paymentMethod: 'cash',
       })
       setPendingDispensePayload(null)
-      setShowCashTenderModal(false)
       onSuccess()
       setCustomerName('')
       setCustomerPhone('')
@@ -2777,15 +2769,10 @@ function PharmacyBillingPanel({
   const taxTotal = taxable * (taxPercent / 100)
   const netTotal = taxable + taxTotal
   const today = new Date().toISOString().slice(0, 10)
+  const showCashPanel = paymentMode === 'cash' && !!pendingDispensePayload && pendingBillAmount > 0
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0 bg-white rounded-xl border border-[#E5E7EB] shadow-sm overflow-hidden">
-      <CashTenderModal
-        isOpen={showCashTenderModal}
-        onClose={() => { setShowCashTenderModal(false); setPendingDispensePayload(null) }}
-        billAmount={pendingBillAmount}
-        onConfirm={doDispenseWithCash}
-      />
       {/* Universal patient / prescription search */}
       <div className="shrink-0 p-4 border-b border-[#E5E7EB] bg-white" ref={patientSearchRef}>
         <label className="block text-xs font-medium text-slate-500 mb-1">Search patient / prescription</label>
@@ -3012,8 +2999,8 @@ function PharmacyBillingPanel({
 
       {/* Order table */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <div className="p-4">
-          <table className="w-full text-sm table-fixed">
+        <div className="p-3">
+          <table className="w-full text-xs sm:text-sm table-fixed">
             <colgroup>
               <col className="w-[22%]" />
               <col className="w-[22%]" />
@@ -3024,14 +3011,14 @@ function PharmacyBillingPanel({
               <col className="w-[6%]" />
             </colgroup>
             <thead>
-              <tr className="border-b-2 border-[#E5E7EB] bg-slate-50/80">
-                <th className="text-left py-3 px-3 text-slate-600 font-semibold">Medicine</th>
-                <th className="text-left py-3 px-3 text-slate-600 font-semibold">Batch</th>
-                <th className="text-right py-3 px-3 text-slate-600 font-semibold">Expiry</th>
-                <th className="text-right py-3 px-3 text-slate-600 font-semibold">MRP</th>
-                <th className="text-right py-3 px-3 text-slate-600 font-semibold">Qty</th>
-                <th className="text-right py-3 px-3 text-slate-600 font-semibold">Amount</th>
-                <th className="py-3 px-2 text-center text-slate-600 font-semibold w-12" />
+              <tr className="border-b border-[#E5E7EB] bg-slate-50/80">
+                <th className="text-left py-2 px-3 text-slate-600 font-semibold">Medicine</th>
+                <th className="text-left py-2 px-3 text-slate-600 font-semibold">Batch</th>
+                <th className="text-right py-2 px-3 text-slate-600 font-semibold">Expiry</th>
+                <th className="text-right py-2 px-3 text-slate-600 font-semibold">MRP</th>
+                <th className="text-right py-2 px-3 text-slate-600 font-semibold">Qty</th>
+                <th className="text-right py-2 px-3 text-slate-600 font-semibold">Amount</th>
+                <th className="py-2 px-2 text-center text-slate-600 font-semibold w-12" />
               </tr>
             </thead>
             <tbody>
@@ -3060,7 +3047,7 @@ function PharmacyBillingPanel({
                       outOfStock ? 'bg-red-50/60' : ''
                     }`}
                   >
-                    <td className="py-2.5 px-4 align-middle">
+                    <td className="py-1.5 px-3 align-middle">
                       <div className="space-y-0.5">
                         <span
                           className="block font-medium text-slate-900 truncate"
@@ -3087,12 +3074,12 @@ function PharmacyBillingPanel({
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-4 align-middle">
+                    <td className="py-1.5 px-3 align-middle">
                       {batches.length > 1 ? (
                         <select
                           value={line.batchId ?? ''}
                           onChange={(e) => updateLine(idx, 'batchId', e.target.value)}
-                          className="w-full max-w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs text-slate-700 focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] min-w-0"
+                          className="w-full max-w-full rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[11px] text-slate-700 focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] min-w-0"
                           title="Batch"
                         >
                           {batches.map((b) => (
@@ -3100,7 +3087,7 @@ function PharmacyBillingPanel({
                           ))}
                         </select>
                       ) : batches.length === 1 ? (
-                        <div className="text-slate-600 text-xs">
+                        <div className="text-slate-600 text-[11px]">
                           <span className="font-medium text-slate-700">{batches[0].batchNumber}</span>
                           <div className="mt-1 text-[10px] text-slate-500">Mfg: {formatDate(batches[0].manufacturingDate)}</div>
                           {(() => {
@@ -3113,16 +3100,16 @@ function PharmacyBillingPanel({
                           })()}
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-xs">—</span>
+                        <span className="text-slate-400 text-[11px]">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-4 text-right text-xs text-slate-700 align-middle tabular-nums">
+                    <td className="py-1.5 px-3 text-right text-[11px] text-slate-700 align-middle tabular-nums">
                       {selectedBatch ? formatDate(selectedBatch.expiryDate) : '—'}
                     </td>
-                    <td className="py-2.5 px-4 text-right tabular-nums text-slate-700 font-medium align-middle">
+                    <td className="py-1.5 px-3 text-right tabular-nums text-slate-700 font-medium align-middle">
                       ₹{rate.toFixed(2)}
                     </td>
-                    <td className="py-2.5 px-4 text-right align-middle">
+                    <td className="py-1.5 px-3 text-right align-middle">
                       <div className="flex flex-col items-end gap-0.5">
                         <input
                           type="text"
@@ -3132,7 +3119,7 @@ function PharmacyBillingPanel({
                           onChange={(e) => handleQtyChange(e.target.value)}
                           placeholder="0"
                           disabled={outOfStock}
-                          className={`w-16 rounded-full border px-3 py-1.5 text-sm text-right font-medium focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] ${
+                          className={`w-16 rounded-full border px-2.5 py-1 text-xs text-right font-medium focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] ${
                             outOfStock ? 'border-red-200 bg-slate-100 text-slate-500 cursor-not-allowed' : 'border-[#E5E7EB] text-slate-800'
                           }`}
                         />
@@ -3144,10 +3131,10 @@ function PharmacyBillingPanel({
                         </span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-slate-900 align-middle">
+                    <td className="py-1.5 px-3 text-right tabular-nums font-semibold text-slate-900 align-middle">
                       ₹{amount.toFixed(2)}
                     </td>
-                    <td className="py-2.5 px-2 text-center align-middle">
+                    <td className="py-1.5 px-2 text-center align-middle">
                       <button
                         type="button"
                         onClick={() => removeLine(idx)}
@@ -3163,9 +3150,11 @@ function PharmacyBillingPanel({
             </tbody>
           </table>
           {lines.length === 0 && (
-            <p className="py-8 text-center text-slate-400 text-sm">Search and add medicines above. Use barcode scanner or type name.</p>
+            <p className="py-8 text-center text-slate-400 text-sm">
+              Search and add medicines above. Use barcode scanner or type name.
+            </p>
           )}
-          {/* Removed \"Add more medicine\" button; use search/scan above to add items */}
+          {/* Removed "Add more medicine" button; use search/scan above to add items */}
         </div>
       </div>
 
@@ -3224,11 +3213,30 @@ function PharmacyBillingPanel({
             type="submit"
             disabled={saving || !canCompleteSale || !hasActiveSession}
             className="ml-auto rounded-full bg-[#2563EB] text-white font-semibold py-2.5 px-6 text-xs sm:text-sm hover:bg-[#1d4ed8] disabled:opacity-50 disabled:cursor-not-allowed transition"
-            title={!hasActiveSession ? 'Start a cash session first (Cash & expenses → Start shift)' : !canCompleteSale && orderLines.length > 0 ? 'Reduce quantity to available stock or remove out-of-stock items' : ''}
+            title={
+              !hasActiveSession
+                ? 'Start a cash session first (Cash & expenses → Start shift)'
+                : !canCompleteSale && orderLines.length > 0
+                  ? 'Reduce quantity to available stock or remove out-of-stock items'
+                  : paymentMode === 'cash'
+                    ? 'After this, use the inline cash panel below to confirm payment and complete billing.'
+                    : ''
+            }
           >
-            {saving ? 'Processing…' : 'Complete sale & print bill'}
+            {saving ? 'Processing…' : paymentMode === 'cash' ? 'Review & open cash panel' : 'Complete sale & print bill'}
           </button>
         </div>
+
+        {showCashPanel && (
+          <div className="mt-3">
+            <CashPaymentPanel
+              billAmount={pendingBillAmount}
+              onConfirm={doDispenseWithCash}
+              confirmLabel="Confirm & complete sale"
+              onCancel={() => setPendingDispensePayload(null)}
+            />
+          </div>
+        )}
       </div>
     </form>
   )
@@ -3271,7 +3279,6 @@ function WalkInSaleForm({
   const [lines, setLines] = useState<Array<{ medicineId: string; quantity: string }>>([{ medicineId: '', quantity: '' }])
   const [scanMode, setScanMode] = useState<'scanner' | 'camera'>('scanner')
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
-  const [showCashTenderModal, setShowCashTenderModal] = useState(false)
   const [pendingDispensePayload, setPendingDispensePayload] = useState<{
     branchId: string
     customerName: string
@@ -3363,7 +3370,6 @@ function WalkInSaleForm({
         lines: payload,
       })
       setPendingBillAmount(net)
-      setShowCashTenderModal(true)
       return
     }
     setSaving(true)
@@ -3384,7 +3390,7 @@ function WalkInSaleForm({
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Sale failed')
       const branchName = selectedBranchName ?? branches.find((b) => b.id === effectiveBranchId)?.name ?? ''
-      const today = new Date().toISOString().slice(0, 10)
+      const billedAtIso = new Date().toISOString()
       const billLines = payload.map((p) => {
         const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
         const qty = p.quantity
@@ -3402,7 +3408,7 @@ function WalkInSaleForm({
         type: 'walk_in',
         patientName: customerName.trim(),
         customerPhone: customerPhone.trim(),
-        date: today,
+        date: billedAtIso,
         branchName,
         lines: billLines,
         grossTotal: gross,
@@ -3410,6 +3416,7 @@ function WalkInSaleForm({
         taxTotal: billTax,
         taxPercent,
         netTotal: net,
+        paymentMethod: paymentMode,
       })
       onSuccess()
       setCustomerName(''); setCustomerPhone(''); setTaxPercent(0); setDiscountAmount(0); setLines([{ medicineId: '', quantity: '' }])
@@ -3448,7 +3455,7 @@ function WalkInSaleForm({
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Sale failed')
       const branchName = selectedBranchName ?? branches.find((b) => b.id === pending.branchId)?.name ?? ''
-      const today = new Date().toISOString().slice(0, 10)
+      const billedAtIso = new Date().toISOString()
       const billLines = pending.lines.map((p) => {
         const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
         const qty = p.quantity
@@ -3466,7 +3473,7 @@ function WalkInSaleForm({
         type: 'walk_in',
         patientName: pending.customerName,
         customerPhone: pending.customerPhone,
-        date: today,
+        date: billedAtIso,
         branchName,
         lines: billLines,
         grossTotal: gross,
@@ -3474,9 +3481,9 @@ function WalkInSaleForm({
         taxTotal: billTax,
         taxPercent,
         netTotal: net,
+        paymentMethod: 'cash',
       })
       setPendingDispensePayload(null)
-      setShowCashTenderModal(false)
       onSuccess()
       setCustomerName(''); setCustomerPhone(''); setTaxPercent(0); setDiscountAmount(0); setLines([{ medicineId: '', quantity: '' }])
     } catch (err: any) {
@@ -3499,12 +3506,6 @@ function WalkInSaleForm({
   const today = new Date().toISOString().slice(0, 10)
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <CashTenderModal
-        isOpen={showCashTenderModal}
-        onClose={() => { setShowCashTenderModal(false); setPendingDispensePayload(null) }}
-        billAmount={pendingBillAmount}
-        onConfirm={doDispenseWithCash}
-      />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
         <div>
           <label className="text-xs text-slate-500 uppercase tracking-wide">Customer name</label>
@@ -4323,6 +4324,21 @@ export default function PharmacyManagement() {
     if (!activeCashSession) lastPreFilledSessionIdRef.current = null
   }, [activeCashSession])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored =
+      window.localStorage.getItem('pharmacyPrinterIds') ||
+      window.localStorage.getItem('pharmacyPrinterId') ||
+      window.localStorage.getItem('printerId') ||
+      ''
+    setDefaultPrinterId(stored)
+    const bridgeStored =
+      window.localStorage.getItem('pharmacyPrintBridgeUrl') ||
+      window.localStorage.getItem('printBridgeUrl') ||
+      ''
+    setPrintBridgeUrl(bridgeStored)
+  }, [])
+
   const [expenseCategories, setExpenseCategories] = useState<import('@/types/pharmacy').PharmacyExpenseCategory[]>([])
   const [expenses, setExpenses] = useState<import('@/types/pharmacy').PharmacyExpense[]>([])
   const [expenseFilters, setExpenseFilters] = useState<{ dateFrom: string; dateTo: string; categoryId: string; paymentMethod: string }>({
@@ -4337,6 +4353,8 @@ export default function PharmacyManagement() {
     paymentMethod: 'cash',
     note: '',
   })
+  const [defaultPrinterId, setDefaultPrinterId] = useState('')
+  const [printBridgeUrl, setPrintBridgeUrl] = useState('')
   type CashExpensePeriod = 'today' | 'week' | 'month' | 'year'
   const [cashExpensePeriod, setCashExpensePeriod] = useState<CashExpensePeriod>('today')
   type CashExpenseSubTab = 'shift' | 'daily'
@@ -7635,6 +7653,77 @@ export default function PharmacyManagement() {
 
         {subTab === 'cash_and_expenses' && (
           <div className="space-y-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900">Billing printer settings</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Save printer ID once. Bills auto-open print flow when configured; otherwise PDF downloads.
+                  </p>
+                </div>
+                <div className="w-full sm:w-[460px]">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Default printer ID</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={defaultPrinterId}
+                      onChange={(e) => setDefaultPrinterId(e.target.value)}
+                      placeholder="e.g. HP-LaserJet-1, EPSON-TM-T82, Canon-FrontDesk"
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window === 'undefined') return
+                        const ids = defaultPrinterId
+                          .split(/[\n,]/g)
+                          .map((v) => v.trim())
+                          .filter(Boolean)
+                        if (ids.length > 0) {
+                          window.localStorage.setItem('pharmacyPrinterIds', ids.join(','))
+                          window.localStorage.setItem('pharmacyPrinterId', ids[0])
+                          setSuccess(`Saved ${ids.length} printer ID${ids.length > 1 ? 's' : ''}.`)
+                        } else {
+                          window.localStorage.removeItem('pharmacyPrinterIds')
+                          window.localStorage.removeItem('pharmacyPrinterId')
+                          setSuccess('Default printer ID cleared. Bills will download as PDF.')
+                        }
+                      }}
+                      className="rounded-lg bg-[#2563EB] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1d4ed8] transition"
+                    >
+                      Save
+                    </button>
+                  </div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1 mt-3">Print bridge URL (Phase 2)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={printBridgeUrl}
+                      onChange={(e) => setPrintBridgeUrl(e.target.value)}
+                      placeholder="e.g. http://localhost:3210/print"
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window === 'undefined') return
+                        const url = printBridgeUrl.trim()
+                        if (url) {
+                          window.localStorage.setItem('pharmacyPrintBridgeUrl', url)
+                          setSuccess('Print bridge URL saved.')
+                        } else {
+                          window.localStorage.removeItem('pharmacyPrintBridgeUrl')
+                          setSuccess('Print bridge URL cleared.')
+                        }
+                      }}
+                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                    >
+                      Save URL
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
             {/* Cash & Expenses sub-tabs – professional tab bar */}
             <div className="border-b border-slate-200 bg-white">
               <div className="flex gap-0" role="tablist" aria-label="Cash & Expenses views">

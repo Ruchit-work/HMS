@@ -850,7 +850,306 @@ function createPrescriptionDocument(appointment: Appointment, options: Prescript
 }
 
 export function generatePrescriptionPDF(appointment: Appointment) {
-  createPrescriptionDocument(appointment, { forPreview: false })
+  if (typeof window === "undefined") return
+  void generatePrescriptionPDFWithHtml(appointment)
+}
+
+function escapeHtmlText(value: string): string {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function sanitizeFileSegment(value: string, fallback: string): string {
+  const cleaned = String(value || "")
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+  return cleaned || fallback
+}
+
+function buildPrescriptionHTML(appointment: Appointment): string {
+  const createdDate = appointment.updatedAt || appointment.createdAt
+  const patientAge = appointment.patientDateOfBirth ? calculateAge(appointment.patientDateOfBirth) : null
+  const consultationDate = formatDate(appointment.appointmentDate)
+  const consultationTime = safeText(appointment.appointmentTime, "Not set")
+  const parsed = parsePrescriptionText(appointment.medicine)
+  const rows = (parsed?.medicines || []).map((med, idx) => {
+    const freq = med.frequency ? formatFrequencyForPdf(sanitizeForPdf(med.frequency)) : "As advised"
+    return `
+      <tr>
+        <td class="num">${idx + 1}</td>
+        <td>${escapeHtmlText(sanitizeForPdf(med.name || "Medicine"))}</td>
+        <td>${escapeHtmlText(sanitizeForPdf(med.dosage || "—"))}</td>
+        <td>${escapeHtmlText(sanitizeForPdf(freq || "As advised"))}</td>
+        <td>${escapeHtmlText(sanitizeForPdf(med.duration || "As advised"))}</td>
+      </tr>
+    `
+  }).join("")
+
+  const fallbackRow = `
+    <tr>
+      <td class="num">1</td>
+      <td>${escapeHtmlText(sanitizeForPdf(appointment.medicine || "Not provided"))}</td>
+      <td>—</td>
+      <td>As advised</td>
+      <td>As advised</td>
+    </tr>
+  `
+
+  const advice = escapeHtmlText(
+    sanitizeForPdf(parsed?.advice || appointment.doctorNotes || "Take medicines as directed by your doctor.")
+  )
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prescription</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 14px;
+      background: #eef2f7;
+      color: #0f172a;
+      font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .sheet {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #dbe4ef;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(2, 6, 23, 0.08);
+      overflow: hidden;
+    }
+    .header {
+      padding: 16px 20px;
+      background: linear-gradient(110deg, #0f4c81 0%, #155e75 58%, #0f766e 100%);
+      color: #fff;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: start;
+    }
+    .title { font-size: 24px; font-weight: 700; letter-spacing: 0.3px; margin: 0; }
+    .subtitle { margin-top: 4px; color: rgba(255,255,255,.88); font-size: 12px; }
+    .meta { text-align: right; font-size: 12px; }
+    .meta .row { margin: 2px 0; color: rgba(255,255,255,.9); }
+    .meta b { color: #fff; font-weight: 600; }
+    .section {
+      margin: 14px 20px 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #f8fafc;
+      padding: 12px;
+    }
+    .section h3 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .35px;
+      color: #334155;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 18px;
+    }
+    .field b { color: #0f172a; font-weight: 600; }
+    .field span { color: #334155; }
+    .table-wrap { margin: 14px 20px 0; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+    th, td { border-bottom: 1px solid #e2e8f0; padding: 9px 8px; text-align: left; vertical-align: top; }
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 600;
+      border-top: 1px solid #e2e8f0;
+    }
+    th:first-child, td:first-child { border-left: 1px solid #e2e8f0; width: 8%; }
+    th:last-child, td:last-child { border-right: 1px solid #e2e8f0; width: 17%; }
+    td:nth-child(2) { width: 30%; word-break: break-word; overflow-wrap: anywhere; }
+    td:nth-child(3), td:nth-child(4), td:nth-child(5) { word-break: break-word; overflow-wrap: anywhere; }
+    tr:nth-child(even) td { background: #fcfdff; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .advice {
+      margin: 12px 20px 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #f8fafc;
+      padding: 10px 12px;
+      color: #334155;
+    }
+    .advice b { color: #0f172a; }
+    .footer {
+      margin: 14px 20px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    .muted { color: #64748b; font-size: 11.5px; }
+    .sign {
+      min-width: 180px;
+      text-align: center;
+      border-top: 1px solid #94a3b8;
+      padding-top: 6px;
+      color: #475569;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    @page { size: A4; margin: 10mm; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .sheet { max-width: none; box-shadow: none; border-radius: 0; border: 0; }
+      tr, td, th { break-inside: avoid; page-break-inside: avoid; }
+      thead { display: table-header-group; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet" id="prescription-root">
+    <section class="header">
+      <div>
+        <h1 class="title">Prescription</h1>
+        <div class="subtitle">Clinical Medication Summary</div>
+      </div>
+      <div class="meta">
+        <div class="row"><b>Prescription ID:</b> ${escapeHtmlText(safeText(appointment.id?.substring(0, 12)?.toUpperCase(), "N/A"))}</div>
+        <div class="row"><b>Date:</b> ${escapeHtmlText(formatDate(createdDate))}</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h3>Patient Information</h3>
+      <div class="grid">
+        <div class="field"><b>Name:</b> <span>${escapeHtmlText(safeText(appointment.patientName))}</span></div>
+        <div class="field"><b>Patient ID:</b> <span>${escapeHtmlText(safeText(appointment.patientId, "N/A"))}</span></div>
+        <div class="field"><b>Age:</b> <span>${escapeHtmlText(patientAge != null ? String(patientAge) : "Not available")}</span></div>
+        <div class="field"><b>Gender:</b> <span>${escapeHtmlText(safeText(appointment.patientGender, "Not specified"))}</span></div>
+        <div class="field"><b>Phone:</b> <span>${escapeHtmlText(safeText(appointment.patientPhone))}</span></div>
+        <div class="field"><b>Blood Group:</b> <span>${escapeHtmlText(safeText(appointment.patientBloodGroup, "Not specified"))}</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h3>Doctor Information</h3>
+      <div class="grid">
+        <div class="field"><b>Doctor:</b> <span>Dr. ${escapeHtmlText(safeText(appointment.doctorName))}</span></div>
+        <div class="field"><b>Specialization:</b> <span>${escapeHtmlText(safeText(appointment.doctorSpecialization))}</span></div>
+        <div class="field"><b>Consultation Date:</b> <span>${escapeHtmlText(consultationDate)}</span></div>
+        <div class="field"><b>Consultation Time:</b> <span>${escapeHtmlText(consultationTime)}</span></div>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="num">No.</th>
+            <th>Medicine</th>
+            <th>Dosage</th>
+            <th>Frequency</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows || fallbackRow}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="advice"><b>Advice:</b> ${advice}</section>
+
+    <footer class="footer">
+      <div class="muted">This is a computer-generated prescription.</div>
+      <div class="sign">Authorised Sign</div>
+    </footer>
+  </div>
+</body>
+</html>`
+}
+
+async function ensureHtml2PdfLoadedForPrescription(): Promise<any> {
+  if (typeof window === "undefined") return null
+  const w = window as Window & { html2pdf?: any }
+  if (w.html2pdf) return w.html2pdf
+  try {
+    const mod = await import("html2pdf.js")
+    const html2pdf = (mod as any)?.default ?? (mod as any)
+    if (typeof html2pdf === "function") {
+      w.html2pdf = html2pdf
+      return html2pdf
+    }
+  } catch {
+    // ignore and throw below
+  }
+  throw new Error("Failed to load html2pdf.js")
+}
+
+async function generatePrescriptionPDFWithHtml(appointment: Appointment): Promise<void> {
+  const html2pdf = await ensureHtml2PdfLoadedForPrescription()
+  if (!html2pdf) throw new Error("html2pdf.js is not available")
+
+  const wrapper = document.createElement("div")
+  wrapper.style.position = "fixed"
+  wrapper.style.left = "-100000px"
+  wrapper.style.top = "0"
+  wrapper.style.width = "210mm"
+  wrapper.style.background = "#ffffff"
+  wrapper.innerHTML = buildPrescriptionHTML(appointment)
+  document.body.appendChild(wrapper)
+
+  const element = wrapper.querySelector("#prescription-root") as HTMLElement | null
+  if (!element) {
+    document.body.removeChild(wrapper)
+    throw new Error("Unable to build prescription template")
+  }
+
+  const patientPart = sanitizeFileSegment(safeText(appointment.patientName, "Patient"), "Patient")
+  const datePart = sanitizeFileSegment(String(appointment.appointmentDate || ""), String(Date.now()))
+  const filename = `Prescription_${patientPart}_${datePart}.pdf`
+
+  const options = {
+    margin: [6, 6, 6, 6],
+    filename,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      letterRendering: true,
+      scrollX: 0,
+      scrollY: 0,
+    },
+    jsPDF: {
+      unit: "mm",
+      format: "a4",
+      orientation: "portrait",
+      compress: true,
+    },
+    pagebreak: {
+      mode: ["css", "legacy"],
+      avoid: ["tr", "td", ".section", ".advice", ".footer"],
+    },
+  }
+
+  try {
+    await html2pdf().set(options).from(element).save()
+  } finally {
+    document.body.removeChild(wrapper)
+  }
 }
 
 /**
@@ -862,300 +1161,4 @@ export function getPrescriptionPDFBuffer(appointment: Appointment): Buffer {
   return Buffer.from(output as ArrayBuffer)
 }
 
-export function previewPrescriptionPDF(appointment: Appointment) {
-  const doc = createPrescriptionDocument(appointment, { forPreview: true })
-  const pdfBlob = doc.output('blob')
-  const url = URL.createObjectURL(pdfBlob)
-  window.open(url, '_blank')
-}
-
-// ============================================================================
-// Patient Reports PDF
-// ============================================================================
-
-interface AppointmentData {
-  id: string
-  appointmentDate: string
-  appointmentTime: string
-  doctorName: string
-  doctorSpecialization: string
-  status: string
-  chiefComplaint?: string
-  totalConsultationFee?: number
-  paymentStatus?: string
-  paymentAmount?: number
-}
-
-interface PatientReportData {
-  id: string
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  gender: string
-  bloodGroup: string
-  address: string
-  dateOfBirth: string
-  createdAt: string
-  status: string
-  defaultBranchName?: string
-  appointments?: AppointmentData[]
-  totalAppointments?: number
-}
-
-interface PatientReportOptions {
-  title: string
-  dateRange: string
-  totalPatients: number
-}
-
-export function generatePatientReportPDF(
-  patients: PatientReportData[],
-  options: PatientReportOptions
-): string {
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const pageWidth = pdf.internal.pageSize.getWidth()
-  const pageHeight = pdf.internal.pageSize.getHeight()
-  const margin = 15
-  let yPos = margin
-
-  // Header
-  pdf.setFillColor(45, 55, 72)
-  pdf.rect(0, 0, pageWidth, 50, 'F')
-  pdf.setTextColor(255, 255, 255)
-  pdf.setFontSize(24)
-  pdf.setFont('helvetica', 'bold')
-  pdf.text('Patient Report', pageWidth / 2, 20, { align: 'center' })
-
-  pdf.setFontSize(12)
-  pdf.setFont('helvetica', 'normal')
-  pdf.text(options.title, pageWidth / 2, 32, { align: 'center' })
-  pdf.text(`Date Range: ${options.dateRange}`, pageWidth / 2, 38, { align: 'center' })
-  pdf.text(`Total Patients: ${options.totalPatients}`, pageWidth / 2, 44, { align: 'center' })
-
-  yPos = 60
-
-  // Table headers
-  const colWidths = [25, 40, 50, 35, 30, 25, 35, 45, 30]
-  const headers = ['S.No', 'Name', 'Email', 'Phone', 'Gender', 'DOB', 'Blood Group', 'Address', 'Status']
-  const startX = margin
-
-  pdf.setFillColor(241, 245, 249)
-  pdf.rect(startX, yPos, pageWidth - 2 * margin, 12, 'F')
-  pdf.setDrawColor(203, 213, 225)
-  pdf.rect(startX, yPos, pageWidth - 2 * margin, 12)
-
-  pdf.setTextColor(30, 41, 59)
-  pdf.setFontSize(9)
-  pdf.setFont('helvetica', 'bold')
-
-  let currentX = startX + 2
-  headers.forEach((header, index) => {
-    pdf.text(header, currentX, yPos + 8)
-    currentX += colWidths[index]
-  })
-
-  yPos += 15
-
-  // Table rows
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8)
-  pdf.setTextColor(71, 85, 105)
-
-  patients.forEach((patient, index) => {
-    // Check if we need a new page
-    if (yPos > pageHeight - 30) {
-      pdf.addPage()
-      yPos = margin
-
-      // Redraw headers on new page
-      pdf.setFillColor(241, 245, 249)
-      pdf.rect(startX, yPos, pageWidth - 2 * margin, 12, 'F')
-      pdf.setDrawColor(203, 213, 225)
-      pdf.rect(startX, yPos, pageWidth - 2 * margin, 12)
-
-      pdf.setTextColor(30, 41, 59)
-      pdf.setFontSize(9)
-      pdf.setFont('helvetica', 'bold')
-      currentX = startX + 2
-      headers.forEach((header) => {
-        pdf.text(header, currentX, yPos + 8)
-        currentX += colWidths[headers.indexOf(header)]
-      })
-      yPos += 15
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(8)
-      pdf.setTextColor(71, 85, 105)
-    }
-
-    const rowData = [
-      String(index + 1),
-      `${patient.firstName} ${patient.lastName}`.substring(0, 18),
-      patient.email?.substring(0, 22) || 'N/A',
-      patient.phone?.substring(0, 12) || 'N/A',
-      patient.gender || 'N/A',
-      patient.dateOfBirth ? formatDate(patient.dateOfBirth, { year: 'numeric', month: '2-digit', day: '2-digit' }) : 'N/A',
-      patient.bloodGroup || 'N/A',
-      patient.address?.substring(0, 25) || 'N/A',
-      String(patient.totalAppointments || patient.appointments?.length || 0),
-      patient.status || 'active'
-    ]
-
-    // Draw row background (alternate colors)
-    if (index % 2 === 0) {
-      pdf.setFillColor(255, 255, 255)
-    } else {
-      pdf.setFillColor(249, 250, 251)
-    }
-    pdf.rect(startX, yPos - 5, pageWidth - 2 * margin, 10, 'F')
-    pdf.setDrawColor(226, 232, 240)
-    pdf.rect(startX, yPos - 5, pageWidth - 2 * margin, 10)
-
-    currentX = startX + 2
-    rowData.forEach((cell, cellIndex) => {
-      const lines = pdf.splitTextToSize(cell, colWidths[cellIndex] - 2)
-      pdf.text(lines[0] || '', currentX, yPos)
-      currentX += colWidths[cellIndex]
-    })
-
-    yPos += 10
-  })
-
-  // Add appointment details section if any patient has appointments
-  const patientsWithAppointments = patients.filter(p => p.appointments && p.appointments.length > 0)
-  if (patientsWithAppointments.length > 0) {
-    // Check if we need a new page
-    if (yPos > pageHeight - 100) {
-      pdf.addPage()
-      yPos = margin
-    }
-
-    yPos += 15
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(14)
-    pdf.setTextColor(30, 41, 59)
-    pdf.text('Appointment Details', startX, yPos)
-    yPos += 10
-
-    patientsWithAppointments.forEach((patient) => {
-      if (!patient.appointments || patient.appointments.length === 0) return
-
-      // Check if we need a new page
-      if (yPos > pageHeight - 60) {
-        pdf.addPage()
-        yPos = margin
-      }
-
-      // Patient name header
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(11)
-      pdf.setTextColor(30, 41, 59)
-      pdf.text(`${patient.firstName} ${patient.lastName} (${patient.totalAppointments || patient.appointments.length} appointment${(patient.totalAppointments || patient.appointments.length) > 1 ? 's' : ''})`, startX, yPos)
-      yPos += 8
-
-      // Appointment table headers
-      const aptColWidths = [30, 25, 45, 40, 25, 30, 35]
-      const aptHeaders = ['Date', 'Time', 'Doctor', 'Specialization', 'Status', 'Fee', 'Payment']
-      
-      pdf.setFillColor(241, 245, 249)
-      pdf.rect(startX, yPos, pageWidth - 2 * margin, 10, 'F')
-      pdf.setDrawColor(203, 213, 225)
-      pdf.rect(startX, yPos, pageWidth - 2 * margin, 10)
-
-      pdf.setTextColor(30, 41, 59)
-      pdf.setFontSize(8)
-      pdf.setFont('helvetica', 'bold')
-
-      let currentX = startX + 2
-      aptHeaders.forEach((header, idx) => {
-        pdf.text(header, currentX, yPos + 7)
-        currentX += aptColWidths[idx]
-      })
-
-      yPos += 12
-
-      // Appointment rows (show first 5, or all if fewer)
-      const appointmentsToShow = patient.appointments.slice(0, 5)
-      appointmentsToShow.forEach((apt, aptIndex) => {
-        if (yPos > pageHeight - 30) {
-          pdf.addPage()
-          yPos = margin + 10
-          
-          // Redraw headers
-          pdf.setFillColor(241, 245, 249)
-          pdf.rect(startX, yPos, pageWidth - 2 * margin, 10, 'F')
-          pdf.setDrawColor(203, 213, 225)
-          pdf.rect(startX, yPos, pageWidth - 2 * margin, 10)
-          
-          currentX = startX + 2
-          aptHeaders.forEach((header) => {
-            pdf.text(header, currentX, yPos + 7)
-            currentX += aptColWidths[aptHeaders.indexOf(header)]
-          })
-          yPos += 12
-        }
-
-        pdf.setFont('helvetica', 'normal')
-        pdf.setFontSize(7.5)
-        pdf.setTextColor(71, 85, 105)
-
-        // Row background
-        if (aptIndex % 2 === 0) {
-          pdf.setFillColor(255, 255, 255)
-        } else {
-          pdf.setFillColor(249, 250, 251)
-        }
-        pdf.rect(startX, yPos - 4, pageWidth - 2 * margin, 8, 'F')
-        pdf.setDrawColor(226, 232, 240)
-        pdf.rect(startX, yPos - 4, pageWidth - 2 * margin, 8)
-
-        const aptRowData = [
-          formatDate(apt.appointmentDate, { year: 'numeric', month: '2-digit', day: '2-digit' }),
-          apt.appointmentTime?.substring(0, 5) || 'N/A',
-          apt.doctorName?.substring(0, 20) || 'N/A',
-          apt.doctorSpecialization?.substring(0, 18) || 'N/A',
-          apt.status || 'pending',
-          apt.totalConsultationFee ? `₹${apt.totalConsultationFee}` : 'N/A',
-          apt.paymentStatus || 'pending'
-        ]
-
-        currentX = startX + 2
-        aptRowData.forEach((cell, cellIndex) => {
-          const lines = pdf.splitTextToSize(cell, aptColWidths[cellIndex] - 2)
-          pdf.text(lines[0] || '', currentX, yPos)
-          currentX += aptColWidths[cellIndex]
-        })
-
-        yPos += 9
-      })
-
-      if (patient.appointments.length > 5) {
-        pdf.setFont('helvetica', 'italic')
-        pdf.setFontSize(7)
-        pdf.setTextColor(148, 163, 184)
-        pdf.text(`... and ${patient.appointments.length - 5} more appointment(s)`, startX + 2, yPos)
-        yPos += 6
-      }
-
-      yPos += 5
-    })
-  }
-
-  // Footer
-  const footerY = pageHeight - 15
-  pdf.setDrawColor(203, 213, 225)
-  pdf.line(margin, footerY, pageWidth - margin, footerY)
-
-  pdf.setFontSize(8)
-  pdf.setTextColor(148, 163, 184)
-  pdf.setFont('helvetica', 'italic')
-  pdf.text(
-    `Generated on: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`,
-    pageWidth / 2,
-    footerY + 8,
-    { align: 'center' }
-  )
-
-  return pdf.output('datauristring')
-}
 

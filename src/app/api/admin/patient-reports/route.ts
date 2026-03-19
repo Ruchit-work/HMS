@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/firebase/apiAuth"
 import { getHospitalCollectionPath, getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
-import { generatePatientReportPDF } from "@/utils/documents/pdfGenerators"
 import { generatePatientReportExcel } from "@/utils/documents/excelGenerators"
 
 interface AppointmentData {
@@ -118,6 +117,256 @@ function formatDateRange(filterType: string, startDate?: string, endDate?: strin
   })
   
   return `${startStr} - ${endStr}`
+}
+
+function escapeHtml(input: string): string {
+  return String(input ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function formatINR(value?: number): string {
+  const amount = Number(value || 0)
+  return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function buildPatientReportHTML(
+  patients: PatientReportData[],
+  options: { title: string; dateRange: string; totalPatients: number }
+): string {
+  const patientRows = patients.map((patient, index) => {
+    const name = `${patient.firstName || ""} ${patient.lastName || ""}`.trim() || "N/A"
+    return `
+      <tr>
+        <td class="num">${index + 1}</td>
+        <td>${escapeHtml(name)}</td>
+        <td>${escapeHtml(patient.email || "N/A")}</td>
+        <td>${escapeHtml(patient.phone || "N/A")}</td>
+        <td>${escapeHtml(patient.gender || "N/A")}</td>
+        <td>${escapeHtml(patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString("en-IN") : "N/A")}</td>
+        <td>${escapeHtml(patient.bloodGroup || "N/A")}</td>
+        <td>${escapeHtml(patient.address || "N/A")}</td>
+        <td>${escapeHtml(String(patient.totalAppointments || patient.appointments?.length || 0))}</td>
+        <td>${escapeHtml(patient.status || "active")}</td>
+      </tr>
+    `
+  }).join("")
+
+  const appointmentSections = patients
+    .filter((p) => p.appointments && p.appointments.length > 0)
+    .map((patient) => {
+      const name = `${patient.firstName || ""} ${patient.lastName || ""}`.trim() || "Patient"
+      const appointments = (patient.appointments || []).slice(0, 8)
+      const rows = appointments.map((apt) => `
+        <tr>
+          <td>${escapeHtml(apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString("en-IN") : "N/A")}</td>
+          <td>${escapeHtml(apt.appointmentTime || "N/A")}</td>
+          <td>${escapeHtml(apt.doctorName || "N/A")}</td>
+          <td>${escapeHtml(apt.doctorSpecialization || "N/A")}</td>
+          <td>${escapeHtml(apt.status || "pending")}</td>
+          <td class="num">${formatINR(apt.totalConsultationFee || apt.paymentAmount || 0)}</td>
+          <td>${escapeHtml(apt.paymentStatus || "pending")}</td>
+        </tr>
+      `).join("")
+      const remaining = Math.max(0, (patient.appointments?.length || 0) - appointments.length)
+
+      return `
+        <section class="detail-card">
+          <h3>${escapeHtml(name)} (${patient.totalAppointments || patient.appointments?.length || 0} appointment${(patient.totalAppointments || patient.appointments?.length || 0) > 1 ? "s" : ""})</h3>
+          <table class="detail-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Doctor</th>
+                <th>Specialization</th>
+                <th>Status</th>
+                <th class="num">Fee</th>
+                <th>Payment</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          ${remaining > 0 ? `<p class="more">... and ${remaining} more appointment(s)</p>` : ""}
+        </section>
+      `
+    })
+    .join("")
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Patient Report</title>
+  <style>
+    :root {
+      --border: #dbe4ef;
+      --text: #0f172a;
+      --muted: #475569;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 14px;
+      background: #eef2f7;
+      color: var(--text);
+      font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .sheet {
+      max-width: 1120px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(2, 6, 23, 0.08);
+    }
+    .header {
+      background: linear-gradient(110deg, #0f4c81 0%, #155e75 60%, #0f766e 100%);
+      color: #fff;
+      padding: 18px 22px;
+    }
+    .header h1 { margin: 0; font-size: 26px; font-weight: 700; }
+    .header p { margin: 5px 0 0; color: rgba(255,255,255,.9); font-size: 12px; }
+    .summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin: 12px 22px 0;
+    }
+    .summary .item {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      border-radius: 10px;
+      padding: 9px 10px;
+    }
+    .summary .label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
+    .summary .value { margin-top: 3px; font-size: 13px; font-weight: 600; color: #0f172a; }
+    .table-wrap { margin: 14px 22px 0; overflow: visible; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+    th, td {
+      border-bottom: 1px solid #e2e8f0;
+      border-left: 1px solid #e2e8f0;
+      padding: 8px 6px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    th:last-child, td:last-child { border-right: 1px solid #e2e8f0; }
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-size: 11px;
+      font-weight: 600;
+      border-top: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+    td { font-size: 11.5px; color: #334155; }
+    tr:nth-child(even) td { background: #fcfdff; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .details { margin: 14px 22px 0; }
+    .details h2 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .detail-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+      margin-bottom: 10px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .detail-card h3 { margin: 0 0 7px; font-size: 12px; color: #0f172a; }
+    .detail-table th, .detail-table td { font-size: 11px; padding: 7px 6px; }
+    .more { margin: 7px 0 0; color: #64748b; font-size: 11px; font-style: italic; }
+    .footer {
+      margin: 12px 22px 18px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      color: #64748b;
+      font-size: 11px;
+      text-align: center;
+    }
+    @page { size: A4 landscape; margin: 10mm; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .sheet { max-width: none; box-shadow: none; border-radius: 0; border: 0; }
+      tr, td, th, .detail-card { break-inside: avoid; page-break-inside: avoid; }
+      thead { display: table-header-group; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <section class="header">
+      <h1>Patient Report</h1>
+      <p>${escapeHtml(options.title)}</p>
+    </section>
+    <section class="summary">
+      <div class="item"><div class="label">Date Range</div><div class="value">${escapeHtml(options.dateRange)}</div></div>
+      <div class="item"><div class="label">Total Patients</div><div class="value">${escapeHtml(String(options.totalPatients))}</div></div>
+      <div class="item"><div class="label">Generated On</div><div class="value">${escapeHtml(new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }))}</div></div>
+    </section>
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:5%" class="num">S.No</th>
+            <th style="width:13%">Name</th>
+            <th style="width:18%">Email</th>
+            <th style="width:11%">Phone</th>
+            <th style="width:8%">Gender</th>
+            <th style="width:10%">DOB</th>
+            <th style="width:8%">Blood Group</th>
+            <th style="width:15%">Address</th>
+            <th style="width:6%" class="num">Visits</th>
+            <th style="width:6%">Status</th>
+          </tr>
+        </thead>
+        <tbody>${patientRows}</tbody>
+      </table>
+    </section>
+    ${appointmentSections ? `<section class="details"><h2>Appointment Details</h2>${appointmentSections}</section>` : ""}
+    <footer class="footer">Generated by HMS Report Engine</footer>
+  </div>
+</body>
+</html>`
+}
+
+async function generatePatientReportPdfBufferHtml(
+  patients: PatientReportData[],
+  options: { title: string; dateRange: string; totalPatients: number }
+): Promise<Buffer> {
+  const html = buildPatientReportHTML(patients, options)
+  const puppeteer = await import("puppeteer")
+  const browser = await puppeteer.default.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  })
+  try {
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: "networkidle0" })
+    const pdf = await page.pdf({
+      format: "A4",
+      landscape: true,
+      printBackground: true,
+      margin: { top: "10mm", right: "10mm", bottom: "10mm", left: "10mm" },
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await browser.close()
+  }
 }
 
 export async function GET(request: Request) {
@@ -337,15 +586,11 @@ export async function GET(request: Request) {
       })
     } else {
       // PDF format (default)
-      const pdfBase64 = generatePatientReportPDF(patients, reportOptions)
-      
-      // Extract base64 data (remove data URI prefix)
-      const base64Data = pdfBase64.split(',')[1]
-      const pdfBuffer = Buffer.from(base64Data, 'base64')
+      const pdfBuffer = await generatePatientReportPdfBufferHtml(patients, reportOptions)
 
       const filename = `Patient_Report_${filterType}_${new Date().toISOString().split('T')[0]}.pdf`
 
-      return new Response(pdfBuffer, {
+      return new Response(pdfBuffer as unknown as BodyInit, {
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `attachment; filename="${filename}"`
