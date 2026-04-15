@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useCallback, useRef } from "react"
+import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot, collection } from "firebase/firestore"
@@ -36,6 +36,7 @@ interface UserData {
 
 export default function DoctorDashboard() {
   const router = useRouter()
+  const pathname = usePathname()
   const [userData, setUserData] = useState<UserData | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
@@ -47,6 +48,8 @@ export default function DoctorDashboard() {
   const [branches, setBranches] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
   const [loadingBranches, setLoadingBranches] = useState(false)
+  const [navigatingAppointmentId, setNavigatingAppointmentId] = useState<string | null>(null)
+  const navigatingRef = useRef(false)
 
   // Protect route - only allow doctors (or admins for demo)
   const { user, loading } = useAuth("doctor")
@@ -233,6 +236,14 @@ export default function DoctorDashboard() {
     loadCampaigns()
   }, [user, activeHospitalId])
 
+  // If we land on appointments page, clear the "opening" state so clicks work again.
+  useEffect(() => {
+    if (pathname === '/doctor-dashboard/appointments') {
+      navigatingRef.current = false
+      setNavigatingAppointmentId(null)
+    }
+  }, [pathname])
+
   if (loading) {
     return <LoadingSpinner message="Loading Doctor Dashboard..." />
   }
@@ -248,10 +259,22 @@ export default function DoctorDashboard() {
   }
 
   const viewAppointmentDetails = (appointment: Appointment) => {
+    if (navigatingRef.current) return
+    navigatingRef.current = true
+    setNavigatingAppointmentId(appointment.id)
+
     // Store the appointment ID in sessionStorage to auto-expand it on the appointments page
     sessionStorage.setItem('expandAppointmentId', appointment.id)
-    // Navigate to appointments page using Next.js router
+
+    // Navigate to appointments page using Next.js router.
+    // If navigation fails / doesn't change route, reset after a short delay so user can click again.
     router.push('/doctor-dashboard/appointments')
+    window.setTimeout(() => {
+      if (window.location.pathname !== '/doctor-dashboard/appointments') {
+        navigatingRef.current = false
+        setNavigatingAppointmentId(null)
+      }
+    }, 1500)
   }
 
   // Shared comparator to sort appointments by combined date and time (earliest first)
@@ -532,9 +555,21 @@ export default function DoctorDashboard() {
                                 e.stopPropagation()
                                 viewAppointmentDetails(apt)
                               }}
-                              className="btn-modern btn-modern-sm"
+                              disabled={navigatingAppointmentId === apt.id}
+                              className={`btn-modern btn-modern-sm transition-all ${
+                                navigatingAppointmentId === apt.id ? "opacity-70 cursor-not-allowed" : ""
+                              }`}
                             >
-                              View Details
+                              {navigatingAppointmentId === apt.id ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                                  </svg>
+                                  Opening...
+                                </span>
+                              ) : (
+                                "View Details"
+                              )}
                             </button>
                           )}
                           {isPast && (

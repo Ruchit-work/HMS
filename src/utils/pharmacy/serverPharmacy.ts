@@ -20,6 +20,8 @@ export const PHARMACY_COLLECTIONS = {
   shifts: 'pharmacy_shifts',
   cashiers: 'pharmacy_cashiers',
   counters: 'pharmacy_counters',
+  idempotency: 'pharmacy_idempotency_keys',
+  audit_logs: 'pharmacy_audit_logs',
 } as const
 
 export function getPharmacyCollectionPath(hospitalId: string, name: keyof typeof PHARMACY_COLLECTIONS): string {
@@ -56,7 +58,19 @@ export async function getPharmacyAuthContext(
     if (!hid) {
       return { success: false, error: 'Hospital not assigned for this pharmacy user.' }
     }
-    const branchId = searchParams.branchId ?? data?.branchId ?? null
+    const requestedHospitalId = searchParams.hospitalId?.trim() || null
+    if (requestedHospitalId && requestedHospitalId !== hid) {
+      return { success: false, error: 'Pharmacy user is not authorized for the requested hospital.' }
+    }
+
+    const assignedBranchId = typeof data?.branchId === 'string' ? data.branchId.trim() : ''
+    const requestedBranchId = searchParams.branchId?.trim() || null
+    if (assignedBranchId && requestedBranchId && requestedBranchId !== assignedBranchId) {
+      return { success: false, error: 'Pharmacy user is not authorized for the requested branch.' }
+    }
+
+    // If pharmacist is assigned to a branch, enforce it; otherwise fall back to optional requested branch.
+    const branchId = assignedBranchId || requestedBranchId || null
     return {
       success: true,
       context: {

@@ -2,7 +2,16 @@
  * ENT anatomy mappings - object names, anatomical names, helpers
  */
 
-export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes'
+export type AnatomyType =
+  | 'ear'
+  | 'nose'
+  | 'throat'
+  | 'dental'
+  | 'lungs'
+  | 'kidney'
+  | 'skeleton'
+  | 'lymph_nodes'
+  | 'female_reproductive'
 
 export const objectNameToPartMap: Record<string, string> = {
   'Object 1': 'Outer_Ear', 'Object 2': 'Ear_Canal', 'Object 3': 'Eardrum', 'Object 4': 'Ossicles', 'Object 5': 'Cochlea', 'Object 6': 'Semicircular_Canals', 'Object 7': 'Auditory_Nerve',
@@ -15,6 +24,7 @@ export const objectNameToPartMap: Record<string, string> = {
 }
 
 export function getAnatomyTypeFromPath(modelPath: string): AnatomyType {
+  if (modelPath.includes('reproduction') || modelPath.includes('reproductive') || modelPath.includes('pelvic')) return 'female_reproductive'
   if (modelPath.includes('skeleton') || modelPath.includes('bone') || modelPath.includes('skelton')) return 'skeleton'
   if (modelPath.includes('thorat') || modelPath.includes('throat') || modelPath.includes('larynx')) return 'throat'
   if (modelPath.includes('human_mouth_detailed') || modelPath.includes('mouth') || modelPath.includes('mandible') || modelPath.includes('dental')) return 'dental'
@@ -41,6 +51,7 @@ export function getObjectNumberMapping(anatomyType: AnatomyType): Record<number,
     ear: { 1: 'Outer_Ear', 2: 'Ear_Canal', 3: 'Eardrum', 4: 'Ossicles', 5: 'Cochlea', 6: 'Semicircular_Canals', 7: 'Auditory_Nerve', 10: 'Outer_Ear', 11: 'Ear_Canal', 12: 'Eardrum', 13: 'Ossicles', 14: 'Cochlea', 15: 'Semicircular_Canals', 16: 'Auditory_Nerve' },
     skeleton: { 1: 'Skull', 2: 'Spine', 3: 'Ribcage', 4: 'Pelvis', 5: 'Humerus', 6: 'Radius', 7: 'Ulna', 8: 'Femur', 9: 'Tibia', 10: 'Fibula', 11: 'Clavicle', 12: 'Scapula', 13: 'Sternum', 14: 'Patella' },
     lymph_nodes: {},
+    female_reproductive: {},
   }
   return mappings[anatomyType] ?? mappings.ear
 }
@@ -116,5 +127,25 @@ export const anatomicalNameToPartMap: Record<AnatomyType, Record<string, string>
     Kraakbeen_trache: 'Trachea', 'Kraakbeen_trache_Kraakbeen_trache_0': 'Trachea',
     Hart6: 'Heart', 'Hart6_Hart6_0': 'Heart', 'Hart6_Hart6_0_5': 'Heart', 'Hart6_Hart6_0_1': 'Heart', 'Hart6_Hart6_0_2': 'Heart', 'Hart6_Hart6_0_3': 'Heart', 'Hart6_Hart6_0_4': 'Heart',
     RootNode: 'Thoracic_Nodes', Sketchfab_model: 'Thoracic_Nodes',
+  },
+  female_reproductive: {
+    Uterus: 'Uterus',
+    Cervix: 'Cervix',
+    Vagina: 'Vagina',
+    Vulva: 'Vulva',
+    Ovary: 'Ovary',
+    Ovaries: 'Ovary',
+    Bladder: 'Bladder',
+    Rectum: 'Rectum',
+    Pelvic_Bone: 'Pelvic_Bone',
+    Bony_Pelvis: 'Pelvic_Bone',
+    'Uterine tube': 'Uterine_Tube',
+    'Fallopian tube': 'Uterine_Tube',
+    'Fallopian Tube': 'Uterine_Tube',
+    Endometrium: 'Endometrium',
+    Myometrium: 'Myometrium',
+    Fundus: 'Fundus',
+    Fimbriae: 'Fimbriae',
+    Infundibulum: 'Infundibulum',
   },
 }

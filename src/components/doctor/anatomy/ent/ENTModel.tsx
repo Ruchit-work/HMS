@@ -258,7 +258,17 @@ export function ENTModel({
         }
       }
 
-      gl.domElement.style.cursor = newHoveredPart ? 'pointer' : 'default'
+      // Cursor UX:
+      // - If we can resolve a selectable part under cursor -> show hand pointer.
+      // - If the cursor is over the model but we cannot resolve a selectable part -> show not-allowed.
+      // - Otherwise -> default.
+      if (newHoveredPart) {
+        gl.domElement.style.cursor = 'pointer'
+      } else if (newHoveredMesh) {
+        gl.domElement.style.cursor = 'not-allowed'
+      } else {
+        gl.domElement.style.cursor = 'default'
+      }
     }
   })
 

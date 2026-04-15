@@ -6,6 +6,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
 import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
 import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
+import { acquireIdempotencyKey, clearIdempotencyKey, completeIdempotencyKey, sanitizeIdempotencyKey } from '@/utils/pharmacy/idempotency'
+import { writePharmacyAuditEvent } from '@/utils/pharmacy/audit'
+import { pharmacyError } from '@/utils/pharmacy/apiResponse'
 import type { MedicineBatch, PharmacyPurchaseOrder, PurchaseOrderLine } from '@/types/pharmacy'
 
 function getStockDocId(branchId: string, medicineId: string): string {
@@ -17,7 +20,7 @@ export async function GET(request: NextRequest) {
   if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
 
   const init = initFirebaseAdmin('pharmacy/purchase-orders')
-  if (!init.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+  if (!init.ok) return pharmacyError('Server not configured', 500, 'SERVER_NOT_CONFIGURED')
 
   const { searchParams } = new URL(request.url)
   const hospitalIdParam = searchParams.get('hospitalId') || undefined
@@ -28,14 +31,14 @@ export async function GET(request: NextRequest) {
     hospitalId: hospitalIdParam,
     branchId: branchIdParam,
   })
-  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+  if (!ctxResult.success) return pharmacyError(ctxResult.error, 403, 'PHARMACY_AUTH_FORBIDDEN')
 
   const db = admin.firestore()
   const path = getPharmacyCollectionPath(ctxResult.context.hospitalId, 'purchase_orders')
 
   if (orderIdParam) {
     const doc = await db.collection(path).doc(orderIdParam).get()
-    if (!doc.exists) return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
+    if (!doc.exists) return pharmacyError('Order not found', 404, 'PURCHASE_ORDER_NOT_FOUND')
     const order = { id: doc.id, ...doc.data() } as PharmacyPurchaseOrder
     return NextResponse.json({ success: true, order })
   }
@@ -66,10 +69,10 @@ export async function POST(request: NextRequest) {
   if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
 
   const init = initFirebaseAdmin('pharmacy/purchase-orders')
-  if (!init.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+  if (!init.ok) return pharmacyError('Server not configured', 500, 'SERVER_NOT_CONFIGURED')
 
   const ctxResult = await getPharmacyAuthContext(auth.user, {})
-  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+  if (!ctxResult.success) return pharmacyError(ctxResult.error, 403, 'PHARMACY_AUTH_FORBIDDEN')
 
   const body = await request.json().catch(() => ({}))
   const { branchId, supplierId, items, receive, expectedDeliveryDate, status: bodyStatus, notes } = (body || {}) as {
@@ -117,7 +120,7 @@ export async function POST(request: NextRequest) {
     .filter((it: { quantity: number }) => it.quantity > 0)
 
   if (rawItems.length === 0) {
-    return NextResponse.json({ success: false, error: 'At least one item with positive quantity is required' }, { status: 400 })
+    return pharmacyError('At least one item with positive quantity is required', 400, 'INVALID_PURCHASE_ORDER_ITEMS')
   }
 
   // For items with no medicineId but with medicineName, create a new medicine in the catalog
@@ -282,7 +285,7 @@ export async function POST(request: NextRequest) {
   })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to create order'
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return pharmacyError(message, 500, 'PURCHASE_ORDER_CREATE_FAILED')
   }
 }
 
@@ -292,21 +295,22 @@ export async function PATCH(request: NextRequest) {
   if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
 
   const init = initFirebaseAdmin('pharmacy/purchase-orders')
-  if (!init.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+  if (!init.ok) return pharmacyError('Server not configured', 500, 'SERVER_NOT_CONFIGURED')
 
   const ctxResult = await getPharmacyAuthContext(auth.user, {})
-  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+  if (!ctxResult.success) return pharmacyError(ctxResult.error, 403, 'PHARMACY_AUTH_FORBIDDEN')
 
   const { searchParams } = new URL(request.url)
   const orderId = searchParams.get('orderId')
   if (!orderId) {
-    return NextResponse.json({ success: false, error: 'orderId is required' }, { status: 400 })
+    return pharmacyError('orderId is required', 400, 'ORDER_ID_REQUIRED')
   }
 
   let supplierInvoiceNumber: string | null = null
   /** Per-line batch/expiry/mfg entered at receive time (from physical goods) */
   let receiveDetails: Array<{ batchNumber?: string; expiryDate?: string; manufacturingDate?: string }> = []
   let cancelOrder = false
+  let idempotencyKey: string | null = null
   try {
     const body = await request.json().catch(() => ({}))
     if (body && typeof body.supplierInvoiceNumber === 'string' && body.supplierInvoiceNumber.trim()) {
@@ -320,6 +324,9 @@ export async function PATCH(request: NextRequest) {
       }))
     }
     if (body && body.cancel === true) cancelOrder = true
+    idempotencyKey = sanitizeIdempotencyKey(
+      request.headers.get('x-idempotency-key') || (body as { idempotencyKey?: unknown }).idempotencyKey
+    )
   } catch {
     // no body
   }
@@ -333,7 +340,7 @@ export async function PATCH(request: NextRequest) {
   const orderRef = db.collection(ordersPath).doc(orderId)
   const orderSnap = await orderRef.get()
   if (!orderSnap.exists) {
-    return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
+    return pharmacyError('Order not found', 404, 'PURCHASE_ORDER_NOT_FOUND')
   }
 
   const orderData = orderSnap.data()!
@@ -341,72 +348,184 @@ export async function PATCH(request: NextRequest) {
 
   if (cancelOrder) {
     if (status !== 'draft' && status !== 'pending') {
-      return NextResponse.json({ success: false, error: 'Only draft or sent orders can be cancelled' }, { status: 400 })
+      return pharmacyError('Only draft or sent orders can be cancelled', 400, 'PURCHASE_ORDER_CANCEL_INVALID_STATUS')
     }
+    if (idempotencyKey) {
+      const lock = await acquireIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'purchase_order_receive',
+        key: `${orderId}_cancel_${idempotencyKey}`,
+        userId: auth.user.uid,
+      })
+      if (lock.kind === 'completed') {
+        return NextResponse.json(lock.response, { status: lock.statusCode })
+      }
+      if (lock.kind === 'in_progress') {
+        return NextResponse.json(
+          { success: false, error: 'This cancel request is already being processed. Please retry shortly.' },
+          { status: 409 }
+        )
+      }
+    }
+
     const nowStr = new Date().toISOString()
-    await orderRef.update({ status: 'cancelled', updatedAt: nowStr })
-    const updated = await orderRef.get()
-    return NextResponse.json({ success: true, order: { id: orderId, ...updated.data() } })
+    try {
+      await orderRef.update({ status: 'cancelled', updatedAt: nowStr })
+      const updated = await orderRef.get()
+      const responseBody = { success: true, order: { id: orderId, ...updated.data() } }
+      if (idempotencyKey) {
+        await completeIdempotencyKey({
+          db,
+          hospitalId,
+          scope: 'purchase_order_receive',
+          key: `${orderId}_cancel_${idempotencyKey}`,
+          statusCode: 200,
+          response: responseBody,
+        })
+      }
+      await writePharmacyAuditEvent({
+        db,
+        hospitalId,
+        action: 'purchase_order_cancelled',
+        actorUserId: auth.user.uid,
+        branchId: (updated.data()?.branchId as string | undefined) || null,
+        entityType: 'purchase_order',
+        entityId: orderId,
+        summary: 'Purchase order cancelled.',
+        details: {
+          previousStatus: status,
+        },
+      }).catch(() => {})
+      return NextResponse.json(responseBody)
+    } catch (err) {
+      if (idempotencyKey) {
+        await clearIdempotencyKey({
+          db,
+          hospitalId,
+          scope: 'purchase_order_receive',
+          key: `${orderId}_cancel_${idempotencyKey}`,
+        }).catch(() => {})
+      }
+      const message = err instanceof Error ? err.message : 'Failed to cancel order'
+      return pharmacyError(message, 500, 'PURCHASE_ORDER_CANCEL_FAILED')
+    }
   }
 
   if (status !== 'pending') {
-    return NextResponse.json({ success: false, error: 'Order is not pending (only sent orders can be received)' }, { status: 400 })
+    return pharmacyError('Order is not pending (only sent orders can be received)', 400, 'PURCHASE_ORDER_RECEIVE_INVALID_STATUS')
   }
 
   const branchId = orderData.branchId
   const items: PurchaseOrderLine[] = Array.isArray(orderData.items) ? orderData.items : []
   if (items.length === 0) {
-    return NextResponse.json({ success: false, error: 'Order has no items' }, { status: 400 })
+    return pharmacyError('Order has no items', 400, 'PURCHASE_ORDER_ITEMS_MISSING')
+  }
+
+  if (idempotencyKey) {
+    const lock = await acquireIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'purchase_order_receive',
+      key: `${orderId}_receive_${idempotencyKey}`,
+      userId: auth.user.uid,
+    })
+    if (lock.kind === 'completed') {
+      return NextResponse.json(lock.response, { status: lock.statusCode })
+    }
+    if (lock.kind === 'in_progress') {
+      return NextResponse.json(
+        { success: false, error: 'This receive request is already being processed. Please retry shortly.' },
+        { status: 409 }
+      )
+    }
   }
 
   const nowStr = new Date().toISOString()
+  try {
+    await db.runTransaction(async (tx) => {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]
+        const rd = receiveDetails[i]
+        const batchNumber = (rd?.batchNumber && rd.batchNumber.length > 0) ? rd.batchNumber : (it.batchNumber || nanoidLike())
+        const expiryDate = (rd?.expiryDate && /^\d{4}-\d{2}-\d{2}$/.test(rd.expiryDate)) ? rd.expiryDate : (it.expiryDate || '')
+        const manufacturingDate = (rd?.manufacturingDate && /^\d{4}-\d{2}-\d{2}$/.test(rd.manufacturingDate)) ? rd.manufacturingDate : null
 
-  await db.runTransaction(async (tx) => {
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i]
-      const rd = receiveDetails[i]
-      const batchNumber = (rd?.batchNumber && rd.batchNumber.length > 0) ? rd.batchNumber : (it.batchNumber || nanoidLike())
-      const expiryDate = (rd?.expiryDate && /^\d{4}-\d{2}-\d{2}$/.test(rd.expiryDate)) ? rd.expiryDate : (it.expiryDate || '')
-      const manufacturingDate = (rd?.manufacturingDate && /^\d{4}-\d{2}-\d{2}$/.test(rd.manufacturingDate)) ? rd.manufacturingDate : null
+        const medDoc = await tx.get(db.collection(medicinesPath).doc(it.medicineId))
+        const medicineName = medDoc.exists ? (medDoc.data() as { name: string }).name : (it.medicineName || '')
+        const stockRef = db.collection(stockPath).doc(getStockDocId(branchId, it.medicineId))
+        const stockSnap = await tx.get(stockRef)
+        const batch: MedicineBatch = {
+          id: nanoidLike(),
+          batchNumber,
+          expiryDate,
+          quantity: it.quantity,
+          receivedAt: nowStr,
+          ...(manufacturingDate && { manufacturingDate }),
+        }
 
-      const medDoc = await tx.get(db.collection(medicinesPath).doc(it.medicineId))
-      const medicineName = medDoc.exists ? (medDoc.data() as { name: string }).name : (it.medicineName || '')
-      const stockRef = db.collection(stockPath).doc(getStockDocId(branchId, it.medicineId))
-      const stockSnap = await tx.get(stockRef)
-      const batch: MedicineBatch = {
-        id: nanoidLike(),
-        batchNumber,
-        expiryDate,
-        quantity: it.quantity,
-        receivedAt: nowStr,
-        ...(manufacturingDate && { manufacturingDate }),
+        if (!stockSnap.exists) {
+          tx.set(stockRef, {
+            hospitalId,
+            branchId,
+            medicineId: it.medicineId,
+            medicineName,
+            batches: [batch],
+            totalQuantity: it.quantity,
+            updatedAt: nowStr,
+          })
+        } else {
+          const data = stockSnap.data()!
+          const batches = Array.isArray(data.batches) ? [...data.batches, batch] : [batch]
+          const totalQuantity = (Number(data.totalQuantity) || 0) + it.quantity
+          tx.update(stockRef, { batches, totalQuantity, medicineName, updatedAt: nowStr })
+        }
       }
+      const updateData: Record<string, unknown> = { status: 'received', receivedAt: nowStr, updatedAt: nowStr }
+      if (supplierInvoiceNumber) updateData.supplierInvoiceNumber = supplierInvoiceNumber
+      tx.update(orderRef, updateData)
+    })
 
-      if (!stockSnap.exists) {
-        tx.set(stockRef, {
-          hospitalId,
-          branchId,
-          medicineId: it.medicineId,
-          medicineName,
-          batches: [batch],
-          totalQuantity: it.quantity,
-          updatedAt: nowStr,
-        })
-      } else {
-        const data = stockSnap.data()!
-        const batches = Array.isArray(data.batches) ? [...data.batches, batch] : [batch]
-        const totalQuantity = (Number(data.totalQuantity) || 0) + it.quantity
-        tx.update(stockRef, { batches, totalQuantity, medicineName, updatedAt: nowStr })
-      }
+    const updated = await orderRef.get()
+    const responseBody = {
+      success: true,
+      order: { id: orderId, ...updated.data() },
     }
-    const updateData: Record<string, unknown> = { status: 'received', receivedAt: nowStr, updatedAt: nowStr }
-    if (supplierInvoiceNumber) updateData.supplierInvoiceNumber = supplierInvoiceNumber
-    tx.update(orderRef, updateData)
-  })
-
-  const updated = await orderRef.get()
-  return NextResponse.json({
-    success: true,
-    order: { id: orderId, ...updated.data() },
-  })
+    if (idempotencyKey) {
+      await completeIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'purchase_order_receive',
+        key: `${orderId}_receive_${idempotencyKey}`,
+        statusCode: 200,
+        response: responseBody,
+      })
+    }
+    await writePharmacyAuditEvent({
+      db,
+      hospitalId,
+      action: 'purchase_order_received',
+      actorUserId: auth.user.uid,
+      branchId,
+      entityType: 'purchase_order',
+      entityId: orderId,
+      summary: 'Purchase order received and stock updated.',
+      details: {
+        itemCount: items.length,
+        supplierInvoiceNumber: supplierInvoiceNumber || null,
+      },
+    }).catch(() => {})
+    return NextResponse.json(responseBody)
+  } catch (err) {
+    if (idempotencyKey) {
+      await clearIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'purchase_order_receive',
+        key: `${orderId}_receive_${idempotencyKey}`,
+      }).catch(() => {})
+    }
+    const message = err instanceof Error ? err.message : 'Failed to receive order'
+    return pharmacyError(message, 500, 'PURCHASE_ORDER_RECEIVE_FAILED')
+  }
 }

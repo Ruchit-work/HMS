@@ -6,6 +6,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
 import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
 import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
+import { acquireIdempotencyKey, clearIdempotencyKey, completeIdempotencyKey, sanitizeIdempotencyKey } from '@/utils/pharmacy/idempotency'
+import { writePharmacyAuditEvent } from '@/utils/pharmacy/audit'
+import { pharmacyError } from '@/utils/pharmacy/apiResponse'
 import { getHospitalCollectionPath } from '@/utils/firebase/serverHospitalQueries'
 import type { MedicineBatch, PharmacySale, PharmacySaleLine } from '@/types/pharmacy'
 
@@ -18,16 +21,16 @@ export async function POST(request: NextRequest) {
   if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
 
   const init = initFirebaseAdmin('pharmacy/dispense')
-  if (!init.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+  if (!init.ok) return pharmacyError('Server not configured', 500, 'SERVER_NOT_CONFIGURED')
 
   const ctxResult = await getPharmacyAuthContext(auth.user, {})
-  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+  if (!ctxResult.success) return pharmacyError(ctxResult.error, 403, 'PHARMACY_AUTH_FORBIDDEN')
 
   let body: unknown
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
+    return pharmacyError('Invalid JSON body', 400, 'INVALID_JSON_BODY')
   }
   const { appointmentId, branchId, lines, customerName, customerPhone, paymentMode, tenderNotes, changeNotes, changeGiven } = body as {
     appointmentId?: string
@@ -107,7 +110,7 @@ export async function POST(request: NextRequest) {
     const appointmentRef = db.collection(appointmentsPath).doc(appointmentId!)
     const appointmentSnap = await appointmentRef.get()
     if (!appointmentSnap.exists) {
-      return NextResponse.json({ success: false, error: 'Appointment not found' }, { status: 404 })
+      return pharmacyError('Appointment not found', 404, 'APPOINTMENT_NOT_FOUND')
     }
     const appointment = appointmentSnap.data()!
     patientName = appointment.patientName || 'Unknown'
@@ -130,7 +133,7 @@ const deductions: Array<{ stockRef: DocRef; batches: MedicineBatch[]; totalQty: 
 
     const medicineDoc = await db.collection(medicinesPath).doc(line.medicineId).get()
     if (!medicineDoc.exists) {
-      return NextResponse.json({ success: false, error: `Medicine ${line.medicineId} not found` }, { status: 400 })
+      return pharmacyError(`Medicine ${line.medicineId} not found`, 400, 'MEDICINE_NOT_FOUND')
     }
     const medData = medicineDoc.data() as { name: string; sellingPrice: number; unit?: string }
     const stockRef = db.collection(stockPath).doc(getStockDocId(branchId, line.medicineId))
@@ -225,6 +228,28 @@ const deductions: Array<{ stockRef: DocRef; batches: MedicineBatch[]; totalQty: 
 
   const salesPath = getPharmacyCollectionPath(hospitalId, 'sales')
   const saleRef = db.collection(salesPath).doc(saleId)
+  const idempotencyKey = sanitizeIdempotencyKey(
+    request.headers.get('x-idempotency-key') || (body as { idempotencyKey?: unknown })?.idempotencyKey
+  )
+
+  if (idempotencyKey) {
+    const lock = await acquireIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'dispense',
+      key: idempotencyKey,
+      userId: auth.user.uid,
+    })
+    if (lock.kind === 'completed') {
+      return NextResponse.json(lock.response, { status: lock.statusCode })
+    }
+    if (lock.kind === 'in_progress') {
+      return NextResponse.json(
+        { success: false, error: 'This dispense request is already being processed. Please retry shortly.' },
+        { status: 409 }
+      )
+    }
+  }
 
   try {
     await db.runTransaction(async (tx) => {
@@ -241,51 +266,81 @@ const deductions: Array<{ stockRef: DocRef; batches: MedicineBatch[]; totalQty: 
         }
       }
     })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Dispense failed'
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
-  }
 
-  if (validPaymentMode === 'cash' && (Number(changeGiven) || 0) >= 0) {
-    const sessionsPath = getPharmacyCollectionPath(hospitalId, 'cashSessions')
-    const branchIdForSession = ctxResult.context.branchId || branchId
-    const sessionSnap = await db
-      .collection(sessionsPath)
-      .where('cashierId', '==', auth.user.uid)
-      .where('branchId', '==', branchIdForSession)
-      .where('status', '==', 'open')
-      .limit(1)
-      .get()
-    if (!sessionSnap.empty) {
-      const sessionRef = sessionSnap.docs[0].ref
-      const sessionData = sessionSnap.docs[0].data() as {
-        runningNotes?: Record<string, number>
-        changeNotesTotal?: Record<string, number>
-        cashSales?: number
-        changeGiven?: number
+    if (validPaymentMode === 'cash' && (Number(changeGiven) || 0) >= 0) {
+      const sessionsPath = getPharmacyCollectionPath(hospitalId, 'cashSessions')
+      const branchIdForSession = ctxResult.context.branchId || branchId
+      const sessionSnap = await db
+        .collection(sessionsPath)
+        .where('cashierId', '==', auth.user.uid)
+        .where('branchId', '==', branchIdForSession)
+        .where('status', '==', 'open')
+        .limit(1)
+        .get()
+      if (!sessionSnap.empty) {
+        const sessionRef = sessionSnap.docs[0].ref
+        const sessionData = sessionSnap.docs[0].data() as {
+          runningNotes?: Record<string, number>
+          changeNotesTotal?: Record<string, number>
+          cashSales?: number
+          changeGiven?: number
+        }
+        const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
+        const running = { ...(sessionData.runningNotes || {}) }
+        const tender = tenderNotes || {}
+        const change = changeNotes || {}
+        denoms.forEach((d) => {
+          const t = Number(tender[d]) || 0
+          const c = Number(change[d]) || 0
+          running[d] = Math.max(0, (Number(running[d]) || 0) + t - c)
+        })
+        const changeNotesTotal = { ...(sessionData.changeNotesTotal || {}) }
+        denoms.forEach((d) => {
+          const c = Number(change[d]) || 0
+          if (c > 0) changeNotesTotal[d] = (Number(changeNotesTotal[d]) || 0) + c
+        })
+        await sessionRef.update({
+          runningNotes: running,
+          changeNotesTotal,
+          cashSales: admin.firestore.FieldValue.increment(totalAmount),
+          changeGiven: admin.firestore.FieldValue.increment(Number(changeGiven) || 0),
+        })
       }
-      const denoms = ['500', '200', '100', '50', '20', '10', '5', '2', '1']
-      const running = { ...(sessionData.runningNotes || {}) }
-      const tender = tenderNotes || {}
-      const change = changeNotes || {}
-      denoms.forEach((d) => {
-        const t = Number(tender[d]) || 0
-        const c = Number(change[d]) || 0
-        running[d] = Math.max(0, (Number(running[d]) || 0) + t - c)
-      })
-      const changeNotesTotal = { ...(sessionData.changeNotesTotal || {}) }
-      denoms.forEach((d) => {
-        const c = Number(change[d]) || 0
-        if (c > 0) changeNotesTotal[d] = (Number(changeNotesTotal[d]) || 0) + c
-      })
-      await sessionRef.update({
-        runningNotes: running,
-        changeNotesTotal,
-        cashSales: admin.firestore.FieldValue.increment(totalAmount),
-        changeGiven: admin.firestore.FieldValue.increment(Number(changeGiven) || 0),
+    }
+
+    const responseBody = { success: true, sale: { id: saleId, ...saleData } as PharmacySale }
+    if (idempotencyKey) {
+      await completeIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'dispense',
+        key: idempotencyKey,
+        statusCode: 200,
+        response: responseBody,
       })
     }
+    await writePharmacyAuditEvent({
+      db,
+      hospitalId,
+      action: 'dispense_completed',
+      actorUserId: auth.user.uid,
+      branchId,
+      entityType: 'sale',
+      entityId: saleId,
+      summary: `Dispensed ${saleLines.length} line item(s) via ${saleType === 'walk_in' ? 'walk-in' : 'prescription'} flow.`,
+      details: {
+        totalAmount,
+        paymentMode: validPaymentMode,
+        saleType,
+        invoiceNumber,
+      },
+    }).catch(() => {})
+    return NextResponse.json(responseBody)
+  } catch (err) {
+    if (idempotencyKey) {
+      await clearIdempotencyKey({ db, hospitalId, scope: 'dispense', key: idempotencyKey }).catch(() => {})
+    }
+    const message = err instanceof Error ? err.message : 'Dispense failed'
+    return pharmacyError(message, 500, 'DISPENSE_FAILED')
   }
-
-  return NextResponse.json({ success: true, sale: { id: saleId, ...saleData } as PharmacySale })
 }

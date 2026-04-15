@@ -72,8 +72,8 @@ function DoctorAppointmentsContent() {
   const [updating, setUpdating] = useState<{ [key: string]: boolean }>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{ [key: string]: boolean }>({})
   const [consultationMode, setConsultationMode] = useState<{ [key: string]: "normal" | "anatomy" | null }>({})
-  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes")[] }>({})
-  const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" }>({})
+  const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive")[] }>({})
+  const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive" }>({})
   const [anatomyViewerData, setAnatomyViewerData] = useState<{ [key: string]: { [anatomyType: string]: AnatomyViewerData | null } }>({})
   const [showCombinedCompletionModal, setShowCombinedCompletionModal] = useState<{ [key: string]: boolean }>({})
   const appointmentCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -446,7 +446,7 @@ function DoctorAppointmentsContent() {
 
   const handleConsultationModeSelect = (
     mode: "normal" | "anatomy",
-    anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes"
+    anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive"
   ) => {
     const appointmentId = showConsultationModeModal.appointmentId
     if (!appointmentId) return
@@ -503,7 +503,7 @@ function DoctorAppointmentsContent() {
 
   const openAnatomyFromQuickCard = (
     appointmentId: string,
-    anatomyType: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes"
+    anatomyType: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive"
   ) => {
     setConsultationMode((prev) => ({ ...prev, [appointmentId]: "anatomy" }))
     setSelectedAnatomyTypes((prev) => {
@@ -1610,7 +1610,7 @@ function DoctorAppointmentsContent() {
                           consultationMode[selectedAppointment.id] === "normal" ||
                           !consultationMode[selectedAppointment.id]
                         const added = selectedAnatomyTypes[selectedAppointment.id] || []
-                        const renderAnatomyIcon = (type: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes") => {
+                        const renderAnatomyIcon = (type: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive") => {
                           switch (type) {
                             case "ear":
                               return <Ear className="w-5 h-5 text-sky-600" />
@@ -1622,6 +1622,8 @@ function DoctorAppointmentsContent() {
                               return <Stethoscope className="w-5 h-5 text-emerald-600" />
                             case "lungs":
                               return <HeartPulse className="w-5 h-5 text-teal-600" />
+                            case "female_reproductive":
+                              return <Stethoscope className="w-5 h-5 text-pink-600" />
                             case "skeleton":
                               return <Bone className="w-5 h-5 text-slate-700" />
                             case "kidney":
@@ -1657,12 +1659,12 @@ function DoctorAppointmentsContent() {
                                 </span>
                               </button>
                               {models.map((model) => {
-                                const isAdded = added.includes(model.type as "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton")
+                                const isAdded = added.includes(model.type)
                                 return (
                                   <button
                                     key={model.type}
                                     type="button"
-                                    onClick={() => openAnatomyFromQuickCard(selectedAppointment.id, model.type as "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton")}
+                                    onClick={() => openAnatomyFromQuickCard(selectedAppointment.id, model.type)}
                                     className={`flex-shrink-0 w-20 sm:w-24 rounded-xl border-2 px-3 py-2.5 flex flex-col items-center justify-center gap-1 transition-all hover:shadow-md ${
                                       isAdded
                                         ? "border-blue-400 bg-blue-50/80 text-blue-800"

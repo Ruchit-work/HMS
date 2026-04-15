@@ -7,6 +7,7 @@ import InteractiveEarSVG from '@/components/doctor/anatomy/svg/InteractiveEarSVG
 import InteractiveThroatSVG from '@/components/doctor/anatomy/svg/InteractiveThroatSVG'
 import InteractiveLungsSVG from '@/components/doctor/anatomy/svg/InteractiveLungsSVG'
 import InteractiveMouthSVG from '@/components/doctor/anatomy/svg/InteractiveMouthSVG'
+import InteractiveFemaleReproductiveSVG from '@/components/doctor/anatomy/svg/InteractiveFemaleReproductiveSVG'
 // import InteractiveKidneySVG from '@/components/doctor/anatomy/svg/InteractiveKidneySVG' // Commented out: module not found
 import { earPartsData, type Disease } from '@/constants/earDiseases'
 import { nosePartsData } from '@/constants/noseDiseases'
@@ -16,6 +17,7 @@ import { lungsPartsData } from '@/constants/lungsDiseases'
 import { kidneyPartsData } from '@/constants/kidneyDiseases'
 import { skeletonPartsData } from '@/constants/skeletonDiseases'
 import { lymphNodesPartsData } from '@/constants/lymphNodesDiseases'
+import { femaleReproductivePartsData } from '@/constants/femaleReproductiveDiseases'
 import { completeAppointment } from '@/utils/appointmentHelpers'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useAuth } from '@/hooks/useAuth'
@@ -40,7 +42,7 @@ const DynamicENTAnatomyViewer = dynamic(
 )
 
 export interface AnatomyViewerData {
-  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes'
+  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes' | 'female_reproductive'
   selectedPart?: string
   selectedPartInfo?: any
   selectedDisease?: Disease | null
@@ -53,13 +55,14 @@ export interface AnatomyViewerData {
 interface InlineAnatomyViewerProps {
   appointmentId: string
   patientName: string
-  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes'
+  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes' | 'female_reproductive'
   initialData?: AnatomyViewerData | null
   onComplete?: () => void
   onDataChange?: (data: AnatomyViewerData | null) => void
 }
 
 export default function InlineAnatomyViewer({ appointmentId, patientName, anatomyType = 'ear', initialData, onComplete, onDataChange }: InlineAnatomyViewerProps) {
+  const FEMALE_REPRODUCTIVE_GLB_PATH = '/3dmodels/reproduction/bony_pelvis_and_pelvic_organs_from_mri.glb'
   const { activeHospitalId } = useMultiHospital()
   const { user } = useAuth("doctor")
   const [completing, setCompleting] = useState(false)
@@ -133,6 +136,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return skeletonPartsData
       case 'lymph_nodes':
         return lymphNodesPartsData
+      case 'female_reproductive':
+        return femaleReproductivePartsData
       case 'ear':
       default:
         return earPartsData
@@ -156,6 +161,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         return '/models/skeleton/free_pack_-_human_skeleton.glb'
       case 'lymph_nodes':
         return '/3dmodels/thorax_and_abdomen_some_of_the_lymph_nodes/scene.gltf'
+      case 'female_reproductive':
+        return FEMALE_REPRODUCTIVE_GLB_PATH
       case 'ear':
       default:
         return '/models/ear/ear-anatomy.glb'
@@ -1086,7 +1093,9 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                   />
                 </div>
                 <p className="text-[11px] text-slate-500 px-1">
-                  Click on any anatomical part to view details and related conditions.
+                  {anatomyType === 'female_reproductive'
+                    ? '3D model loaded locally (offline). Use mouse to rotate/zoom.'
+                    : 'Click on any anatomical part to view details and related conditions.'}
                 </p>
               </>
             ) : (
@@ -1108,6 +1117,11 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                   />
                 ) : anatomyType === 'dental' ? (
                   <InteractiveMouthSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'female_reproductive' ? (
+                  <InteractiveFemaleReproductiveSVG
                     onPartSelect={handlePartSelect2D}
                     selectedPart={selectedPart2D}
                   />
@@ -1190,7 +1204,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 <svg className="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                 </svg>
-                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : anatomyType === 'skeleton' ? 'skeleton' : anatomyType === 'lymph_nodes' ? 'lymph nodes' : 'ear'} model</p>
+                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : anatomyType === 'skeleton' ? 'skeleton' : anatomyType === 'lymph_nodes' ? 'lymph nodes' : anatomyType === 'female_reproductive' ? 'female reproductive system' : 'ear'} model</p>
                 <p className="text-xs text-slate-500 mt-1">to see its name and description here</p>
               </div>
             )}

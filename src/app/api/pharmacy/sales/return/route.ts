@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
 import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
 import { getPharmacyAuthContext, getPharmacyCollectionPath } from '@/utils/pharmacy/serverPharmacy'
+import { acquireIdempotencyKey, clearIdempotencyKey, completeIdempotencyKey, sanitizeIdempotencyKey } from '@/utils/pharmacy/idempotency'
+import { writePharmacyAuditEvent } from '@/utils/pharmacy/audit'
+import { pharmacyError } from '@/utils/pharmacy/apiResponse'
 import type { PharmacySale, PharmacySaleLine } from '@/types/pharmacy'
 
 interface ReturnLineInput {
@@ -18,7 +21,7 @@ export async function POST(request: NextRequest) {
   if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
 
   const init = initFirebaseAdmin('pharmacy/sales-return')
-  if (!init.ok) return NextResponse.json({ success: false, error: 'Server not configured' }, { status: 500 })
+  if (!init.ok) return pharmacyError('Server not configured', 500, 'SERVER_NOT_CONFIGURED')
 
   const body = await request.json().catch(() => null) as {
     saleId?: string
@@ -26,13 +29,14 @@ export async function POST(request: NextRequest) {
     note?: string
     refundPaymentMode?: 'cash' | 'upi' | 'card' | 'other'
     refundNotes?: Record<string, number>
+    idempotencyKey?: string
   }
   if (!body || !body.saleId || !Array.isArray(body.lines) || body.lines.length === 0) {
-    return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 })
+    return pharmacyError('Invalid request body', 400, 'INVALID_REQUEST_BODY')
   }
 
   const ctxResult = await getPharmacyAuthContext(auth.user, {})
-  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+  if (!ctxResult.success) return pharmacyError(ctxResult.error, 403, 'PHARMACY_AUTH_FORBIDDEN')
 
   const db = admin.firestore()
   const hospitalId = ctxResult.context.hospitalId
@@ -42,17 +46,17 @@ export async function POST(request: NextRequest) {
   const saleRef = db.collection(salesPath).doc(body.saleId)
   const saleSnap = await saleRef.get()
   if (!saleSnap.exists) {
-    return NextResponse.json({ success: false, error: 'Sale not found' }, { status: 404 })
+    return pharmacyError('Sale not found', 404, 'SALE_NOT_FOUND')
   }
 
   const sale = saleSnap.data() as PharmacySale
   if (sale.hospitalId !== hospitalId) {
-    return NextResponse.json({ success: false, error: 'Sale does not belong to this hospital' }, { status: 403 })
+    return pharmacyError('Sale does not belong to this hospital', 403, 'SALE_HOSPITAL_MISMATCH')
   }
 
   const branchId = sale.branchId
   if (!branchId) {
-    return NextResponse.json({ success: false, error: 'Sale branch missing' }, { status: 400 })
+    return pharmacyError('Sale branch missing', 400, 'SALE_BRANCH_MISSING')
   }
 
   const sessionsPath = getPharmacyCollectionPath(hospitalId, 'cashSessions')
@@ -91,7 +95,7 @@ export async function POST(request: NextRequest) {
     if (!input.medicineId || qty <= 0) continue
     const line = lineByMed.get(input.medicineId)
     if (!line) {
-      return NextResponse.json({ success: false, error: `Medicine not found on sale: ${input.medicineId}` }, { status: 400 })
+      return pharmacyError(`Medicine not found on sale: ${input.medicineId}`, 400, 'SALE_LINE_MEDICINE_NOT_FOUND')
     }
     const already = alreadyReturnedMap.get(input.medicineId) || 0
     if (qty + already > line.quantity) {
@@ -104,7 +108,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (validLines.length === 0) {
-    return NextResponse.json({ success: false, error: 'No valid lines to return' }, { status: 400 })
+    return pharmacyError('No valid lines to return', 400, 'NO_VALID_RETURN_LINES')
   }
 
   const now = new Date().toISOString()
@@ -168,6 +172,28 @@ export async function POST(request: NextRequest) {
     ? body.refundPaymentMode
     : null
 
+  const idempotencyKey = sanitizeIdempotencyKey(
+    request.headers.get('x-idempotency-key') || body.idempotencyKey
+  )
+  if (idempotencyKey) {
+    const lock = await acquireIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'sales_return',
+      key: idempotencyKey,
+      userId: auth.user.uid,
+    })
+    if (lock.kind === 'completed') {
+      return NextResponse.json(lock.response, { status: lock.statusCode })
+    }
+    if (lock.kind === 'in_progress') {
+      return NextResponse.json(
+        { success: false, error: 'This return request is already being processed. Please retry shortly.' },
+        { status: 409 }
+      )
+    }
+  }
+
   try {
     await db.runTransaction(async (tx) => {
       // Update sale with returns info and refund totals
@@ -200,8 +226,11 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (err) {
+    if (idempotencyKey) {
+      await clearIdempotencyKey({ db, hospitalId, scope: 'sales_return', key: idempotencyKey }).catch(() => {})
+    }
     const message = err instanceof Error ? err.message : 'Sales return failed'
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return pharmacyError(message, 500, 'SALES_RETURN_FAILED')
   }
 
   const refundPaymentMode = (body.refundPaymentMode === 'cash' || body.refundPaymentMode === 'upi' || body.refundPaymentMode === 'card' || body.refundPaymentMode === 'other')
@@ -231,10 +260,37 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const responseBody = {
     success: true,
     refundAmount,
     netAmount,
-  })
+  }
+  if (idempotencyKey) {
+    await completeIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'sales_return',
+      key: idempotencyKey,
+      statusCode: 200,
+      response: responseBody,
+    })
+  }
+  await writePharmacyAuditEvent({
+    db,
+    hospitalId,
+    action: 'sales_return_completed',
+    actorUserId: auth.user.uid,
+    branchId,
+    entityType: 'return',
+    entityId: returnId,
+    summary: `Processed sales return for ${validLines.length} line item(s).`,
+    details: {
+      saleId: body.saleId,
+      refundAmount,
+      refundPaymentMode: refundPaymentMode || null,
+    },
+  }).catch(() => {})
+
+  return NextResponse.json(responseBody)
 }
 

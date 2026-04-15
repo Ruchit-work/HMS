@@ -8,6 +8,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
 import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
 import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
+import { acquireIdempotencyKey, clearIdempotencyKey, completeIdempotencyKey, sanitizeIdempotencyKey } from '@/utils/pharmacy/idempotency'
+import { writePharmacyAuditEvent } from '@/utils/pharmacy/audit'
+import { pharmacyError } from '@/utils/pharmacy/apiResponse'
 import { getFileKind, parseExcelBuffer, parsePdfText, type ParsedMedicineRow } from '@/utils/pharmacy/parseMedicineFile'
 import type { MedicineBatch, PurchaseOrderLine } from '@/types/pharmacy'
 
@@ -63,32 +66,37 @@ export async function POST(request: NextRequest) {
   if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
 
   const init = initFirebaseAdmin('pharmacy/purchase-orders/receive-by-file')
-  if (!init.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+  if (!init.ok) return pharmacyError('Server not configured', 500, 'SERVER_NOT_CONFIGURED')
 
   const ctxResult = await getPharmacyAuthContext(auth.user, {})
-  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+  if (!ctxResult.success) return pharmacyError(ctxResult.error, 403, 'PHARMACY_AUTH_FORBIDDEN')
 
   let orderId: string | null = null
   let file: File
   let supplierInvoiceNumber: string | null = null
   let parseOnly = false
+  let idempotencyKey: string | null = sanitizeIdempotencyKey(request.headers.get('x-idempotency-key'))
   try {
     const formData = await request.formData()
     const orderIdVal = formData.get('orderId')
     file = formData.get('file') as File
     const inv = formData.get('supplierInvoiceNumber')
     const parseOnlyVal = formData.get('parseOnly')
+    const idempotencyVal = formData.get('idempotencyKey')
     parseOnly = parseOnlyVal === '1' || parseOnlyVal === 'true'
+    if (!idempotencyKey && typeof idempotencyVal === 'string') {
+      idempotencyKey = sanitizeIdempotencyKey(idempotencyVal)
+    }
     if (typeof orderIdVal === 'string' && orderIdVal.trim()) {
       orderId = orderIdVal.trim()
     }
     if (typeof inv === 'string' && inv.trim()) supplierInvoiceNumber = inv.trim()
   } catch {
-    return NextResponse.json({ success: false, error: 'Invalid form data' }, { status: 400 })
+    return pharmacyError('Invalid form data', 400, 'INVALID_FORM_DATA')
   }
 
   if (!file || !(file instanceof File) || file.size === 0) {
-    return NextResponse.json({ success: false, error: 'No file or empty file' }, { status: 400 })
+    return pharmacyError('No file or empty file', 400, 'FILE_MISSING')
   }
 
   const filename = file.name || ''
@@ -107,14 +115,14 @@ export async function POST(request: NextRequest) {
     try {
       rows = await parseExcelBuffer(buffer)
     } catch {
-      return NextResponse.json({ success: false, error: 'Failed to parse Excel. Ensure it has a header row (e.g. name, quantity, batch, expiry).' }, { status: 400 })
+      return pharmacyError('Failed to parse Excel. Ensure it has a header row (e.g. name, quantity, batch, expiry).', 400, 'EXCEL_PARSE_FAILED')
     }
   } else {
     try {
       const text = await extractPdfText(buffer)
       rows = parsePdfText(text)
     } catch {
-      return NextResponse.json({ success: false, error: 'Failed to parse PDF. Try an Excel file for best results.' }, { status: 400 })
+      return pharmacyError('Failed to parse PDF. Try an Excel file for best results.', 400, 'PDF_PARSE_FAILED')
     }
   }
 
@@ -135,13 +143,33 @@ export async function POST(request: NextRequest) {
   const orderRef = db.collection(ordersPath).doc(orderId)
   const orderSnap = await orderRef.get()
   if (!orderSnap.exists) {
-    return NextResponse.json({ success: false, error: 'Order not found. Check the order number.' }, { status: 404 })
+    return pharmacyError('Order not found. Check the order number.', 404, 'PURCHASE_ORDER_NOT_FOUND')
+  }
+
+  const scopedIdempotencyKey = idempotencyKey && !parseOnly ? `${orderId}_receive_file_${idempotencyKey}` : null
+  if (scopedIdempotencyKey) {
+    const lock = await acquireIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'purchase_order_receive',
+      key: scopedIdempotencyKey,
+      userId: auth.user.uid,
+    })
+    if (lock.kind === 'completed') {
+      return NextResponse.json(lock.response, { status: lock.statusCode })
+    }
+    if (lock.kind === 'in_progress') {
+      return NextResponse.json(
+        { success: false, error: 'This receive-by-file request is already being processed. Please retry shortly.' },
+        { status: 409 }
+      )
+    }
   }
 
   const orderData = orderSnap.data()!
   const status = orderData.status as string
   if (status !== 'pending') {
-    return NextResponse.json({ success: false, error: 'Order is not pending (only sent orders can be received).' }, { status: 400 })
+    return pharmacyError('Order is not pending (only sent orders can be received).', 400, 'PURCHASE_ORDER_RECEIVE_INVALID_STATUS')
   }
 
   const branchId = orderData.branchId
@@ -166,7 +194,7 @@ export async function POST(request: NextRequest) {
 
   const items: PurchaseOrderLine[] = Array.isArray(orderData.items) ? orderData.items : []
   if (items.length === 0) {
-    return NextResponse.json({ success: false, error: 'Order has no items.' }, { status: 400 })
+    return pharmacyError('Order has no items.', 400, 'PURCHASE_ORDER_ITEMS_MISSING')
   }
 
   const receiveDetails = matchReceiveDetails(items, rows)
@@ -216,14 +244,48 @@ export async function POST(request: NextRequest) {
       tx.update(orderRef, updateData)
     })
   } catch (err) {
+    if (scopedIdempotencyKey) {
+      await clearIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'purchase_order_receive',
+        key: scopedIdempotencyKey,
+      }).catch(() => {})
+    }
     const message = err instanceof Error ? err.message : 'Failed to receive order'
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return pharmacyError(message, 500, 'PURCHASE_ORDER_RECEIVE_BY_FILE_FAILED')
   }
 
   const updated = await orderRef.get()
-  return NextResponse.json({
+  const responseBody = {
     success: true,
     order: { id: orderId, ...updated.data() },
     message: `Order received. Stock updated from ${rows.length} row(s) in file.`,
-  })
+  }
+  if (scopedIdempotencyKey) {
+    await completeIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'purchase_order_receive',
+      key: scopedIdempotencyKey,
+      statusCode: 200,
+      response: responseBody,
+    })
+  }
+  await writePharmacyAuditEvent({
+    db,
+    hospitalId,
+    action: 'purchase_order_received_by_file',
+    actorUserId: auth.user.uid,
+    branchId,
+    entityType: 'purchase_order',
+    entityId: orderId,
+    summary: 'Purchase order received using supplier upload file.',
+    details: {
+      supplierInvoiceNumber: supplierInvoiceNumber || null,
+      parsedRowCount: rows.length,
+    },
+  }).catch(() => {})
+
+  return NextResponse.json(responseBody)
 }

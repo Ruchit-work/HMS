@@ -8,6 +8,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
 import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
 import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
+import { acquireIdempotencyKey, clearIdempotencyKey, completeIdempotencyKey, sanitizeIdempotencyKey } from '@/utils/pharmacy/idempotency'
+import { writePharmacyAuditEvent } from '@/utils/pharmacy/audit'
+import { pharmacyError } from '@/utils/pharmacy/apiResponse'
 import type { MedicineBatch } from '@/types/pharmacy'
 import type { ParsedMedicineRow } from '@/utils/pharmacy/parseMedicineFile'
 
@@ -34,16 +37,16 @@ export async function POST(request: NextRequest) {
   if (!auth.success || !auth.user) return createAuthErrorResponse(auth)
 
   const init = initFirebaseAdmin('pharmacy/purchase-orders/receive-by-file/confirm')
-  if (!init.ok) return NextResponse.json({ error: 'Server not configured' }, { status: 500 })
+  if (!init.ok) return pharmacyError('Server not configured', 500, 'SERVER_NOT_CONFIGURED')
 
   const ctxResult = await getPharmacyAuthContext(auth.user, {})
-  if (!ctxResult.success) return NextResponse.json({ success: false, error: ctxResult.error }, { status: 403 })
+  if (!ctxResult.success) return pharmacyError(ctxResult.error, 403, 'PHARMACY_AUTH_FORBIDDEN')
 
-  let body: { orderId?: string; rows?: ParsedMedicineRow[]; supplierInvoiceNumber?: string }
+  let body: { orderId?: string; rows?: ParsedMedicineRow[]; supplierInvoiceNumber?: string; idempotencyKey?: string }
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
+    return pharmacyError('Invalid JSON body', 400, 'INVALID_JSON_BODY')
   }
 
   const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : ''
@@ -54,17 +57,40 @@ export async function POST(request: NextRequest) {
 
   const validRows = rows.filter((r) => (r.name || '').trim().length > 0)
   if (validRows.length === 0) {
-    return NextResponse.json({ success: false, error: 'At least one row with medicine name is required' }, { status: 400 })
+    return pharmacyError('At least one row with medicine name is required', 400, 'ROWS_REQUIRED')
   }
 
   const db = admin.firestore()
   const hospitalId = ctxResult.context.hospitalId
   const medicinesPath = getPharmacyCollectionPath(hospitalId, 'medicines')
   const stockPath = getPharmacyCollectionPath(hospitalId, 'stock')
+  const idempotencyKey = sanitizeIdempotencyKey(
+    request.headers.get('x-idempotency-key') || body.idempotencyKey
+  )
 
   // If no orderId is provided, behave like a generic bulk upload:
   // create/update medicines and (if possible) stock, but do not touch any purchase order.
   if (!orderId) {
+    const scopedIdempotencyKey = idempotencyKey ? `generic_import_${idempotencyKey}` : null
+    if (scopedIdempotencyKey) {
+      const lock = await acquireIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'purchase_order_receive',
+        key: scopedIdempotencyKey,
+        userId: auth.user.uid,
+      })
+      if (lock.kind === 'completed') {
+        return NextResponse.json(lock.response, { status: lock.statusCode })
+      }
+      if (lock.kind === 'in_progress') {
+        return NextResponse.json(
+          { success: false, error: 'This import request is already being processed. Please retry shortly.' },
+          { status: 409 }
+        )
+      }
+    }
+
     const nowStr = new Date().toISOString()
     const nowIso = nowStr
     try {
@@ -155,14 +181,33 @@ export async function POST(request: NextRequest) {
         }
       })
     } catch (err) {
+      if (scopedIdempotencyKey) {
+        await clearIdempotencyKey({
+          db,
+          hospitalId,
+          scope: 'purchase_order_receive',
+          key: scopedIdempotencyKey,
+        }).catch(() => {})
+      }
       const message = err instanceof Error ? err.message : 'Failed to import medicines'
-      return NextResponse.json({ success: false, error: message }, { status: 500 })
+      return pharmacyError(message, 500, 'GENERIC_IMPORT_FAILED')
     }
 
-    return NextResponse.json({
+    const responseBody = {
       success: true,
       message: 'Medicines imported from file. No purchase order was updated.',
-    })
+    }
+    if (scopedIdempotencyKey) {
+      await completeIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'purchase_order_receive',
+        key: scopedIdempotencyKey,
+        statusCode: 200,
+        response: responseBody,
+      })
+    }
+    return NextResponse.json(responseBody)
   }
 
   const ordersPath = getPharmacyCollectionPath(hospitalId, 'purchase_orders')
@@ -170,13 +215,33 @@ export async function POST(request: NextRequest) {
   const orderRef = db.collection(ordersPath).doc(orderId)
   const orderSnap = await orderRef.get()
   if (!orderSnap.exists) {
-    return NextResponse.json({ success: false, error: 'Order not found' }, { status: 404 })
+    return pharmacyError('Order not found', 404, 'PURCHASE_ORDER_NOT_FOUND')
+  }
+
+  const scopedIdempotencyKey = idempotencyKey ? `${orderId}_receive_file_confirm_${idempotencyKey}` : null
+  if (scopedIdempotencyKey) {
+    const lock = await acquireIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'purchase_order_receive',
+      key: scopedIdempotencyKey,
+      userId: auth.user.uid,
+    })
+    if (lock.kind === 'completed') {
+      return NextResponse.json(lock.response, { status: lock.statusCode })
+    }
+    if (lock.kind === 'in_progress') {
+      return NextResponse.json(
+        { success: false, error: 'This confirm request is already being processed. Please retry shortly.' },
+        { status: 409 }
+      )
+    }
   }
 
   const orderData = orderSnap.data()!
   const status = orderData.status as string
   if (status !== 'pending') {
-    return NextResponse.json({ success: false, error: 'Order is not pending (only sent orders can be received)' }, { status: 400 })
+    return pharmacyError('Order is not pending (only sent orders can be received)', 400, 'PURCHASE_ORDER_RECEIVE_INVALID_STATUS')
   }
 
   const branchId = orderData.branchId as string
@@ -340,14 +405,48 @@ export async function POST(request: NextRequest) {
       tx.update(orderRef, updateData)
     })
   } catch (err) {
+    if (scopedIdempotencyKey) {
+      await clearIdempotencyKey({
+        db,
+        hospitalId,
+        scope: 'purchase_order_receive',
+        key: scopedIdempotencyKey,
+      }).catch(() => {})
+    }
     const message = err instanceof Error ? err.message : 'Failed to confirm receive'
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return pharmacyError(message, 500, 'PURCHASE_ORDER_RECEIVE_CONFIRM_FAILED')
   }
 
   const updated = await orderRef.get()
-  return NextResponse.json({
+  const responseBody = {
     success: true,
     order: { id: orderId, ...updated.data() },
     message: 'Order marked as delivered. Stock updated.',
-  })
+  }
+  if (scopedIdempotencyKey) {
+    await completeIdempotencyKey({
+      db,
+      hospitalId,
+      scope: 'purchase_order_receive',
+      key: scopedIdempotencyKey,
+      statusCode: 200,
+      response: responseBody,
+    })
+  }
+  await writePharmacyAuditEvent({
+    db,
+    hospitalId,
+    action: 'purchase_order_received_by_file_confirmed',
+    actorUserId: auth.user.uid,
+    branchId,
+    entityType: 'purchase_order',
+    entityId: orderId,
+    summary: 'Purchase order receive confirmed from parsed supplier rows.',
+    details: {
+      supplierInvoiceNumber: supplierInvoiceNumber || null,
+      validRowCount: validRows.length,
+    },
+  }).catch(() => {})
+
+  return NextResponse.json(responseBody)
 }

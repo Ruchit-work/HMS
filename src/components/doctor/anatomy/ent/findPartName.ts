@@ -58,6 +58,29 @@ export function findPartName(
     return null
   }
 
+  // Female reproductive system: try resolving from *any* meaningful name in the object->parent chain.
+  // Many GLBs use generic mesh names like "Object_32", so we must not rely on only the first non-empty name.
+  if (anatomyType === 'female_reproductive') {
+    const namesInChain = getObjectAndParentNamesWithDepth(object, 18)
+    const femaleMap = anatomicalNameToPartMap.female_reproductive ?? {}
+    for (const rawName of namesInChain) {
+      const n = rawName.trim()
+      if (!n) continue
+      if (isGenericAnatomyPlaceholder(n)) continue
+
+      // Exact / case-insensitive match to our standardized part keys
+      if (femaleMap[n]) return femaleMap[n]
+      const lower = n.toLowerCase()
+      for (const [anatomicalName, mappedPart] of Object.entries(femaleMap)) {
+        if (anatomicalName.toLowerCase() === lower) return mappedPart
+      }
+
+      // Pattern match (uterus/ovary/cervix/etc.)
+      const patternPart = matchByNamePattern('female_reproductive', n)
+      if (patternPart) return patternPart
+    }
+  }
+
   // Resolve name from object or parent chain (some GLBs put name on parent group)
   const effectiveName = getObjectOrParentName(object)
 
@@ -153,6 +176,29 @@ export function getObjectAndParentNames(object: THREE.Object3D): string[] {
   return names
 }
 
+function getObjectAndParentNamesWithDepth(object: THREE.Object3D, maxDepth: number): string[] {
+  const names: string[] = []
+  let current: THREE.Object3D | null = object
+  let depth = 0
+  while (current && depth < maxDepth) {
+    if (current.name && typeof current.name === 'string' && current.name.trim() !== '') {
+      names.push(current.name.trim())
+    }
+    current = current.parent
+    depth++
+  }
+  return names
+}
+
+function isGenericAnatomyPlaceholder(name: string): boolean {
+  const lower = name.trim().toLowerCase()
+  if (!lower) return true
+  if (lower === 'anatomical name') return true
+  if (lower.startsWith('object_') || /^object\s*[_-]?\d+$/i.test(name)) return true
+  if (lower.startsWith('mesh_') || /^mesh\s*[_-]?\d+$/i.test(name)) return true
+  return false
+}
+
 /** Resolve a single name using the editable lungs mapping (lungsMeshPartMapping.ts). Case-insensitive. */
 function getLungsPartFromEditableMapping(name: string): string | null {
   const lower = name.toLowerCase()
@@ -168,6 +214,23 @@ function getLungsPartFromEditableMapping(name: string): string | null {
 function matchByNamePattern(anatomyType: string, objectName: string): string | null {
   const lowerName = objectName.toLowerCase()
   const name = objectName.toLowerCase()
+
+  if (anatomyType === 'female_reproductive') {
+    if (/uterus|uterine\b/.test(lowerName) && !/tube/.test(lowerName)) return 'Uterus'
+    if (/fundus/.test(lowerName)) return 'Fundus'
+    if (/cervix|cervical/.test(lowerName)) return 'Cervix'
+    if (/vagina|vaginal/.test(lowerName)) return 'Vagina'
+    if (/vulva|vulvar/.test(lowerName)) return 'Vulva'
+    if (/bladder|urinary/.test(lowerName)) return 'Bladder'
+    if (/rectum/.test(lowerName)) return 'Rectum'
+    if (/bony pelvis|pelvic bone|pelvis|bony_pelvis|pubis|ilium|ischium|sacrum|coccyx/.test(lowerName)) return 'Pelvic_Bone'
+    if (/ovary|ovaries|ovarian/.test(lowerName)) return 'Ovary'
+    if (/fallopian|uterine\s*tube|tube/.test(lowerName)) return 'Uterine_Tube'
+    if (/infundibulum/.test(lowerName)) return 'Infundibulum'
+    if (/fimbria|fimbriae/.test(lowerName)) return 'Fimbriae'
+    if (/endometrium/.test(lowerName)) return 'Endometrium'
+    if (/myometrium/.test(lowerName)) return 'Myometrium'
+  }
 
   if (anatomyType === 'throat') {
     if (/pharynx/.test(lowerName)) return 'Pharynx'
@@ -286,6 +349,25 @@ function matchFromParent(object: THREE.Object3D, anatomyType: string): string | 
 
       const lower = parentName.toLowerCase()
       const m = (pat: RegExp, res: string) => pat.test(lower) ? res : null
+
+      if (anatomyType === 'female_reproductive') {
+        const r =
+          m(/uterus|uterine\b(?!.*tube)/, 'Uterus') ||
+          m(/fundus/, 'Fundus') ||
+          m(/cervix|cervical/, 'Cervix') ||
+          m(/vagina|vaginal/, 'Vagina') ||
+          m(/vulva|vulvar/, 'Vulva') ||
+          m(/bladder|urinary/, 'Bladder') ||
+          m(/rectum/, 'Rectum') ||
+          m(/bony pelvis|pelvic bone|pelvis|pubis|ilium|ischium|sacrum|coccyx/, 'Pelvic_Bone') ||
+          m(/ovary|ovaries|ovarian/, 'Ovary') ||
+          m(/fallopian|uterine\s*tube|tube/, 'Uterine_Tube') ||
+          m(/infundibulum/, 'Infundibulum') ||
+          m(/fimbria|fimbriae/, 'Fimbriae') ||
+          m(/endometrium/, 'Endometrium') ||
+          m(/myometrium/, 'Myometrium')
+        if (r) return r
+      }
 
       if (anatomyType === 'throat') {
         const r = m(/pharynx/, 'Pharynx') || m(/larynx|voice box/, 'Larynx') || m(/epiglottis/, 'Epiglottis') || m(/trachea|windpipe/, 'Trachea') || m(/vocal|cord/, 'Vocal_Cords')

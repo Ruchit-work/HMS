@@ -3,7 +3,7 @@
  * Maps doctor specializations to relevant anatomy models
  */
 
-export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes'
+export type AnatomyType = 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes' | 'female_reproductive'
 
 export interface AnatomyModel {
   type: AnatomyType
@@ -60,6 +60,12 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
     label: 'Lymph Nodes',
     icon: '🧬',
     description: 'Lymph nodes anatomy and related conditions'
+  },
+  {
+    type: 'female_reproductive',
+    label: 'Female Reproductive',
+    icon: '♀️',
+    description: 'Female reproductive system anatomy'
   }
 ]
 
@@ -71,7 +77,7 @@ export const ALL_ANATOMY_MODELS: AnatomyModel[] = [
 export function getAnatomyModelsForSpecialization(specialization: string | null | undefined): AnatomyType[] {
   if (!specialization) {
     // If no specialization, show all models (for flexibility)
-    return ['ear', 'nose', 'throat', 'dental', 'lungs', 'kidney', 'skeleton', 'lymph_nodes']
+    return ['ear', 'nose', 'throat', 'dental', 'lungs', 'kidney', 'skeleton', 'lymph_nodes', 'female_reproductive']
   }
 
   const lowerSpecialization = specialization.toLowerCase()
@@ -141,7 +147,7 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     lowerSpecialization.includes('general physician') ||
     lowerSpecialization.includes('primary care')
   ) {
-    return ['ear', 'nose', 'throat', 'lungs', 'kidney', 'skeleton']
+    return ['ear', 'nose', 'throat', 'lungs', 'kidney', 'skeleton', 'female_reproductive']
   }
 
   // Pediatrician → ear, nose, throat, lungs, kidney, skeleton (common in children)
@@ -163,6 +169,18 @@ export function getAnatomyModelsForSpecialization(specialization: string | null 
     lowerSpecialization.includes('lymph')
   ) {
     return ['lymph_nodes']
+  }
+
+  // Gynecology / Obstetrics → female reproductive system
+  if (
+    lowerSpecialization.includes('gyne') ||
+    lowerSpecialization.includes('gynae') ||
+    lowerSpecialization.includes('obstetric') ||
+    lowerSpecialization.includes('ob-gyn') ||
+    lowerSpecialization.includes('obgyn') ||
+    lowerSpecialization.includes('women')
+  ) {
+    return ['female_reproductive']
   }
 
   // For other specializations, return empty array (no relevant models)
