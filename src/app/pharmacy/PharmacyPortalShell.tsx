@@ -97,6 +97,7 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const notificationsRef = useRef<HTMLDivElement>(null)
+  const didRestoreActiveTabRef = useRef(false)
 
   const displayName: string =
     (user?.data?.firstName != null && user?.data?.lastName != null
@@ -120,6 +121,8 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!portal) return
+    if (didRestoreActiveTabRef.current) return
+    didRestoreActiveTabRef.current = true
     try {
       const storedTab = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) as string | null
       const tab: PharmacyPortalTabId | null =

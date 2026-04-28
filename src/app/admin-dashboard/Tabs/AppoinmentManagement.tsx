@@ -540,6 +540,7 @@ export default function AppoinmentManagement({
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
+                body: JSON.stringify({ hospitalId: activeHospitalId || null }),
             })
 
             const data = await response.json()

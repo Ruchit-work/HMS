@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { applyRateLimit } from '@/utils/shared/rateLimit'
 
 /**
  * Azure Speech Services API endpoint
@@ -16,6 +17,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimitResult = await applyRateLimit(req, 'GENERAL')
+    if (rateLimitResult instanceof Response) {
+      return rateLimitResult
+    }
+
     const formData = await req.formData()
     const audioFile = formData.get('audio') as File
     const language = (formData.get('language') as string) || 'en-IN'
@@ -23,6 +29,14 @@ export async function POST(req: NextRequest) {
     if (!audioFile) {
       return NextResponse.json(
         { error: 'No audio file provided' },
+        { status: 400 }
+      )
+    }
+
+    const MAX_AUDIO_BYTES = 15 * 1024 * 1024
+    if (audioFile.size <= 0 || audioFile.size > MAX_AUDIO_BYTES) {
+      return NextResponse.json(
+        { error: 'Audio file size must be between 1 byte and 15 MB.' },
         { status: 400 }
       )
     }

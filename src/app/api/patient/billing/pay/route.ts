@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
   // Declare variables outside try block for catch block access
   let billingId: string | undefined
-  let method: "card" | "upi" | "cash" | "demo" = "card"
+  let method: "card" | "upi" | "cash" = "card"
   let totalAmount = 0
   let body: any = {}
 
@@ -44,25 +44,41 @@ export async function POST(req: Request) {
     }
 
     body = await req.json().catch(() => ({}))
-    billingId = body?.billingId
-    const paymentMethod = body?.paymentMethod || "card"
-    method = paymentMethod
+    billingId = typeof body?.billingId === "string" ? body.billingId.trim() : body?.billingId
+    const paymentMethod = typeof body?.paymentMethod === "string" ? body.paymentMethod.trim().toLowerCase() : "card"
+    if (paymentMethod === "card" || paymentMethod === "upi" || paymentMethod === "cash") {
+      method = paymentMethod
+    }
     const actor = body?.actor
-    const actorType: "patient" | "receptionist" | "admin" = actor || (isPatient ? "patient" : "receptionist")
+    const actorType: "patient" | "receptionist" | "admin" =
+      actor === "patient" || actor === "receptionist" || actor === "admin"
+        ? actor
+        : (isPatient ? "patient" : "receptionist")
 
     if (!billingId || typeof billingId !== "string") {
       return Response.json({ error: "Missing billingId" }, { status: 400 })
     }
+    if (billingId.length > 128) {
+      return Response.json({ error: "Invalid billingId" }, { status: 400 })
+    }
+
+    const requestedHospitalId =
+      typeof body?.hospitalId === "string" && body.hospitalId.trim().length > 0
+        ? body.hospitalId.trim()
+        : null
+    const authHospitalId =
+      typeof auth.user?.data?.hospitalId === "string" && auth.user.data.hospitalId.trim().length > 0
+        ? auth.user.data.hospitalId.trim()
+        : typeof auth.user?.data?.activeHospital === "string" && auth.user.data.activeHospital.trim().length > 0
+          ? auth.user.data.activeHospital.trim()
+          : Array.isArray(auth.user?.data?.hospitals) && typeof auth.user?.data?.hospitals?.[0] === "string"
+            ? auth.user.data.hospitals[0].trim()
+            : null
 
     const firestore = admin.firestore()
     const nowIso = new Date().toISOString()
     const paymentReference = `BILL-${Date.now()}`
     const transactionId = `TXN-${Date.now()}`
-
-
-    if (!billingId) {
-      return Response.json({ error: "Missing billingId" }, { status: 400 })
-    }
 
     await firestore.runTransaction(async (tx) => {
       // First, try to find in billing_records (admission billing)
@@ -78,19 +94,22 @@ export async function POST(req: Request) {
         billingData = billingSnap.data() || {}
       } else {
         // If not found in billing_records, check appointments (appointment billing)
-        // Prefer hospital-scoped appointments when hospitalId is provided
-        const hospitalId: string | undefined = body?.hospitalId
-        
-        if (hospitalId) {
+        // Prefer hospital-scoped appointments when hospital context is available.
+        const candidateHospitalIds = [requestedHospitalId, authHospitalId].filter(
+          (value, idx, arr): value is string => Boolean(value) && arr.indexOf(value) === idx
+        )
+
+        for (const hospitalId of candidateHospitalIds) {
           const hospAppointmentRef = firestore
             .collection(getHospitalCollectionPath(hospitalId, "appointments"))
             .doc(billingId!)
           const hospAppointmentSnap = await tx.get(hospAppointmentRef)
-          
+
           if (hospAppointmentSnap.exists) {
             isAdmissionBilling = false
             billingData = hospAppointmentSnap.data() || {}
             appointmentRef = hospAppointmentRef
+            break
           }
         }
         

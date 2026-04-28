@@ -3,6 +3,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { getUserActiveHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/firebase/serverHospitalQueries"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
 
 interface Params {
   appointmentId: string
@@ -31,12 +32,30 @@ export async function POST(
   }
 
   try {
+    const rateLimitResult = await applyRateLimit(request, "ADMIN", auth.user?.uid)
+    if (rateLimitResult instanceof Response) {
+      return rateLimitResult
+    }
+
     const initResult = initFirebaseAdmin("mark-not-attended API")
     if (!initResult.ok) {
       return NextResponse.json({ error: "Server not configured" }, { status: 500 })
     }
 
     const { appointmentId } = await context.params
+    if (!appointmentId || typeof appointmentId !== "string" || appointmentId.trim().length > 128) {
+      return NextResponse.json(
+        { error: "Invalid appointment ID" },
+        { status: 400 }
+      )
+    }
+
+    const body = await request.json().catch(() => ({}))
+    const requestedHospitalId =
+      typeof body?.hospitalId === "string" && body.hospitalId.trim().length > 0
+        ? body.hospitalId.trim()
+        : null
+
     const firestore = admin.firestore()
 
     // Try to find the appointment - first check user's active hospital, then search all hospitals
@@ -44,19 +63,27 @@ export async function POST(
     let appointmentData: FirebaseFirestore.DocumentData | null = null
     let hospitalId: string | null = null
 
-    // First, try user's active hospital
+    // First, try request hospital context or user's active hospital (preferred path)
+    const preferredHospitalIds: string[] = []
+    if (requestedHospitalId) preferredHospitalIds.push(requestedHospitalId)
+
     if (auth.user?.uid) {
       const userHospitalId = await getUserActiveHospitalId(auth.user.uid)
-      if (userHospitalId) {
-        const ref = firestore
-          .collection(getHospitalCollectionPath(userHospitalId, "appointments"))
-          .doc(appointmentId)
-        const doc = await ref.get()
-        if (doc.exists) {
-          appointmentRef = ref
-          appointmentData = doc.data()!
-          hospitalId = userHospitalId
-        }
+      if (userHospitalId && !preferredHospitalIds.includes(userHospitalId)) {
+        preferredHospitalIds.push(userHospitalId)
+      }
+    }
+
+    for (const preferredHospitalId of preferredHospitalIds) {
+      const ref = firestore
+        .collection(getHospitalCollectionPath(preferredHospitalId, "appointments"))
+        .doc(appointmentId)
+      const doc = await ref.get()
+      if (doc.exists) {
+        appointmentRef = ref
+        appointmentData = doc.data()!
+        hospitalId = preferredHospitalId
+        break
       }
     }
 

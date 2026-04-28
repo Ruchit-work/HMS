@@ -8,6 +8,8 @@ import { Appointment } from "@/types/patient"
 import { getDoctorHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/firebase/serverHospitalQueries"
 import { detectDocumentType, detectDocumentTypeFromText, detectDocumentTypeEnhanced, detectSpecialty } from "@/utils/documents/documentDetection"
 import { getStorage } from "firebase-admin/storage"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
+import crypto from "crypto"
 
 // Button handler registry
 const BUTTON_HANDLERS: Record<string, (from: string) => Promise<void>> = {
@@ -50,7 +52,37 @@ async function sendWithFallback(
   }
 }
 
+function verifyMetaWebhookSignature(rawBody: string, signatureHeader: string, appSecret: string): boolean {
+  if (!signatureHeader.startsWith("sha256=")) {
+    return false
+  }
+
+  const receivedSignature = signatureHeader.slice("sha256=".length).trim()
+  if (!receivedSignature || receivedSignature.length !== 64) {
+    return false
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", appSecret)
+    .update(rawBody, "utf8")
+    .digest("hex")
+
+  const receivedBuffer = Buffer.from(receivedSignature, "hex")
+  const expectedBuffer = Buffer.from(expectedSignature, "hex")
+
+  if (receivedBuffer.length !== expectedBuffer.length) {
+    return false
+  }
+
+  return crypto.timingSafeEqual(receivedBuffer, expectedBuffer)
+}
+
 export async function GET(req: Request) {
+  const rateLimitResult = await applyRateLimit(req, "GENERAL")
+  if (rateLimitResult instanceof Response) {
+    return rateLimitResult
+  }
+
   const { searchParams } = new URL(req.url)
   const mode = searchParams.get("hub.mode")
   const token = searchParams.get("hub.verify_token")
@@ -65,7 +97,28 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
+    const rateLimitResult = await applyRateLimit(req, "GENERAL")
+    if (rateLimitResult instanceof Response) {
+      return rateLimitResult
+    }
+
+    const rawBody = await req.text()
+    if (!rawBody || rawBody.length > 1024 * 1024) {
+      return NextResponse.json({ error: "Invalid webhook payload size" }, { status: 400 })
+    }
+
+    const appSecret = process.env.META_WHATSAPP_APP_SECRET
+    if (appSecret) {
+      const signatureHeader = req.headers.get("x-hub-signature-256")
+      if (!signatureHeader || !verifyMetaWebhookSignature(rawBody, signatureHeader, appSecret)) {
+        return NextResponse.json({ error: "Invalid webhook signature" }, { status: 403 })
+      }
+    }
+
+    const body = JSON.parse(rawBody)
+    if (body?.object && body.object !== "whatsapp_business_account") {
+      return NextResponse.json({ success: true })
+    }
 
     const entry = body.entry?.[0]
     const changes = entry?.changes?.[0]

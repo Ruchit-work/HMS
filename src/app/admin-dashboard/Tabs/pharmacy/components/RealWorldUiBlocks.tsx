@@ -1,5 +1,66 @@
 import React from 'react'
 
+export type EmptyStateAction = {
+  label: string
+  onClick: () => void
+  variant?: 'primary' | 'secondary'
+}
+
+export function ActionEmptyState({
+  title,
+  hint,
+  actions,
+}: {
+  title: string
+  hint?: string
+  actions?: EmptyStateAction[]
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-4 text-center">
+      <p className="text-sm font-medium text-slate-700">{title}</p>
+      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      {actions && actions.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+          {actions.map((action, idx) => (
+            <button
+              key={`${action.label}-${idx}`}
+              type="button"
+              onClick={action.onClick}
+              className={
+                action.variant === 'primary'
+                  ? 'rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700'
+                  : 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50'
+              }
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function getPurchaseOrderStatusMeta(status: string | undefined) {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'received') return { label: 'Delivered', badgeClass: 'bg-emerald-100 text-emerald-800' }
+  if (normalized === 'partial') return { label: 'Partial', badgeClass: 'bg-blue-100 text-blue-800' }
+  if (normalized === 'cancelled') return { label: 'Cancelled', badgeClass: 'bg-slate-100 text-slate-700' }
+  if (normalized === 'draft') return { label: 'Draft', badgeClass: 'bg-slate-200 text-slate-700' }
+  return { label: 'Sent', badgeClass: 'bg-amber-100 text-amber-800' }
+}
+
+export function getTransferStatusMeta(status: string | undefined) {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'completed' || normalized === 'received') {
+    return { label: 'Completed', badgeClass: 'bg-emerald-100 text-emerald-800' }
+  }
+  if (normalized === 'cancelled' || normalized === 'failed') {
+    return { label: 'Cancelled', badgeClass: 'bg-slate-100 text-slate-700' }
+  }
+  return { label: 'In progress', badgeClass: 'bg-amber-100 text-amber-800' }
+}
+
 export function QueueFiltersBar({
   queueSearch,
   onQueueSearchChange,

@@ -22,7 +22,7 @@ interface UnifiedBillingRecord {
   totalAmount: number
   generatedAt: string
   status: "pending" | "paid" | "void" | "cancelled"
-  paymentMethod?: "card" | "upi" | "cash" | "demo"
+  paymentMethod?: "card" | "upi" | "cash"
   paidAt?: string | null
   paymentReference?: string | null
   transactionId?: string | null

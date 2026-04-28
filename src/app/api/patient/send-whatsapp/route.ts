@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { sendTextMessage } from "@/server/metaWhatsApp"
+import { applyRateLimit } from "@/utils/shared/rateLimit"
 
 /**
  * Public API route for sending WhatsApp messages during patient signup
@@ -7,6 +8,11 @@ import { sendTextMessage } from "@/server/metaWhatsApp"
  */
 export async function POST(request: Request) {
   try {
+    const rateLimitResult = await applyRateLimit(request, "GENERAL")
+    if (rateLimitResult instanceof Response) {
+      return rateLimitResult
+    }
+
     // Check if Meta WhatsApp is configured
     const metaAccessToken = process.env.META_WHATSAPP_ACCESS_TOKEN
     if (!metaAccessToken) {
@@ -56,8 +62,29 @@ export async function POST(request: Request) {
       normalizedTo = `+${normalizedTo}`
     }
 
+    if (!/^\+\d{8,15}$/.test(normalizedTo)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid phone number format.",
+        },
+        { status: 400 }
+      )
+    }
+
+    const trimmedMessage = message.trim()
+    if (!trimmedMessage || trimmedMessage.length > 1000) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Message must be between 1 and 1000 characters.",
+        },
+        { status: 400 }
+      )
+    }
+
     // Send via Meta WhatsApp
-    const result = await sendTextMessage(normalizedTo, message)
+    const result = await sendTextMessage(normalizedTo, trimmedMessage)
 
     if (!result.success) {
       return NextResponse.json(

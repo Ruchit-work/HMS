@@ -362,7 +362,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id, hospitalId: activeHospitalId || null }),
       })
       const data = await response.json()
       

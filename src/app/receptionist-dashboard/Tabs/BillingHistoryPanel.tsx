@@ -267,8 +267,8 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
       if (record.status === "paid") return
       setSelectedBillingRecord(record)
       setBillingPaymentMethod(
-        record.paymentMethod && record.paymentMethod !== "demo"
-          ? (record.paymentMethod as BillingPaymentMethod)
+        record.paymentMethod === "card" || record.paymentMethod === "upi" || record.paymentMethod === "cash"
+          ? record.paymentMethod
           : "cash"
       )
       setBillingPaymentData(emptyPaymentData)
