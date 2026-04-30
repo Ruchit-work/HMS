@@ -15,6 +15,15 @@ interface UnifiedBillingRecord {
   doctorFee?: number
   consultationFee?: number
   otherServices?: Array<{ description: string; amount: number }>
+  paymentTerms?: "standard" | "pay_later_after_discharge"
+  packageSummary?: {
+    packageId: string
+    packageName: string
+    fixedRate: number
+    paymentTiming: "advance" | "after_operation"
+    advancePaidAmount: number
+    dueAmount: number
+  } | null
   totalAmount: number
   generatedAt: string
   status: "pending" | "paid" | "void" | "cancelled"
@@ -48,6 +57,11 @@ export async function GET(request: Request) {
     if (!initResult.ok) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
+
+    const { searchParams } = new URL(request.url)
+    const mode = searchParams.get("mode")
+    const admissionOnlyMode = mode === "admission_only"
+    const enrichPatientDetails = searchParams.get("enrich") !== "0"
 
     const firestore = admin.firestore()
     
@@ -122,8 +136,9 @@ export async function GET(request: Request) {
           }
         }
         
-        // If no appointmentId and no branchId, skip (can't determine branch)
-        if (!data.branchId && !data.appointmentId) {
+        // If no appointmentId and no branchId, skip only non-admission records.
+        const isAdmissionRecord = Boolean(data.admissionId)
+        if (!data.branchId && !data.appointmentId && !isAdmissionRecord) {
           continue
         }
       }
@@ -137,7 +152,7 @@ export async function GET(request: Request) {
         !patientName ||
         (typeof patientName === "string" && patientName.trim().toLowerCase() === "unknown")
 
-      if (needsEnrichment) {
+      if (enrichPatientDetails && needsEnrichment) {
         try {
           if (patientUid) {
             const patientDoc = await firestore.collection("patients").doc(String(patientUid)).get()
@@ -177,6 +192,11 @@ export async function GET(request: Request) {
         roomCharges: Number(data.roomCharges || 0),
         doctorFee: data.doctorFee !== undefined ? Number(data.doctorFee) : undefined,
         otherServices: Array.isArray(data.otherServices) ? data.otherServices : [],
+        paymentTerms:
+          data.paymentTerms === "pay_later_after_discharge"
+            ? "pay_later_after_discharge"
+            : "standard",
+        packageSummary: data.packageSummary || null,
         totalAmount: Number(data.totalAmount || 0),
         generatedAt: data.generatedAt || new Date().toISOString(),
         status: data.status || "pending",
@@ -193,6 +213,15 @@ export async function GET(request: Request) {
       if (data.appointmentId) {
         billedAppointmentIds.add(String(data.appointmentId))
       }
+    }
+
+    if (admissionOnlyMode) {
+      records.sort((a, b) => {
+        const dateA = new Date(a.generatedAt).getTime()
+        const dateB = new Date(b.generatedAt).getTime()
+        return dateB - dateA
+      })
+      return Response.json({ records })
     }
 
     // Fetch appointments with payments
@@ -351,7 +380,10 @@ export async function GET(request: Request) {
       const patientId = data.patientId || null
 
       // Enrich patient name if needed
-      if (!patientName || (typeof patientName === "string" && patientName.trim().toLowerCase() === "unknown")) {
+      if (
+        enrichPatientDetails &&
+        (!patientName || (typeof patientName === "string" && patientName.trim().toLowerCase() === "unknown"))
+      ) {
         try {
           if (patientUid) {
             const patientDoc = await firestore.collection("patients").doc(String(patientUid)).get()

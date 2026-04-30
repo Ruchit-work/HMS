@@ -188,12 +188,13 @@ export interface NotificationData {
   message: string
 }
 
-export type RoomType = "general" | "semi_private" | "private" | "deluxe" | "vip"
+export type RoomType = "general" | "semi_private" | "private" | "deluxe" | "vip" | "custom"
 
 export interface Room {
   id: string
   roomNumber: string
   roomType: RoomType
+  customRoomTypeName?: string | null
   ratePerDay: number
   status: "available" | "occupied" | "maintenance"
   attributes?: Record<string, unknown>
@@ -227,12 +228,110 @@ export interface Admission {
   appointmentId: string
   patientUid: string
   patientId?: string
+  patientAddress?: string | null
   doctorId: string
   doctorName?: string
   roomId: string
   roomNumber: string
   roomType: RoomType
+  customRoomTypeName?: string | null
   roomRatePerDay: number
+  admitType?: "emergency" | "planned" | "doctor_request"
+  expectedDischargeAt?: string | null
+  plannedAdmitAt?: string | null
+  roomStays?: Array<{
+    roomId: string
+    roomNumber: string
+    roomType: RoomType
+    customRoomTypeName?: string | null
+    ratePerDay: number
+    fromAt: string
+    toAt?: string | null
+  }>
+  charges?: {
+    doctorRoundFee?: number
+    nurseRoundFee?: number
+    medicineCharges?: number
+    injectionCharges?: number
+    bottleCharges?: number
+    facilityCharges?: number
+    otherCharges?: number
+    otherDescription?: string | null
+  }
+  paymentTerms?: "standard" | "pay_later_after_discharge"
+  operationPackage?: {
+    packageId: string
+    packageName: string
+    fixedRate: number
+    paymentTiming: "advance" | "after_operation"
+    advancePaidAmount?: number
+    notes?: string | null
+  } | null
+  doctorRounds?: Array<{
+    roundAt: string
+    doctorId: string
+    doctorName?: string | null
+    notes?: string | null
+    fee?: number
+    markedBy?: string
+    prescriptionNote?: string | null
+    medicineName?: string | null
+    injectionName?: string | null
+    additionalNote?: string | null
+    medicineCharge?: number
+    injectionCharge?: number
+    bottleCharge?: number
+    otherCharge?: number
+    medicineEntries?: Array<{
+      medicineId?: string | null
+      name: string
+      category: "medicine" | "injection" | "bottle" | "other"
+      qty: number
+      unitPrice: number
+      totalPrice: number
+      source: "hospital" | "pharmacy_billed" | "outside"
+    }>
+  }>
+  clinicalUpdates?: Array<{
+    updatedAt: string
+    doctorId: string
+    doctorName?: string | null
+    roundNote?: string | null
+    prescriptionNote?: string | null
+    medicineName?: string | null
+    injectionName?: string | null
+    additionalNote?: string | null
+  }>
+  chargeLineItems?: Array<{
+    id: string
+    addedAt: string
+    addedByRole: "doctor" | "receptionist" | "nurse"
+    category: "medicine" | "injection" | "bottle" | "other"
+    name: string
+    amount: number
+  }>
+  depositSummary?: {
+    totalDeposited: number
+    totalAdjusted: number
+    balance: number
+  }
+  depositTransactions?: Array<{
+    id: string
+    type: "initial" | "topup" | "refund" | "adjustment"
+    amount: number
+    note?: string | null
+    paymentMode?: "cash" | "upi" | "card" | "other" | null
+    createdAt: string
+    createdBy?: string | null
+  }>
+  dischargeRequest?: {
+    requestedByDoctor?: boolean
+    requestedByDoctorAt?: string | null
+    requestedByDoctorId?: string | null
+    requestedByDoctorName?: string | null
+    notes?: string | null
+    status?: "pending" | "processed" | "cancelled"
+  } | null
   status: "admitted" | "discharged" | "completed"
   checkInAt: string
   checkOutAt?: string | null
@@ -258,6 +357,40 @@ export interface BillingRecord {
   doctorFee?: number // For admission billing
   consultationFee?: number // For appointment billing
   otherServices?: Array<{ description: string; amount: number }>
+  chargeLineItems?: Array<{
+    id: string
+    addedAt: string
+    addedByRole: "doctor" | "receptionist" | "nurse"
+    category: "medicine" | "injection" | "bottle" | "other"
+    name: string
+    amount: number
+  }>
+  paymentTerms?: "standard" | "pay_later_after_discharge"
+  packageSummary?: {
+    packageId: string
+    packageName: string
+    fixedRate: number
+    paymentTiming: "advance" | "after_operation"
+    advancePaidAmount: number
+    dueAmount: number
+  } | null
+  depositSummary?: {
+    totalDeposited: number
+    totalAdjusted: number
+    balance: number
+  } | null
+  depositTransactions?: Array<{
+    id: string
+    type: "initial" | "topup" | "refund" | "adjustment"
+    amount: number
+    note?: string | null
+    paymentMode?: "cash" | "upi" | "card" | "other" | null
+    createdAt: string
+    createdBy?: string | null
+  }>
+  grossTotal?: number
+  netPayable?: number
+  refundAmount?: number
   totalAmount: number
   generatedAt: string
   status: "pending" | "paid" | "void" | "cancelled"

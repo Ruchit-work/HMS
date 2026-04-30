@@ -36,6 +36,7 @@ export async function POST(req: Request) {
   let method: "card" | "upi" | "cash" = "card"
   let totalAmount = 0
   let body: any = {}
+  let requestedType: "admission" | "appointment" | undefined
 
   try {
     const initResult = initFirebaseAdmin("patient-billing-pay API")
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
 
     body = await req.json().catch(() => ({}))
     billingId = typeof body?.billingId === "string" ? body.billingId.trim() : body?.billingId
+    requestedType = body?.type === "admission" || body?.type === "appointment" ? body.type : undefined
     const paymentMethod = typeof body?.paymentMethod === "string" ? body.paymentMethod.trim().toLowerCase() : "card"
     if (paymentMethod === "card" || paymentMethod === "upi" || paymentMethod === "cash") {
       method = paymentMethod
@@ -93,6 +95,9 @@ export async function POST(req: Request) {
         isAdmissionBilling = true
         billingData = billingSnap.data() || {}
       } else {
+        if (requestedType === "admission") {
+          throw new Error("Admission billing record not found")
+        }
         // If not found in billing_records, check appointments (appointment billing)
         // Prefer hospital-scoped appointments when hospital context is available.
         const candidateHospitalIds = [requestedHospitalId, authHospitalId].filter(
@@ -201,6 +206,13 @@ export async function POST(req: Request) {
       transactionId,
     })
   } catch (error: any) {
+    if (error?.message === "Billing record already paid" || error?.message === "Appointment already paid") {
+      return Response.json({ error: error.message }, { status: 409 })
+    }
+    if (error?.message === "Admission billing record not found") {
+      return Response.json({ error: error.message }, { status: 404 })
+    }
+
     // Extract hospitalId from billing data if available
     const hospitalId = (error as { hospitalId?: string }).hospitalId || body?.hospitalId
     

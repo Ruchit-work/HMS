@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getAllActiveHospitals, getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   requestId: string
@@ -28,7 +29,7 @@ export async function POST(
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
 
-    const { roomId, notes } = await req.json().catch(() => ({}))
+    const { roomId, notes, initialDeposit, initialDepositPaymentMode } = await req.json().catch(() => ({}))
     if (!roomId || typeof roomId !== "string") {
       return Response.json({ error: "Missing roomId" }, { status: 400 })
     }
@@ -56,8 +57,36 @@ export async function POST(
       return Response.json({ error: "Request missing appointmentId" }, { status: 400 })
     }
 
-    const appointmentRef = firestore.collection("appointments").doc(appointmentId)
-    const appointmentSnap = await appointmentRef.get()
+    let appointmentRef = firestore.collection("appointments").doc(appointmentId)
+    let appointmentSnap = await appointmentRef.get()
+    if (!appointmentSnap.exists) {
+      const doctorId = String(requestData.doctorId || "")
+      const doctorHospitalId = doctorId ? await getDoctorHospitalId(doctorId) : null
+      if (doctorHospitalId) {
+        const scopedRef = firestore
+          .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
+          .doc(appointmentId)
+        const scopedSnap = await scopedRef.get()
+        if (scopedSnap.exists) {
+          appointmentRef = scopedRef
+          appointmentSnap = scopedSnap
+        }
+      }
+    }
+    if (!appointmentSnap.exists) {
+      const hospitals = await getAllActiveHospitals()
+      for (const hospital of hospitals.slice(0, 20)) {
+        const scopedRef = firestore
+          .collection(getHospitalCollectionPath(hospital.id, "appointments"))
+          .doc(appointmentId)
+        const scopedSnap = await scopedRef.get()
+        if (scopedSnap.exists) {
+          appointmentRef = scopedRef
+          appointmentSnap = scopedSnap
+          break
+        }
+      }
+    }
     if (!appointmentSnap.exists) {
       return Response.json({ error: "Appointment not found" }, { status: 404 })
     }
@@ -75,6 +104,14 @@ export async function POST(
 
     const nowIso = new Date().toISOString()
     const admissionRef = firestore.collection("admissions").doc()
+    const parsedInitialDeposit = Math.max(0, Number(initialDeposit || 0))
+    const parsedInitialDepositPaymentMode =
+      initialDepositPaymentMode === "upi" ||
+      initialDepositPaymentMode === "card" ||
+      initialDepositPaymentMode === "cash" ||
+      initialDepositPaymentMode === "other"
+        ? initialDepositPaymentMode
+        : "cash"
 
     const admissionPayload = {
       appointmentId,
@@ -87,6 +124,36 @@ export async function POST(
       roomNumber: roomData.roomNumber || "",
       roomType: roomData.roomType || "",
       roomRatePerDay: roomData.ratePerDay || 0,
+      roomStays: [
+        {
+          roomId,
+          roomNumber: roomData.roomNumber || "",
+          roomType: roomData.roomType || "general",
+          customRoomTypeName: roomData.customRoomTypeName || null,
+          ratePerDay: Number(roomData.ratePerDay || 0),
+          fromAt: nowIso,
+          toAt: null,
+        },
+      ],
+      depositSummary: {
+        totalDeposited: parsedInitialDeposit,
+        totalAdjusted: 0,
+        balance: parsedInitialDeposit,
+      },
+      depositTransactions:
+        parsedInitialDeposit > 0
+          ? [
+              {
+                id: `${admissionRef.id}-dep-init`,
+                type: "initial",
+                amount: parsedInitialDeposit,
+                note: "Initial deposit at admission",
+                paymentMode: parsedInitialDepositPaymentMode,
+                createdAt: nowIso,
+                createdBy: auth.user?.uid || "receptionist",
+              },
+            ]
+          : [],
       status: "admitted",
       checkInAt: nowIso,
       checkOutAt: null,

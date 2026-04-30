@@ -41,6 +41,7 @@ export default function ReceptionistDashboard() {
   const [pendingBillingCount, setPendingBillingCount] = useState(0)
   const [admitRequestsCount, setAdmitRequestsCount] = useState(0)
   const [whatsappPendingCount, setWhatsappPendingCount] = useState(0)
+  const [billingFocusQuery, setBillingFocusQuery] = useState<string | null>(null)
 
   const router = useRouter()
   const { user, loading: authLoading } = useAuth("receptionist")
@@ -397,7 +398,7 @@ export default function ReceptionistDashboard() {
               />
             </div>
 
-            {/* Admit Requests */}
+            {/* IPD Admissions */}
             <div className="relative">
               <button 
                 onClick={() => { setActiveTab("admit-requests"); setSidebarOpen(false) }} 
@@ -412,7 +413,7 @@ export default function ReceptionistDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2v14z" />
                   </svg>
                 </div>
-                <span className="font-medium text-sm">Admit Requests</span>
+                <span className="font-medium text-sm">IPD Admissions</span>
               </button>
               <NotificationBadge 
                 count={admitRequestsBadge.displayCount} 
@@ -571,7 +572,7 @@ export default function ReceptionistDashboard() {
                     : activeTab === "appointments"
                     ? "Appointment Management"
                     : activeTab === "admit-requests"
-                    ? "Admit Requests"
+                    ? "IPD Admissions"
                     : activeTab === "billing"
                     ? "Billing History"
                     : activeTab === "whatsapp-bookings"
@@ -663,12 +664,20 @@ export default function ReceptionistDashboard() {
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
               <AdmitRequestsPanel
                 onNotification={(payload) => setNotification(payload)}
+                onOpenBilling={(admissionId) => {
+                  setBillingFocusQuery(admissionId)
+                  setActiveTab("billing")
+                }}
               />
             </div>
           )}
           {activeTab === "billing" && (
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
-              <BillingHistoryPanel onNotification={(payload) => setNotification(payload)} />
+              <BillingHistoryPanel
+                onNotification={(payload) => setNotification(payload)}
+                focusBillingQuery={billingFocusQuery}
+                onFocusHandled={() => setBillingFocusQuery(null)}
+              />
             </div>
           )}
           {activeTab === "book-appointment" && (

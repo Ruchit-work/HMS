@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getAllActiveHospitals, getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 function isSequentialPatientId(value?: string | null) {
   if (!value) return false
@@ -27,8 +28,37 @@ export async function POST(req: NextRequest) {
     }
 
     const firestore = admin.firestore()
-    const appointmentRef = firestore.collection("appointments").doc(appointmentId)
-    const appointmentSnap = await appointmentRef.get()
+    const doctorHospitalId = await getDoctorHospitalId(auth.user!.uid)
+    let appointmentRef = firestore.collection("appointments").doc(appointmentId)
+    let appointmentSnap = await appointmentRef.get()
+
+    // Prefer hospital-scoped appointments for doctor-side booked appointments.
+    if (!appointmentSnap.exists && doctorHospitalId) {
+      const hospitalAppointmentRef = firestore
+        .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
+        .doc(appointmentId)
+      const hospitalAppointmentSnap = await hospitalAppointmentRef.get()
+      if (hospitalAppointmentSnap.exists) {
+        appointmentRef = hospitalAppointmentRef
+        appointmentSnap = hospitalAppointmentSnap
+      }
+    }
+
+    // Fallback: scan active hospital appointment collections by ID.
+    if (!appointmentSnap.exists) {
+      const hospitals = await getAllActiveHospitals()
+      for (const hospital of hospitals.slice(0, 20)) {
+        const candidateRef = firestore
+          .collection(getHospitalCollectionPath(hospital.id, "appointments"))
+          .doc(appointmentId)
+        const candidateSnap = await candidateRef.get()
+        if (candidateSnap.exists) {
+          appointmentRef = candidateRef
+          appointmentSnap = candidateSnap
+          break
+        }
+      }
+    }
 
     if (!appointmentSnap.exists) {
       return Response.json({ error: "Appointment not found" }, { status: 404 })
@@ -36,7 +66,12 @@ export async function POST(req: NextRequest) {
 
     const appointmentData = appointmentSnap.data() || {}
 
-    const doctorId = String(appointmentData.doctorId || "")
+    const doctorId = String(
+      appointmentData.doctorId ||
+      appointmentData.createdByDoctorId ||
+      appointmentData.createdByUid ||
+      ""
+    )
     const doctorName = String(appointmentData.doctorName || "")
     const patientName = String(appointmentData.patientName || "")
     const patientUid = String(
@@ -48,14 +83,20 @@ export async function POST(req: NextRequest) {
       ? String(appointmentData.patientId)
       : null
 
-    if (!doctorId || !patientUid) {
+    if (!patientUid) {
       return Response.json({
-        error: "Appointment is missing doctor or patient identifiers"
+        error: "Appointment is missing patient identifiers"
       }, { status: 400 })
     }
 
     // Verify doctor can only create admission requests for their own appointments
-    if (doctorId !== auth.user?.uid) {
+    const createdBy = String(appointmentData.createdBy || "")
+    const createdByUid = String(appointmentData.createdByUid || appointmentData.createdByDoctorId || "")
+    const isOwnerDoctor =
+      !doctorId ||
+      doctorId === auth.user?.uid ||
+      (createdBy === "doctor" && createdByUid === auth.user?.uid)
+    if (!isOwnerDoctor) {
       return Response.json({
         error: "You can only create admission requests for your own appointments"
       }, { status: 403 })
@@ -87,7 +128,7 @@ export async function POST(req: NextRequest) {
       appointmentId,
       patientUid,
       patientId: finalPatientId,
-      doctorId,
+      doctorId: doctorId || String(auth.user?.uid || ""),
       doctorName: doctorName || null,
       patientName: finalPatientName,
       notes: typeof notes === "string" && notes.trim() ? notes.trim() : null,

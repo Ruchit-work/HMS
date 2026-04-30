@@ -14,6 +14,13 @@ interface DashboardStats {
   doctorsAvailableToday: number
 }
 
+interface IpdStats {
+  activeAdmissions: number
+  pendingAdmissionRequests: number
+  doctorRequestedDischarge: number
+  dischargesToday: number
+}
+
 interface AppointmentRow {
   id: string
   appointmentTime: string
@@ -36,6 +43,14 @@ interface QueuePatient {
   doctorName: string
   waitingTime: string
   appointmentTime: string
+}
+
+interface IpdPatientRow {
+  id: string
+  patientName: string
+  doctorName: string
+  roomLabel: string
+  checkInAt?: string
 }
 
 interface RecentActivity {
@@ -94,6 +109,13 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
   const [todayAppointments, setTodayAppointments] = useState<AppointmentRow[]>([])
   const [doctors, setDoctors] = useState<DoctorRow[]>([])
   const [queuePatients, setQueuePatients] = useState<QueuePatient[]>([])
+  const [ipdStats, setIpdStats] = useState<IpdStats>({
+    activeAdmissions: 0,
+    pendingAdmissionRequests: 0,
+    doctorRequestedDischarge: 0,
+    dischargesToday: 0,
+  })
+  const [ipdPatients, setIpdPatients] = useState<IpdPatientRow[]>([])
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
@@ -105,6 +127,8 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
 
     const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
     const doctorsRef = getHospitalCollection(activeHospitalId, 'doctors')
+    const admissionsRef = getHospitalCollection(activeHospitalId, 'admissions')
+    const admissionRequestsRef = getHospitalCollection(activeHospitalId, 'admission_requests')
 
     const unsubAppointments = onSnapshot(appointmentsRef, (snapshot) => {
       const all = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as any))
@@ -196,6 +220,54 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
       setRecentActivity(activities.slice(0, 8))
     })
 
+    const unsubAdmissions = onSnapshot(admissionsRef, (snapshot) => {
+      const rows = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as any))
+      const filtered = receptionistBranchId ? rows.filter((r) => r.branchId === receptionistBranchId) : rows
+      const todayDate = new Date().toISOString().split('T')[0]
+      const activeRows = filtered.filter((row) => {
+        const status = String(row.status || '').toLowerCase()
+        return status !== 'discharged' && status !== 'cancelled'
+      })
+      const doctorRequestedRows = filtered.filter((row) => {
+        const status = String(row.status || '').toLowerCase()
+        return status === 'doctor_requested_discharge' || row?.dischargeRequest?.status === 'requested'
+      })
+      const dischargesToday = filtered.filter((row) => {
+        const status = String(row.status || '').toLowerCase()
+        if (status !== 'discharged') return false
+        const dischargedAtRaw = row.checkedOutAt || row.dischargedAt || row.updatedAt
+        if (!dischargedAtRaw) return false
+        const dischargedDate = new Date(dischargedAtRaw).toISOString().split('T')[0]
+        return dischargedDate === todayDate
+      })
+
+      setIpdStats((prev) => ({
+        ...prev,
+        activeAdmissions: activeRows.length,
+        doctorRequestedDischarge: doctorRequestedRows.length,
+        dischargesToday: dischargesToday.length,
+      }))
+
+      const recentInpatients: IpdPatientRow[] = activeRows
+        .sort((a, b) => new Date(b.checkInAt || 0).getTime() - new Date(a.checkInAt || 0).getTime())
+        .slice(0, 6)
+        .map((row) => ({
+          id: row.id,
+          patientName: row.patientName || 'Unknown patient',
+          doctorName: row.doctorName || '—',
+          roomLabel: row.roomNumber ? `${row.roomNumber} (${row.roomType || 'Room'})` : (row.roomType || 'Not assigned'),
+          checkInAt: row.checkInAt,
+        }))
+      setIpdPatients(recentInpatients)
+    })
+
+    const unsubAdmissionRequests = onSnapshot(admissionRequestsRef, (snapshot) => {
+      const rows = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as any))
+      const filtered = receptionistBranchId ? rows.filter((r) => r.branchId === receptionistBranchId) : rows
+      const pending = filtered.filter((row) => String(row.status || '').toLowerCase() === 'pending')
+      setIpdStats((prev) => ({ ...prev, pendingAdmissionRequests: pending.length }))
+    })
+
     getDocs(query(doctorsRef, where('status', '==', 'active')))
       .then((snap) => {
         setStats((prev) => ({ ...prev, doctorsAvailableToday: snap.size }))
@@ -216,6 +288,8 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
 
     return () => {
       unsubAppointments()
+      unsubAdmissions()
+      unsubAdmissionRequests()
     }
   }, [activeHospitalId, receptionistBranchId, todayStr])
 
@@ -265,6 +339,62 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
             <p className="text-sm font-medium text-slate-500">{card.label}</p>
           </button>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">IPD Admissions Snapshot</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Live inpatient and admission request status</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onTabChange?.('admit-requests')}
+              className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+            >
+              Open IPD
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-medium text-slate-500">Active Admissions</p>
+              <p className="mt-1 text-2xl font-bold text-slate-900">{ipdStats.activeAdmissions}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-medium text-slate-500">Pending Requests</p>
+              <p className="mt-1 text-2xl font-bold text-amber-600">{ipdStats.pendingAdmissionRequests}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-medium text-slate-500">Doctor Requested Discharge</p>
+              <p className="mt-1 text-2xl font-bold text-rose-600">{ipdStats.doctorRequestedDischarge}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <p className="text-xs font-medium text-slate-500">Discharges Today</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-600">{ipdStats.dischargesToday}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/70">
+            <h2 className="text-lg font-semibold text-slate-900">Current Inpatients</h2>
+            <p className="text-sm text-slate-500 mt-0.5">Recently admitted patients</p>
+          </div>
+          <div className="p-4 space-y-2 max-h-[220px] overflow-y-auto">
+            {ipdPatients.length === 0 ? (
+              <p className="text-sm text-slate-500 py-4 text-center">No active inpatients</p>
+            ) : (
+              ipdPatients.map((patient) => (
+                <div key={patient.id} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                  <p className="text-sm font-semibold text-slate-900">{patient.patientName}</p>
+                  <p className="text-xs text-slate-600">Doctor: {patient.doctorName}</p>
+                  <p className="text-xs text-slate-500">Room: {patient.roomLabel}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

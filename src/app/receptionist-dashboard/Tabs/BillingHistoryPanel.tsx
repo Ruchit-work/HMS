@@ -13,6 +13,8 @@ const BILLING_PAGE_SIZE = 10
 
 interface BillingHistoryPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
+  focusBillingQuery?: string | null
+  onFocusHandled?: () => void
 }
 
 const emptyPaymentData: BillingPaymentData = {
@@ -23,7 +25,11 @@ const emptyPaymentData: BillingPaymentData = {
   upiId: "",
 }
 
-export default function BillingHistoryPanel({ onNotification }: BillingHistoryPanelProps) {
+export default function BillingHistoryPanel({
+  onNotification,
+  focusBillingQuery,
+  onFocusHandled,
+}: BillingHistoryPanelProps) {
   const [billingRecords, setBillingRecords] = useState<BillingRecord[]>([])
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
@@ -97,6 +103,14 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
         paymentType: record.paymentType || "full",
         remainingAmount: record.remainingAmount !== undefined ? Number(record.remainingAmount) : undefined,
         hospitalId: record.hospitalId || null,
+        paymentTerms: record.paymentTerms || "standard",
+        packageSummary: record.packageSummary || null,
+        chargeLineItems: Array.isArray(record.chargeLineItems) ? record.chargeLineItems : [],
+        grossTotal: record.grossTotal !== undefined ? Number(record.grossTotal) : undefined,
+        netPayable: record.netPayable !== undefined ? Number(record.netPayable) : undefined,
+        refundAmount: record.refundAmount !== undefined ? Number(record.refundAmount) : undefined,
+        depositSummary: record.depositSummary || null,
+        depositTransactions: Array.isArray(record.depositTransactions) ? record.depositTransactions : [],
       }))
       setBillingRecords(formatted)
     } catch (error) {
@@ -117,6 +131,14 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
     
     return () => clearInterval(interval)
   }, [fetchBillingRecords])
+
+  useEffect(() => {
+    if (!focusBillingQuery) return
+    setBillingSearchTerm(focusBillingQuery)
+    setBillingStatusFilter("all")
+    setCurrentPage(1)
+    onFocusHandled?.()
+  }, [focusBillingQuery, onFocusHandled])
 
   const billingSearchValue = billingSearchTerm.trim().toLowerCase()
   const statusFilteredRecords = useMemo(() => {
@@ -146,7 +168,8 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
       const idMatch = record.patientId?.toLowerCase().includes(billingSearchValue)
       const nameMatch = record.patientName ? record.patientName.toLowerCase().includes(billingSearchValue) : false
       const billingIdMatch = record.id.toLowerCase().includes(billingSearchValue)
-      return idMatch || nameMatch || billingIdMatch
+      const admissionIdMatch = record.admissionId ? record.admissionId.toLowerCase().includes(billingSearchValue) : false
+      return idMatch || nameMatch || billingIdMatch || admissionIdMatch
     })
   }, [statusFilteredRecords, billingSearchValue, billingDateFilter])
 
@@ -581,6 +604,19 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                             <p className="text-[11px] uppercase tracking-wide text-slate-400">Total Amount</p>
                             <p className="text-base font-bold text-slate-900">{formatCurrency(record.totalAmount)}</p>
                           </div>
+                          {record.type !== "appointment" && (record.netPayable !== undefined || record.refundAmount !== undefined) && (
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Final Settlement</p>
+                              <p className="text-sm font-bold text-emerald-700">
+                                Final Payable: {formatCurrency(Number(record.netPayable || record.totalAmount || 0))}
+                              </p>
+                              {Number(record.refundAmount || 0) > 0 && (
+                                <p className="text-xs font-semibold text-blue-700">
+                                  Refund Due: {formatCurrency(Number(record.refundAmount || 0))}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {record.otherServices && record.otherServices.length > 0 && (
@@ -598,6 +634,19 @@ export default function BillingHistoryPanel({ onNotification }: BillingHistoryPa
                                 </span>
                               ))}
                             </div>
+                          </div>
+                        )}
+                        {(record.paymentTerms === "pay_later_after_discharge" || record.packageSummary) && (
+                          <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                            {record.paymentTerms === "pay_later_after_discharge" ? (
+                              <p className="font-semibold">Payment plan: Pay later allowed after discharge</p>
+                            ) : null}
+                            {record.packageSummary ? (
+                              <p>
+                                Package: {record.packageSummary.packageName} (Due{" "}
+                                {formatCurrency(Number(record.packageSummary.dueAmount || 0))})
+                              </p>
+                            ) : null}
                           </div>
                         )}
                       </div>

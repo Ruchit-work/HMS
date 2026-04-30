@@ -1407,6 +1407,7 @@ function DoctorAppointmentsContent() {
             ? error.message
             : "Failed to admit patient. Please try again.",
       })
+      closeAdmitDialog()
     } finally {
       setAdmitting((prev) => ({ ...prev, [appointmentId]: false }))
     }

@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       private: ["301"],
       deluxe: ["401"],
       vip: ["501"],
+      custom: [],
     }
 
     const sampleRooms = Object.entries(defaultRoomNumbers).flatMap(([type, numbers]) => {

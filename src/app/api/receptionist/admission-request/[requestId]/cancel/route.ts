@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getAllActiveHospitals, getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   requestId: string
@@ -52,8 +53,36 @@ export async function POST(
       return Response.json({ error: "Request missing appointmentId" }, { status: 400 })
     }
 
-    const appointmentRef = firestore.collection("appointments").doc(appointmentId)
-    const appointmentSnap = await appointmentRef.get()
+    let appointmentRef = firestore.collection("appointments").doc(appointmentId)
+    let appointmentSnap = await appointmentRef.get()
+    if (!appointmentSnap.exists) {
+      const doctorId = String(requestData.doctorId || "")
+      const doctorHospitalId = doctorId ? await getDoctorHospitalId(doctorId) : null
+      if (doctorHospitalId) {
+        const scopedRef = firestore
+          .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
+          .doc(appointmentId)
+        const scopedSnap = await scopedRef.get()
+        if (scopedSnap.exists) {
+          appointmentRef = scopedRef
+          appointmentSnap = scopedSnap
+        }
+      }
+    }
+    if (!appointmentSnap.exists) {
+      const hospitals = await getAllActiveHospitals()
+      for (const hospital of hospitals.slice(0, 20)) {
+        const scopedRef = firestore
+          .collection(getHospitalCollectionPath(hospital.id, "appointments"))
+          .doc(appointmentId)
+        const scopedSnap = await scopedRef.get()
+        if (scopedSnap.exists) {
+          appointmentRef = scopedRef
+          appointmentSnap = scopedSnap
+          break
+        }
+      }
+    }
     if (!appointmentSnap.exists) {
       return Response.json({ error: "Appointment not found" }, { status: 404 })
     }

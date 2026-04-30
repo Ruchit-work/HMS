@@ -44,5 +44,12 @@ export const ROOM_TYPES: HospitalRoomType[] = [
     dailyRate: 10000,
     features: ['Personal attendant', 'Separate sitting area', 'AC', 'TV', 'Refrigerator'],
   },
+  {
+    id: 'custom',
+    name: 'Custom Room Type',
+    description: 'User-defined room type for special use-cases.',
+    dailyRate: 0,
+    features: ['Configurable'],
+  },
 ]
 

@@ -605,6 +605,20 @@ export default function DoctorDashboard() {
                 </Link>
 
                 <Link
+                  href="/doctor-dashboard/inpatients"
+                  prefetch={true}
+                  className="flex items-center gap-3 p-3 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors group"
+                >
+                  <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
+                    🏥
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-800">Inpatient Rounds</p>
+                    <p className="text-sm text-slate-600">Mark rounds for admitted patients</p>
+                  </div>
+                </Link>
+
+                <Link
                   href="/doctor-dashboard/profile"
                   prefetch={true}
                   className="flex items-center gap-3 p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group"

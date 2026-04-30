@@ -223,6 +223,7 @@ export default function GlobalHeader() {
   const doctorLinks: NavLink[] = [
     { href: "/doctor-dashboard", label: "Home" },
     { href: "/doctor-dashboard/appointments", label: "Appointments", showBadge: true },
+    { href: "/doctor-dashboard/inpatients", label: "Inpatients" },
     { href: "/doctor-dashboard/book-appointment", label: "Book Appointment" },
     { href: "/doctor-dashboard/documents", label: "Documents & Reports" },
     { href: "/doctor-dashboard/analytics", label: "Analytics" },
