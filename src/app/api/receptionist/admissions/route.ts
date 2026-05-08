@@ -1,6 +1,24 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getHospitalCollectionPath, getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import {
+  getHospitalCollectionPath,
+  getReceptionistDefaultBranch,
+  getUserActiveHospitalId,
+} from "@/utils/firebase/serverHospitalQueries"
+
+const DOB_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const IPD_START_NUMBER = 1000
+
+function resolveDateOfBirthForRegistration(explicitDob: string, ageYears: number): string {
+  const dob = explicitDob.trim()
+  if (DOB_PATTERN.test(dob)) return dob
+  const age = Math.floor(Number(ageYears))
+  if (age > 0 && age <= 120) {
+    const y = new Date().getFullYear() - age
+    return `${y}-01-01`
+  }
+  return ""
+}
 
 export async function GET(req: Request) {
   // Authenticate request - requires receptionist or admin role
@@ -119,6 +137,16 @@ export async function POST(req: Request) {
     const patientId = typeof body?.patientId === "string" ? body.patientId.trim() : ""
     const patientName = typeof body?.patientName === "string" ? body.patientName.trim() : ""
     const patientAddress = typeof body?.patientAddress === "string" ? body.patientAddress.trim() : ""
+    const patientPhone = typeof body?.patientPhone === "string" ? body.patientPhone.trim() : ""
+    const patientGender = typeof body?.patientGender === "string" ? body.patientGender.trim() : ""
+    const patientDateOfBirth =
+      typeof body?.patientDateOfBirth === "string" ? body.patientDateOfBirth.trim() : ""
+    const patientAgeYearsRaw = Number(body?.patientAgeYears)
+    const patientAgeYears = Number.isFinite(patientAgeYearsRaw)
+      ? Math.max(0, Math.min(120, Math.floor(patientAgeYearsRaw)))
+      : 0
+    const emergencyContactName =
+      typeof body?.emergencyContactName === "string" ? body.emergencyContactName.trim() : ""
     const notes = typeof body?.notes === "string" ? body.notes.trim() : ""
     const admitType = body?.admitType === "planned" ? "planned" : "emergency"
     const plannedAdmitAt = typeof body?.plannedAdmitAt === "string" ? body.plannedAdmitAt : null
@@ -171,10 +199,18 @@ export async function POST(req: Request) {
     }
 
     const nowIso = new Date().toISOString()
+    const isPlanned = admitType === "planned"
     const admissionRef = firestore.collection("admissions").doc()
     let resolvedPatientUid = patientUid
     let resolvedPatientId = patientId
     let resolvedPatientName = patientName
+
+    const resolvedDob = resolveDateOfBirthForRegistration(patientDateOfBirth, patientAgeYears)
+
+    const { branchId: defaultBranchId, branchName: defaultBranchName } = await getReceptionistDefaultBranch(
+      auth.user!.uid,
+      auth.user?.role
+    )
 
     // For direct admits with no existing UID, auto-register patient and generate patient ID.
     if (!resolvedPatientUid) {
@@ -208,23 +244,26 @@ export async function POST(req: Request) {
       const nameParts = String(resolvedPatientName || "").trim().split(/\s+/).filter(Boolean)
       const firstName = nameParts[0] || "Patient"
       const lastName = nameParts.slice(1).join(" ") || ""
-      const patientDoc = {
+      const patientDoc: Record<string, unknown> = {
         status: "active",
         firstName,
         lastName,
         email: "",
-        phone: "",
-        gender: "",
+        phone: patientPhone || "",
+        gender: patientGender || "",
         bloodGroup: "",
         address: patientAddress || "",
-        dateOfBirth: "",
+        dateOfBirth: resolvedDob || "",
         createdAt: nowIso,
         updatedAt: nowIso,
         createdBy: "receptionist",
         patientId: generatedPatientId,
         hospitalId,
-        defaultBranchId: null,
-        defaultBranchName: null,
+        defaultBranchId,
+        defaultBranchName,
+      }
+      if (emergencyContactName) {
+        patientDoc.emergencyContactName = emergencyContactName
       }
       await patientRef.set(patientDoc, { merge: true })
       await firestore
@@ -235,7 +274,67 @@ export async function POST(req: Request) {
       resolvedPatientUid = patientRef.id
       resolvedPatientId = generatedPatientId
       resolvedPatientName = `${firstName}${lastName ? ` ${lastName}` : ""}`.trim()
+    } else {
+      const patientUpdates: Record<string, unknown> = { updatedAt: nowIso }
+      if (patientPhone) patientUpdates.phone = patientPhone
+      if (patientGender) patientUpdates.gender = patientGender
+      if (resolvedDob) patientUpdates.dateOfBirth = resolvedDob
+      if (emergencyContactName) patientUpdates.emergencyContactName = emergencyContactName
+      if (patientAddress) patientUpdates.address = patientAddress
+
+      const keys = Object.keys(patientUpdates).filter((k) => k !== "updatedAt")
+      if (keys.length > 0) {
+        const rootPatientRef = firestore.collection("patients").doc(resolvedPatientUid)
+        const hospitalPatientRef = firestore
+          .collection(getHospitalCollectionPath(hospitalId, "patients"))
+          .doc(resolvedPatientUid)
+        await rootPatientRef.set(patientUpdates, { merge: true })
+        await hospitalPatientRef.set(patientUpdates, { merge: true })
+      }
     }
+
+    if (resolvedPatientUid) {
+      const existingAdmissionSnap = await firestore
+        .collection("admissions")
+        .where("patientUid", "==", resolvedPatientUid)
+        .where("status", "in", ["admitted", "scheduled"])
+        .limit(1)
+        .get()
+      if (!existingAdmissionSnap.empty) {
+        const activeStatus = String(existingAdmissionSnap.docs[0]?.data()?.status || "")
+        return Response.json(
+          {
+            error:
+              activeStatus === "scheduled"
+                ? "Patient is already pre-registered for admission"
+                : "Patient is already admitted",
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    const ipdNo = await firestore.runTransaction(async (tx) => {
+      const counterRef = firestore.collection("meta").doc("ipdCounter")
+      const counterSnap = await tx.get(counterRef)
+      let lastNumber = IPD_START_NUMBER - 1
+      if (counterSnap.exists) {
+        const stored = Number(counterSnap.data()?.lastNumber || 0)
+        if (Number.isFinite(stored) && stored >= IPD_START_NUMBER - 1) {
+          lastNumber = stored
+        }
+      }
+      const nextNumber = lastNumber + 1
+      tx.set(
+        counterRef,
+        {
+          lastNumber: nextNumber,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      )
+      return `IPD-${String(nextNumber).padStart(6, "0")}`
+    })
 
     const initialDepositTransaction =
       initialDeposit > 0
@@ -252,11 +351,15 @@ export async function POST(req: Request) {
           ]
         : []
     const admissionPayload = {
+      ipdNo,
       appointmentId: "",
       patientUid: resolvedPatientUid || resolvedPatientId || `direct-${admissionRef.id}`,
       patientId: resolvedPatientId || null,
       patientName: resolvedPatientName || null,
       patientAddress: patientAddress || null,
+      patientPhone: patientPhone || null,
+      patientGender: patientGender || null,
+      emergencyContactName: emergencyContactName || null,
       doctorId: doctorId || "unassigned",
       doctorName: doctorName || "To be assigned",
       roomId,
@@ -297,8 +400,8 @@ export async function POST(req: Request) {
         balance: initialDeposit,
       },
       depositTransactions: initialDepositTransaction,
-      status: "admitted",
-      checkInAt: admitType === "planned" && plannedAdmitAt ? plannedAdmitAt : nowIso,
+      status: isPlanned ? "scheduled" : "admitted",
+      checkInAt: isPlanned && plannedAdmitAt ? plannedAdmitAt : nowIso,
       checkOutAt: null,
       notes: notes || null,
       createdBy: "receptionist",
@@ -307,10 +410,12 @@ export async function POST(req: Request) {
     }
 
     await firestore.runTransaction(async (tx) => {
-      tx.update(roomRef, {
-        status: "occupied",
-        updatedAt: nowIso,
-      })
+      if (!isPlanned) {
+        tx.update(roomRef, {
+          status: "occupied",
+          updatedAt: nowIso,
+        })
+      }
       tx.set(admissionRef, admissionPayload)
     })
 

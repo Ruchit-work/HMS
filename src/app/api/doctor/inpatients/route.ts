@@ -13,13 +13,13 @@ export async function GET(req: Request) {
     if (!initResult.ok) return Response.json({ error: "Server not configured for admin" }, { status: 500 })
 
     const firestore = admin.firestore()
-    const snap = await firestore
-      .collection("admissions")
-      .where("doctorId", "==", auth.user.uid)
-      .where("status", "==", "admitted")
-      .get()
+    const baseRef = firestore.collection("admissions").where("doctorId", "==", auth.user.uid)
+    const [admittedSnap, scheduledSnap] = await Promise.all([
+      baseRef.where("status", "==", "admitted").get(),
+      baseRef.where("status", "==", "scheduled").get(),
+    ])
 
-    const admissions = snap.docs
+    const admissions = [...admittedSnap.docs, ...scheduledSnap.docs]
       .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }))
       .sort((a: any, b: any) => {
         const aDate = new Date(String(a.checkInAt || "")).getTime()

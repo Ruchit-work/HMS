@@ -829,6 +829,33 @@ interface BookingSession {
   updatedAt: string
 }
 
+/** When creating/linking WhatsApp patients, mirror into hospitals/{id}/patients so reception Patient tab lists them */
+type WhatsAppPatientCreateOptions = {
+  hospitalId?: string | null
+  defaultBranchId?: string | null
+  defaultBranchName?: string | null
+}
+
+async function buildWhatsAppPatientHospitalScope(
+  db: FirebaseFirestore.Firestore,
+  session: Pick<BookingSession, "branchId" | "branchName"> | null | undefined
+): Promise<WhatsAppPatientCreateOptions | undefined> {
+  if (!session?.branchId) return undefined
+  const branchDoc = await db.collection("branches").doc(session.branchId).get()
+  if (!branchDoc.exists) return undefined
+  const bd = branchDoc.data() || {}
+  const hid = typeof bd.hospitalId === "string" && bd.hospitalId.trim() ? bd.hospitalId.trim() : null
+  if (!hid) return undefined
+  const branchNameFromSession =
+    typeof session.branchName === "string" && session.branchName.trim() ? session.branchName.trim() : null
+  const branchNameFromDoc = typeof bd.name === "string" && bd.name.trim() ? bd.name.trim() : null
+  return {
+    hospitalId: hid,
+    defaultBranchId: session.branchId,
+    defaultBranchName: branchNameFromSession || branchNameFromDoc,
+  }
+}
+
 async function startBookingWithFlow(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
@@ -1501,7 +1528,7 @@ async function handleRegistrationPrompt(phone: string) {
     let patient = await findPatientByPhone(db, normalizedPhone)
     if (!patient) {
       const placeholderName = `WhatsApp Patient ${normalizedPhone.slice(-4)}`
-      const { patientUid } = await createPatientFromWhatsApp(db, normalizedPhone, placeholderName, "")
+      const { patientUid } = await createPatientFromWhatsApp(db, normalizedPhone, placeholderName, "", undefined)
       const patientDoc = await db.collection("patients").doc(patientUid).get()
       if (patientDoc.exists) {
         patient = { id: patientDoc.id, data: patientDoc.data()! }
@@ -1574,7 +1601,14 @@ async function handleRegistrationFullName(
   
   // Create minimal patient record (name + phone only)
   try {
-    const { patientUid, patientId } = await createPatientFromWhatsApp(db, normalizedPhone, firstName, lastName)
+    const waScope = await buildWhatsAppPatientHospitalScope(db, session)
+    const { patientUid, patientId } = await createPatientFromWhatsApp(
+      db,
+      normalizedPhone,
+      firstName,
+      lastName,
+      waScope
+    )
     
     // Update session
     await sessionRef.update({
@@ -1633,7 +1667,8 @@ async function createPatientFromWhatsApp(
   db: FirebaseFirestore.Firestore,
   phone: string,
   firstName: string,
-  lastName: string
+  lastName: string,
+  scoped?: WhatsAppPatientCreateOptions
 ): Promise<{ patientUid: string; patientId: string }> {
   // Check if patient already exists
   const existing = await findPatientByPhone(db, phone)
@@ -1676,8 +1711,22 @@ async function createPatientFromWhatsApp(
   // Create patient document (no Firebase Auth user - receptionist will add email/password later)
   const patientRef = db.collection("patients").doc()
   const patientUid = patientRef.id
-  
-  await patientRef.set({
+
+  const activeHospitals = await getAllActiveHospitals()
+  const hospitalFromScope =
+    typeof scoped?.hospitalId === "string" && scoped.hospitalId.trim() ? scoped.hospitalId.trim() : null
+  const hospitalId = hospitalFromScope || (activeHospitals[0]?.id ? String(activeHospitals[0].id) : null)
+
+  const defaultBranchId =
+    typeof scoped?.defaultBranchId === "string" && scoped.defaultBranchId.trim()
+      ? scoped.defaultBranchId.trim()
+      : null
+  const defaultBranchName =
+    typeof scoped?.defaultBranchName === "string" && scoped.defaultBranchName.trim()
+      ? scoped.defaultBranchName.trim()
+      : null
+
+  const patientPayload: Record<string, unknown> = {
     patientId,
     firstName: firstName.trim(),
     lastName: lastName.trim(),
@@ -1688,8 +1737,20 @@ async function createPatientFromWhatsApp(
     updatedAt: new Date().toISOString(),
     createdBy: "whatsapp",
     whatsappRegistered: true, // Flag to indicate registered via WhatsApp
-  })
-  
+    hospitalId: hospitalId || null,
+    defaultBranchId,
+    defaultBranchName,
+  }
+
+  await patientRef.set(patientPayload)
+
+  if (hospitalId) {
+    await db
+      .collection(getHospitalCollectionPath(hospitalId, "patients"))
+      .doc(patientUid)
+      .set(patientPayload, { merge: true })
+  }
+
   return { patientUid, patientId }
 }
 
@@ -2602,11 +2663,13 @@ async function handleConfirmation(
 
     if (!patient && session.registrationData?.firstName) {
       try {
+        const waScope = await buildWhatsAppPatientHospitalScope(db, session)
         const recreated = await createPatientFromWhatsApp(
           db,
           normalizedPhone,
           session.registrationData.firstName,
-          session.registrationData?.lastName || ""
+          session.registrationData?.lastName || "",
+          waScope
         )
         const patientDoc = await db.collection("patients").doc(recreated.patientUid).get()
         if (patientDoc.exists) {

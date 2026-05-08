@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { auth } from "@/firebase/config"
 import { Admission } from "@/types/patient"
+import { onAuthStateChanged, type User } from "firebase/auth"
 
 const ROUND_CHARGE_OPTIONS = [
   { key: "medicine", label: "Medicine" },
@@ -22,7 +23,32 @@ type InpatientRow = Admission & {
   }>
 }
 
+type PatientHistoryState = {
+  loading: boolean
+  error: string | null
+  patientProfile: Record<string, unknown> | null
+  previousAdmissions: Array<any>
+  normalVisits: Array<any>
+}
+
+const getAuthenticatedUser = async (): Promise<User> => {
+  if (auth.currentUser) return auth.currentUser
+  return await new Promise<User>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe()
+      reject(new Error("You must be logged in"))
+    }, 5000)
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) return
+      clearTimeout(timeout)
+      unsubscribe()
+      resolve(user)
+    })
+  })
+}
+
 export default function DoctorInpatientsPage() {
+  const [activeTab, setActiveTab] = useState<"admitted" | "prebooked">("admitted")
   const [inpatients, setInpatients] = useState<InpatientRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,13 +74,20 @@ export default function DoctorInpatientsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [confirmDischargeAdmission, setConfirmDischargeAdmission] = useState<InpatientRow | null>(null)
   const [dischargeRequestNote, setDischargeRequestNote] = useState("")
+  const [viewingPatient, setViewingPatient] = useState<InpatientRow | null>(null)
+  const [patientHistory, setPatientHistory] = useState<PatientHistoryState>({
+    loading: false,
+    error: null,
+    patientProfile: null,
+    previousAdmissions: [],
+    normalVisits: [],
+  })
 
   const fetchInpatients = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in")
+      const currentUser = await getAuthenticatedUser()
       const token = await currentUser.getIdToken()
       const res = await fetch("/api/doctor/inpatients", {
         headers: {
@@ -106,14 +139,23 @@ export default function DoctorInpatientsPage() {
     })
   }, [inpatients, searchTerm])
 
+  const admittedPatients = useMemo(
+    () => filteredInpatients.filter((patient) => String(patient.status || "") === "admitted"),
+    [filteredInpatients]
+  )
+
+  const preBookedPatients = useMemo(
+    () => filteredInpatients.filter((patient) => String(patient.status || "") === "scheduled"),
+    [filteredInpatients]
+  )
+
   const markRoundDone = useCallback(async () => {
     if (!expandedAdmissionId) return
     const selectedAdmission = inpatients.find((item) => item.id === expandedAdmissionId)
     if (!selectedAdmission) return
     setMarkingRound(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in")
+      const currentUser = await getAuthenticatedUser()
       const token = await currentUser.getIdToken()
       const res = await fetch(`/api/doctor/admissions/${selectedAdmission.id}/rounds`, {
         method: "POST",
@@ -170,8 +212,7 @@ export default function DoctorInpatientsPage() {
     async (admission: InpatientRow, note?: string) => {
       setRequestingDischargeId(admission.id)
       try {
-        const currentUser = auth.currentUser
-        if (!currentUser) throw new Error("You must be logged in")
+        const currentUser = await getAuthenticatedUser()
         const token = await currentUser.getIdToken()
         const res = await fetch(`/api/doctor/admissions/${admission.id}/request-discharge`, {
           method: "POST",
@@ -195,6 +236,76 @@ export default function DoctorInpatientsPage() {
     [fetchInpatients]
   )
 
+  const handleViewPatientDetails = useCallback(async (patient: InpatientRow) => {
+    setViewingPatient(patient)
+    setPatientHistory({
+      loading: true,
+      error: null,
+      patientProfile: null,
+      previousAdmissions: [],
+      normalVisits: [],
+    })
+    try {
+      const currentUser = await getAuthenticatedUser()
+      const token = await currentUser.getIdToken()
+      const patientUid = String(patient.patientUid || "")
+      if (!patientUid) throw new Error("Patient UID not found for this admission")
+
+      const query = new URLSearchParams()
+      if (patient.patientId) query.set("patientId", String(patient.patientId))
+      query.set("currentAdmissionId", String(patient.id))
+
+      const res = await fetch(`/api/doctor/patients/${patientUid}/history?${query.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || "Failed to load patient history")
+      }
+      const data = await res.json().catch(() => ({}))
+      setPatientHistory({
+        loading: false,
+        error: null,
+        patientProfile:
+          data?.patientProfile && typeof data.patientProfile === "object" ? data.patientProfile : null,
+        previousAdmissions: Array.isArray(data?.previousAdmissions) ? data.previousAdmissions : [],
+        normalVisits: Array.isArray(data?.normalVisits) ? data.normalVisits : [],
+      })
+    } catch (err: any) {
+      setPatientHistory({
+        loading: false,
+        error: err?.message || "Failed to load patient history",
+        patientProfile: null,
+        previousAdmissions: [],
+        normalVisits: [],
+      })
+    }
+  }, [])
+
+  const patientProfileEntries = useMemo(() => {
+    if (!patientHistory.patientProfile) return []
+    const hiddenKeys = new Set([
+      "id",
+      "createdAt",
+      "createdBy",
+      "defaultBranchId",
+      "email",
+      "patientId",
+      "phoneCountryCode",
+      "phone",
+      "phoneNumber",
+      "hospitalId",
+      "updatedAt",
+      "status",
+    ])
+    return Object.entries(patientHistory.patientProfile)
+      .filter(([key, value]) => !hiddenKeys.has(key) && value !== undefined && value !== null && String(value).trim() !== "")
+      .sort(([a], [b]) => a.localeCompare(b))
+  }, [patientHistory.patientProfile])
+
   return (
     <div className="min-h-screen bg-slate-50 pt-20">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -203,7 +314,7 @@ export default function DoctorInpatientsPage() {
             <div>
               <h2 className="text-2xl font-bold text-slate-900">Admitted Patients Under My Care</h2>
               <p className="text-sm text-slate-500">
-                Mark doctor rounds, track visit count, and keep billing fee in sync.
+                Track admitted and pre-booked patients, mark doctor rounds, and keep billing fee in sync.
               </p>
             </div>
             <div className="text-sm text-slate-600">
@@ -226,33 +337,72 @@ export default function DoctorInpatientsPage() {
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
         ) : null}
 
-        <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <section className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mb-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("admitted")}
+              suppressHydrationWarning
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                activeTab === "admitted"
+                  ? "bg-indigo-100 text-indigo-700"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              Admitted Patients ({admittedPatients.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("prebooked")}
+              suppressHydrationWarning
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                activeTab === "prebooked"
+                  ? "bg-amber-100 text-amber-800"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              Pre-Booked Admissions ({preBookedPatients.length})
+            </button>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-3 py-2 text-left">Patient</th>
                 <th className="px-3 py-2 text-left">Room</th>
                 <th className="px-3 py-2 text-left">Admitted</th>
-                <th className="px-3 py-2 text-left">Round Count</th>
-                <th className="px-3 py-2 text-left">Last Round</th>
-                <th className="px-3 py-2 text-right">Actions</th>
+                {activeTab === "admitted" ? (
+                  <>
+                    <th className="px-3 py-2 text-left">Round Count</th>
+                    <th className="px-3 py-2 text-left">Last Round</th>
+                    <th className="px-3 py-2 text-right">Actions</th>
+                  </>
+                ) : (
+                  <th className="px-3 py-2 text-left">Status</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={activeTab === "admitted" ? 6 : 4} className="px-3 py-6 text-center text-slate-500">
                     Loading inpatients...
                   </td>
                 </tr>
-              ) : filteredInpatients.length === 0 ? (
+              ) : activeTab === "admitted" && admittedPatients.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
                     No matching admitted patients found.
                   </td>
                 </tr>
+              ) : activeTab === "prebooked" && preBookedPatients.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                    No matching pre-booked admissions found.
+                  </td>
+                </tr>
               ) : (
-                filteredInpatients.map((patient) => {
+                (activeTab === "admitted" ? admittedPatients : preBookedPatients).map((patient) => {
                   const rounds = Array.isArray(patient.doctorRounds) ? patient.doctorRounds : []
                   const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null
                   return [
@@ -267,57 +417,81 @@ export default function DoctorInpatientsPage() {
                       <td className="px-3 py-3 text-xs text-slate-600">
                         {patient.checkInAt ? new Date(patient.checkInAt).toLocaleString() : "—"}
                       </td>
-                      <td className="px-3 py-3 text-slate-700 font-semibold">{rounds.length}</td>
-                      <td className="px-3 py-3 text-xs text-slate-600">
-                        {lastRound?.roundAt ? new Date(lastRound.roundAt).toLocaleString() : "No rounds yet"}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setExpandedAdmissionId((prev) => (prev === patient.id ? null : patient.id))
-                              setRoundFee("500")
-                              setRoundNotes("")
-                              setRoundChargeSelection({
-                                medicine: false,
-                                injection: false,
-                                drug: false,
-                                bottle: false,
-                                other: false,
-                              })
-                              setRoundChargeAmount({
-                                medicine: "",
-                                injection: "",
-                                drug: "",
-                                bottle: "",
-                                other: "",
-                              })
-                            }}
-                            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
-                          >
-                            {expandedAdmissionId === patient.id ? "Close Round Form" : "Mark Round Done"}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setConfirmDischargeAdmission(patient)
-                              setDischargeRequestNote("")
-                            }}
-                            disabled={
-                              requestingDischargeId === patient.id ||
-                              patient.dischargeRequest?.status === "pending"
-                            }
-                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-                          >
-                            {patient.dischargeRequest?.status === "pending"
-                              ? "Requested"
-                              : requestingDischargeId === patient.id
-                                ? "Requesting..."
-                                : "Request Discharge"}
-                          </button>
-                        </div>
-                      </td>
+                      {activeTab === "admitted" ? (
+                        <>
+                          <td className="px-3 py-3 text-slate-700 font-semibold">{rounds.length}</td>
+                          <td className="px-3 py-3 text-xs text-slate-600">
+                            {lastRound?.roundAt ? new Date(lastRound.roundAt).toLocaleString() : "No rounds yet"}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => handleViewPatientDetails(patient)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                View Details
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setExpandedAdmissionId((prev) => (prev === patient.id ? null : patient.id))
+                                  setRoundFee("500")
+                                  setRoundNotes("")
+                                  setRoundChargeSelection({
+                                    medicine: false,
+                                    injection: false,
+                                    drug: false,
+                                    bottle: false,
+                                    other: false,
+                                  })
+                                  setRoundChargeAmount({
+                                    medicine: "",
+                                    injection: "",
+                                    drug: "",
+                                    bottle: "",
+                                    other: "",
+                                  })
+                                }}
+                                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                              >
+                                {expandedAdmissionId === patient.id ? "Close Round Form" : "Mark Round Done"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setConfirmDischargeAdmission(patient)
+                                  setDischargeRequestNote("")
+                                }}
+                                disabled={
+                                  requestingDischargeId === patient.id ||
+                                  patient.dischargeRequest?.status === "pending"
+                                }
+                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                              >
+                                {patient.dischargeRequest?.status === "pending"
+                                  ? "Requested"
+                                  : requestingDischargeId === patient.id
+                                    ? "Requesting..."
+                                    : "Request Discharge"}
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                              Pre-Booked (Read only)
+                            </span>
+                            <button
+                              onClick={() => handleViewPatientDetails(patient)}
+                              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>,
-                    expandedAdmissionId === patient.id ? (
+                    activeTab === "admitted" && expandedAdmissionId === patient.id ? (
                       <tr key={`${patient.id}-accordion`} className="border-t border-slate-100 bg-slate-50">
                         <td colSpan={6} className="px-3 py-4">
                           <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
@@ -409,6 +583,7 @@ export default function DoctorInpatientsPage() {
               )}
             </tbody>
           </table>
+          </div>
         </section>
       </main>
 
@@ -457,6 +632,130 @@ export default function DoctorInpatientsPage() {
               >
                 {requestingDischargeId === confirmDischargeAdmission.id ? "Sending..." : "Yes, Send Request"}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {viewingPatient ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+            <div className="sticky top-0 z-10 mb-0 flex items-start justify-between border-b border-slate-200 bg-white px-4 py-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Patient Details - {viewingPatient.patientName || "Unknown patient"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {viewingPatient.patientId || "PID: N/A"} | Room {viewingPatient.roomNumber || "—"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingPatient(null)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="overflow-y-auto px-4 py-3">
+              {patientHistory.loading ? (
+                <p className="py-6 text-center text-sm text-slate-500">Loading patient history...</p>
+              ) : patientHistory.error ? (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {patientHistory.error}
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-slate-200 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Patient Master Details</p>
+                    {patientProfileEntries.length === 0 ? (
+                      <p className="mt-2 text-sm text-slate-500">No additional patient profile details found.</p>
+                    ) : (
+                      <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                        {patientProfileEntries.map(([key, value]) => (
+                          <div key={key} className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
+                            <p className="font-semibold uppercase tracking-wide text-slate-500">{key}</p>
+                            <p className="break-words text-slate-700">
+                              {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Previous Admissions</p>
+                    <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+                      {patientHistory.previousAdmissions.length === 0 ? (
+                        <p className="text-sm text-slate-500">No previous admissions found.</p>
+                      ) : (
+                        patientHistory.previousAdmissions.map((entry) => (
+                          <div key={String(entry.id)} className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
+                            <p className="font-semibold text-slate-700">Admission ID: {String(entry.id)}</p>
+                            <p className="text-slate-600">
+                              {String(entry.status || "—")} | {entry.checkInAt ? new Date(entry.checkInAt).toLocaleString() : "—"}
+                            </p>
+                            <p className="text-slate-500">Room: {String(entry.roomNumber || "—")}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Normal Visits (OPD)</p>
+                    <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+                      {patientHistory.normalVisits.length === 0 ? (
+                        <p className="text-sm text-slate-500">No previous normal visits found.</p>
+                      ) : (
+                        patientHistory.normalVisits.map((entry) => (
+                        <div key={String(entry.id)} className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs space-y-1">
+                            <p className="font-semibold text-slate-700">
+                              Appointment ID: {String(entry.id || "—")}
+                            </p>
+                            <p className="text-slate-600">
+                              Date/Time: {String(entry.appointmentDate || "—")}{" "}
+                              {entry.appointmentTime ? `at ${String(entry.appointmentTime)}` : ""}
+                            </p>
+                            <p className="text-slate-600">Doctor: {String(entry.doctorName || "—")}</p>
+                            <p className="text-slate-600">Status: {String(entry.status || "—")}</p>
+                          <p className="text-slate-600">Chief complaint: {String(entry.chiefComplaint || "—")}</p>
+                          {Array.isArray(entry.finalDiagnosis) && entry.finalDiagnosis.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {entry.finalDiagnosis.map((diag: string, idx: number) => (
+                                <span
+                                  key={`${entry.id}-diag-${idx}`}
+                                  className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700"
+                                >
+                                  {diag}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-slate-500">Final diagnosis: —</p>
+                          )}
+                          <p className="text-slate-600 whitespace-pre-line">
+                            Prescription: {String(entry.medicine || "—")}
+                          </p>
+                          <p className="text-slate-600 whitespace-pre-line">
+                            Doctor notes: {String(entry.doctorNotes || entry.notes || "—")}
+                          </p>
+                            <p className="text-slate-500">
+                              Payment: {String(entry.paymentStatus || "—")} | {String(entry.paymentMethod || "—")} | ₹
+                              {Number(entry.paymentAmount || entry.totalConsultationFee || 0).toLocaleString()}
+                            </p>
+                            <p className="text-slate-500">
+                              Branch: {String(entry.branchName || "—")} | Type: {String(entry.paymentType || "—")}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

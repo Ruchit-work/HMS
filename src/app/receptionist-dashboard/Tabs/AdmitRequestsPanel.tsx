@@ -29,6 +29,19 @@ const roomTypeRateMap = ROOM_TYPES.reduce((acc, type) => {
   return acc
 }, {} as Record<Room["roomType"], number>)
 
+/** Approximate whole years from YYYY-MM-DD for direct-admit form prefill */
+function ageInputFromDob(dob: string): string {
+  const t = dob.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return ""
+  const d = new Date(`${t}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return ""
+  const today = new Date()
+  let age = today.getFullYear() - d.getFullYear()
+  const md = today.getMonth() - d.getMonth()
+  if (md < 0 || (md === 0 && today.getDate() < d.getDate())) age -= 1
+  return age >= 0 && age <= 120 ? String(age) : ""
+}
+
 const fallbackRoomNumbersByType: Record<Room["roomType"], string[]> = {
   general: ["101", "102"],
   semi_private: ["201", "202"],
@@ -145,6 +158,8 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     gender: string
     dateOfBirth: string
     address: string
+    admissionStatus?: "admitted" | "scheduled" | null
+    activeAdmissionId?: string | null
   }
   type DoctorOption = {
     uid: string
@@ -203,8 +218,14 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [directPatientId, setDirectPatientId] = useState("")
   const [directPatientUid, setDirectPatientUid] = useState("")
   const [directPatientAddress, setDirectPatientAddress] = useState("")
+  const [directPatientPhone, setDirectPatientPhone] = useState("")
+  const [directPatientGender, setDirectPatientGender] = useState("")
+  const [directPatientAge, setDirectPatientAge] = useState("")
+  const [directEmergencyRelativeName, setDirectEmergencyRelativeName] = useState("")
   const [directPatientResults, setDirectPatientResults] = useState<ExistingPatientOption[]>([])
   const [directPatientLookupLoading, setDirectPatientLookupLoading] = useState(false)
+  const [directSelectedPatientAdmissionStatus, setDirectSelectedPatientAdmissionStatus] =
+    useState<"admitted" | "scheduled" | null>(null)
   const [directDoctorName, setDirectDoctorName] = useState("")
   const [directDoctorId, setDirectDoctorId] = useState("")
   const [doctors, setDoctors] = useState<DoctorOption[]>([])
@@ -240,6 +261,17 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [manageRoomRate, setManageRoomRate] = useState("")
   const [manageRoomStatus, setManageRoomStatus] = useState<Room["status"]>("available")
   const [selectedDateFilter, setSelectedDateFilter] = useState("today")
+  const [plannedActionLoadingId, setPlannedActionLoadingId] = useState<string | null>(null)
+  const [postponeModalOpen, setPostponeModalOpen] = useState(false)
+  const [postponeAdmissionId, setPostponeAdmissionId] = useState<string | null>(null)
+  const [postponeDateTime, setPostponeDateTime] = useState("")
+  const [plannedConfirmModalOpen, setPlannedConfirmModalOpen] = useState(false)
+  const [plannedConfirmAdmissionId, setPlannedConfirmAdmissionId] = useState<string | null>(null)
+  const [plannedConfirmAction, setPlannedConfirmAction] = useState<"ready_to_admit" | "delete" | null>(null)
+  const [assignDoctorReadyModalOpen, setAssignDoctorReadyModalOpen] = useState(false)
+  const [assignDoctorReadyAdmissionId, setAssignDoctorReadyAdmissionId] = useState<string | null>(null)
+  const [assignDoctorReadyDoctorId, setAssignDoctorReadyDoctorId] = useState("")
+  const plannedPopupRef = useRef<HTMLDivElement | null>(null)
 
   const availableRoomTypes = useMemo(() => {
     const types = new Map<string, string>()
@@ -499,10 +531,15 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const handleOpenDirectAdmitModal = () => {
     setDirectPatientResults([])
     setDirectPatientLookupLoading(false)
+    setDirectSelectedPatientAdmissionStatus(null)
     setDirectPatientName("")
     setDirectPatientId("")
     setDirectPatientUid("")
     setDirectPatientAddress("")
+    setDirectPatientPhone("")
+    setDirectPatientGender("")
+    setDirectPatientAge("")
+    setDirectEmergencyRelativeName("")
     setDirectDoctorName("")
     setDirectDoctorId("")
     setDirectAdmitType("emergency")
@@ -522,6 +559,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     const query = queryValue.trim()
     if (query.length < 2) {
       setDirectPatientResults([])
+      setDirectSelectedPatientAdmissionStatus(null)
       return
     }
     setDirectPatientLookupLoading(true)
@@ -553,12 +591,35 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   }, [notify])
 
   const handleSelectExistingPatient = (patient: ExistingPatientOption) => {
+    if (patient.admissionStatus === "admitted" || patient.admissionStatus === "scheduled") {
+      notify({
+        type: "error",
+        message:
+          patient.admissionStatus === "admitted"
+            ? "This patient is already admitted."
+            : "This patient is already pre-registered for admission.",
+      })
+      return
+    }
     setDirectPatientUid(patient.uid)
     setDirectPatientId(patient.patientId || "")
     setDirectPatientName(patient.fullName || "")
     setDirectPatientAddress(patient.address || "")
+    setDirectPatientPhone(patient.phone || "")
+    setDirectPatientGender(patient.gender || "")
+    setDirectPatientAge(ageInputFromDob(patient.dateOfBirth))
+    setDirectEmergencyRelativeName("")
     setDirectPatientResults([])
+    setDirectSelectedPatientAdmissionStatus(patient.admissionStatus || null)
   }
+
+  const handleClearDirectPatientSelectionFields = useCallback(() => {
+    setDirectPatientPhone("")
+    setDirectPatientGender("")
+    setDirectPatientAge("")
+    setDirectEmergencyRelativeName("")
+    setDirectSelectedPatientAdmissionStatus(null)
+  }, [])
 
   useEffect(() => {
     if (!directAdmitModalOpen) return
@@ -574,6 +635,16 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   }, [directAdmitModalOpen, directPatientName, handleSearchExistingPatients])
 
   const handleCreateDirectAdmit = async () => {
+    if (directPatientUid && (directSelectedPatientAdmissionStatus === "admitted" || directSelectedPatientAdmissionStatus === "scheduled")) {
+      notify({
+        type: "error",
+        message:
+          directSelectedPatientAdmissionStatus === "admitted"
+            ? "Selected patient is already admitted."
+            : "Selected patient is already pre-registered for admission.",
+      })
+      return
+    }
     if (!assignRoomId) {
       notify({ type: "error", message: "Select a room to continue." })
       return
@@ -603,6 +674,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
           patientName: directPatientName.trim() || undefined,
           patientId: directPatientId.trim() || undefined,
           patientAddress: directPatientAddress.trim() || undefined,
+          patientPhone: directPatientPhone.trim() || undefined,
+          patientGender: directPatientGender.trim() || undefined,
+          patientAgeYears: directPatientAge.trim() === "" ? undefined : Number(directPatientAge.trim()),
+          emergencyContactName: directEmergencyRelativeName.trim() || undefined,
           doctorName: directDoctorName.trim() || undefined,
           doctorId: directDoctorId.trim() || undefined,
           admitType: directAdmitType,
@@ -1039,6 +1114,54 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     []
   )
 
+  const plannedAdmissions = useMemo(() => {
+    const now = Date.now()
+    return admissions
+      .filter((admission) => {
+        if (admission.admitType !== "planned") return false
+        const plannedAt = new Date(String(admission.plannedAdmitAt || admission.checkInAt || "")).getTime()
+        return Number.isFinite(plannedAt) && plannedAt >= now
+      })
+      .sort(
+        (a, b) =>
+          new Date(String(a.plannedAdmitAt || a.checkInAt || "")).getTime() -
+          new Date(String(b.plannedAdmitAt || b.checkInAt || "")).getTime()
+      )
+  }, [admissions])
+
+  const plannedAdmissionsWithin24h = useMemo(() => {
+    const now = Date.now()
+    const end = now + DAY_MS
+    return plannedAdmissions.filter((admission) => {
+      const plannedAt = new Date(String(admission.plannedAdmitAt || admission.checkInAt || "")).getTime()
+      return Number.isFinite(plannedAt) && plannedAt >= now && plannedAt <= end
+    })
+  }, [plannedAdmissions])
+
+  const plannedReminderKey = useMemo(
+    () => plannedAdmissionsWithin24h.map((admission) => admission.id).sort().join("|"),
+    [plannedAdmissionsWithin24h]
+  )
+  const [lastPlannedReminderKey, setLastPlannedReminderKey] = useState("")
+
+  useEffect(() => {
+    if (!plannedReminderKey || plannedReminderKey === lastPlannedReminderKey) return
+    notify({
+      type: "success",
+      message: `Reminder: ${plannedAdmissionsWithin24h.length} planned admission(s) are due within the next 24 hours.`,
+    })
+    setLastPlannedReminderKey(plannedReminderKey)
+  }, [plannedReminderKey, lastPlannedReminderKey, plannedAdmissionsWithin24h.length, notify])
+
+  useEffect(() => {
+    if (!postponeModalOpen && !plannedConfirmModalOpen && !assignDoctorReadyModalOpen) return
+    const timer = setTimeout(() => {
+      plannedPopupRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+      plannedPopupRef.current?.focus()
+    }, 40)
+    return () => clearTimeout(timer)
+  }, [postponeModalOpen, plannedConfirmModalOpen, assignDoctorReadyModalOpen])
+
   const handleAssignFromTable = (requestId: string) => {
     const match = admitRequests.find((request) => request.id.slice(0, 4).toUpperCase() === requestId.replace("#AR-", ""))
     if (match) {
@@ -1049,6 +1172,213 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const handleViewInpatient = (admissionId: string) => {
     const match = admissions.find((admission) => admission.id === admissionId)
     if (match) handleOpenDischargeModal(match)
+  }
+
+  const handlePlannedAdmissionAction = async (
+    admissionId: string,
+    action: "ready_to_admit" | "postpone" | "delete"
+  ) => {
+    const targetAdmission = admissions.find((admission) => admission.id === admissionId)
+    if (!targetAdmission) {
+      notify({ type: "error", message: "Admission not found." })
+      return
+    }
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      notify({ type: "error", message: "You must be logged in." })
+      return
+    }
+    if (action === "postpone") {
+      const currentPlannedIso = String(targetAdmission.plannedAdmitAt || targetAdmission.checkInAt || "")
+      const parsed = new Date(currentPlannedIso)
+      const initialValue = Number.isFinite(parsed.getTime())
+        ? new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+        : ""
+      setPostponeAdmissionId(admissionId)
+      setPostponeDateTime(initialValue)
+      setPostponeModalOpen(true)
+      return
+    }
+    if (action === "ready_to_admit") {
+      const status = String(targetAdmission.status || "")
+      const plannedAt = new Date(String(targetAdmission.plannedAdmitAt || targetAdmission.checkInAt || "")).getTime()
+      const now = Date.now()
+      if (status !== "scheduled") {
+        notify({ type: "error", message: "Only scheduled admissions can be marked ready to admit." })
+        return
+      }
+      if (!Number.isFinite(plannedAt) || plannedAt < now || plannedAt > now + DAY_MS) {
+        notify({ type: "error", message: "Ready to admit is allowed only within 24 hours before planned time." })
+        return
+      }
+      if (!String(targetAdmission.doctorId || "").trim()) {
+        setAssignDoctorReadyAdmissionId(admissionId)
+        setAssignDoctorReadyDoctorId("")
+        setAssignDoctorReadyModalOpen(true)
+        return
+      }
+    }
+    if (action === "ready_to_admit" || action === "delete") {
+      setPlannedConfirmAdmissionId(admissionId)
+      setPlannedConfirmAction(action)
+      setPlannedConfirmModalOpen(true)
+      return
+    }
+
+    return
+  }
+
+  const handleConfirmAssignDoctorAndReady = async () => {
+    const admissionId = assignDoctorReadyAdmissionId
+    const doctorId = assignDoctorReadyDoctorId
+    if (!admissionId || !doctorId) return
+    const targetDoctor = doctors.find((doctor) => doctor.uid === doctorId)
+    if (!targetDoctor) {
+      notify({ type: "error", message: "Selected doctor not found." })
+      return
+    }
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      notify({ type: "error", message: "You must be logged in." })
+      return
+    }
+    try {
+      setPlannedActionLoadingId(admissionId)
+      const token = await currentUser.getIdToken()
+      const assignRes = await fetch(`/api/receptionist/admissions/${admissionId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          doctorId: targetDoctor.uid,
+          doctorName: targetDoctor.fullName,
+        }),
+      })
+      const assignData = await assignRes.json().catch(() => ({}))
+      if (!assignRes.ok) {
+        throw new Error(assignData?.error || "Failed to assign doctor")
+      }
+      const readyRes = await fetch(`/api/receptionist/admissions/${admissionId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          plannedAction: "ready_to_admit",
+        }),
+      })
+      const readyData = await readyRes.json().catch(() => ({}))
+      if (!readyRes.ok) {
+        throw new Error(readyData?.error || "Failed to mark ready to admit")
+      }
+      notify({ type: "success", message: `Doctor assigned and patient marked admitted: ${targetDoctor.fullName}` })
+      setAssignDoctorReadyModalOpen(false)
+      setAssignDoctorReadyAdmissionId(null)
+      setAssignDoctorReadyDoctorId("")
+      fetchAdmissions()
+      fetchRooms()
+    } catch (error: any) {
+      notify({ type: "error", message: error?.message || "Failed to complete ready to admit flow" })
+    } finally {
+      setPlannedActionLoadingId(null)
+    }
+  }
+
+  const handleConfirmPlannedAction = async () => {
+    if (!plannedConfirmAdmissionId || !plannedConfirmAction) return
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      notify({ type: "error", message: "You must be logged in." })
+      return
+    }
+    try {
+      setPlannedActionLoadingId(plannedConfirmAdmissionId)
+      const token = await currentUser.getIdToken()
+      if (plannedConfirmAction === "delete") {
+        const res = await fetch(`/api/receptionist/admissions/${plannedConfirmAdmissionId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to delete admission")
+        }
+        notify({ type: "success", message: "Scheduled admission deleted." })
+      } else {
+        const res = await fetch(`/api/receptionist/admissions/${plannedConfirmAdmissionId}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            plannedAction: "ready_to_admit",
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to mark ready to admit")
+        }
+        notify({ type: "success", message: "Patient marked as admitted." })
+      }
+      setPlannedConfirmModalOpen(false)
+      setPlannedConfirmAdmissionId(null)
+      setPlannedConfirmAction(null)
+      fetchAdmissions()
+      fetchRooms()
+    } catch (error: any) {
+      notify({ type: "error", message: error?.message || "Failed to update planned admission" })
+    } finally {
+      setPlannedActionLoadingId(null)
+    }
+  }
+
+  const handleConfirmPostpone = async () => {
+    if (!postponeAdmissionId) return
+    if (!postponeDateTime) {
+      notify({ type: "error", message: "Select new planned date and time." })
+      return
+    }
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      notify({ type: "error", message: "You must be logged in." })
+      return
+    }
+    try {
+      setPlannedActionLoadingId(postponeAdmissionId)
+      const token = await currentUser.getIdToken()
+      const res = await fetch(`/api/receptionist/admissions/${postponeAdmissionId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          plannedAction: "postpone",
+          plannedAdmitAt: postponeDateTime,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to postpone admission")
+      }
+      notify({ type: "success", message: "Planned admission date postponed." })
+      setPostponeModalOpen(false)
+      setPostponeAdmissionId(null)
+      setPostponeDateTime("")
+      fetchAdmissions()
+      fetchRooms()
+    } catch (error: any) {
+      notify({ type: "error", message: error?.message || "Failed to postpone admission" })
+    } finally {
+      setPlannedActionLoadingId(null)
+    }
   }
 
   const handleMoreInpatient = (admissionId: string) => {
@@ -1406,6 +1736,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
           admissionsLoading={admissionsLoading}
           handleViewInpatient={handleViewInpatient}
           handleMoreInpatient={handleMoreInpatient}
+        plannedAdmissions={plannedAdmissions}
+        plannedAdmissionsWithin24h={plannedAdmissionsWithin24h}
+        onPlannedAction={handlePlannedAdmissionAction}
+        plannedActionLoadingId={plannedActionLoadingId}
         />
       )}
 
@@ -1440,6 +1774,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         setDirectPatientName={setDirectPatientName}
         setDirectPatientUid={setDirectPatientUid}
         setDirectPatientId={setDirectPatientId}
+        onClearDirectPatientSelection={handleClearDirectPatientSelectionFields}
         directPatientLookupLoading={directPatientLookupLoading}
         directPatientResults={directPatientResults}
         handleSelectExistingPatient={handleSelectExistingPatient}
@@ -1453,6 +1788,14 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         directDoctorName={directDoctorName}
         directPatientAddress={directPatientAddress}
         setDirectPatientAddress={setDirectPatientAddress}
+        directPatientPhone={directPatientPhone}
+        setDirectPatientPhone={setDirectPatientPhone}
+        directPatientGender={directPatientGender}
+        setDirectPatientGender={setDirectPatientGender}
+        directPatientAge={directPatientAge}
+        setDirectPatientAge={setDirectPatientAge}
+        directEmergencyRelativeName={directEmergencyRelativeName}
+        setDirectEmergencyRelativeName={setDirectEmergencyRelativeName}
         directPackageId={directPackageId}
         setDirectPackageId={setDirectPackageId}
         admissionPackages={admissionPackages}
@@ -1521,6 +1864,149 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         roomManageLoading={roomManageLoading}
         onSubmit={handleSubmitRoom}
       />
+
+      {plannedConfirmModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+          <div
+            ref={plannedPopupRef}
+            tabIndex={-1}
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl outline-none"
+          >
+            <h3 className="text-base font-semibold text-slate-900">
+              {plannedConfirmAction === "delete" ? "Delete scheduled admission" : "Mark ready to admit"}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {plannedConfirmAction === "delete"
+                ? "This will remove the scheduled admission record."
+                : "This will change status from scheduled to admitted and occupy the assigned room."}
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPlannedConfirmModalOpen(false)
+                  setPlannedConfirmAdmissionId(null)
+                  setPlannedConfirmAction(null)
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                disabled={Boolean(plannedActionLoadingId)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPlannedAction}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
+                  plannedConfirmAction === "delete" ? "bg-rose-600 hover:bg-rose-700" : "bg-violet-600 hover:bg-violet-700"
+                }`}
+                disabled={Boolean(plannedActionLoadingId)}
+              >
+                {plannedActionLoadingId
+                  ? "Processing..."
+                  : plannedConfirmAction === "delete"
+                    ? "Delete Admission"
+                    : "Ready to Admit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {postponeModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+          <div
+            ref={plannedPopupRef}
+            tabIndex={-1}
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl outline-none"
+          >
+            <h3 className="text-base font-semibold text-slate-900">Postpone planned admission</h3>
+            <p className="mt-1 text-sm text-slate-500">Select a new admission date and time.</p>
+            <div className="mt-4 space-y-1">
+              <label className="text-xs font-medium uppercase tracking-wide text-slate-500">New planned date & time</label>
+              <input
+                type="datetime-local"
+                value={postponeDateTime}
+                onChange={(e) => setPostponeDateTime(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPostponeModalOpen(false)
+                  setPostponeAdmissionId(null)
+                  setPostponeDateTime("")
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                disabled={Boolean(plannedActionLoadingId)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPostpone}
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                disabled={!postponeDateTime || Boolean(plannedActionLoadingId)}
+              >
+                {plannedActionLoadingId ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assignDoctorReadyModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+          <div
+            ref={plannedPopupRef}
+            tabIndex={-1}
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl outline-none"
+          >
+            <h3 className="text-base font-semibold text-slate-900">Please select doctor</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Doctor is required before marking this planned admission as ready to admit.
+            </p>
+            <div className="mt-4 space-y-1">
+              <label className="text-xs font-medium uppercase tracking-wide text-slate-500">Assign doctor</label>
+              <select
+                value={assignDoctorReadyDoctorId}
+                onChange={(e) => setAssignDoctorReadyDoctorId(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Select doctor</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.uid} value={doctor.uid}>
+                    {doctor.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setAssignDoctorReadyModalOpen(false)
+                  setAssignDoctorReadyAdmissionId(null)
+                  setAssignDoctorReadyDoctorId("")
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                disabled={Boolean(plannedActionLoadingId)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAssignDoctorAndReady}
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                disabled={!assignDoctorReadyDoctorId || Boolean(plannedActionLoadingId)}
+              >
+                {plannedActionLoadingId ? "Processing..." : "Assign & Ready to Admit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AdmissionDetailsModal
         selectedAdmission={selectedAdmission}

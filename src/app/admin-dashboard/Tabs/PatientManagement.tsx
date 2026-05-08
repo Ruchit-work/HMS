@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
-import { getDocs, where, query, doc, deleteDoc, onSnapshot, collection } from 'firebase/firestore'
+import { where, query, doc, deleteDoc, onSnapshot, collection, getDocs, type DocumentData, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase/firestore'
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
@@ -41,6 +41,15 @@ interface Patient {
     appointmentDetails?: {
         total: number
         upcoming: number
+        appointments?: Array<{
+            id: string
+            appointmentDate?: string
+            appointmentTime?: string
+            doctorName?: string
+            status?: string
+            chiefComplaint?: string
+            medicalHistory?: string
+        }>
         nextAppointment?: {
             date: string
             time: string
@@ -63,6 +72,8 @@ interface PatientManagementProps {
     /** When provided (admin dashboard), filter patients by this branch */
     selectedBranchId?: string
 }
+
+type BranchOption = { id: string; name: string }
 
 type ReportFilterType = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom' | 'all'
 
@@ -292,6 +303,7 @@ export default function PatientManagement({
     const [sortField, setSortField] = useState<string>('')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+    const [appointmentViewFilter, setAppointmentViewFilter] = useState<'all' | 'upcoming' | null>(null)
     const [showViewModal, setShowViewModal] = useState(false)
     const [deleteModal, setDeleteModal] = useState(false)
     const [deletePatient, setDeletePatient] = useState<Patient | null>(null)
@@ -306,40 +318,153 @@ export default function PatientManagement({
     const [customStartDate, setCustomStartDate] = useState('')
     const [customEndDate, setCustomEndDate] = useState('')
     const [generatingReport, setGeneratingReport] = useState(false)
+    const [branchBackfillModalOpen, setBranchBackfillModalOpen] = useState(false)
+    const [branchBackfillLoading, setBranchBackfillLoading] = useState(false)
+    const [branchBackfillError, setBranchBackfillError] = useState<string | null>(null)
+    const [branchBackfillPreview, setBranchBackfillPreview] = useState<{
+        wouldAssign: number
+        targetBranch: { id: string; name: string }
+        scanned: number
+        samples: string[]
+        reachedEnd: boolean
+        capped: boolean
+    } | null>(null)
+    const [branchEditModalOpen, setBranchEditModalOpen] = useState(false)
+    const [branchEditPatient, setBranchEditPatient] = useState<Patient | null>(null)
+    const [branchOptions, setBranchOptions] = useState<BranchOption[]>([])
+    const [branchOptionsLoading, setBranchOptionsLoading] = useState(false)
+    const [selectedBranchIdForEdit, setSelectedBranchIdForEdit] = useState("")
+    const [branchEditLoading, setBranchEditLoading] = useState(false)
+    const [branchEditError, setBranchEditError] = useState<string | null>(null)
 
-    // Load legacy patients (root 'patients' collection) once per hospital to avoid
-    // repeated network calls inside the realtime snapshot listener.
+    // Root `patients` with hospitalId (legacy + flows that write root first). Realtime so new rows stay visible.
     useEffect(() => {
         if (!activeHospitalId) {
             setLegacyPatients([])
-            return
+            return () => {}
         }
 
-        const loadLegacyPatients = async () => {
-            try {
-                const legacyRef = collection(db, 'patients')
-                const legacyQuery = query(
-                    legacyRef,
-                    where('hospitalId', '==', activeHospitalId),
-                    where('status', 'in', ['active', 'inactive'])
-                )
-                const legacySnapshot = await getDocs(legacyQuery)
-                const mapped = legacySnapshot.docs.map((legacyDoc) => ({
-                    id: legacyDoc.id,
-                    ...legacyDoc.data()
-                })) as Patient[]
-                setLegacyPatients(mapped)
-            } catch {
-                // On error, just fall back to hospital-scoped patients
-                setLegacyPatients([])
-            }
-        }
+        const legacyRef = collection(db, 'patients')
+        const legacyQuery = query(
+            legacyRef,
+            where('hospitalId', '==', activeHospitalId),
+            where('status', 'in', ['active', 'inactive'])
+        )
 
-        loadLegacyPatients()
+        try {
+            const unsubscribe = onSnapshot(
+                legacyQuery,
+                (legacySnapshot) => {
+                    const mapped = legacySnapshot.docs.map((legacyDoc) => ({
+                        id: legacyDoc.id,
+                        ...legacyDoc.data(),
+                    })) as Patient[]
+                    setLegacyPatients(mapped)
+                },
+                () => {
+                    setLegacyPatients([])
+                }
+            )
+            return () => unsubscribe()
+        } catch {
+            setLegacyPatients([])
+            return () => {}
+        }
     }, [activeHospitalId])
-    const handleView = (patient: Patient) => {
-        setSelectedPatient(patient)
+    const fetchPatientAppointmentDetails = useCallback(async (patient: Patient) => {
+        if (!activeHospitalId) {
+            return null
+        }
+
+        const appointmentMap = new Map<string, any>()
+        const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
+
+        // Query by UID and patient ID because old + new records are not always consistent.
+        const tasks: Promise<QuerySnapshot<DocumentData>>[] = [getDocs(query(appointmentsRef, where('patientUid', '==', patient.id)))]
+        if (patient.patientId) {
+            tasks.push(getDocs(query(appointmentsRef, where('patientId', '==', patient.patientId))))
+        }
+
+        const snapshots = await Promise.all(tasks)
+        snapshots.forEach((snap) => {
+            snap.docs.forEach((aptDoc: QueryDocumentSnapshot<DocumentData>) => {
+                appointmentMap.set(aptDoc.id, { id: aptDoc.id, ...(aptDoc.data() || {}) })
+            })
+        })
+
+        const appointments = Array.from(appointmentMap.values())
+        const today = new Date().toISOString().split('T')[0]
+        const upcoming = appointments.filter((apt: any) => {
+            const isUpcoming = String(apt.appointmentDate || '') >= today
+            const isActiveStatus = ['confirmed', 'pending', 'whatsapp_pending'].includes(String(apt.status || ''))
+            return isUpcoming && isActiveStatus
+        })
+
+        const nextAppointment = upcoming.length > 0
+            ? upcoming.sort((a: any, b: any) => {
+                const dateA = new Date(`${a.appointmentDate}T${a.appointmentTime || '00:00'}`).getTime()
+                const dateB = new Date(`${b.appointmentDate}T${b.appointmentTime || '00:00'}`).getTime()
+                return dateA - dateB
+            })[0]
+            : null
+
+        const sortedAppointments = appointments.sort((a: any, b: any) => {
+            const aTime = new Date(`${a.appointmentDate || ''}T${a.appointmentTime || '00:00'}`).getTime()
+            const bTime = new Date(`${b.appointmentDate || ''}T${b.appointmentTime || '00:00'}`).getTime()
+            return bTime - aTime
+        })
+
+        return {
+            total: appointments.length,
+            upcoming: upcoming.length,
+            appointments: sortedAppointments.map((apt: any) => ({
+                id: String(apt.id || ''),
+                appointmentDate: apt.appointmentDate,
+                appointmentTime: apt.appointmentTime,
+                doctorName: apt.doctorName,
+                status: apt.status,
+                chiefComplaint: apt.chiefComplaint,
+                medicalHistory: apt.medicalHistory,
+            })),
+            nextAppointment: nextAppointment ? {
+                date: nextAppointment.appointmentDate,
+                time: nextAppointment.appointmentTime || '',
+                doctorName: nextAppointment.doctorName || 'To be assigned',
+                status: nextAppointment.status,
+                chiefComplaint: nextAppointment.chiefComplaint || '',
+                medicalHistory: nextAppointment.medicalHistory || '',
+            } : undefined,
+        }
+    }, [activeHospitalId])
+
+    const handleView = async (patient: Patient) => {
+        setAppointmentViewFilter(null)
+        setSelectedPatient({ ...patient, appointmentDetails: undefined })
         setShowViewModal(true)
+        try {
+            const details = await fetchPatientAppointmentDetails(patient)
+            setSelectedPatient((prev) => {
+                if (!prev || prev.id !== patient.id) return prev
+                return {
+                    ...prev,
+                    appointmentDetails: details || {
+                        total: 0,
+                        upcoming: 0,
+                    },
+                }
+            })
+        } catch {
+            setSelectedPatient((prev) => {
+                if (!prev || prev.id !== patient.id) return prev
+                return {
+                    ...prev,
+                    appointmentDetails: {
+                        total: 0,
+                        upcoming: 0,
+                    },
+                }
+            })
+        }
     }
     const handleDelete = (patient: Patient) => {
         if (!canDelete) return
@@ -441,60 +566,29 @@ export default function PatientManagement({
                     patientsList = Array.from(byId.values())
                 }
 
-                // If used from receptionist dashboard, restrict to their branch
+                // If used from receptionist dashboard, restrict to their branch.
+                // Include patients with no branch (legacy / IPD auto-register before branch was set) so they stay visible.
                 if (receptionistBranchId) {
-                    patientsList = patientsList.filter(p => p.defaultBranchId === receptionistBranchId)
-                }
-                
-                // If used from admin dashboard with branch filter, filter by selected branch
-                if (!receptionistBranchId && selectedBranchId !== "all") {
-                    patientsList = patientsList.filter(p => p.defaultBranchId === selectedBranchId)
-                }
-                
-                // Add appointment counts to each patient (lazy load full appointments only when needed)
-                const patientsWithAppointments = patientsList.map(patient => {
-                    const patientAppointments: any[] = [] // Empty array - will be loaded on demand if needed
-                    
-                    // Remove duplicates
-                    const uniqueAppointments = Array.from(
-                        new Map(patientAppointments.map(apt => [apt.id, apt])).values()
+                    patientsList = patientsList.filter(
+                        (p) =>
+                            p.defaultBranchId === receptionistBranchId ||
+                            p.defaultBranchId == null ||
+                            p.defaultBranchId === ""
                     )
-                    
-                    // Filter upcoming appointments (confirmed/pending and date >= today)
-                    const today = new Date().toISOString().split('T')[0]
-                    const upcoming = uniqueAppointments.filter((apt: any) => {
-                        const isUpcoming = apt.appointmentDate >= today
-                        const isActiveStatus = ['confirmed', 'pending', 'whatsapp_pending'].includes(apt.status)
-                        return isUpcoming && isActiveStatus
-                    })
-                    
-                    // Find next appointment
-                    const nextAppointment = upcoming.length > 0
-                        ? upcoming.sort((a: any, b: any) => {
-                            const dateA = new Date(`${a.appointmentDate}T${a.appointmentTime || '00:00'}`).getTime()
-                            const dateB = new Date(`${b.appointmentDate}T${b.appointmentTime || '00:00'}`).getTime()
-                            return dateA - dateB
-                        })[0]
-                        : null
-                    
-                    return {
-                        ...patient,
-                        appointmentDetails: {
-                            total: uniqueAppointments.length,
-                            upcoming: upcoming.length,
-                            nextAppointment: nextAppointment ? {
-                                date: nextAppointment.appointmentDate,
-                                time: nextAppointment.appointmentTime || '',
-                                doctorName: nextAppointment.doctorName || 'To be assigned',
-                                status: nextAppointment.status,
-                                chiefComplaint: nextAppointment.chiefComplaint || '',
-                                medicalHistory: nextAppointment.medicalHistory || ''
-                            } : undefined
-                        }
-                    }
-                })
+                }
                 
-                setPatients(patientsWithAppointments)
+                // Admin branch filter: match branch or patients with no branch (same as receptionist list)
+                if (!receptionistBranchId && selectedBranchId !== "all") {
+                    patientsList = patientsList.filter(
+                        (p) =>
+                            p.defaultBranchId === selectedBranchId ||
+                            p.defaultBranchId == null ||
+                            p.defaultBranchId === ""
+                    )
+                }
+                
+                // Appointment stats are loaded on-demand when View modal opens.
+                setPatients(patientsList)
                 setLoading(false)
             }, (error) => {
                 setError(error.message)
@@ -872,6 +966,195 @@ export default function PatientManagement({
             closeAddPatientModal()
         }
     }, [allowAdd, showAddModal])
+
+    useEffect(() => {
+        if (!branchBackfillModalOpen || !activeHospitalId) return
+        let cancelled = false
+        setBranchBackfillError(null)
+        setBranchBackfillPreview(null)
+        setBranchBackfillLoading(true)
+        ;(async () => {
+            try {
+                const currentUser = auth.currentUser
+                if (!currentUser) {
+                    throw new Error("You must be signed in.")
+                }
+                const token = await currentUser.getIdToken()
+                const res = await fetch("/api/admin/patients/branch-backfill", {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        dryRun: true,
+                        maxUpdates: 3000,
+                        hospitalId: activeHospitalId,
+                    }),
+                })
+                const data = await res.json().catch(() => ({}))
+                if (!res.ok) {
+                    throw new Error(data?.error || "Failed to scan patients")
+                }
+                if (cancelled) return
+                setBranchBackfillPreview({
+                    wouldAssign: data.wouldAssign ?? 0,
+                    targetBranch: data.targetBranch,
+                    scanned: data.scanned ?? 0,
+                    samples: Array.isArray(data.samplePatientDocIds) ? data.samplePatientDocIds : [],
+                    reachedEnd: Boolean(data.reachedEnd),
+                    capped: Boolean(data.cappedByMaxUpdates),
+                })
+            } catch (e: unknown) {
+                if (!cancelled) {
+                    setBranchBackfillError((e as Error)?.message || "Preview failed")
+                }
+            } finally {
+                if (!cancelled) {
+                    setBranchBackfillLoading(false)
+                }
+            }
+        })()
+        return () => {
+            cancelled = true
+        }
+    }, [branchBackfillModalOpen, activeHospitalId])
+
+    const handleBranchBackfillApply = async () => {
+        if (!activeHospitalId) return
+        setBranchBackfillLoading(true)
+        setBranchBackfillError(null)
+        try {
+            const currentUser = auth.currentUser
+            if (!currentUser) {
+                throw new Error("You must be signed in.")
+            }
+            const token = await currentUser.getIdToken()
+            const res = await fetch("/api/admin/patients/branch-backfill", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    dryRun: false,
+                    maxUpdates: 400,
+                    hospitalId: activeHospitalId,
+                }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                throw new Error(data?.error || "Failed to assign branches")
+            }
+            const n = typeof data.updated === "number" ? data.updated : 0
+            const branchLabel = data.targetBranch?.name || "branch"
+            setSuccessMessage(
+                n > 0
+                    ? `Assigned "${branchLabel}" to ${n} patient record(s). Open this tool again if more patients still show "Not assigned".`
+                    : "No patients in this batch needed a branch assignment."
+            )
+            setTimeout(() => setSuccessMessage(null), 6000)
+            setBranchBackfillModalOpen(false)
+            setBranchBackfillPreview(null)
+        } catch (e: unknown) {
+            setBranchBackfillError((e as Error)?.message || "Apply failed")
+        } finally {
+            setBranchBackfillLoading(false)
+        }
+    }
+
+    const openBranchEditModal = (patient: Patient) => {
+        setBranchEditPatient(patient)
+        setSelectedBranchIdForEdit(patient.defaultBranchId || "")
+        setBranchEditError(null)
+        setBranchEditModalOpen(true)
+    }
+
+    useEffect(() => {
+        if (!branchEditModalOpen || !activeHospitalId) return
+        let cancelled = false
+        setBranchOptionsLoading(true)
+        ;(async () => {
+            try {
+                const currentUser = auth.currentUser
+                if (!currentUser) throw new Error("You must be logged in")
+                const token = await currentUser.getIdToken()
+                const res = await fetch(`/api/branches?hospitalId=${encodeURIComponent(activeHospitalId)}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                })
+                const data = await res.json().catch(() => ({}))
+                if (!res.ok || !data?.success) {
+                    throw new Error(data?.error || "Failed to load branches")
+                }
+                const rows = Array.isArray(data?.branches) ? data.branches : []
+                if (cancelled) return
+                setBranchOptions(
+                    rows
+                        .map((b: any) => ({
+                            id: String(b?.id || "").trim(),
+                            name: String(b?.name || "Branch").trim(),
+                        }))
+                        .filter((b: BranchOption) => b.id)
+                )
+            } catch (e: unknown) {
+                if (!cancelled) {
+                    setBranchEditError((e as Error)?.message || "Failed to load branches")
+                    setBranchOptions([])
+                }
+            } finally {
+                if (!cancelled) setBranchOptionsLoading(false)
+            }
+        })()
+        return () => {
+            cancelled = true
+        }
+    }, [branchEditModalOpen, activeHospitalId])
+
+    const handleSavePatientBranch = async () => {
+        if (!branchEditPatient) return
+        if (!selectedBranchIdForEdit) {
+            setBranchEditError("Select a branch")
+            return
+        }
+        setBranchEditLoading(true)
+        setBranchEditError(null)
+        try {
+            const currentUser = auth.currentUser
+            if (!currentUser) throw new Error("You must be logged in")
+            const token = await currentUser.getIdToken()
+            const res = await fetch(`/api/receptionist/patients/${encodeURIComponent(branchEditPatient.id)}/branch`, {
+                method: "PATCH",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ branchId: selectedBranchIdForEdit }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                throw new Error(data?.error || "Failed to update branch")
+            }
+            const branchName =
+                branchOptions.find((b) => b.id === selectedBranchIdForEdit)?.name || data?.branch?.name || "Branch"
+            setSuccessMessage(`Updated branch for ${branchEditPatient.firstName} ${branchEditPatient.lastName} to ${branchName}.`)
+            setTimeout(() => setSuccessMessage(null), 4000)
+            if (selectedPatient?.id === branchEditPatient.id) {
+                setSelectedPatient({
+                    ...selectedPatient,
+                    defaultBranchId: selectedBranchIdForEdit,
+                    defaultBranchName: branchName,
+                })
+            }
+            setBranchEditModalOpen(false)
+        } catch (e: unknown) {
+            setBranchEditError((e as Error)?.message || "Failed to update branch")
+        } finally {
+            setBranchEditLoading(false)
+        }
+    }
+
     if (authLoading) {
         return <LoadingSpinner message="Loading patient management..." />
     }
@@ -926,6 +1209,15 @@ export default function PatientManagement({
                       </div>
                       <span className="whitespace-nowrap">Generate Report</span>
                     </button>
+                    {(user.role === "admin" || user.role === "receptionist") && activeHospitalId && (
+                      <button
+                        type="button"
+                        onClick={() => setBranchBackfillModalOpen(true)}
+                        className="group relative inline-flex items-center gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-5 py-3 text-sm font-bold text-amber-900 shadow-sm transition-all duration-200 hover:bg-amber-100 hover:border-amber-400 active:translate-y-0"
+                      >
+                        <span className="whitespace-nowrap">Fix missing branches</span>
+                      </button>
+                    )}
                     {allowAdd && (
                       <button
                         onClick={openAddPatientModal}
@@ -1308,6 +1600,14 @@ export default function PatientManagement({
                                       View
                                     </span>
                                   </button>
+                                  <button
+                                    className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                                    onClick={() => openBranchEditModal(patient)}
+                                    type="button"
+                                  >
+                                    <span className="hidden sm:inline">Branch</span>
+                                    <span className="sm:hidden">B</span>
+                                  </button>
                                   {canDelete && (
                                     <button
                                       className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
@@ -1359,7 +1659,10 @@ export default function PatientManagement({
           {/* Patient Details Modal */}
           <ViewModal
             isOpen={showViewModal}
-            onClose={() => setShowViewModal(false)}
+            onClose={() => {
+              setShowViewModal(false)
+              setAppointmentViewFilter(null)
+            }}
             title="Patient Details"
             subtitle="Complete patient information"
             headerColor="blue"
@@ -1620,23 +1923,89 @@ export default function PatientManagement({
                 {selectedPatient?.appointmentDetails ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <button
+                        type="button"
+                        onClick={() => setAppointmentViewFilter('all')}
+                        className={`text-left bg-blue-50 rounded-lg p-4 border transition-all ${
+                          appointmentViewFilter === 'all' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-blue-200 hover:border-blue-300'
+                        }`}
+                      >
                         <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">
                           Total Appointments
                         </div>
                         <div className="text-2xl font-bold text-blue-900">
                           {selectedPatient.appointmentDetails.total}
                         </div>
-                      </div>
-                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <div className="text-[11px] text-blue-700 mt-1">Click to view details</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAppointmentViewFilter('upcoming')}
+                        className={`text-left bg-green-50 rounded-lg p-4 border transition-all ${
+                          appointmentViewFilter === 'upcoming' ? 'border-green-500 ring-2 ring-green-100' : 'border-green-200 hover:border-green-300'
+                        }`}
+                      >
                         <div className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-1">
                           Upcoming Appointments
                         </div>
                         <div className="text-2xl font-bold text-green-900">
                           {selectedPatient.appointmentDetails.upcoming}
                         </div>
-                      </div>
+                        <div className="text-[11px] text-green-700 mt-1">Click to view details</div>
+                      </button>
                     </div>
+                    {appointmentViewFilter && (
+                      <div className="bg-white rounded-lg border border-slate-200 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {appointmentViewFilter === "all" ? "All Appointment Details" : "Upcoming Appointment Details"}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setAppointmentViewFilter(null)}
+                            className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                          >
+                            Hide
+                          </button>
+                        </div>
+                        {((selectedPatient.appointmentDetails.appointments || []).filter((apt) => {
+                          if (appointmentViewFilter !== 'upcoming') return true
+                          const today = new Date().toISOString().split('T')[0]
+                          const status = String(apt.status || '')
+                          return String(apt.appointmentDate || '') >= today && ['confirmed', 'pending', 'whatsapp_pending'].includes(status)
+                        })).length > 0 ? (
+                          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                            {(selectedPatient.appointmentDetails.appointments || []).filter((apt) => {
+                              if (appointmentViewFilter !== 'upcoming') return true
+                              const today = new Date().toISOString().split('T')[0]
+                              const status = String(apt.status || '')
+                              return String(apt.appointmentDate || '') >= today && ['confirmed', 'pending', 'whatsapp_pending'].includes(status)
+                            }).map((apt) => (
+                              <div key={apt.id} className="rounded-md border border-slate-200 bg-slate-50 p-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    {apt.appointmentDate ? formatDate(apt.appointmentDate) : "Date not set"}
+                                    {apt.appointmentTime ? ` at ${apt.appointmentTime}` : ""}
+                                  </p>
+                                  <span className="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                                    {apt.status === "whatsapp_pending" ? "pending" : (apt.status || "unknown")}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-600 mt-1">Doctor: {apt.doctorName || "To be assigned"}</p>
+                                {apt.chiefComplaint ? (
+                                  <p className="text-xs text-slate-600 mt-1">Complaint: {apt.chiefComplaint}</p>
+                                ) : null}
+                                {apt.medicalHistory ? (
+                                  <p className="text-xs text-slate-600 mt-1">History: {apt.medicalHistory}</p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 py-1">No appointments found for this filter.</p>
+                        )}
+                      </div>
+                    )}
                     {selectedPatient.appointmentDetails.nextAppointment ? (
                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
@@ -1755,6 +2124,124 @@ export default function PatientManagement({
             </RevealModal>
           )}
         </div>
+        {branchBackfillModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+              <h3 className="text-lg font-bold text-slate-900">Assign default branch</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                Patients without <span className="font-medium">defaultBranchId</span> are hard to filter by branch. This
+                assigns the correct branch: receptionists use <span className="font-medium">their branch</span> when
+                set, otherwise the hospital&apos;s first active branch (alphabetically).
+              </p>
+              {branchBackfillLoading && !branchBackfillPreview && (
+                <p className="mt-4 text-sm text-slate-500">Scanning patients…</p>
+              )}
+              {branchBackfillError && (
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {branchBackfillError}
+                </div>
+              )}
+              {branchBackfillPreview && (
+                <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <p>
+                    <span className="font-semibold text-slate-800">Target branch:</span>{" "}
+                    {branchBackfillPreview.targetBranch.name}{" "}
+                    <span className="text-slate-500">({branchBackfillPreview.targetBranch.id})</span>
+                  </p>
+                  <p>
+                    <span className="font-semibold text-slate-800">Patients missing branch (in scan window):</span>{" "}
+                    {branchBackfillPreview.wouldAssign}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Scanned {branchBackfillPreview.scanned} document(s).
+                    {branchBackfillPreview.capped ? " Scan hit the preview limit; more may exist." : ""}
+                    {branchBackfillPreview.reachedEnd ? " Reached end of hospital patient list for this pass." : ""}
+                  </p>
+                  {branchBackfillPreview.samples.length > 0 && (
+                    <p className="text-xs text-slate-500 break-all">
+                      Sample IDs: {branchBackfillPreview.samples.join(", ")}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => {
+                    setBranchBackfillModalOpen(false)
+                    setBranchBackfillPreview(null)
+                    setBranchBackfillError(null)
+                  }}
+                  disabled={branchBackfillLoading}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                  onClick={handleBranchBackfillApply}
+                  disabled={
+                    branchBackfillLoading ||
+                    !branchBackfillPreview ||
+                    branchBackfillPreview.wouldAssign === 0
+                  }
+                >
+                  {branchBackfillLoading ? "Working…" : "Assign branch (up to 400)"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {branchEditModalOpen && (
+          <div className="fixed inset-0 z-[61] flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+              <h3 className="text-lg font-bold text-slate-900">Change patient branch</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                {branchEditPatient?.firstName} {branchEditPatient?.lastName}
+              </p>
+              <div className="mt-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</label>
+                <select
+                  value={selectedBranchIdForEdit}
+                  onChange={(e) => setSelectedBranchIdForEdit(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  disabled={branchOptionsLoading || branchEditLoading}
+                >
+                  <option value="">{branchOptionsLoading ? "Loading branches..." : "Select branch"}</option>
+                  {branchOptions.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {branchEditError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {branchEditError}
+                </div>
+              )}
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setBranchEditModalOpen(false)}
+                  disabled={branchEditLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+                  onClick={handleSavePatientBranch}
+                  disabled={branchEditLoading || !selectedBranchIdForEdit}
+                >
+                  {branchEditLoading ? "Saving..." : "Save branch"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Add Patient Modal */}
         {allowAdd && showAddModal && (
           <RevealModal

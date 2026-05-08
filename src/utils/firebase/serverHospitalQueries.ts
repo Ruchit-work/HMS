@@ -123,8 +123,68 @@ export async function getAppointmentHospitalId(appointmentId: string): Promise<s
 }
 
 /**
- * Get all active hospitals
+ * Default branch for patients created by a receptionist (matches create-patient API).
  */
+export async function getReceptionistDefaultBranch(
+  userId: string,
+  role: string | undefined
+): Promise<{ branchId: string | null; branchName: string | null }> {
+  if (role !== "receptionist") {
+    return { branchId: null, branchName: null }
+  }
+  try {
+    const db = admin.firestore()
+    const snap = await db.collection("receptionists").doc(userId).get()
+    if (!snap.exists) {
+      return { branchId: null, branchName: null }
+    }
+    const d = snap.data() || {}
+    const branchId = typeof d.branchId === "string" && d.branchId.trim() ? d.branchId.trim() : null
+    const branchName = typeof d.branchName === "string" && d.branchName.trim() ? d.branchName.trim() : null
+    return { branchId, branchName }
+  } catch {
+    return { branchId: null, branchName: null }
+  }
+}
+
+/** First active branch for a hospital (stable: alphabetical by name). */
+export async function getFirstActiveBranchForHospital(hospitalId: string): Promise<{ id: string; name: string } | null> {
+  try {
+    const db = admin.firestore()
+    const snap = await db.collection("branches").where("hospitalId", "==", hospitalId).where("status", "==", "active").get()
+    if (snap.empty) return null
+    const rows = snap.docs.map((d) => ({
+      id: d.id,
+      name: String((d.data() as { name?: string }).name || "Branch"),
+    }))
+    rows.sort((a, b) => a.name.localeCompare(b.name))
+    return rows[0] || null
+  } catch {
+    return null
+  }
+}
+
+/** Returns branch id+name if branch exists, is active, and belongs to hospital. */
+export async function getBranchIfBelongsToHospital(
+  branchId: string,
+  hospitalId: string
+): Promise<{ id: string; name: string } | null> {
+  try {
+    const id = branchId.trim()
+    if (!id) return null
+    const db = admin.firestore()
+    const snap = await db.collection("branches").doc(id).get()
+    if (!snap.exists) return null
+    const d = snap.data() || {}
+    if (String(d.hospitalId || "") !== hospitalId) return null
+    if (d.status && d.status !== "active") return null
+    return { id: snap.id, name: String(d.name || "Branch") }
+  } catch {
+    return null
+  }
+}
+
+/** Get all active hospitals */
 export async function getAllActiveHospitals(): Promise<Array<{ id: string; name: string }>> {
   try {
     const db = admin.firestore()

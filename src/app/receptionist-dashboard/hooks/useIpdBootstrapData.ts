@@ -209,7 +209,7 @@ export function useIpdBootstrapData({
       const currentUser = auth.currentUser
       if (!currentUser) throw new Error("You must be logged in to access admissions")
       const token = await currentUser.getIdToken()
-      const res = await fetch("/api/receptionist/admissions?status=admitted&includeAppointmentDetails=false", {
+      const res = await fetch("/api/receptionist/admissions?includeAppointmentDetails=false", {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -257,7 +257,11 @@ export function useIpdBootstrapData({
         billingId: item.billingId || null,
         appointmentDetails: item.appointmentDetails || null,
       }))
-      setAdmissions(formatted.filter((admission) => admission.status === "admitted"))
+      setAdmissions(
+        formatted.filter(
+          (admission) => admission.status === "admitted" || admission.status === "scheduled"
+        )
+      )
     } catch (error: any) {
       setAdmissionsError(error?.message || "Failed to load admissions")
     } finally {

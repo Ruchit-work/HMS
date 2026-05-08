@@ -35,6 +35,14 @@ interface UseIpdAdmissionsDeskParams {
   availableRoomsCount: number
 }
 
+const formatIpdNo = (ipdNo: string | undefined, admissionId: string) => {
+  const normalized = String(ipdNo || "").trim()
+  if (normalized) return normalized
+  const raw = String(admissionId || "").trim()
+  if (!raw) return "-"
+  return `IPD-${raw.slice(-6).toUpperCase()}`
+}
+
 export function useIpdAdmissionsDesk({
   admitRequests,
   admissions,
@@ -48,6 +56,18 @@ export function useIpdAdmissionsDesk({
   admissionsTodayCount,
   availableRoomsCount,
 }: UseIpdAdmissionsDeskParams) {
+  const currentInpatientAdmissions = useMemo(() => {
+    const now = Date.now()
+    return admissions.filter((admission) => {
+      if (admission.status !== "admitted") return false
+      const effectiveAdmitAt = new Date(String(admission.checkInAt || admission.plannedAdmitAt || "")).getTime()
+      if (!Number.isFinite(effectiveAdmitAt)) return true
+      // Planned admissions in future should stay in Pre-Booked list, not current inpatients.
+      if (admission.admitType === "planned" && effectiveAdmitAt > now) return false
+      return true
+    })
+  }, [admissions])
+
   const requestRows = useMemo<RequestRow[]>(() => {
     return admitRequests.map((request) => {
       const requestDate = request.createdAt ? new Date(request.createdAt) : null
@@ -80,7 +100,7 @@ export function useIpdAdmissionsDesk({
   }, [roomAvailabilityByType])
 
   const inpatientRows = useMemo<InpatientRow[]>(() => {
-    return admissions.map((admission) => {
+    return currentInpatientAdmissions.map((admission) => {
       const status: InpatientRow["status"] =
         admission.charges?.otherCharges && admission.charges.otherCharges > 1000
           ? "critical"
@@ -89,7 +109,7 @@ export function useIpdAdmissionsDesk({
             : "stable"
       return {
         id: admission.id,
-        ipdNo: `IPD-${admission.id.slice(0, 6).toUpperCase()}`,
+        ipdNo: formatIpdNo(admission.ipdNo, admission.id),
         patientName: admission.patientName || "Unknown",
         patientMeta: `${admission.patientId || "PID: N/A"} / ${admission.patientAddress || "Address not set"}`,
         roomBed: `${admission.roomNumber} / ${getRoomTypeDisplayName({
@@ -103,7 +123,7 @@ export function useIpdAdmissionsDesk({
         status,
       }
     })
-  }, [admissions, getRoomTypeDisplayName])
+  }, [currentInpatientAdmissions, getRoomTypeDisplayName])
 
   const todayOverviewMetrics = useMemo<OverviewMetric[]>(() => {
     const dischargesToday = 0
@@ -121,7 +141,7 @@ export function useIpdAdmissionsDesk({
     const now = Date.now()
     const oneDayMs = 24 * 60 * 60 * 1000
     return inpatientRows.filter((row) => {
-      const admission = admissions.find((entry) => entry.id === row.id)
+      const admission = currentInpatientAdmissions.find((entry) => entry.id === row.id)
       if (!admission) return false
       if (admissionsDeskFocus === "doctor_requested_discharge") {
         return admission.dischargeRequest?.status === "pending"
@@ -142,7 +162,7 @@ export function useIpdAdmissionsDesk({
       }
       return true
     })
-  }, [admissionsDeskFocus, inpatientRows, admissions])
+  }, [admissionsDeskFocus, inpatientRows, currentInpatientAdmissions])
 
   const admissionsDeskFocusLabel = useMemo(() => {
     return admissionsDeskFocus === "doctor_requested_discharge"

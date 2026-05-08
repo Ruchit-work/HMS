@@ -225,6 +225,7 @@ export interface AdmissionRequest {
 
 export interface Admission {
   id: string
+  ipdNo?: string
   appointmentId: string
   patientUid: string
   patientId?: string
@@ -332,7 +333,7 @@ export interface Admission {
     notes?: string | null
     status?: "pending" | "processed" | "cancelled"
   } | null
-  status: "admitted" | "discharged" | "completed"
+  status: "scheduled" | "admitted" | "discharged" | "completed"
   checkInAt: string
   checkOutAt?: string | null
   notes?: string | null
@@ -341,6 +342,10 @@ export interface Admission {
   updatedAt?: string
   billingId?: string | null
   patientName?: string | null
+  /** Snapshot from direct admit / reception for IPD lists without loading patient doc */
+  patientPhone?: string | null
+  patientGender?: string | null
+  emergencyContactName?: string | null
 }
 
 export interface BillingRecord {

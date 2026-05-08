@@ -10,6 +10,8 @@ type ExistingPatientOption = {
   gender: string
   dateOfBirth: string
   address: string
+  admissionStatus?: "admitted" | "scheduled" | null
+  activeAdmissionId?: string | null
 }
 
 type DoctorOption = {
@@ -50,6 +52,8 @@ interface DirectAdmitModalProps {
   setDirectPatientName: (value: string) => void
   setDirectPatientUid: (value: string) => void
   setDirectPatientId: (value: string) => void
+  /** When user types a new name, clear linked UID and extra demographic fields */
+  onClearDirectPatientSelection?: () => void
   directPatientLookupLoading: boolean
   directPatientResults: ExistingPatientOption[]
   handleSelectExistingPatient: (patient: ExistingPatientOption) => void
@@ -63,6 +67,14 @@ interface DirectAdmitModalProps {
   directDoctorName: string
   directPatientAddress: string
   setDirectPatientAddress: (value: string) => void
+  directPatientPhone: string
+  setDirectPatientPhone: (value: string) => void
+  directPatientGender: string
+  setDirectPatientGender: (value: string) => void
+  directPatientAge: string
+  setDirectPatientAge: (value: string) => void
+  directEmergencyRelativeName: string
+  setDirectEmergencyRelativeName: (value: string) => void
   directPackageId: string
   setDirectPackageId: (value: string) => void
   admissionPackages: AdmissionPackageOption[]
@@ -102,6 +114,7 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
     setDirectPatientName,
     setDirectPatientUid,
     setDirectPatientId,
+    onClearDirectPatientSelection,
     directPatientLookupLoading,
     directPatientResults,
     handleSelectExistingPatient,
@@ -115,6 +128,14 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
     directDoctorName,
     directPatientAddress,
     setDirectPatientAddress,
+    directPatientPhone,
+    setDirectPatientPhone,
+    directPatientGender,
+    setDirectPatientGender,
+    directPatientAge,
+    setDirectPatientAge,
+    directEmergencyRelativeName,
+    setDirectEmergencyRelativeName,
     directPackageId,
     setDirectPackageId,
     admissionPackages,
@@ -169,6 +190,7 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
                 setDirectPatientName(e.target.value)
                 setDirectPatientUid("")
                 setDirectPatientId("")
+                onClearDirectPatientSelection?.()
               }}
               placeholder="Type patient name"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -181,12 +203,20 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
                     key={patient.uid}
                     type="button"
                     onClick={() => handleSelectExistingPatient(patient)}
-                    className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
+                    disabled={patient.admissionStatus === "admitted" || patient.admissionStatus === "scheduled"}
+                    className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70"
                   >
                     <p className="text-sm font-semibold text-slate-800">{patient.fullName || "Unknown patient"}</p>
                     <p className="text-xs text-slate-500">
                       {patient.patientId || "PID: N/A"} · {patient.phone || "No phone"}
                     </p>
+                    {patient.admissionStatus ? (
+                      <p className="text-[11px] font-medium text-rose-600">
+                        {patient.admissionStatus === "admitted"
+                          ? "Already admitted (cannot direct admit again)"
+                          : "Pre-registered for admission (cannot direct admit again)"}
+                      </p>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -247,6 +277,51 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
                 <input
                   value={directPatientAddress}
                   onChange={(e) => setDirectPatientAddress(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-600">Mobile</p>
+                <input
+                  value={directPatientPhone}
+                  onChange={(e) => setDirectPatientPhone(e.target.value)}
+                  placeholder="Patient / attendant mobile"
+                  inputMode="tel"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-600">Age (years)</p>
+                <input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={directPatientAge}
+                  onChange={(e) => setDirectPatientAge(e.target.value)}
+                  placeholder="e.g. 45"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <p className="text-[11px] text-slate-500">Used for new patient record when not selecting an existing patient.</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-600">Gender</p>
+                <select
+                  value={directPatientGender}
+                  onChange={(e) => setDirectPatientGender(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                >
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <p className="text-xs font-medium text-slate-600">Relative / emergency contact name</p>
+                <input
+                  value={directEmergencyRelativeName}
+                  onChange={(e) => setDirectEmergencyRelativeName(e.target.value)}
                   placeholder="Optional"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
