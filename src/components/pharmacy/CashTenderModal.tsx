@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 
 export type NotesRecord = Record<string, number>
 
@@ -57,13 +58,9 @@ export function CashPaymentPanel({
           </p>
         </div>
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         )}
       </div>
 
@@ -130,21 +127,12 @@ export function CashPaymentPanel({
       </div>
 
       <div className="mt-auto pt-1 flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={handleConfirm}
-          disabled={!canConfirm}
-          className="w-full h-11 rounded-xl bg-blue-600 text-white text-sm font-semibold shadow-sm hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-        >
+        <Button type="button" variant="primary" size="lg" className="w-full" onClick={handleConfirm} disabled={!canConfirm}>
           {confirmLabel || 'Confirm & complete sale'}
-        </button>
-        <button
-          type="button"
-          onClick={handleClearAll}
-          className="w-full h-10 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-transform"
-        >
+        </Button>
+        <Button type="button" variant="outline" size="md" className="w-full" onClick={handleClearAll}>
           Reset amounts
-        </button>
+        </Button>
       </div>
     </div>
   )

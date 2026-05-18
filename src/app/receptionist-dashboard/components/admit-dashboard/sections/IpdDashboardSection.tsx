@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
 import StatsCard from "@/app/receptionist-dashboard/components/admit-dashboard/StatsCard"
 import SectionCard from "@/app/receptionist-dashboard/components/admit-dashboard/SectionCard"
 import RoomAvailability, { RoomAvailabilityRow } from "@/app/receptionist-dashboard/components/admit-dashboard/RoomAvailability"
@@ -106,54 +107,42 @@ export default function IpdDashboardSection({
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+        <div className="hms-kpi-card">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Doctor Requested Discharge</p>
           <p className="mt-2 text-2xl font-bold text-rose-700">{ipdKpiSummary.doctorRequestedDischarge}</p>
           <p className="mt-1 text-xs text-slate-500">Needs receptionist discharge processing</p>
-          <button
-            onClick={() => openAdmissionsDeskWithFocus("doctor_requested_discharge")}
-            className="mt-2 inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800"
-          >
+          <Button type="button" variant="ghost" size="sm" className="mt-2 text-rose-700" onClick={() => openAdmissionsDeskWithFocus("doctor_requested_discharge")}>
             View in Admissions Desk
-          </button>
+          </Button>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+        <div className="hms-kpi-card">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Expected Discharge (24h)</p>
           <p className="mt-2 text-2xl font-bold text-amber-700">{ipdKpiSummary.expectedDischargeSoon}</p>
           <p className="mt-1 text-xs text-slate-500">Plan billing and room turnover</p>
-          <button
-            onClick={() => openAdmissionsDeskWithFocus("expected_discharge_soon")}
-            className="mt-2 inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 hover:text-amber-800"
-          >
+          <Button type="button" variant="ghost" size="sm" className="mt-2 text-amber-700" onClick={() => openAdmissionsDeskWithFocus("expected_discharge_soon")}>
             View in Admissions Desk
-          </button>
+          </Button>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+        <div className="hms-kpi-card">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Doctor Rounds Pending</p>
-          <p className="mt-2 text-2xl font-bold text-violet-700">{ipdKpiSummary.roundsPending}</p>
+          <p className="mt-2 text-2xl font-bold text-[var(--color-primary-dark)]">{ipdKpiSummary.roundsPending}</p>
           <p className="mt-1 text-xs text-slate-500">No round in last 24 hours</p>
-          <button
-            onClick={() => openAdmissionsDeskWithFocus("rounds_pending")}
-            className="mt-2 inline-flex rounded-md bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100 hover:text-violet-800"
-          >
+          <Button type="button" variant="ghost" size="sm" className="mt-2 text-[var(--color-primary-dark)]" onClick={() => openAdmissionsDeskWithFocus("rounds_pending")}>
             View in Admissions Desk
-          </button>
+          </Button>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md">
+        <div className="hms-kpi-card">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pay Later Cases</p>
-          <p className="mt-2 text-2xl font-bold text-blue-700">{ipdFinanceSummary.payLaterCases}</p>
+          <p className="mt-2 text-2xl font-bold text-[var(--color-secondary-dark)]">{ipdFinanceSummary.payLaterCases}</p>
           <p className="mt-1 text-xs text-slate-500">Settlement expected at discharge</p>
-          <button
-            onClick={() => openAdmissionsDeskWithFocus("pay_later")}
-            className="mt-2 inline-flex rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-          >
+          <Button type="button" variant="ghost" size="sm" className="mt-2 text-[var(--color-secondary-dark)]" onClick={() => openAdmissionsDeskWithFocus("pay_later")}>
             View in Admissions Desk
-          </button>
+          </Button>
         </div>
       </section>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="hms-surface overflow-hidden">
           <div className="border-b border-slate-200 px-4 py-3">
             <h3 className="text-sm font-semibold text-slate-900">Expected Discharge List</h3>
             <p className="text-xs text-slate-500">Patients with planned discharge dates</p>
@@ -186,7 +175,7 @@ export default function IpdDashboardSection({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="hms-surface overflow-hidden">
           <div className="border-b border-slate-200 px-4 py-3">
             <h3 className="text-sm font-semibold text-slate-900">Doctor Round Follow-up</h3>
             <p className="text-xs text-slate-500">Inpatients needing fresh doctor updates</p>
@@ -211,7 +200,7 @@ export default function IpdDashboardSection({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="hms-surface p-4">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-slate-900">IPD Financial Mini Summary</h3>

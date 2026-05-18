@@ -28,10 +28,10 @@ const STAT_CONFIG: Record<
   { color: string; accent: string; icon: React.ReactNode; hoverBg: string }
 > = {
   Today: {
-    color: "text-blue-700",
-    accent: "bg-blue-500",
-    icon: <Calendar className="w-4 h-4 text-blue-600" />,
-    hoverBg: "hover:bg-blue-50/80",
+    color: "text-cyan-800",
+    accent: "bg-cyan-500",
+    icon: <Calendar className="w-4 h-4 text-cyan-700" />,
+    hoverBg: "hover:bg-cyan-50/80",
   },
   Tomorrow: {
     color: "text-emerald-700",
@@ -40,10 +40,10 @@ const STAT_CONFIG: Record<
     hoverBg: "hover:bg-emerald-50/80",
   },
   "This Week": {
-    color: "text-violet-700",
-    accent: "bg-violet-500",
-    icon: <CalendarRange className="w-4 h-4 text-violet-600" />,
-    hoverBg: "hover:bg-violet-50/80",
+    color: "text-cyan-800",
+    accent: "bg-cyan-600",
+    icon: <CalendarRange className="w-4 h-4 text-cyan-600" />,
+    hoverBg: "hover:bg-cyan-50/80",
   },
   History: {
     color: "text-slate-600",

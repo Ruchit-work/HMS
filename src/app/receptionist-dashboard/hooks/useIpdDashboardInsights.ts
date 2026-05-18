@@ -34,7 +34,7 @@ export function useIpdDashboardInsights({
         value: pendingCount,
         subtitle: "Awaiting assignment",
         icon: Clock3,
-        accentClass: "bg-purple-500",
+        accentClass: "bg-cyan-500",
       },
       {
         title: "Available Rooms",

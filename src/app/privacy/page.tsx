@@ -43,7 +43,7 @@ export default function PrivacyPolicyPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto bg-white/90 backdrop-blur rounded-3xl shadow-2xl border border-white/40 p-6 sm:p-10">
         <header className="mb-8 text-center">
           <p className="text-sm uppercase tracking-widest text-blue-500 font-semibold mb-2">
@@ -69,7 +69,7 @@ export default function PrivacyPolicyPage() {
             </section>
           ))}
 
-          <section className="bg-blue-50 rounded-2xl p-5 sm:p-6 border border-blue-100 shadow-inner">
+          <section className="bg-cyan-50 rounded-2xl p-5 sm:p-6 border border-blue-100 shadow-inner">
             <h2 className="text-xl font-bold text-gray-900 mb-3">5. Contact & Concerns</h2>
             <p className="text-gray-700 text-sm sm:text-base leading-relaxed mb-4">
               For privacy-related questions, data requests, or security concerns, reach out to our compliance desk any time.
@@ -85,11 +85,11 @@ export default function PrivacyPolicyPage() {
           <p className="mb-2">Effective Date: January 2025</p>
           <p>
             Return to{" "}
-            <Link href="/" className="text-blue-600 font-semibold hover:underline">
+            <Link href="/" className="text-cyan-700 font-semibold hover:underline">
               Hospital Management System landing page
             </Link>{" "}
             or{" "}
-            <Link href="/auth/login" className="text-blue-600 font-semibold hover:underline">
+            <Link href="/auth/login" className="text-cyan-700 font-semibold hover:underline">
               sign in
             </Link>{" "}
             to manage your appointments.

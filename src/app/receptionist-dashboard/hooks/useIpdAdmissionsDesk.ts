@@ -90,7 +90,7 @@ export function useIpdAdmissionsDesk({
   }, [admitRequests])
 
   const roomRows = useMemo<RoomAvailabilityRow[]>(() => {
-    const colorPalette = ["bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-orange-500", "bg-fuchsia-500", "bg-cyan-500"]
+    const colorPalette = ["bg-cyan-500", "bg-emerald-500", "bg-teal-500", "bg-orange-500", "bg-sky-500", "bg-amber-500"]
     return roomAvailabilityByType.map((type, index) => ({
       name: type.name,
       occupied: type.occupied,
@@ -128,7 +128,7 @@ export function useIpdAdmissionsDesk({
   const todayOverviewMetrics = useMemo<OverviewMetric[]>(() => {
     const dischargesToday = 0
     return [
-      { label: "New Requests", value: pendingCount, accentClass: "text-violet-700" },
+      { label: "New Requests", value: pendingCount, accentClass: "text-cyan-700" },
       { label: "Admissions Today", value: admissionsTodayCount, accentClass: "text-emerald-700" },
       { label: "Discharges Today", value: dischargesToday, accentClass: "text-orange-700" },
       { label: "Available Rooms", value: availableRoomsCount, accentClass: "text-blue-700" },

@@ -1,4 +1,5 @@
 'use client'
+import { Button } from '@/components/ui/Button'
 
 import React, { useEffect, useState } from 'react'
 import type { PharmacyMedicine } from '@/types/pharmacy'
@@ -80,7 +81,7 @@ export function AddStockForm({
       <input type="text" placeholder="Batch number" value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
       <input type="date" placeholder="Expiry date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
       <input type="number" min="1" placeholder="Quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" required />
-      <button type="submit" disabled={saving} className="btn-modern btn-modern-primary btn-modern-sm">Add stock</button>
+      <Button type="submit" size="sm" loading={saving} loadingText="Saving...">Add stock</Button>
     </form>
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Button } from "@/components/ui/Button"
 import { auth } from "@/firebase/config"
 import { Admission } from "@/types/patient"
 import { onAuthStateChanged, type User } from "firebase/auth"
@@ -345,7 +346,7 @@ export default function DoctorInpatientsPage() {
               suppressHydrationWarning
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
                 activeTab === "admitted"
-                  ? "bg-indigo-100 text-indigo-700"
+                  ? "bg-cyan-100 text-cyan-800"
                   : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               }`}
             >
@@ -431,7 +432,10 @@ export default function DoctorInpatientsPage() {
                               >
                                 View Details
                               </button>
-                              <button
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={expandedAdmissionId === patient.id ? "outline" : "primary"}
                                 onClick={() => {
                                   setExpandedAdmissionId((prev) => (prev === patient.id ? null : patient.id))
                                   setRoundFee("500")
@@ -451,10 +455,9 @@ export default function DoctorInpatientsPage() {
                                     other: "",
                                   })
                                 }}
-                                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
                               >
                                 {expandedAdmissionId === patient.id ? "Close Round Form" : "Mark Round Done"}
-                              </button>
+                              </Button>
                               <button
                                 onClick={() => {
                                   setConfirmDischargeAdmission(patient)
@@ -571,8 +574,12 @@ export default function DoctorInpatientsPage() {
                               </div>
                             </div>
                             <div className="flex justify-end gap-2">
-                              <button onClick={() => setExpandedAdmissionId(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" disabled={markingRound}>Cancel</button>
-                              <button onClick={markRoundDone} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60" disabled={markingRound}>{markingRound ? "Saving..." : "Mark Round Done"}</button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => setExpandedAdmissionId(null)} disabled={markingRound}>
+                                Cancel
+                              </Button>
+                              <Button type="button" variant="primary" size="sm" onClick={markRoundDone} loading={markingRound} loadingText="Saving...">
+                                Mark Round Done
+                              </Button>
                             </div>
                           </div>
                         </td>
@@ -726,7 +733,7 @@ export default function DoctorInpatientsPage() {
                               {entry.finalDiagnosis.map((diag: string, idx: number) => (
                                 <span
                                   key={`${entry.id}-diag-${idx}`}
-                                  className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700"
+                                  className="inline-flex items-center rounded-full border border-blue-100 bg-cyan-50 px-2 py-0.5 text-[10px] font-medium text-cyan-800"
                                 >
                                   {diag}
                                 </span>

@@ -1,5 +1,7 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
+
 import type { Admission, Room } from "@/types/patient"
 
 interface TransferRoomModalProps {
@@ -75,20 +77,19 @@ export default function TransferRoomModal({
           </div>
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            disabled={transferLoading}
-          >
+          <Button type="button" variant="outline" onClick={onClose} disabled={transferLoading}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
             onClick={onConfirm}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-            disabled={transferLoading || !transferRoomId}
+            loading={transferLoading}
+            loadingText="Transferring..."
+            disabled={!transferRoomId}
           >
-            {transferLoading ? "Transferring..." : "Confirm Transfer"}
-          </button>
+            Confirm Transfer
+          </Button>
         </div>
       </div>
     </div>

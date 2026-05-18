@@ -87,7 +87,7 @@ export default function PatientHistorySection({
     return (
       <div key={historyItem.id} className="relative h-56 sm:h-64">
         <div className="group h-full w-full [perspective:1000px] bg">
-          <div className="relative h-full w-full rounded-2xl border border-slate-200 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 shadow-lg transition-transform duration-300 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] ">
+          <div className="relative h-full w-full rounded-2xl border border-slate-200 bg-gradient-to-br from-cyan-50 via-teal-50 to-sky-50 shadow-lg transition-transform duration-300 [transform-style:preserve-3d] group-hover:[transform:rotateY(180deg)] ">
             {/* Front side - minimal info */}
             <div className="absolute inset-0 flex flex-col p-3 sm:p-4 [backface-visibility:hidden]">
               <div className="flex items-start justify-between gap-2 mb-2">
@@ -132,7 +132,7 @@ export default function PatientHistorySection({
                     <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                       Diagnosis
                     </span>
-                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 border border-blue-100">
+                    <span className="inline-flex items-center rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-800 border border-blue-100">
                       {primaryDiagnosis}
                     </span>
                     {diagnoses.length > 1 && (
@@ -146,7 +146,7 @@ export default function PatientHistorySection({
             </div>
 
             {/* Back side - detailed info */}
-            <div className="absolute inset-0 flex flex-col p-3 sm:p-4 [backface-visibility:hidden] [transform:rotateY(180deg)] bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+            <div className="absolute inset-0 flex flex-col p-3 sm:p-4 [backface-visibility:hidden] [transform:rotateY(180deg)] bg-gradient-to-br from-cyan-50 via-teal-50 to-sky-50">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[11px] font-semibold text-slate-700">Visit details</p>
                 <span className="text-[10px] text-slate-400">Hover to flip</span>
@@ -270,7 +270,7 @@ export default function PatientHistorySection({
                       onClick={() => setActiveTab("current")}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                         activeTab === "current"
-                          ? "bg-blue-50 text-blue-700 border border-blue-200"
+                          ? "bg-cyan-50 text-cyan-800 border border-cyan-200"
                           : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                       }`}
                     >
@@ -280,7 +280,7 @@ export default function PatientHistorySection({
                       onClick={() => setActiveTab("all")}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                         activeTab === "all"
-                          ? "bg-blue-50 text-blue-700 border border-blue-200"
+                          ? "bg-cyan-50 text-cyan-800 border border-cyan-200"
                           : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                       }`}
                     >

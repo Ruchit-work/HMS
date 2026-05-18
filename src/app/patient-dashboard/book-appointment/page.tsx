@@ -16,6 +16,7 @@ import Footer from "@/components/ui/layout/Footer"
 import { useSearchParams, useRouter } from "next/navigation"
 import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
+import { assertAppointmentSlotAvailable } from "@/utils/booking/checkAppointmentSlot"
 
 export default function BookAppointmentPage() {
   return (
@@ -274,17 +275,7 @@ See you soon! 🏥`
       
       // Check slot availability BEFORE payment deduction
       if (!rescheduleMode) {
-        const slotCheckResponse = await fetch(
-          `/api/appointments/check-slot?doctorId=${selectedDoctor}&date=${appointmentData.date}&time=${appointmentData.time}`
-        )
-        if (!slotCheckResponse.ok) {
-          const slotData = await slotCheckResponse.json().catch(() => ({}))
-          throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
-        }
-        const slotData = await slotCheckResponse.json().catch(() => ({}))
-        if (!slotData?.available) {
-          throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
-        }
+        await assertAppointmentSlotAvailable(selectedDoctor, appointmentData.date, appointmentData.time)
       }
       
       // Fetch latest patient profile to reflect any inline edits done during booking

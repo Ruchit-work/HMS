@@ -994,7 +994,7 @@ export default function DoctorProfileForm({
         <button
           type="submit"
           disabled={loading}
-          className="btn-modern btn-modern-success inline-flex items-center justify-center gap-2"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           {loading ? (
             <>

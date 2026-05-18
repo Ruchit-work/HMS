@@ -103,7 +103,7 @@ export default function DocumentViewer({
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-2xl">
       {/* Header */}
-      <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+      <div className="bg-[var(--color-primary)] text-white px-6 py-4 flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-semibold truncate">{document.originalFileName}</h3>
           <p className="text-sm text-blue-100 mt-1">
@@ -122,7 +122,7 @@ export default function DocumentViewer({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-blue-700 rounded-md transition-colors"
+              className="p-1.5 hover:opacity-90 rounded-md transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -217,7 +217,7 @@ export default function DocumentViewer({
             <p className="mt-4 text-red-600">{error}</p>
             <button
               onClick={fetchDownloadUrl}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90"
             >
               Retry
             </button>
@@ -261,7 +261,7 @@ export default function DocumentViewer({
                 <p className="mt-4 text-gray-600">Preview not available for this file type</p>
                 <button
                   onClick={handleDownload}
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  className="mt-4 px-4 py-2 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90"
                 >
                   Download to View
                 </button>
@@ -273,7 +273,7 @@ export default function DocumentViewer({
             <p className="text-gray-600">No preview available</p>
             <button
               onClick={fetchDownloadUrl}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="mt-4 px-4 py-2 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90"
             >
               Load Document
             </button>

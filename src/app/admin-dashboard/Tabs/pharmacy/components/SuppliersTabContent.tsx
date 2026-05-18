@@ -50,7 +50,7 @@ export function SuppliersTabContent(props: {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-xl border border-[#E0E0E0] bg-white p-6 shadow-sm flex items-start gap-4 transition-shadow hover:shadow">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#E3F2FD] text-[#1565C0]">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#E3F2FD] text-[#0891b2]">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
           </div>
           <div className="min-w-0">
@@ -92,7 +92,7 @@ export function SuppliersTabContent(props: {
           <button
             type="button"
             onClick={onOpenAddSupplier}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#1565C0] px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#0D47A1] transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#0891b2] px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#0e7490] transition-colors"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             Add Supplier
@@ -108,7 +108,7 @@ export function SuppliersTabContent(props: {
               placeholder="Search suppliers"
               value={supplierSearchQuery}
               onChange={(e) => setSupplierSearchQuery(e.target.value)}
-              className="w-48 rounded-lg border border-[#E0E0E0] bg-white py-2 pl-8 pr-3 text-sm text-[#263238] placeholder-[#607D8B] focus:ring-2 focus:ring-[#1565C0]/30 focus:border-[#1565C0]"
+              className="w-48 rounded-lg border border-[#E0E0E0] bg-white py-2 pl-8 pr-3 text-sm text-[#263238] placeholder-[#607D8B] focus:ring-2 focus:ring-[#0891b2]/30 focus:border-[#0891b2]"
             />
           </div>
           {supplierSearchQuery.trim() && (

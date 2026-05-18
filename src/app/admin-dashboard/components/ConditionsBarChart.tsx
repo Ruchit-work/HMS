@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 
-export const HEALTHCARE_COLORS = ["#2563EB", "#14B8A6", "#22C55E", "#8B5CF6", "#F59E0B", "#EF4444", "#64748B"]
+export const HEALTHCARE_COLORS = ["#0891b2", "#14B8A6", "#22C55E", "#8B5CF6", "#F59E0B", "#EF4444", "#64748B"]
 
 export interface BarItem {
   name: string

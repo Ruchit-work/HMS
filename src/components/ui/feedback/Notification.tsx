@@ -61,7 +61,7 @@ export default function Notification({
       <div className={`rounded-lg shadow-lg p-4 min-w-[300px] max-w-md overflow-hidden ${
         type === 'success' ? 'bg-green-50 border-l-4 border-green-500' :
         type === 'error' ? 'bg-red-50 border-l-4 border-red-500' :
-        'bg-blue-50 border-l-4 border-blue-500'
+        'bg-cyan-50 border-l-4 border-cyan-500'
       }`}>
         <div className="flex items-start gap-3">
           <span className="text-xl">
@@ -71,7 +71,7 @@ export default function Notification({
             <p className={`text-sm font-medium ${
               type === 'success' ? 'text-green-800' :
               type === 'error' ? 'text-red-800' :
-              'text-blue-800'
+              'text-cyan-900'
             }`}>
               {displayMessage}
             </p>
@@ -79,7 +79,7 @@ export default function Notification({
               <p className={`text-xs mt-1 font-semibold ${
                 type === 'success' ? 'text-green-700' :
                 type === 'error' ? 'text-red-700' :
-                'text-blue-700'
+                'text-cyan-800'
               }`}>
                 Redirecting in {remaining}…
               </p>
@@ -100,7 +100,7 @@ export default function Notification({
             className={`h-full animate-shrink ${
               type === 'success' ? 'bg-green-500' :
               type === 'error' ? 'bg-red-500' :
-              'bg-blue-500'
+              'bg-cyan-500'
             }`}
             style={{ animation: `shrink ${defaultDuration / 1000}s linear forwards` }}
           />

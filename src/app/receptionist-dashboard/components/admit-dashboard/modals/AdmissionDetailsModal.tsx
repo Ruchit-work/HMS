@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react"
 import type { Admission, Room } from "@/types/patient"
+import { Button } from "@/components/ui/Button"
 
 type AdmissionPackageOption = {
   id: string
@@ -25,6 +26,8 @@ interface AdmissionDetailsModalProps {
   depositPaymentModes: Array<{ value: string; label: string }>
   handleAddDepositTopup: (admission: Admission) => void
   depositTopupLoading: boolean
+  admissionDetailsSaving?: boolean
+  billingProcessing?: boolean
   handleSaveAdmissionDetails: (admission: Admission) => void
   handleProcessBilling: (admission: Admission) => void
 }
@@ -45,6 +48,8 @@ export default function AdmissionDetailsModal({
   depositPaymentModes,
   handleAddDepositTopup,
   depositTopupLoading,
+  admissionDetailsSaving = false,
+  billingProcessing = false,
   handleSaveAdmissionDetails,
   handleProcessBilling,
 }: AdmissionDetailsModalProps) {
@@ -312,18 +317,24 @@ export default function AdmissionDetailsModal({
             ))}
           </div>
           <div className="flex justify-end gap-3">
-            <button
+            <Button
+              variant="outline"
               onClick={() => handleSaveAdmissionDetails(selectedAdmission)}
-              className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              loading={admissionDetailsSaving}
+              loadingText="Saving..."
+              disabled={billingProcessing}
             >
               Save Details
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => handleProcessBilling(selectedAdmission)}
-              className="px-4 py-2 rounded-lg bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700"
+              loading={billingProcessing}
+              loadingText="Processing..."
+              disabled={admissionDetailsSaving}
             >
               Process Billing
-            </button>
+            </Button>
           </div>
         </div>
       </div>

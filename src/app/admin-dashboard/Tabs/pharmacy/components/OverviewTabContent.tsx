@@ -99,7 +99,7 @@ export function OverviewTabContent(props: {
                 key={range}
                 type="button"
                 onClick={() => setOverviewDateRange(range)}
-                className={`px-3 py-2.5 text-sm font-medium transition sm:px-4 ${overviewDateRange === range ? 'bg-[#2563EB] text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`px-3 py-2.5 text-sm font-medium transition sm:px-4 ${overviewDateRange === range ? 'bg-[#0891b2] text-white' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 {range === 'today' ? 'Today' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '6m' ? '6 month' : range === 'year' ? 'Year' : 'All time'}
               </button>
@@ -109,7 +109,7 @@ export function OverviewTabContent(props: {
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
-              className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm focus:border-[#2563EB] focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+              className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm focus:border-[#0891b2] focus:outline-none focus:ring-1 focus:ring-[#0891b2]"
             >
               <option value="all">All branches</option>
               {branches.map((b) => (
@@ -231,8 +231,8 @@ export function OverviewTabContent(props: {
             <svg viewBox="0 0 400 160" className="h-full w-full overflow-visible" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="salesLineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#2563EB" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#0891b2" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#0891b2" stopOpacity={0} />
                 </linearGradient>
               </defs>
               {(() => {
@@ -246,11 +246,11 @@ export function OverviewTabContent(props: {
                 return (
                   <>
                     <polyline fill="url(#salesLineGrad)" points={areaPoints} />
-                    <polyline fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+                    <polyline fill="none" stroke="#0891b2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts} />
                     {salesTrendData.map((d, i) => {
                       const x = (i / (salesTrendData.length - 1 || 1)) * 380 + 10
                       const y = 140 - (d.value / maxVal) * 120
-                      return <circle key={i} cx={x} cy={y} r="3" fill="#2563EB" />
+                      return <circle key={i} cx={x} cy={y} r="3" fill="#0891b2" />
                     })}
                   </>
                 )
@@ -279,7 +279,7 @@ export function OverviewTabContent(props: {
                   <div key={i} className="flex items-center gap-3">
                     <span className="w-32 truncate text-sm font-medium text-slate-700" title={m.name}>{m.name}</span>
                     <div className="flex-1 h-8 rounded-lg bg-slate-100 overflow-hidden">
-                      <div className="h-full rounded-lg bg-[#2563EB] transition-all duration-300" style={{ width: `${Math.max(w, 4)}%` }} />
+                      <div className="h-full rounded-lg bg-[#0891b2] transition-all duration-300" style={{ width: `${Math.max(w, 4)}%` }} />
                     </div>
                     <span className="text-sm font-semibold text-slate-900 w-12 text-right">{m.count}</span>
                   </div>
@@ -466,7 +466,7 @@ export function OverviewTabContent(props: {
                 {filteredList.map((m, i) => (
                   <li key={i} className="flex justify-between items-center text-sm py-1 border-b border-[#E0E0E0] last:border-0">
                     <span className={isPharmacyPortal ? 'text-[#263238]' : 'text-slate-700'}>{m.medicineName}</span>
-                    <span className={`font-medium ${isPharmacyPortal ? 'text-[#1565C0]' : 'text-slate-900'}`}>{m.count} sold</span>
+                    <span className={`font-medium ${isPharmacyPortal ? 'text-[#0891b2]' : 'text-slate-900'}`}>{m.count} sold</span>
                   </li>
                 ))}
               </ul>

@@ -247,7 +247,7 @@ export const computeCategoryDistribution = ({
     const normalized = categoryList.find((c) => c.toLowerCase() === (cat || '').toLowerCase()) || 'Other'
     map.set(normalized, (map.get(normalized) ?? 0) + 1)
   })
-  const colors = ['#2563EB', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE', '#E5E7EB']
+  const colors = ['#0891b2', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE', '#E5E7EB']
   return Array.from(map.entries())
     .filter(([, count]) => count > 0)
     .map(([name, count], i) => ({ name, count, color: colors[i % colors.length] }))

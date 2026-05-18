@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { BarcodeCameraScanner } from '@/components/pharmacy/BarcodeCameraScanner'
 import { CashPaymentPanel } from '@/components/pharmacy/CashTenderModal'
 import type { BranchMedicineStock, PharmacyMedicine } from '@/types/pharmacy'
@@ -525,7 +526,7 @@ export function PharmacyBillingPanel({
             }}
             onFocus={() => setSearchPatientOpen(true)}
             placeholder="Type patient name, doctor or prescription ID..."
-            className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 pl-10 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+            className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 pl-10 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]"
           />
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -566,7 +567,7 @@ export function PharmacyBillingPanel({
           <span className="text-slate-400">·</span>
           <span className="text-sm text-slate-600">{today}</span>
           {!selectedBranchId && (
-            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="ml-1 rounded-lg border border-[#E5E7EB] bg-white px-2 py-1 text-sm focus:ring-2 focus:ring-[#2563EB]/20" required>
+            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="ml-1 rounded-lg border border-[#E5E7EB] bg-white px-2 py-1 text-sm focus:ring-2 focus:ring-[#0891b2]/20" required>
               <option value="">Select branch</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -576,7 +577,7 @@ export function PharmacyBillingPanel({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Customer Name</label>
-              <input type="text" placeholder="Name *" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" required />
+              <input type="text" placeholder="Name *" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]" required />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -592,7 +593,7 @@ export function PharmacyBillingPanel({
                     setNoPhoneHospitalPatient(checked)
                     if (checked) setCustomerPhone('')
                   }}
-                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#2563EB] focus:ring-[#2563EB]/30"
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#0891b2] focus:ring-[#0891b2]/30"
                 />
                
               </label>
@@ -609,7 +610,7 @@ export function PharmacyBillingPanel({
                 setCustomerPhone(cleaned)
               }}
               disabled={noPhoneHospitalPatient}
-              className={`w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:border-[#2563EB] focus:ring-[#2563EB]/20 ${
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:border-[#0891b2] focus:ring-[#0891b2]/20 ${
                 phoneHighlight && !customerPhone.trim() && !noPhoneHospitalPatient
                   ? 'border-red-400 bg-rose-50'
                   : 'border-[#E5E7EB] bg-white'
@@ -624,12 +625,12 @@ export function PharmacyBillingPanel({
                 placeholder="Doctor"
                 value={doctorName}
                 onChange={(e) => setDoctorName(e.target.value)}
-                className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]"
+                className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]"
               />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Address</label>
-              <input type="text" placeholder="Address (optional)" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" />
+              <input type="text" placeholder="Address (optional)" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]" />
             </div>
           </div>
           <div>
@@ -640,7 +641,7 @@ export function PharmacyBillingPanel({
                   key={opt.id}
                   type="button"
                   onClick={() => setPaymentMode(opt.id === 'other' ? 'other' : opt.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${paymentMode === (opt.id === 'other' ? 'other' : opt.id) ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-slate-600 border-[#E5E7EB] hover:bg-slate-50'}`}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${paymentMode === (opt.id === 'other' ? 'other' : opt.id) ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white text-slate-600 border-[#E5E7EB] hover:bg-slate-50'}`}
                 >
                   {opt.label}
                 </button>
@@ -830,7 +831,7 @@ export function PharmacyBillingPanel({
                         <select
                           value={line.batchId ?? ''}
                           onChange={(e) => updateLine(idx, 'batchId', e.target.value)}
-                          className="w-full max-w-full rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[11px] text-slate-700 focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] min-w-0"
+                          className="w-full max-w-full rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[11px] text-slate-700 focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2] min-w-0"
                           title="Batch"
                         >
                           {batches.map((b) => (
@@ -870,7 +871,7 @@ export function PharmacyBillingPanel({
                           onChange={(e) => handleQtyChange(e.target.value)}
                           placeholder="0"
                           disabled={outOfStock}
-                          className={`w-16 rounded-full border px-2.5 py-1 text-xs text-right font-medium focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] ${
+                          className={`w-16 rounded-full border px-2.5 py-1 text-xs text-right font-medium focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2] ${
                             outOfStock ? 'border-red-200 bg-slate-100 text-slate-500 cursor-not-allowed' : 'border-[#E5E7EB] text-slate-800'
                           }`}
                         />
@@ -947,25 +948,15 @@ export function PharmacyBillingPanel({
         </div>
         <div className="flex justify-between items-center pt-2 border-t border-[#E5E7EB]">
           <span className="text-base font-semibold text-slate-800">Total payable</span>
-          <span className="text-2xl font-bold text-[#2563EB] tabular-nums">₹{netTotal.toFixed(2)}</span>
+          <span className="text-2xl font-bold text-[var(--color-primary)] tabular-nums">₹{netTotal.toFixed(2)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-2">
-          <button
-            type="button"
-            onClick={holdCurrentBill}
-            disabled={orderLines.length === 0}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={holdCurrentBill} disabled={orderLines.length === 0}>
             Hold bill
-          </button>
-          <button
-            type="button"
-            onClick={resumeHeldBill}
-            disabled={!hasHeldBill}
-            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={resumeHeldBill} disabled={!hasHeldBill}>
             Resume held bill
-          </button>
+          </Button>
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-600" htmlFor="queue-tax-percent">Tax %</label>
             <input
@@ -990,10 +981,14 @@ export function PharmacyBillingPanel({
               className="w-24 rounded-lg border border-[#E5E7EB] px-2 py-1.5 text-xs text-right"
             />
           </div>
-          <button
+          <Button
             type="submit"
-            disabled={saving || !canCompleteSale || !hasActiveSession}
-            className="ml-auto rounded-full bg-[#2563EB] text-white font-semibold py-2.5 px-6 text-xs sm:text-sm hover:bg-[#1d4ed8] disabled:opacity-50 disabled:cursor-not-allowed transition"
+            variant="primary"
+            size="md"
+            className="ml-auto rounded-full px-6"
+            loading={saving}
+            loadingText="Processing…"
+            disabled={!canCompleteSale || !hasActiveSession}
             title={
               !hasActiveSession
                 ? 'Start a cash session first (Cash & expenses → Start shift)'
@@ -1006,8 +1001,8 @@ export function PharmacyBillingPanel({
                     : ''
             }
           >
-            {saving ? 'Processing…' : paymentMode === 'cash' ? 'Review & open cash panel' : 'Complete sale & print bill'}
-          </button>
+            {paymentMode === 'cash' ? 'Review & open cash panel' : 'Complete sale & print bill'}
+          </Button>
         </div>
 
         {showCashPanel && (

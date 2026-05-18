@@ -131,7 +131,7 @@ export default function HeroCarousel() {
                       {slide.cta && slide.ctaLink && (
                         <Link
                           href={slide.ctaLink}
-                          className={`inline-block px-6 sm:px-8 py-3 sm:py-4 bg-white text-blue-600 font-semibold rounded-lg shadow-lg hover:bg-blue-50 hover:scale-105 active:scale-95 transition-all duration-300 hover-lift ${isActive ? 'opacity-100 translate-y-0 delay-300' : 'opacity-0 translate-y-8'}`}
+                          className={`inline-block px-6 sm:px-8 py-3 sm:py-4 bg-white text-cyan-700 font-semibold rounded-lg shadow-lg hover:bg-cyan-50 hover:scale-105 active:scale-95 transition-all duration-300 hover-lift ${isActive ? 'opacity-100 translate-y-0 delay-300' : 'opacity-0 translate-y-8'}`}
                         >
                           {slide.cta}
                           <span className="ml-2">→</span>

@@ -8,6 +8,7 @@ import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/symptoms/SymptomSelector"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { Button } from "@/components/ui/Button"
 
 interface WhatsAppBookingsPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
@@ -603,7 +604,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       <div className="flex items-center gap-3">
                         <button
                           onClick={() => handleOpenEditModal(booking)}
-                          className="text-purple-600 hover:text-purple-900 font-medium"
+                          className="text-cyan-700 hover:text-cyan-900 font-medium"
                         >
                           Add Details
                         </button>
@@ -674,7 +675,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       setTimeout(() => setShowSuggestions(false), 200)
                     }}
                     rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                     placeholder="Start typing to see suggestions..."
                   />
                   {showSuggestions && chiefComplaintSuggestions.length > 0 && (
@@ -688,7 +689,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                             setShowSuggestions(false)
                             setChiefComplaintSuggestions([])
                           }}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 transition-colors"
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-cyan-50 hover:text-cyan-800 transition-colors"
                         >
                           {suggestion}
                         </button>
@@ -696,7 +697,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                     </div>
                   )}
                   {matchedSymptomCategory && (
-                    <p className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+                    <p className="text-xs text-cyan-700 mt-1 flex items-center gap-1">
                       💡 Detected: {matchedSymptomCategory.label} - Showing recommended doctors below
                     </p>
                   )}
@@ -710,7 +711,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                   <select
                     value={formDoctorId}
                     onChange={(e) => setFormDoctorId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                     disabled={doctorsLoading}
                   >
                     <option value="">Select a doctor</option>
@@ -737,7 +738,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                     )}
                   </select>
                   {recommendedDoctors.length > 0 && (
-                    <p className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+                    <p className="text-xs text-cyan-700 mt-1 flex items-center gap-1">
                       ⭐ {recommendedDoctors.length} doctor(s) recommended based on chief complaint
                     </p>
                   )}
@@ -758,7 +759,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       }}
                       className={
                         allowPatientInfoEdit
-                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                           : "w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                       }
                     />
@@ -777,7 +778,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       }}
                       className={
                         allowPatientInfoEdit
-                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                           : "w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                       }
                     />
@@ -793,7 +794,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       }}
                       className={
                         allowPatientInfoEdit
-                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          ? "w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                           : "w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                       }
                     />
@@ -810,7 +811,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       type="date"
                       value={formAppointmentDate}
                       onChange={(e) => setFormAppointmentDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                     />
                   </div>
                   <div>
@@ -821,7 +822,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       type="time"
                       value={formAppointmentTime}
                       onChange={(e) => setFormAppointmentTime(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                     />
                   </div>
                 </div>
@@ -835,7 +836,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                     value={formMedicalHistory}
                     onChange={(e) => setFormMedicalHistory(e.target.value)}
                     rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                     placeholder="Previous medical conditions, allergies, medications, etc."
                   />
                 </div>
@@ -847,7 +848,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                       <span className="text-sm font-medium text-blue-900">Doctor Fee:</span>
                       <span className="text-lg font-semibold text-blue-900">₹{selectedDoctor.consultationFee}</span>
                     </div>
-                    <p className="text-xs text-blue-600 mt-1">Fee will be automatically set from doctor's profile</p>
+                    <p className="text-xs text-[var(--color-primary-dark)] mt-1">Fee will be automatically set from doctor's profile</p>
                   </div>
                 )}
 
@@ -857,7 +858,7 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
                   <select
                     value={formPaymentMethod}
                     onChange={(e) => setFormPaymentMethod(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                   >
                     <option value="cash">Cash</option>
                     <option value="card">Card</option>
@@ -868,20 +869,17 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
               </div>
 
               <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
-                <button
-                  onClick={handleCloseEditModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                  disabled={updateLoading}
-                >
+                <Button variant="outline" onClick={handleCloseEditModal} disabled={updateLoading}>
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleUpdateBooking}
-                  disabled={updateLoading || !formDoctorId || !formPatientName.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  loading={updateLoading}
+                  loadingText="Updating..."
+                  disabled={!formDoctorId || !formPatientName.trim()}
                 >
-                  {updateLoading ? "Updating..." : "Update Booking"}
-                </button>
+                  Update Booking
+                </Button>
               </div>
             </div>
           </div>

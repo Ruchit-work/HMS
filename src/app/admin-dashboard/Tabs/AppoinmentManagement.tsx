@@ -271,7 +271,7 @@ export default function AppoinmentManagement({
             value: metrics.total.toLocaleString(),
             caption: `${filteredAppointments.length.toLocaleString()} showing with current filters`,
             icon: (
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-100 text-cyan-700">
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -721,11 +721,11 @@ export default function AppoinmentManagement({
             )}
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 bg-gradient-to-r from-blue-50 via-white to-purple-50 px-6 py-6">
+                <div className="border-b border-slate-200 bg-gradient-to-r from-cyan-50 via-white to-teal-50 px-6 py-6">
                     <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                         <div className="space-y-2">
-                            <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                                <span className="inline-flex h-2 w-2 rounded-full bg-blue-500" /> Appointment control  </span>
+                            <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-800">
+                                <span className="inline-flex h-2 w-2 rounded-full bg-cyan-500" /> Appointment control  </span>
                             <h2 className="text-2xl font-bold text-slate-900">Appointment Workspace</h2>
                             <p className="max-w-xl text-sm text-slate-600">Track visits, manage follow-ups, and audit cancellations across the hospital in one place.
                             </p>
@@ -775,7 +775,7 @@ export default function AppoinmentManagement({
                             <div>
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Doctor</label>
                                 <select value={selectedDoctorId}  onChange={(e) => setSelectedDoctorId(e.target.value)}
-                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                                 >
                                     <option value="all">All</option>
                                     {doctors.map((d) => (
@@ -788,7 +788,7 @@ export default function AppoinmentManagement({
                             <div>
                                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Time range</label>
                                 <select value={timeRange}   onChange={(e) => setTimeRange(e.target.value as any)}
-                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                                 >
                                     <option value="all">All</option>
                                     <option value="today">Today</option>
@@ -802,7 +802,7 @@ export default function AppoinmentManagement({
                                 <div>
                                     <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Branch</label>
                                     <select value={effectiveSelectedBranchId} onChange={(e) => setLocalSelectedBranchId(e.target.value)} disabled={selectedBranchId !== undefined}
-                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                                     >
                                         <option value="all">All Branches</option>
                                         {branches.map((branch) => (
@@ -818,7 +818,7 @@ export default function AppoinmentManagement({
                                 <div className="relative">
                                     <input  type="text" value={search}
                                         onChange={(e) => setSearch(e.target.value)} placeholder="Search by patient name, ID, phone, doctor, or email…"
-                                        className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                                     />
                                     <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -837,7 +837,7 @@ export default function AppoinmentManagement({
                                             <button key={tab.key}  type="button"   onClick={() => setStatusFilter(tab.key)}
                                                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                                                     active
-                                                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                                                        ? 'border-cyan-500 bg-cyan-50 text-cyan-800 shadow-sm'
                                                         : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700' 
                                                            }`} >
                                                 <span>{tab.label}</span>
@@ -979,7 +979,7 @@ export default function AppoinmentManagement({
                                                     {(() => {
                                                         const s = (appointment as any).status || ''
                                                         const label = getStatusDisplayLabel(s)
-                                                        const cls = s === 'completed' ? 'bg-emerald-100 text-emerald-700' : s === 'confirmed' || s === 'whatsapp_pending' ? 'bg-blue-100 text-blue-700' : s === 'cancelled' || s === 'doctor_cancelled' ? 'bg-red-100 text-red-700' : s === 'not_attended' || s === 'no_show' ? 'bg-orange-100 text-orange-700' : s === 'pending' ? 'bg-slate-100 text-slate-700' : s === 'waiting' ? 'bg-amber-100 text-amber-700' : s === 'in_consultation' ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-700'
+                                                        const cls = s === 'completed' ? 'bg-emerald-100 text-emerald-700' : s === 'confirmed' || s === 'whatsapp_pending' ? 'bg-cyan-100 text-cyan-800' : s === 'cancelled' || s === 'doctor_cancelled' ? 'bg-red-100 text-red-700' : s === 'not_attended' || s === 'no_show' ? 'bg-orange-100 text-orange-700' : s === 'pending' ? 'bg-slate-100 text-slate-700' : s === 'waiting' ? 'bg-amber-100 text-amber-700' : s === 'in_consultation' ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-700'
                                                         return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold truncate max-w-full ${cls}`}><span className="inline-flex h-1.5 w-1.5 rounded-full flex-shrink-0 bg-current" />{label}</span>
                                                     })()}
                                                 </td>
@@ -989,7 +989,7 @@ export default function AppoinmentManagement({
                                                 <td className="hidden w-[7%] px-2 py-3 md:table-cell text-sm font-semibold text-slate-900">₹{Number(appointment.paymentAmount || 0).toLocaleString()}</td>
                                                 <td className="w-[10%] min-w-[88px] px-2 py-3">
                                                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                        <button type="button" onClick={() => handleView(appointment)} className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
+                                                        <button type="button" onClick={() => handleView(appointment)} className="text-sm font-medium text-cyan-700 hover:text-cyan-800 hover:underline">
                                                             View
                                                         </button>
                                                         <button
@@ -1047,8 +1047,8 @@ export default function AppoinmentManagement({
                     {/* Patient Information */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
                         <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                 </svg>
                             </div>
@@ -1127,7 +1127,7 @@ export default function AppoinmentManagement({
                                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</label>
                                 <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
                                     selectedAppointment?.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                    selectedAppointment?.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                                    selectedAppointment?.status === 'confirmed' ? 'bg-cyan-100 text-cyan-800' :
                                     selectedAppointment?.status === 'cancelled' ? 'bg-red-100 text-red-800' :
                                     'bg-gray-100 text-gray-800'
                                 }`}>
@@ -1155,8 +1155,8 @@ export default function AppoinmentManagement({
                     {/* Medical Information */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
                         <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                             </div>
@@ -1180,10 +1180,10 @@ export default function AppoinmentManagement({
 
                     {/* Final Diagnosis - View-only for receptionist/admin */}
                     {selectedAppointment && (selectedAppointment as any).finalDiagnosis && (
-                        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4 sm:p-6">
+                        <div className="bg-white rounded-lg shadow-sm border border-cyan-200 p-4 sm:p-6">
                             <div className="flex items-center space-x-2 mb-4">
-                                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
+                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
                                 </div>
@@ -1196,7 +1196,7 @@ export default function AppoinmentManagement({
                                         {(selectedAppointment as any).finalDiagnosis.map((diagnosis: string, index: number) => (
                                             <span
                                                 key={index}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-sm font-medium text-blue-700"
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-cyan-50 border border-cyan-200 rounded-lg text-sm font-medium text-cyan-800"
                                             >
                                                 {diagnosis}
                                             </span>
@@ -1206,7 +1206,7 @@ export default function AppoinmentManagement({
                                 {(selectedAppointment as any).customDiagnosis && (
                                     <div className="flex flex-col space-y-1">
                                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Diagnosis</label>
-                                        <p className="text-sm font-medium text-gray-900 bg-purple-50 border border-purple-200 px-3 py-2 rounded-md">
+                                        <p className="text-sm font-medium text-gray-900 bg-cyan-50 border border-cyan-200 px-3 py-2 rounded-md">
                                             {(selectedAppointment as any).customDiagnosis}
                                         </p>
                                     </div>

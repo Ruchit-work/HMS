@@ -1,5 +1,7 @@
 'use client'
 
+import { Button } from '@/components/ui/Button'
+
 import { useEffect, useState } from 'react'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { auth } from '@/firebase/config'
@@ -172,7 +174,7 @@ export default function BranchManagement() {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                     placeholder="e.g. Main Branch, City Light"
                   />
                 </div>
@@ -185,7 +187,7 @@ export default function BranchManagement() {
                     required
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                     placeholder="e.g. Surat, Navsari"
                   />
                 </div>
@@ -196,13 +198,9 @@ export default function BranchManagement() {
               </p>
 
               <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Creating…' : 'Create branch'}
-                </button>
+                <Button type="submit" size="sm" loading={saving} loadingText="Creating…">
+                  Create branch
+                </Button>
               </div>
             </form>
           </div>

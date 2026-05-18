@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { Button } from "@/components/ui/Button"
 
 interface InpatientRow {
   id: string
@@ -101,7 +102,7 @@ export default function InpatientTable({ rows, loading, onView, onMore, focusTag
           Showing {paginatedRows.length} of {filteredByDateRows.length} records
         </p>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="hms-surface overflow-hidden">
       <div className="overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50/90 text-xs uppercase tracking-wide text-slate-500">
@@ -117,7 +118,7 @@ export default function InpatientTable({ rows, loading, onView, onMore, focusTag
         </thead>
         <tbody>
           {paginatedRows.map((row, index) => (
-            <tr key={row.id} className={`border-t border-slate-100 transition-colors hover:bg-violet-50/30 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+            <tr key={row.id} className={`border-t border-slate-100 transition-colors hover:bg-[var(--color-primary)]/5 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
               <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.ipdNo}</td>
               <td className="px-4 py-3">
                 <p className="font-semibold text-slate-900">{row.patientName}</p>
@@ -137,7 +138,7 @@ export default function InpatientTable({ rows, loading, onView, onMore, focusTag
                     {row.status}
                   </span>
                   {row.dischargeRequested && (
-                    <span className="inline-flex w-fit rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-violet-700">
+                    <span className="inline-flex w-fit rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[var(--color-primary-dark)]">
                       Doctor requested discharge
                     </span>
                   )}
@@ -145,19 +146,17 @@ export default function InpatientTable({ rows, loading, onView, onMore, focusTag
               </td>
               <td className="px-4 py-3 text-right">
                 <div className="inline-flex min-w-[180px] items-center justify-end gap-1.5">
-                  <button
-                    onClick={() => onView(row.id)}
-                    className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 transition hover:bg-violet-100"
-                  >
+                  <Button size="sm" variant="primary" onClick={() => onView(row.id)}>
                     Start Discharge
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => onMore(row.id)}
                     disabled={Boolean(row.dischargeRequested)}
-                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
                   >
                     Room Transfer
-                  </button>
+                  </Button>
                 </div>
               </td>
             </tr>

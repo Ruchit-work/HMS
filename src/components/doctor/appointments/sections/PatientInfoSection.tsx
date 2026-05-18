@@ -11,7 +11,7 @@ export default function PatientInfoSection({ appointment }: PatientInfoSectionPr
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm border-l-4 border-l-blue-500">
       <div className="flex items-center gap-2 pb-2 mb-2 border-b border-slate-200">
-        <div className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+        <div className="w-6 h-6 rounded-md bg-cyan-50 flex items-center justify-center text-cyan-700 shrink-0">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>

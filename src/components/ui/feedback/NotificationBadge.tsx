@@ -36,10 +36,10 @@ export default function NotificationBadge({
 
   const colorClasses = {
     red: 'bg-red-500 text-white border-red-600',
-    blue: 'bg-blue-500 text-white border-blue-600',
+    blue: 'bg-cyan-500 text-white border-[var(--color-primary)]',
     green: 'bg-green-500 text-white border-green-600',
     yellow: 'bg-yellow-500 text-white border-yellow-600',
-    purple: 'bg-purple-500 text-white border-purple-600',
+    purple: 'bg-cyan-600 text-white border-cyan-700',
     orange: 'bg-orange-500 text-white border-orange-600'
   }
 

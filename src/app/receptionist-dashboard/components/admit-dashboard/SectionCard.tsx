@@ -20,11 +20,11 @@ export default function SectionCard({
   className,
 }: SectionCardProps) {
   return (
-    <section className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className || ""}`}>
+    <section className={`hms-surface rounded-2xl ${className || ""}`}>
       <header className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-          {subtitle ? <p className="text-sm text-slate-500">{subtitle}</p> : null}
+          <h3 className="hms-heading text-base">{title}</h3>
+          {subtitle ? <p className="text-sm hms-muted">{subtitle}</p> : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </header>

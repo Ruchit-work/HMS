@@ -1,8 +1,9 @@
 'use client'
 
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import React from 'react'
 import { RevealModal, useRevealModalClose } from './RevealModal'
+import { Button } from '@/components/ui/Button'
 
 // ============================================================================
 // ConfirmDialog - Simple confirmation dialog with two buttons
@@ -14,9 +15,11 @@ interface ConfirmDialogProps {
   message: string
   confirmText?: string
   cancelText?: string
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   onCancel: () => void
   confirmLoading?: boolean
+  /** When false, dialog stays open after confirm (parent must close). Default: true */
+  closeOnConfirm?: boolean
   loadingText?: string // Optional custom loading text
 }
 
@@ -26,13 +29,28 @@ function ConfirmDialogContent({
   confirmText,
   cancelText,
   onConfirm,
+  onCancel,
   confirmLoading,
   loadingText,
+  closeOnConfirm = true,
 }: Omit<ConfirmDialogProps, 'isOpen'>) {
   const requestClose = useRevealModalClose()
-  const handleConfirm = () => {
-    onConfirm()
-    requestClose()
+  const [internalLoading, setInternalLoading] = useState(false)
+  const isBusy = Boolean(confirmLoading || internalLoading)
+
+  const handleConfirm = async () => {
+    if (isBusy) return
+    setInternalLoading(true)
+    try {
+      await Promise.resolve(onConfirm())
+      if (closeOnConfirm) {
+        requestClose()
+      }
+    } catch {
+      // Keep dialog open on failure; parent can show error via notification.
+    } finally {
+      setInternalLoading(false)
+    }
   }
   return (
     <>
@@ -48,28 +66,34 @@ function ConfirmDialogContent({
         </div>
       </div>
       <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button
+        <Button
           type="button"
-          onClick={requestClose}
-          className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-          disabled={confirmLoading}
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            onCancel()
+            requestClose()
+          }}
+          disabled={isBusy}
         >
           {cancelText}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="danger"
+          size="sm"
           onClick={handleConfirm}
-          className="btn-modern btn-modern-danger btn-modern-sm disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={confirmLoading}
+          loading={isBusy}
+          loadingText={
+            loadingText ||
+            (confirmText === "Delete" ? "Deleting..." :
+              confirmText === "Remove" ? "Removing..." :
+              confirmText === "Logout" ? "Signing out..." :
+              `${confirmText}ing...` || "Processing...")
+          }
         >
-          {confirmLoading
-            ? (loadingText ||
-               (confirmText === "Delete" ? "Deleting..." :
-                confirmText === "Remove" ? "Removing..." :
-                confirmText === "Logout" ? "Signing out..." :
-                `${confirmText}ing...` || "Processing..."))
-            : confirmText}
-        </button>
+          {confirmText}
+        </Button>
       </div>
     </>
   )
@@ -85,6 +109,7 @@ export function ConfirmDialog({
   onCancel,
   confirmLoading = false,
   loadingText,
+  closeOnConfirm = true,
 }: ConfirmDialogProps) {
   if (!isOpen) return null
 
@@ -105,6 +130,7 @@ export function ConfirmDialog({
         onCancel={onCancel}
         confirmLoading={confirmLoading}
         loadingText={loadingText}
+        closeOnConfirm={closeOnConfirm}
       />
     </RevealModal>
   )
@@ -120,7 +146,7 @@ export default ConfirmDialog
 interface DeleteModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   title: string
   subtitle: string
   itemType: string
@@ -145,9 +171,20 @@ function DeleteModalContent({
   loading,
 }: DeleteModalProps) {
   const requestClose = useRevealModalClose()
-  const handleConfirm = () => {
-    onConfirm()
-    requestClose()
+  const [internalLoading, setInternalLoading] = useState(false)
+  const isBusy = Boolean(loading || internalLoading)
+
+  const handleConfirm = async () => {
+    if (isBusy) return
+    setInternalLoading(true)
+    try {
+      await Promise.resolve(onConfirm())
+      requestClose()
+    } catch {
+      // Parent handles error notification; keep modal open.
+    } finally {
+      setInternalLoading(false)
+    }
   }
   return (
     <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -201,19 +238,12 @@ function DeleteModalContent({
         </div>
       </div>
       <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-        <button
-          onClick={requestClose}
-          className="px-3 sm:px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm sm:text-base"
-        >
+        <Button variant="outline" size="sm" onClick={requestClose}>
           Cancel
-        </button>
-        <button
-          onClick={handleConfirm}
-          disabled={loading}
-          className="px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-        >
-          {loading ? `Deleting ${itemType}...` : `Delete ${itemType}`}
-        </button>
+        </Button>
+        <Button variant="danger" size="sm" onClick={handleConfirm} loading={isBusy} loadingText={`Deleting ${itemType}...`}>
+          {`Delete ${itemType}`}
+        </Button>
       </div>
     </div>
   )
@@ -265,21 +295,21 @@ interface ViewModalProps {
 }
 
 const viewModalHeaderClasses = {
-  blue: 'bg-gradient-to-r from-blue-600 to-blue-700',
+  blue: 'bg-gradient-to-r from-cyan-600 to-teal-700',
   green: 'bg-gradient-to-r from-green-600 to-green-700',
-  purple: 'bg-gradient-to-r from-purple-600 to-purple-700',
+  purple: 'bg-gradient-to-r from-cyan-600 to-teal-700',
   orange: 'bg-gradient-to-r from-orange-600 to-orange-700',
 }
 const viewModalTextColorClasses = {
-  blue: 'text-blue-100',
+  blue: 'text-cyan-100',
   green: 'text-green-100',
-  purple: 'text-purple-100',
+  purple: 'text-cyan-100',
   orange: 'text-orange-100',
 }
 const viewModalHoverClasses = {
-  blue: 'hover:text-blue-200 hover:bg-white hover:bg-opacity-20',
+  blue: 'hover:text-cyan-200 hover:bg-white hover:bg-opacity-20',
   green: 'hover:text-green-200 hover:bg-white hover:bg-opacity-20',
-  purple: 'hover:text-purple-200 hover:bg-white hover:bg-opacity-20',
+  purple: 'hover:text-cyan-200 hover:bg-white hover:bg-opacity-20',
   orange: 'hover:text-orange-200 hover:bg-white hover:bg-opacity-20',
 }
 
@@ -320,12 +350,9 @@ function ViewModalContent({
         {children}
       </div>
       <div className="px-4 sm:px-8 py-4 bg-white border-t border-gray-200 flex justify-end space-x-3">
-        <button
-          onClick={requestClose}
-          className="px-4 sm:px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200 font-medium shadow-sm hover:shadow-md text-sm sm:text-base"
-        >
+        <Button variant="secondary" size="sm" onClick={requestClose}>
           Close
-        </button>
+        </Button>
       </div>
     </div>
   )

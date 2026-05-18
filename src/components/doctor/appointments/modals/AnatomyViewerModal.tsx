@@ -41,7 +41,7 @@ export default function AnatomyViewerModal({
                   onClick={() => setAnatomyType(type)}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                     anatomyType === type
-                      ? "bg-indigo-600 text-white"
+                      ? "bg-[var(--color-primary)] text-white"
                       : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >

@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
 import type { Admission, Room } from "@/types/patient"
 import type { Dispatch, SetStateAction } from "react"
 
@@ -95,10 +96,10 @@ export default function DischargeModal({
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-t-2xl">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between hms-panel-header text-white rounded-t-2xl">
           <div>
             <h3 className="text-lg font-semibold">Discharge Patient</h3>
-            <p className="text-sm text-indigo-100">Finalize the patient's discharge summary and billing adjustments</p>
+            <p className="text-sm text-white/85">Finalize discharge summary and billing adjustments</p>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-white/20 flex items-center justify-center">
             <span className="text-xl">×</span>
@@ -112,7 +113,7 @@ export default function DischargeModal({
                 <p className="text-xs text-gray-500 mt-0.5">Doctor: {selectedAdmission.doctorName || "—"}</p>
               </div>
               {selectedAdmission.patientId && (
-                <span className="text-xs font-mono px-2 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
+                <span className="rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-2 py-1 text-xs font-mono text-[var(--color-primary-dark)]">
                   ID: {selectedAdmission.patientId}
                 </span>
               )}
@@ -147,7 +148,7 @@ export default function DischargeModal({
               </div>
             </div>
             {selectedAdmission.dischargeRequest?.status === "pending" && (
-              <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+              <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-900">
                 <p className="font-semibold">Doctor discharge request received.</p>
                 {selectedAdmission.dischargeRequest?.notes ? <p className="mt-1">Note: {selectedAdmission.dischargeRequest.notes}</p> : null}
               </div>
@@ -189,13 +190,16 @@ export default function DischargeModal({
                 </select>
               </div>
               <div className="mt-2">
-                <button
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
                   onClick={() => handleAddDepositTopup(selectedAdmission)}
-                  disabled={depositTopupLoading}
-                  className="rounded border border-amber-300 bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200 disabled:opacity-60"
+                  loading={depositTopupLoading}
+                  loadingText="Adding..."
                 >
-                  {depositTopupLoading ? "Adding..." : "Add Top-up Deposit"}
-                </button>
+                  Add Top-up Deposit
+                </Button>
               </div>
               {Array.isArray(selectedAdmission.depositTransactions) && selectedAdmission.depositTransactions.length > 0 && (
                 <div className="mt-2 rounded border border-amber-300 bg-amber-100/40 p-2 text-xs text-amber-900">
@@ -228,9 +232,9 @@ export default function DischargeModal({
               </div>
             )}
             {Array.isArray(selectedAdmission.clinicalUpdates) && selectedAdmission.clinicalUpdates.length > 0 && (
-              <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                <p className="text-xs font-semibold uppercase text-indigo-700">Doctor Clinical Updates</p>
-                <div className="mt-2 max-h-32 space-y-1 overflow-y-auto text-xs text-indigo-900">
+              <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50 p-3">
+                <p className="text-xs font-semibold uppercase text-cyan-700">Doctor Clinical Updates</p>
+                <div className="mt-2 max-h-32 space-y-1 overflow-y-auto text-xs text-cyan-900">
                   {selectedAdmission.clinicalUpdates
                     .slice()
                     .reverse()
@@ -257,7 +261,7 @@ export default function DischargeModal({
                   min="0"
                   value={dischargeDoctorFee}
                   onChange={(e) => setDischargeDoctorFee(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                   placeholder="e.g. 500"
                 />
                 <div className="space-y-2">
@@ -267,14 +271,14 @@ export default function DischargeModal({
                     min="0"
                     value={dischargePrescriptionCharges}
                     onChange={(e) => setDischargePrescriptionCharges(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                     placeholder="e.g. 1200"
                   />
                   <input
                     type="text"
                     value={dischargePrescriptionNames}
                     onChange={(e) => setDischargePrescriptionNames(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
                     placeholder="Prescription names (e.g. Cefixime, Dolo, IV NS)"
                   />
                 </div>
@@ -316,14 +320,14 @@ export default function DischargeModal({
                       )
                     })}
                   </div>
-                  <p className="mt-2 text-xs font-semibold text-indigo-700">
+                  <p className="mt-2 text-xs font-semibold text-cyan-700">
                     Selected total: ₹{dischargeChargePreview.extraDischargeCharges.toLocaleString()}
                   </p>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+            <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800">
               Package is selected for this patient. Additional doctor/prescription/other fee inputs are disabled because package covers total cost.
             </div>
           )}
@@ -386,26 +390,24 @@ export default function DischargeModal({
               rows={3}
               value={dischargeNotes}
               onChange={(e) => setDischargeNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
               placeholder="Add any discharge notes for medical records."
             />
           </div>
 
           <div className="flex justify-end gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              disabled={dischargeLoading}
-            >
+            <Button type="button" variant="outline" onClick={onClose} disabled={dischargeLoading}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
               onClick={onConfirm}
-              disabled={dischargeLoading}
-              className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              loading={dischargeLoading}
+              loadingText="Processing..."
             >
-              {dischargeLoading ? "Processing..." : "Confirm Discharge"}
-            </button>
+              Confirm Discharge
+            </Button>
           </div>
         </div>
       </div>

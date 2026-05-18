@@ -13,6 +13,7 @@ import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blocked
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { Button } from "@/components/ui/Button"
 
 interface BookAppointmentFormProps {
   user: { uid: string; email: string | null }
@@ -666,7 +667,7 @@ export default function BookAppointmentForm({
         </div>
         <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
           <div 
-            className="h-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-500 ease-out shadow-sm" 
+            className="h-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 rounded-full transition-all duration-500 ease-out shadow-sm" 
             style={{ width: `${(currentStep / totalSteps) * 100}%` }} 
           />
         </div>
@@ -834,53 +835,37 @@ export default function BookAppointmentForm({
           {/* Navigation Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 pt-6 mt-6 border-t border-slate-200">
             {currentStep > 1 && (
-              <button
-                type="button"
-                onClick={prevStep}
-                className="px-4 sm:px-6 py-3 sm:py-3.5 border-2 border-slate-300 rounded-xl hover:bg-slate-100 hover:border-slate-400 transition-all font-semibold text-slate-700 shadow-sm hover:shadow-md text-sm sm:text-base"
-              >
+              <Button type="button" variant="outline" size="lg" onClick={prevStep} className="sm:flex-none">
                 ← Previous
-              </button>
+              </Button>
             )}
             
             {currentStep < totalSteps ? (
-              <button
+              <Button
                 type="button"
+                size="lg"
                 onClick={nextStep}
                 disabled={!canProceedToNextStep()}
-                className="btn-modern flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1"
               >
                 Next Step →
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="submit"
-                disabled={submitting || !canProceedToNextStep()}
-                className="btn-modern btn-modern-success flex-1 flex items-center justify-center"
+                size="lg"
+                loading={submitting}
+                loadingText="Processing..."
+                disabled={!canProceedToNextStep()}
+                className="flex-1"
               >
-                {submitting 
-                  ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Processing...
-                    </span>
-                  )
-                  : rescheduleMode
-                    ? "Confirm Reschedule"
-                    : "Book Appointment"}
-              </button>
+                {rescheduleMode ? "Confirm Reschedule" : "Book Appointment"}
+              </Button>
             )}
 
-            <button
-              type="button"
-              onClick={handleClear}
-              className="px-4 sm:px-6 py-3 sm:py-3.5 border-2 border-red-300 rounded-xl hover:bg-red-50 hover:border-red-400 transition-all font-semibold text-red-700 shadow-sm hover:shadow-md text-sm sm:text-base"
-            >
+            <Button type="button" variant="danger" size="lg" onClick={handleClear} className="sm:flex-none">
               Clear
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -945,19 +930,12 @@ export default function BookAppointmentForm({
             </div>
 
             <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
-              <button
-                onClick={() => setShowBranchConfirm(false)}
-                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700"
-              >
+              <Button variant="outline" onClick={() => setShowBranchConfirm(false)}>
                 Go Back
-              </button>
-              <button
-                onClick={handleConfirmBranch}
-                className="btn-modern btn-modern-success flex items-center gap-2"
-              >
-                <span>✓</span>
-                <span>Yes, Continue</span>
-              </button>
+              </Button>
+              <Button onClick={handleConfirmBranch}>
+                ✓ Yes, Continue
+              </Button>
             </div>
           </div>
         </div>
@@ -993,12 +971,12 @@ export default function BookAppointmentForm({
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
               <div className="space-y-4">
                 {/* Doctor Information */}
-                <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                <div className="bg-cyan-50 rounded-xl p-4 border-2 border-cyan-100">
                   <div className="flex items-start gap-3">
                     <div className="text-3xl">👨‍⚕️</div>
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-800 mb-1">Doctor</h4>
-                      <p className="text-lg font-bold text-blue-700">
+                      <p className="text-lg font-bold text-teal-700">
                         {selectedDoctorData ? `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}` : 'N/A'}
                       </p>
                       <p className="text-sm text-gray-600 mt-1">
@@ -1014,12 +992,12 @@ export default function BookAppointmentForm({
                 </div>
 
                 {/* Appointment Date & Time */}
-                <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-100">
+                <div className="bg-cyan-50 rounded-xl p-4 border-2 border-cyan-100">
                   <div className="flex items-start gap-3">
                     <div className="text-3xl">📅</div>
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-800 mb-1">Date & Time</h4>
-                      <p className="text-lg font-bold text-purple-700">
+                      <p className="text-lg font-bold text-teal-700">
                         {appointmentData.date ? new Date(appointmentData.date).toLocaleDateString('en-US', { 
                           weekday: 'long', 
                           year: 'numeric', 
@@ -1098,32 +1076,12 @@ export default function BookAppointmentForm({
 
             {/* Modal Footer */}
             <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                disabled={submitting}
-                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <Button variant="outline" onClick={() => setShowConfirmModal(false)} disabled={submitting}>
                 Cancel
-              </button>
-              <button
-                onClick={handleConfirmSubmit}
-                disabled={submitting}
-                className="btn-modern btn-modern-success flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    ✅ Confirm & Book Appointment
-                  </>
-                )}
-              </button>
+              </Button>
+              <Button onClick={handleConfirmSubmit} loading={submitting} loadingText="Processing...">
+                Confirm & Book Appointment
+              </Button>
             </div>
           </div>
         </div>
@@ -1174,12 +1132,12 @@ export default function BookAppointmentForm({
                 {(() => {
                   const doctorToConfirm = doctors.find(d => d.id === pendingDoctorId)
                   return doctorToConfirm ? (
-                    <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                    <div className="bg-cyan-50 rounded-xl p-4 border-2 border-cyan-100">
                       <div className="flex items-start gap-3">
                         <div className="text-3xl">👨‍⚕️</div>
                         <div className="flex-1">
                           <h4 className="font-semibold text-gray-800 mb-1">Selected Doctor</h4>
-                          <p className="text-lg font-bold text-blue-700">
+                          <p className="text-lg font-bold text-teal-700">
                             Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
                           </p>
                           <p className="text-sm text-gray-600 mt-1">

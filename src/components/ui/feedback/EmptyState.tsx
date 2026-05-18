@@ -89,8 +89,8 @@ export default function EmptyState({
 
   const ActionButton = ({ action, isPrimary = true }: { action: NonNullable<EmptyStateProps['action']>, isPrimary?: boolean }) => {
     const baseClasses = isPrimary
-      ? "px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium shadow-sm hover:shadow-md"
-      : "px-6 py-3 bg-white text-blue-600 border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-all font-medium"
+      ? "px-6 py-3 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-all font-medium shadow-sm hover:shadow-md"
+      : "px-6 py-3 bg-white text-cyan-700 border-2 border-[var(--color-primary)] rounded-lg hover:bg-cyan-50 transition-all font-medium"
 
     if (action.href) {
       return (

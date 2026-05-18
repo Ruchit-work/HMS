@@ -1,4 +1,5 @@
 'use client'
+import { Button } from '@/components/ui/Button'
 
 import React, { useEffect, useState } from 'react'
 import type { PharmacyMedicine, PharmacySupplier } from '@/types/pharmacy'
@@ -104,7 +105,7 @@ export function AddMedicineForm({
         <option value="">No supplier</option>
         {supplierOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
       </select>
-      <button type="submit" disabled={saving} className="btn-modern btn-modern-primary btn-modern-sm">Add medicine</button>
+      <Button type="submit" size="sm" loading={saving} loadingText="Saving...">Add medicine</Button>
     </form>
   )
 }
@@ -173,9 +174,8 @@ export function EditMinLevelModal({
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 text-sm">
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+            <Button type="submit" size="sm" loading={saving} loadingText="Saving...">{saving ? 'Saving…' : 'Save'}
+            </Button>
           </div>
         </form>
       </div>

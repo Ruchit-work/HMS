@@ -87,8 +87,8 @@ export default function AppointmentsListPane({
               key={apt.id}
               className={`group rounded-xl border bg-white px-3.5 py-2.5 flex items-center justify-between gap-3 transition-all duration-150 ${
                 isSelected
-                  ? "border-blue-300 bg-blue-50/60 shadow-sm"
-                  : "border-slate-200 hover:border-blue-200 hover:bg-slate-50/80"
+                  ? "border-cyan-300 bg-cyan-50/60 shadow-sm"
+                  : "border-slate-200 hover:border-cyan-200 hover:bg-slate-50/80"
               }`}
             >
               {/* Left: avatar + patient + time + specialization */}

@@ -54,7 +54,7 @@ export default function DoctorAbout() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   📅
                 </div>
                 <div>
@@ -74,7 +74,7 @@ export default function DoctorAbout() {
               </div>
 
               <div className="flex gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   💊
                 </div>
                 <div>
@@ -176,7 +176,7 @@ export default function DoctorAbout() {
           </div>
 
           {/* Support */}
-          <div className="bg-gradient-to-r from-blue-50 to-teal-50 border border-blue-200 rounded-xl p-6">
+          <div className="bg-gradient-to-r from-blue-50 to-teal-50 border border-cyan-200 rounded-xl p-6">
             <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
               <span className="text-2xl">💬</span>
               <span>Need Assistance?</span>

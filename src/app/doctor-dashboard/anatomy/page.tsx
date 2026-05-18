@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { auth } from '@/firebase/config'
 import { ENT_DIAGNOSES, CUSTOM_DIAGNOSIS_OPTION } from '@/constants/entDiagnoses'
 import Notification from '@/components/ui/feedback/Notification'
+import { Button } from '@/components/ui/Button'
 import { doc, getDoc } from 'firebase/firestore'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
 import DiagnosisSelector from '@/components/doctor/DiagnosisSelector'
@@ -827,7 +828,7 @@ function ENTAnatomyPageContent() {
               onClick={() => setActiveView('3d')}
               className={`px-6 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${
                 activeView === '3d'
-                  ? 'bg-white text-blue-600 shadow-md'
+                  ? 'bg-white text-cyan-700 shadow-md'
                   : 'text-slate-600 hover:text-slate-800'
               }`}
             >
@@ -840,7 +841,7 @@ function ENTAnatomyPageContent() {
               onClick={() => setActiveView('2d')}
               className={`px-6 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${
                 activeView === '2d'
-                  ? 'bg-white text-blue-600 shadow-md'
+                  ? 'bg-white text-cyan-700 shadow-md'
                   : 'text-slate-600 hover:text-slate-800'
               }`}
             >
@@ -877,9 +878,9 @@ function ENTAnatomyPageContent() {
             <div className="lg:col-span-6 space-y-4">
               {/* Selected Part Info Section - Show based on active view */}
               {(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D) ? (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-5 shadow-lg">
+                <div className="bg-gradient-to-br from-cyan-50 to-teal-50 border-2 border-cyan-300 rounded-xl p-5 shadow-lg">
                   <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-lg font-bold text-blue-900">Selected Part Information</h3>
+                    <h3 className="text-lg font-bold text-cyan-900">Selected Part Information</h3>
                     <button
                       onClick={() => {
                         if (activeView === '3d') {
@@ -894,7 +895,7 @@ function ENTAnatomyPageContent() {
                           setSelectedMedicines2D([])
                         }
                       }}
-                      className="text-blue-600 hover:text-blue-800 text-lg font-bold hover:bg-blue-100 rounded-full p-1 transition-colors"
+                      className="text-cyan-700 hover:text-cyan-900 text-lg font-bold hover:bg-cyan-100 rounded-full p-1 transition-colors"
                       title="Clear Selection"
                     >
                       ✕
@@ -902,12 +903,12 @@ function ENTAnatomyPageContent() {
                   </div>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Part Name</label>
-                      <p className="text-base text-blue-900 font-bold mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}</p>
+                      <label className="text-xs font-semibold text-cyan-800 uppercase tracking-wide">Part Name</label>
+                      <p className="text-base text-cyan-900 font-bold mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}</p>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Description</label>
-                      <p className="text-sm text-blue-800 leading-relaxed mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.description}</p>
+                      <label className="text-xs font-semibold text-cyan-800 uppercase tracking-wide">Description</label>
+                      <p className="text-sm text-cyan-900 leading-relaxed mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.description}</p>
                     </div>
                   </div>
                 </div>
@@ -927,8 +928,8 @@ function ENTAnatomyPageContent() {
                 const partData = activeView === '3d' ? currentPartData : (selectedPart2D ? earPartsData[selectedPart2D] : null)
                 return partInfo && partData && partData.diseases.length > 0
               })() && (
-                <div className="bg-white/95 backdrop-blur-sm border-2 border-blue-200 rounded-xl p-4 shadow-md">
-                  <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                <div className="bg-white/95 backdrop-blur-sm border-2 border-cyan-200 rounded-xl p-4 shadow-md">
+                  <h4 className="text-sm font-bold text-cyan-900 mb-3 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
@@ -941,14 +942,14 @@ function ENTAnatomyPageContent() {
                         onClick={() => activeView === '3d' ? handleDiseaseSelect(disease) : handleDiseaseSelect2D(disease)}
                         className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
                           (activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id
-                            ? 'bg-blue-100 border-blue-500 shadow-md'
-                            : 'bg-white border-blue-200 hover:bg-blue-50 hover:border-blue-300'
+                            ? 'bg-cyan-100 border-cyan-500 shadow-md'
+                            : 'bg-white border-cyan-200 hover:bg-cyan-50 hover:border-cyan-300'
                         }`}
                       >
-                        <p className={`font-semibold mb-1 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-blue-900' : 'text-blue-800'}`}>
+                        <p className={`font-semibold mb-1 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-cyan-900' : 'text-cyan-900'}`}>
                           {disease.name}
                         </p>
-                        <p className={`text-xs leading-relaxed line-clamp-2 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-blue-700' : 'text-blue-600'}`}>
+                        <p className={`text-xs leading-relaxed line-clamp-2 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-cyan-800' : 'text-cyan-700'}`}>
                           {disease.description}
                         </p>
                       </button>
@@ -1014,22 +1015,19 @@ function ENTAnatomyPageContent() {
 
               {/* Medicines - Editable */}
               {(
-                <div className="bg-purple-50/95 backdrop-blur-sm border border-purple-200 rounded-lg p-3">
+                <div className="bg-cyan-50/95 backdrop-blur-sm border border-cyan-200 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-purple-900">Medicines:</h4>
-                    <button
-                      onClick={activeView === '3d' ? addMedicine : addMedicine2D}
-                      className="btn-modern btn-modern-purple btn-modern-sm flex items-center gap-1"
-                    >
+                    <h4 className="text-xs font-bold text-cyan-900">Medicines:</h4>
+                    <Button type="button" size="sm" variant="primary" onClick={activeView === '3d' ? addMedicine : addMedicine2D}>
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       Add
-                    </button>
+                    </Button>
                   </div>
                   <div className="space-y-2">
                     {(activeView === '3d' ? selectedMedicines : selectedMedicines2D).length === 0 ? (
-                      <p className="text-xs text-purple-700 italic py-1">No medicines. Click "Add" to add one.</p>
+                      <p className="text-xs text-cyan-800 italic py-1">No medicines. Click "Add" to add one.</p>
                     ) : (
                       (activeView === '3d' ? selectedMedicines : selectedMedicines2D).map((medicine, idx) => {
                         const currentSection = activeView
@@ -1040,9 +1038,9 @@ function ENTAnatomyPageContent() {
                           nameSuggestions.length > 0
                       
                       return (
-                      <div key={idx} className="bg-white rounded p-2 border border-purple-200">
+                      <div key={idx} className="bg-white rounded p-2 border border-cyan-200">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-purple-900">#{idx + 1}</span>
+                          <span className="text-xs font-semibold text-cyan-900">#{idx + 1}</span>
                           <button
                             onClick={() => currentSection === '3d' ? removeMedicine(idx) : removeMedicine2D(idx)}
                             className="text-red-600 hover:text-red-800 text-xs font-bold"
@@ -1100,7 +1098,7 @@ function ENTAnatomyPageContent() {
                                   }
                                 }}
                                 placeholder="Medicine name *"
-                                className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                               />
                               {inlineSuggestion?.section === currentSection &&
                               inlineSuggestion?.index === idx &&
@@ -1120,7 +1118,7 @@ function ENTAnatomyPageContent() {
                                 </div>
                               )}
                               {showNameSuggestions && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-purple-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                <div className="absolute z-50 w-full mt-1 bg-white border border-cyan-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                                   {nameSuggestions.map((suggestion, sugIdx) => (
                                     <button
                                       key={suggestion.name}
@@ -1147,7 +1145,7 @@ function ENTAnatomyPageContent() {
                                           }
                                         }
                                       }}
-                                      className="w-full text-left px-3 py-2 hover:bg-purple-50 text-xs text-purple-900 border-b border-purple-100 last:border-b-0"
+                                      className="w-full text-left px-3 py-2 hover:bg-cyan-50 text-xs text-cyan-900 border-b border-cyan-100 last:border-b-0"
                                     >
                                       {suggestion.name}
                                     </button>
@@ -1161,21 +1159,21 @@ function ENTAnatomyPageContent() {
                               value={medicine.dosage}
                               onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "dosage", e.target.value) : updateMedicine2D(idx, "dosage", e.target.value)}
                               placeholder="Dosage"
-                              className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                             />
                             <input
                               type="text"
                               value={medicine.frequency}
                               onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "frequency", e.target.value) : updateMedicine2D(idx, "frequency", e.target.value)}
                               placeholder="Frequency"
-                              className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                             />
                             <input
                               type="text"
                               value={medicine.duration}
                               onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "duration", e.target.value) : updateMedicine2D(idx, "duration", e.target.value)}
                               placeholder="Duration"
-                              className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                             />
                           </div>
                         </div>
@@ -1189,9 +1187,9 @@ function ENTAnatomyPageContent() {
 
               {/* Disease Notes */}
               {(activeView === '3d' ? selectedDisease : selectedDisease2D) && (activeView === '3d' ? selectedDisease : selectedDisease2D)!.notes && (
-                <div className="bg-indigo-50/95 backdrop-blur-sm border border-indigo-200 rounded-xl p-4">
-                  <h4 className="text-xs font-bold text-indigo-900 mb-2">Clinical Notes:</h4>
-                  <p className="text-xs text-indigo-800 leading-relaxed">{(activeView === '3d' ? selectedDisease : selectedDisease2D)!.notes}</p>
+                <div className="bg-cyan-50/95 backdrop-blur-sm border border-cyan-200 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-cyan-900 mb-2">Clinical Notes:</h4>
+                  <p className="text-xs text-cyan-800 leading-relaxed">{(activeView === '3d' ? selectedDisease : selectedDisease2D)!.notes}</p>
                 </div>
               )}
 
@@ -1204,14 +1202,14 @@ function ENTAnatomyPageContent() {
                   value={activeView === '3d' ? notes : notes2D}
                   onChange={(e) => activeView === '3d' ? setNotes(e.target.value) : setNotes2D(e.target.value)}
                   placeholder={`Document your findings from the ${activeView === '3d' ? '3D model' : '2D diagram'} examination...`}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   rows={3}
                 />
               </div>
 
               {/* Diagnosis Selector */}
-              <div className="bg-blue-50/95 backdrop-blur-sm border border-blue-200 rounded-xl p-4">
-                <label className="block font-semibold text-blue-900 mb-2">
+              <div className="bg-cyan-50/95 backdrop-blur-sm border border-cyan-200 rounded-xl p-4">
+                <label className="block font-semibold text-cyan-900 mb-2">
                   Final Diagnosis <span className="text-red-500">*</span>
                 </label>
                 <DiagnosisSelector
@@ -1336,7 +1334,7 @@ function ENTAnatomyPageContent() {
                   onClick={() => setActiveView('3d')}
                   className={`px-6 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${
                     activeView === '3d'
-                      ? 'bg-white text-blue-600 shadow-md'
+                      ? 'bg-white text-cyan-700 shadow-md'
                       : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
@@ -1349,7 +1347,7 @@ function ENTAnatomyPageContent() {
                   onClick={() => setActiveView('2d')}
                   className={`px-6 py-2 rounded-md font-medium transition-all flex items-center gap-2 ${
                     activeView === '2d'
-                      ? 'bg-white text-blue-600 shadow-md'
+                      ? 'bg-white text-cyan-700 shadow-md'
                       : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
@@ -1388,9 +1386,9 @@ function ENTAnatomyPageContent() {
             <div className="lg:col-span-6 space-y-4">
               {/* Selected Part Info Section - Show based on active view */}
               {(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D) ? (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-5 shadow-lg">
+                <div className="bg-gradient-to-br from-cyan-50 to-teal-50 border-2 border-cyan-300 rounded-xl p-5 shadow-lg">
                   <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-lg font-bold text-blue-900">Selected Part Information</h3>
+                    <h3 className="text-lg font-bold text-cyan-900">Selected Part Information</h3>
                     <button
                       onClick={() => {
                         if (activeView === '3d') {
@@ -1405,7 +1403,7 @@ function ENTAnatomyPageContent() {
                           setSelectedMedicines2D([])
                         }
                       }}
-                      className="text-blue-600 hover:text-blue-800 text-lg font-bold hover:bg-blue-100 rounded-full p-1 transition-colors"
+                      className="text-cyan-700 hover:text-cyan-900 text-lg font-bold hover:bg-cyan-100 rounded-full p-1 transition-colors"
                       title="Clear Selection"
                     >
                       ✕
@@ -1413,12 +1411,12 @@ function ENTAnatomyPageContent() {
                   </div>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Part Name</label>
-                      <p className="text-base text-blue-900 font-bold mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}</p>
+                      <label className="text-xs font-semibold text-cyan-800 uppercase tracking-wide">Part Name</label>
+                      <p className="text-base text-cyan-900 font-bold mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}</p>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Description</label>
-                      <p className="text-sm text-blue-800 leading-relaxed mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.description}</p>
+                      <label className="text-xs font-semibold text-cyan-800 uppercase tracking-wide">Description</label>
+                      <p className="text-sm text-cyan-900 leading-relaxed mt-1">{(activeView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.description}</p>
                     </div>
                   </div>
                 </div>
@@ -1438,8 +1436,8 @@ function ENTAnatomyPageContent() {
                 const partData = activeView === '3d' ? currentPartData : (selectedPart2D ? earPartsData[selectedPart2D] : null)
                 return partInfo && partData && partData.diseases.length > 0
               })() && (
-                <div className="bg-white/95 backdrop-blur-sm border-2 border-blue-200 rounded-xl p-4 shadow-md">
-                  <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                <div className="bg-white/95 backdrop-blur-sm border-2 border-cyan-200 rounded-xl p-4 shadow-md">
+                  <h4 className="text-sm font-bold text-cyan-900 mb-3 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
@@ -1452,14 +1450,14 @@ function ENTAnatomyPageContent() {
                         onClick={() => activeView === '3d' ? handleDiseaseSelect(disease) : handleDiseaseSelect2D(disease)}
                         className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
                           (activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id
-                            ? 'bg-blue-100 border-blue-500 shadow-md'
-                            : 'bg-white border-blue-200 hover:bg-blue-50 hover:border-blue-300'
+                            ? 'bg-cyan-100 border-cyan-500 shadow-md'
+                            : 'bg-white border-cyan-200 hover:bg-cyan-50 hover:border-cyan-300'
                         }`}
                       >
-                        <p className={`font-semibold mb-1 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-blue-900' : 'text-blue-800'}`}>
+                        <p className={`font-semibold mb-1 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-cyan-900' : 'text-cyan-900'}`}>
                           {disease.name}
                         </p>
-                        <p className={`text-xs leading-relaxed line-clamp-2 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-blue-700' : 'text-blue-600'}`}>
+                        <p className={`text-xs leading-relaxed line-clamp-2 ${(activeView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id ? 'text-cyan-800' : 'text-cyan-700'}`}>
                           {disease.description}
                         </p>
                       </button>
@@ -1525,22 +1523,19 @@ function ENTAnatomyPageContent() {
 
               {/* Medicines - Editable */}
               {(
-                <div className="bg-purple-50/95 backdrop-blur-sm border border-purple-200 rounded-lg p-3">
+                <div className="bg-cyan-50/95 backdrop-blur-sm border border-cyan-200 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-bold text-purple-900">Medicines:</h4>
-                    <button
-                      onClick={activeView === '3d' ? addMedicine : addMedicine2D}
-                      className="btn-modern btn-modern-purple btn-modern-sm flex items-center gap-1"
-                    >
+                    <h4 className="text-xs font-bold text-cyan-900">Medicines:</h4>
+                    <Button type="button" size="sm" variant="primary" onClick={activeView === '3d' ? addMedicine : addMedicine2D}>
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       Add
-                    </button>
+                    </Button>
                   </div>
                   <div className="space-y-2">
                     {(activeView === '3d' ? selectedMedicines : selectedMedicines2D).length === 0 ? (
-                      <p className="text-xs text-purple-700 italic py-1">No medicines. Click "Add" to add one.</p>
+                      <p className="text-xs text-cyan-800 italic py-1">No medicines. Click "Add" to add one.</p>
                     ) : (
                       (activeView === '3d' ? selectedMedicines : selectedMedicines2D).map((medicine, idx) => {
                         const currentSection = activeView
@@ -1551,9 +1546,9 @@ function ENTAnatomyPageContent() {
                           nameSuggestions.length > 0
                       
                       return (
-                      <div key={idx} className="bg-white rounded p-2 border border-purple-200">
+                      <div key={idx} className="bg-white rounded p-2 border border-cyan-200">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-purple-900">#{idx + 1}</span>
+                          <span className="text-xs font-semibold text-cyan-900">#{idx + 1}</span>
                           <button
                             onClick={() => currentSection === '3d' ? removeMedicine(idx) : removeMedicine2D(idx)}
                             className="text-red-600 hover:text-red-800 text-xs font-bold"
@@ -1611,7 +1606,7 @@ function ENTAnatomyPageContent() {
                                   }
                                 }}
                                 placeholder="Medicine name *"
-                                className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                               />
                               {inlineSuggestion?.section === currentSection &&
                               inlineSuggestion?.index === idx &&
@@ -1631,7 +1626,7 @@ function ENTAnatomyPageContent() {
                                 </div>
                               )}
                               {showNameSuggestions && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-purple-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                <div className="absolute z-50 w-full mt-1 bg-white border border-cyan-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                                   {nameSuggestions.map((suggestion, sugIdx) => (
                                     <button
                                       key={suggestion.name}
@@ -1658,7 +1653,7 @@ function ENTAnatomyPageContent() {
                                           }
                                         }
                                       }}
-                                      className="w-full text-left px-3 py-2 hover:bg-purple-50 text-xs text-purple-900 border-b border-purple-100 last:border-b-0"
+                                      className="w-full text-left px-3 py-2 hover:bg-cyan-50 text-xs text-cyan-900 border-b border-cyan-100 last:border-b-0"
                                     >
                                       {suggestion.name}
                                     </button>
@@ -1672,21 +1667,21 @@ function ENTAnatomyPageContent() {
                               value={medicine.dosage}
                               onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "dosage", e.target.value) : updateMedicine2D(idx, "dosage", e.target.value)}
                               placeholder="Dosage"
-                              className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                             />
                             <input
                               type="text"
                               value={medicine.frequency}
                               onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "frequency", e.target.value) : updateMedicine2D(idx, "frequency", e.target.value)}
                               placeholder="Frequency"
-                              className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                             />
                             <input
                               type="text"
                               value={medicine.duration}
                               onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "duration", e.target.value) : updateMedicine2D(idx, "duration", e.target.value)}
                               placeholder="Duration"
-                              className="w-full px-2 py-1 border border-purple-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                             />
                           </div>
                         </div>
@@ -1700,9 +1695,9 @@ function ENTAnatomyPageContent() {
 
               {/* Disease Notes */}
               {(activeView === '3d' ? selectedDisease : selectedDisease2D) && (activeView === '3d' ? selectedDisease : selectedDisease2D)!.notes && (
-                <div className="bg-indigo-50/95 backdrop-blur-sm border border-indigo-200 rounded-xl p-4">
-                  <h4 className="text-xs font-bold text-indigo-900 mb-2">Clinical Notes:</h4>
-                  <p className="text-xs text-indigo-800 leading-relaxed">{(activeView === '3d' ? selectedDisease : selectedDisease2D)!.notes}</p>
+                <div className="bg-cyan-50/95 backdrop-blur-sm border border-cyan-200 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-cyan-900 mb-2">Clinical Notes:</h4>
+                  <p className="text-xs text-cyan-800 leading-relaxed">{(activeView === '3d' ? selectedDisease : selectedDisease2D)!.notes}</p>
                 </div>
               )}
 
@@ -1715,14 +1710,14 @@ function ENTAnatomyPageContent() {
                   value={activeView === '3d' ? notes : notes2D}
                   onChange={(e) => activeView === '3d' ? setNotes(e.target.value) : setNotes2D(e.target.value)}
                   placeholder={`Document your findings from the ${activeView === '3d' ? '3D model' : '2D diagram'} examination...`}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   rows={3}
                 />
               </div>
 
               {/* Diagnosis Selector */}
-              <div className="bg-blue-50/95 backdrop-blur-sm border border-blue-200 rounded-xl p-4">
-                <label className="block font-semibold text-blue-900 mb-2">
+              <div className="bg-cyan-50/95 backdrop-blur-sm border border-cyan-200 rounded-xl p-4">
+                <label className="block font-semibold text-cyan-900 mb-2">
                   Final Diagnosis <span className="text-red-500">*</span>
                 </label>
                 <DiagnosisSelector

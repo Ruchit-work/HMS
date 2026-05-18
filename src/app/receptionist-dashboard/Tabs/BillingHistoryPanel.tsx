@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Button } from "@/components/ui/Button"
 import { auth } from "@/firebase/config"
 import PaymentMethodSection, {
   PaymentData as BillingPaymentData,
@@ -368,7 +369,7 @@ export default function BillingHistoryPanel({
 
   return (
     <div className="space-y-8">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-800 text-white shadow-lg">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-teal-800 text-white shadow-lg">
         <div className="relative px-6 py-10 sm:px-10">
           <div className="absolute inset-y-0 right-0 hidden w-48 translate-x-16 rotate-12 rounded-full bg-white/10 blur-3xl sm:block" />
           <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
@@ -422,7 +423,7 @@ export default function BillingHistoryPanel({
                 type="date"
                 value={billingDateFilter}
                 onChange={(e) => setBillingDateFilter(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-100"
               />
               {billingDateFilter && (
                 <button
@@ -440,7 +441,7 @@ export default function BillingHistoryPanel({
                 value={billingSearchTerm}
                 onChange={(e) => setBillingSearchTerm(e.target.value)}
                 placeholder="Search bills by patient name or ID"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-100"
               />
               {billingSearchTerm && (
                 <button
@@ -452,8 +453,8 @@ export default function BillingHistoryPanel({
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-cyan-50 border border-cyan-200 rounded-lg text-xs font-semibold text-cyan-800">
+              <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
               <span>Auto-Refresh</span>
             </div>
           </div>
@@ -468,14 +469,14 @@ export default function BillingHistoryPanel({
                 onClick={() => setBillingStatusFilter(tab.value)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   isActive
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                    ? "border-[var(--color-primary)] bg-cyan-50 text-cyan-800 shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800"
                 }`}
               >
                 {tab.label}
                 <span
                   className={`rounded-full px-2 py-0.5 text-[11px] ${
-                    isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                    isActive ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-500"
                   }`}
                 >
                   {tab.count}
@@ -541,7 +542,7 @@ export default function BillingHistoryPanel({
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
                             record.type === "appointment" 
                               ? "bg-blue-100 text-blue-700 border border-blue-200" 
-                              : "bg-purple-100 text-purple-700 border border-purple-200"
+                              : "bg-cyan-100 text-cyan-800 border border-cyan-200"
                           }`}>
                             {record.type === "appointment" ? "Appointment" : "Admission"}
                           </span>
@@ -670,12 +671,9 @@ export default function BillingHistoryPanel({
                         </div>
 
                         {record.status !== "paid" && record.status !== "void" && (
-                          <button
-                            onClick={() => handleOpenBillingPayment(record)}
-                            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                          >
+                          <Button type="button" size="sm" variant="primary" onClick={() => handleOpenBillingPayment(record)}>
                             Record Payment
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -724,10 +722,10 @@ export default function BillingHistoryPanel({
       {billingPaymentModalOpen && selectedBillingRecord && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between hms-panel-header text-white rounded-t-2xl">
               <div>
-                <h3 className="text-xl font-semibold text-slate-900">Record Patient Payment</h3>
-                <p className="text-sm text-slate-500">
+                <h3 className="text-xl font-semibold">Record Patient Payment</h3>
+                <p className="text-sm text-white/80">
                   Patient ID {selectedBillingRecord.patientId || "Unknown"} • Bill #{selectedBillingRecord.id.slice(0, 6).toUpperCase()}
                 </p>
               </div>
@@ -762,20 +760,18 @@ export default function BillingHistoryPanel({
               </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">
-              <button
-                onClick={resetPaymentState}
-                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all"
-                disabled={processingBillingPayment}
-              >
+              <Button type="button" variant="outline" onClick={resetPaymentState} disabled={processingBillingPayment}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
                 onClick={handleConfirmBillingPayment}
-                disabled={processingBillingPayment}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-60"
+                loading={processingBillingPayment}
+                loadingText="Recording..."
               >
-                {processingBillingPayment ? "Recording..." : `Record ${formatCurrency(selectedBillingRecord.totalAmount)}`}
-              </button>
+                {`Record ${formatCurrency(selectedBillingRecord.totalAmount)}`}
+              </Button>
             </div>
           </div>
         </div>

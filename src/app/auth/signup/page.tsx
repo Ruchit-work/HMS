@@ -459,7 +459,7 @@ Thank you for choosing Harmony Medical Services! 🏥`;
 
             <div className="flex items-center gap-2 text-xs text-slate-600">
               <svg
-                className="w-4 h-4 text-blue-600"
+                className="w-4 h-4 text-cyan-700"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -530,7 +530,7 @@ Thank you for choosing Harmony Medical Services! 🏥`;
                               key={hospital.id}
                               className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
                                 selectedHospitalId === hospital.id
-                                  ? "border-blue-500 bg-blue-50"
+                                  ? "border-cyan-500 bg-cyan-50"
                                   : "border-slate-200 hover:border-slate-300"
                               }`}
                             >
@@ -540,7 +540,7 @@ Thank you for choosing Harmony Medical Services! 🏥`;
                                 value={hospital.id}
                                 checked={selectedHospitalId === hospital.id}
                                 onChange={(e) => setSelectedHospitalId(e.target.value)}
-                                className="mt-1 w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                                className="mt-1 w-4 h-4 text-cyan-700 border-slate-300 focus:ring-blue-500"
                               />
                               <div className="flex-1">
                                 <div className="font-medium text-slate-900">

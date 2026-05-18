@@ -11,6 +11,7 @@ import { SuccessToast } from "@/components/ui/feedback/StatusComponents"
 import { formatDateTime } from "@/utils/shared/date"
 import { sanitizeForInnerHTML } from "@/utils/shared/sanitizeHtml"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { Button } from "@/components/ui/Button"
 
 export default function CampaignManagement({ disableAdminGuard = true }: { disableAdminGuard?: boolean } = {}) {
   const { user, loading: authLoading } = useAuth()
@@ -514,7 +515,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                       type="button"
                       onClick={checkCronStatus}
                       disabled={loadingCronStatus}
-                      className="rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                      className="rounded-lg border border-[var(--color-primary)] bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
                       title="Refresh cron status"
                     >
                       {loadingCronStatus ? "Refreshing..." : "Refresh"}
@@ -623,7 +624,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
             )}
             {/* Appointment Reminders Status Display */}
             {(reminderStatus || reminderStatusError) && (
-              <div className="rounded-lg border border-slate-200 bg-blue-50 p-4 mt-4">
+              <div className="rounded-lg border border-slate-200 bg-cyan-50 p-4 mt-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-semibold text-slate-900">📅 Appointment Reminders Status</h3>
                   <div className="flex items-center gap-2">
@@ -631,7 +632,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                       type="button"
                       onClick={checkReminderStatus}
                       disabled={loadingReminderStatus}
-                      className="rounded-lg border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                      className="rounded-lg border border-[var(--color-primary)] bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
                       title="Refresh reminder status"
                     >
                       {loadingReminderStatus ? "Refreshing..." : "Refresh"}
@@ -760,8 +761,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                 disabled={loadingCronStatus || generatingToday || generatingRandom}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                   loadingCronStatus
-                    ? "border-blue-400 bg-blue-200 text-blue-500 cursor-not-allowed"
-                    : "border-blue-600 bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95 disabled:opacity-60"
+                    ? "border-cyan-400 bg-cyan-200 text-cyan-600 cursor-not-allowed"
+                    : "border-[var(--color-primary)] bg-[var(--color-primary)] text-white hover:opacity-90 hover:shadow-md active:scale-95 disabled:opacity-60"
                 }`}
                 title="Check cron job status and execution history"
               >
@@ -783,8 +784,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                 disabled={loadingReminderStatus || generatingToday || generatingRandom}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                   loadingReminderStatus
-                    ? "border-purple-400 bg-purple-200 text-purple-500 cursor-not-allowed"
-                    : "border-purple-600 bg-purple-600 text-white hover:bg-purple-700 hover:shadow-md active:scale-95 disabled:opacity-60"
+                    ? "border-cyan-400 bg-cyan-200 text-cyan-700 cursor-not-allowed"
+                    : "border-cyan-600 bg-[var(--color-primary)] text-white hover:opacity-90 hover:shadow-md active:scale-95 disabled:opacity-60"
                 }`}
                 title="Check appointment reminder cron job status"
               >
@@ -977,8 +978,8 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                 disabled={generatingToday || generatingRandom}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200 ${
                   generatingRandom
-                    ? "border-purple-400 bg-purple-200 text-purple-500 cursor-not-allowed"
-                    : "border-purple-600 bg-purple-600 text-white hover:bg-purple-700 hover:shadow-md active:scale-95"
+                    ? "border-cyan-400 bg-cyan-200 text-cyan-700 cursor-not-allowed"
+                    : "border-cyan-600 bg-[var(--color-primary)] text-white hover:opacity-90 hover:shadow-md active:scale-95"
                 }`}
                 title="Generate a random awareness day campaign for quick WhatsApp testing."
               >
@@ -1083,7 +1084,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
                       disabled={publishingCampaignId !== null || deletingCampaignId !== null || editingId === campaign.id}
                       className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all duration-200 ${
                         editingId === campaign.id
-                          ? "border-blue-400 bg-blue-100 text-blue-600 cursor-not-allowed"
+                          ? "border-cyan-400 bg-cyan-100 text-cyan-700 cursor-not-allowed"
                           : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:shadow-md active:scale-95 disabled:opacity-60"
                       }`}
                     >
@@ -1248,20 +1249,24 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
             </div>
 
             <div className="flex gap-3">
-              <button
+              <Button
                 type="submit"
-                disabled={saving || !form.title}
-                className="flex-1 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-teal-700 hover:to-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                size="lg"
+                className="flex-1"
+                loading={saving}
+                loadingText="Saving..."
+                disabled={!form.title}
               >
-                {saving ? "Saving..." : editingId ? "Save changes" : "Create campaign"}
-              </button>
-              <button
+                {editingId ? "Save changes" : "Create campaign"}
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
+                size="lg"
                 onClick={editingId ? cancelEditing : resetForm}
-                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 {editingId ? "Cancel" : "Reset"}
-              </button>
+              </Button>
             </div>
           </form>
         </aside>

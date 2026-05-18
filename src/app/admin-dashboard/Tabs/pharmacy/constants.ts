@@ -12,14 +12,16 @@ export const RETURN_REASON_OPTIONS: Array<{
   { value: 'other', label: 'Other reason' },
 ]
 
+/** Align with @theme tokens in globals.css */
 export const PHARMACY_UI = {
-  primary: '#2563EB',
-  bg: '#F8FAFC',
-  card: '#FFFFFF',
-  border: '#E5E7EB',
-  success: '#22C55E',
-  warning: '#F59E0B',
-  danger: '#EF4444',
+  primary: '#0891b2',
+  primaryDark: '#0e7490',
+  bg: '#f8fafc',
+  card: '#ffffff',
+  border: '#e2e8f0',
+  success: '#10b981',
+  warning: '#f59e0b',
+  danger: '#ef4444',
 } as const
 
 export const createEmptyCashNotes = (): Record<string, string> => ({

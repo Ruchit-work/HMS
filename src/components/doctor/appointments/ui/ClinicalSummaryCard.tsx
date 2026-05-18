@@ -62,7 +62,7 @@ export default function ClinicalSummaryCard({
               <button
                 type="button"
                 onClick={onClick}
-                className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                className="text-xs font-medium text-cyan-700 hover:text-cyan-800 hover:underline"
               >
                 View full details →
               </button>
@@ -90,7 +90,7 @@ export default function ClinicalSummaryCard({
               {latestRecommendation.date || "Previous visit"}
             </span>
             {onClick && (
-              <span className="text-xs text-blue-600 font-medium">View</span>
+              <span className="text-xs text-cyan-700 font-medium">View</span>
             )}
           </div>
         ) : (

@@ -97,7 +97,7 @@ export default function PatientSummaryBar({
                 </span>
               )}
               {isReturningPatient === true && (
-                <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                <span className="inline-flex items-center rounded-md bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-800">
                   Returning
                 </span>
               )}
@@ -106,7 +106,7 @@ export default function PatientSummaryBar({
                   New
                 </span>
               )}
-              <span className="inline-flex items-center rounded-md bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800 tabular-nums">
+              <span className="inline-flex items-center rounded-md bg-cyan-100 px-2.5 py-1 text-xs font-semibold text-cyan-900 tabular-nums">
                 {dateLabel} · {appointment.appointmentTime}
               </span>
             </div>

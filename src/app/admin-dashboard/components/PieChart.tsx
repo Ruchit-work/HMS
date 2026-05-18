@@ -20,22 +20,22 @@ interface PieChartProps {
 const DEFAULT_COLORS = [
   "#0ea5e9", /* sky-500 */
   "#0d9488", /* teal-600 */
-  "#3b82f6", /* blue-500 */
+  "#06b6d4", /* cyan-500 */
   "#64748b", /* slate-500 */
   "#0891b2", /* cyan-600 */
   "#475569", /* slate-600 */
   "#0284c7", /* sky-600 */
   "#0f766e", /* teal-700 */
-  "#6366f1", /* indigo-500 */
+  "#0891b2", /* cyan-500 */
   "#334155", /* slate-700 */
 ]
 const DEFAULT_COLORS_ALT = [
   "#0369a1", /* sky-700 */
   "#047857", /* emerald-700 */
   "#0d9488", /* teal-600 */
-  "#1e40af", /* blue-800 */
+  "#0e7490", /* teal-700 */
   "#0e7490", /* cyan-700 */
-  "#4f46e5", /* indigo-600 */
+  "#0891b2", /* cyan-600 */
   "#0ea5e9", /* sky-500 */
   "#059669", /* emerald-600 */
   "#475569", /* slate-600 */

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import type { PharmacySupplier } from '@/types/pharmacy'
+import { Button } from '@/components/ui/Button'
 
 export function AddSupplierForm({
   onSuccess,
@@ -66,7 +67,7 @@ export function AddSupplierForm({
         <input type="number" min="0" placeholder="Lead time (days)" value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} className="rounded border border-slate-300 px-2 py-1.5 text-sm" />
         <input type="number" min="0" step="0.01" placeholder="Min order value" value={minOrderValue} onChange={(e) => setMinOrderValue(e.target.value)} className="rounded border border-slate-300 px-2 py-1.5 text-sm" />
       </div>
-      <button type="submit" disabled={saving} className="btn-modern btn-modern-primary btn-modern-sm">Add supplier</button>
+      <Button type="submit" size="sm" loading={saving} loadingText="Adding...">Add supplier</Button>
     </form>
   )
 }
@@ -136,8 +137,8 @@ export function EditSupplierForm({
         <input type="number" min="0" step="0.01" placeholder="Min order value" value={minOrderValue} onChange={(e) => setMinOrderValue(e.target.value)} className="rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
       </div>
       <div className="flex gap-2 pt-2">
-        <button type="button" onClick={onCancel} className="rounded-lg border border-[#E0E0E0] px-4 py-2 text-sm font-medium text-[#607D8B] hover:bg-[#F5F5F5]">Cancel</button>
-        <button type="submit" disabled={saving} className="rounded-lg bg-[#1565C0] px-4 py-2 text-sm font-medium text-white hover:bg-[#0D47A1] disabled:opacity-50">Save changes</button>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" size="sm" loading={saving} loadingText="Saving...">Save changes</Button>
       </div>
     </form>
   )

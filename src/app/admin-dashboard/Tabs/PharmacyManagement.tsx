@@ -8,7 +8,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { usePharmacyPortal } from '@/contexts/PharmacyPortalContext'
 import type { PharmacyPortalTabId } from '@/contexts/PharmacyPortalContext'
-import SubTabNavigation from '@/components/admin/SubTabNavigation'
+import GroupedNav from '@/components/ui/navigation/GroupedNav'
+import { Button } from '@/components/ui/Button'
+import { buildPharmacyAdminNavSections } from '@/app/pharmacy/pharmacyNavConfig'
 import Notification from '@/components/ui/feedback/Notification'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import Pagination from '@/components/ui/navigation/Pagination'
@@ -236,6 +238,9 @@ export default function PharmacyManagement() {
   const [activeCashSession, setActiveCashSession] = useState<PharmacyCashSession | null>(null)
   const [recentCashSessions, setRecentCashSessions] = useState<PharmacyCashSession[]>([])
   const [cashSessionsLoading, setCashSessionsLoading] = useState(false)
+  const [openCounterLoading, setOpenCounterLoading] = useState(false)
+  const [closeShiftLoading, setCloseShiftLoading] = useState(false)
+  const [saveExpenseLoading, setSaveExpenseLoading] = useState(false)
   const [viewShiftReportSession, setViewShiftReportSession] = useState<PharmacyCashSession | null>(null)
   const [shiftReportExpenses, setShiftReportExpenses] = useState<PharmacyExpense[]>([])
   const [cashOpeningNotes, setCashOpeningNotes] = useState<Record<string, string>>(() => createEmptyCashNotes())
@@ -1247,7 +1252,7 @@ export default function PharmacyManagement() {
                     setPharmacistForm({ firstName: '', lastName: '', email: '', password: '', branchId: '' })
                     setShowAddPharmacistModal(true)
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-white px-3 py-1.5 text-sm font-medium text-cyan-800 shadow-sm hover:bg-cyan-50"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1255,33 +1260,16 @@ export default function PharmacyManagement() {
                   Create Pharmacist
                 </button>
               )}
-              <Link
-                href="/pharmacy"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1565C0] px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-[#0D47A1]"
-              >
-                Open Pharmacy Portal
-              </Link>
             </div>
           </div>
         )}
         {!isPharmacyPortal && (
-          <div className="border-b border-slate-200 px-6 pt-6">
-            <SubTabNavigation
-              variant="default"
-              tabs={[
-                { id: 'queue', label: 'Dispense & Billing' },     // 1
-                { id: 'returns', label: 'Sales returns' },        // 2
-                { id: 'sales', label: 'Sales records' },          // 3
-                { id: 'inventory', label: 'Inventory' },          // 4
-                { id: 'orders', label: 'Orders' },                // 5
-                ...(isSuperAdmin ? [{ id: 'transfers' as const, label: 'Transfers' }] : []),
-                { id: 'reports', label: 'Reports' },              // 6
-                { id: 'suppliers', label: 'Suppliers' },          // 7
-                ...(isAdmin ? [{ id: 'users' as const, label: 'Pharmacy Users' }] : []),
-                { id: 'overview', label: 'Overview' },            // 8
-              ]}
-              activeTab={subTab}
-              onTabChange={(id) => setSubTab(id as PharmacySubTab)}
+          <div className="border-b border-slate-200 px-6 py-4">
+            <GroupedNav
+              variant="pills"
+              sections={buildPharmacyAdminNavSections({ isSuperAdmin, isAdmin })}
+              activeId={subTab}
+              onSelect={(id) => setSubTab(id as PharmacySubTab)}
             />
           </div>
         )}
@@ -1539,7 +1527,7 @@ export default function PharmacyManagement() {
                           setSuccess('Default printer ID cleared. Bills will download as PDF.')
                         }
                       }}
-                      className="rounded-lg bg-[#2563EB] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1d4ed8] transition"
+                      className="rounded-lg bg-[#0891b2] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0e7490] transition"
                     >
                       Save
                     </button>
@@ -1671,6 +1659,8 @@ export default function PharmacyManagement() {
                 expenseFilters={expenseFilters}
                 setExpenseFilters={setExpenseFilters}
                 branches={branches}
+                openCounterLoading={openCounterLoading}
+                saveExpenseLoading={saveExpenseLoading}
                 onCloseShiftClick={() => {
                   setCloseCounterButtonClicked(true)
                   window.setTimeout(() => setCloseCounterButtonClicked(false), 350)
@@ -1699,6 +1689,7 @@ export default function PharmacyManagement() {
                   setCashOpeningNotes(next)
                 }}
                 onOpenCounter={async () => {
+                  if (openCounterLoading) return
                   const token = await getToken()
                   if (!token || !activeHospitalId) return
                   if (!selectedCashierId || !selectedCounterId) {
@@ -1714,6 +1705,7 @@ export default function PharmacyManagement() {
                     notesNum[den] = count
                     openingTotal += count * Number(den)
                   })
+                  setOpenCounterLoading(true)
                   try {
                     const client = createPharmacyApiClient(token)
                     const result = await client.upsertCashSession({
@@ -1737,9 +1729,12 @@ export default function PharmacyManagement() {
                     setLastClosedSummary(null)
                   } catch (e: any) {
                     setError(e?.message || 'Failed to open counter')
+                  } finally {
+                    setOpenCounterLoading(false)
                   }
                 }}
                 onSaveExpense={async () => {
+                  if (saveExpenseLoading) return
                   if (!activeHospitalId) {
                     setError('Active hospital is not set.')
                     return
@@ -1772,6 +1767,7 @@ export default function PharmacyManagement() {
                     setShowExpenseCashModal(true)
                     return
                   }
+                  setSaveExpenseLoading(true)
                   try {
                     setError(null)
                     const token = await getToken()
@@ -1792,6 +1788,8 @@ export default function PharmacyManagement() {
                     fetchCashSessions()
                   } catch (e: unknown) {
                     setError(e instanceof Error ? e.message : 'Failed to add expense')
+                  } finally {
+                    setSaveExpenseLoading(false)
                   }
                 }}
                 onConfirmExpenseCash={async (expenseNotes) => {
@@ -1889,7 +1887,7 @@ export default function PharmacyManagement() {
                     key={range}
                     type="button"
                     onClick={() => setOverviewDateRange(range)}
-                    className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[#0891b2] text-white border-[#0891b2]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
                   >
                     {range === 'today' ? 'Today' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '6m' ? '6m' : range === 'year' ? 'Year' : 'All'}
                   </button>
@@ -1948,8 +1946,8 @@ export default function PharmacyManagement() {
                       <svg viewBox="0 0 400 120" className="h-full w-full overflow-visible" preserveAspectRatio="none">
                         <defs>
                           <linearGradient id="salesTrendGradReturnsTab" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stopColor="#2563EB" stopOpacity={0.3} />
-                            <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                            <stop offset="0%" stopColor="#0891b2" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="#0891b2" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         {(() => {
@@ -1963,7 +1961,7 @@ export default function PharmacyManagement() {
                           return (
                             <>
                               <polyline fill="url(#salesTrendGradReturnsTab)" points={areaPoints} />
-                              <polyline fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+                              <polyline fill="none" stroke="#0891b2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
                             </>
                           )
                         })()}
@@ -2032,12 +2030,12 @@ export default function PharmacyManagement() {
                       type="date"
                       value={returnsDate}
                       onChange={(e) => setReturnsDate(e.target.value)}
-                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                     />
                     <select
                       value={returnsPaymentFilter}
                       onChange={(e) => setReturnsPaymentFilter(e.target.value)}
-                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                     >
                       <option value="all">All payments</option>
                       <option value="cash">Cash</option>
@@ -2052,7 +2050,7 @@ export default function PharmacyManagement() {
                       value={returnsMinAmount}
                       onChange={(e) => setReturnsMinAmount(e.target.value)}
                       placeholder="Min amount"
-                      className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                     />
                     <input
                       type="number"
@@ -2060,14 +2058,14 @@ export default function PharmacyManagement() {
                       value={returnsMaxAmount}
                       onChange={(e) => setReturnsMaxAmount(e.target.value)}
                       placeholder="Max amount"
-                      className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                     />
                     <input
                       type="text"
                       value={returnsSearch}
                       onChange={(e) => setReturnsSearch(e.target.value)}
                       placeholder="Search by invoice, name, phone, medicine…"
-                      className="w-full sm:w-56 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full sm:w-56 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                     />
                     {(returnsDate || returnsSearch || returnsPaymentFilter !== 'all' || returnsMinAmount || returnsMaxAmount) && (
                       <button
@@ -2128,7 +2126,7 @@ export default function PharmacyManagement() {
                             <React.Fragment key={s.id}>
                               <tr
                                 className={`border-t border-slate-200 cursor-pointer hover:bg-slate-50 ${
-                                  isSelected ? 'bg-blue-50/40' : ''
+                                  isSelected ? 'bg-cyan-50/40' : ''
                                 }`}
                                 onClick={() => {
                                   if (selectedReturnSale?.id === s.id) {
@@ -2243,7 +2241,7 @@ export default function PharmacyManagement() {
                                           <select
                                             value={returnReasonType}
                                             onChange={(e) => setReturnReasonType(e.target.value as '' | 'damaged' | 'wrong_medicine' | 'doctor_changed' | 'patient_request' | 'expired' | 'other')}
-                                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                                             required
                                           >
                                             <option value="">Select reason</option>
@@ -2263,7 +2261,7 @@ export default function PharmacyManagement() {
                                             value={returnReasonDetails}
                                             onChange={(e) => setReturnReasonDetails(e.target.value)}
                                             placeholder={returnReasonType === 'other' ? 'Describe reason' : 'Add context for audit trail'}
-                                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                                           />
                                         </div>
                                         <div>
@@ -2275,7 +2273,7 @@ export default function PharmacyManagement() {
                                             value={returnSupervisorName}
                                             onChange={(e) => setReturnSupervisorName(e.target.value)}
                                             placeholder="Name / ID"
-                                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                                           />
                                         </div>
                                       </div>
@@ -2344,7 +2342,7 @@ export default function PharmacyManagement() {
                                                         const clamped = Math.min(Math.max(0, num), remaining)
                                                         setReturnQuantities((prev) => ({ ...prev, [key]: clamped > 0 ? String(clamped) : '' }))
                                                       }}
-                                                      className={`w-16 rounded-full border px-2 py-1 text-right focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                                                      className={`w-16 rounded-full border px-2 py-1 text-right focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] ${
                                                         remaining === 0 ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed' : 'border-slate-300'
                                                       }`}
                                                     />
@@ -2366,14 +2364,17 @@ export default function PharmacyManagement() {
                                             ₹{estimatedRefund.toFixed(2)}
                                           </span>
                                         </span>
-                                        <button
+                                        <Button
                                           type="submit"
-                                          disabled={returnSubmitting || !activeCashSession}
+                                          variant="danger"
+                                          size="sm"
+                                          loading={returnSubmitting}
+                                          loadingText="Processing…"
+                                          disabled={!activeCashSession}
                                           title={!activeCashSession ? 'Start a cash session first (Cash & expenses → Start shift)' : ''}
-                                          className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                         >
-                                          {returnSubmitting ? 'Processing…' : 'Process return & update stock'}
-                                        </button>
+                                          Process return & update stock
+                                        </Button>
                                       </div>
                                     </form>
                                   </div>
@@ -2645,7 +2646,7 @@ export default function PharmacyManagement() {
                 <div><dt className="font-medium text-[#607D8B]">Payment terms</dt><dd className="text-[#263238]">{viewSupplier.paymentTerms ?? '—'}</dd></div>
                 <div><dt className="font-medium text-[#607D8B]">Lead time (days)</dt><dd className="text-[#263238]">{viewSupplier.leadTimeDays != null ? viewSupplier.leadTimeDays : '—'}</dd></div>
               </dl>
-              <button type="button" onClick={() => setViewSupplier(null)} className="mt-4 rounded-lg bg-[#1565C0] px-4 py-2 text-sm font-medium text-white hover:bg-[#0D47A1]">Close</button>
+              <button type="button" onClick={() => setViewSupplier(null)} className="mt-4 rounded-lg bg-[#0891b2] px-4 py-2 text-sm font-medium text-white hover:bg-[#0e7490]">Close</button>
               <button type="button" onClick={() => setViewSupplier(null)} className="absolute top-4 right-4 p-1 rounded-lg text-[#607D8B] hover:bg-[#F5F5F5]">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -2793,7 +2794,7 @@ export default function PharmacyManagement() {
                 onError={setError}
               />
               <div className="mt-4 pt-4 border-t border-slate-200">
-                <button type="button" onClick={() => setAddMedicineModalBarcode(null)} className="btn-modern btn-modern-sm">Cancel</button>
+                <button type="button" onClick={() => setAddMedicineModalBarcode(null)} className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
               </div>
             </div>
           </div>
@@ -3049,9 +3050,13 @@ export default function PharmacyManagement() {
                   >
                     Cancel
                   </button>
-                  <button
+                  <Button
                     type="button"
+                    variant="danger"
+                    loading={closeShiftLoading}
+                    loadingText="Closing shift…"
                     onClick={async () => {
+                      if (closeShiftLoading) return
                       const token = await getToken()
                       if (!token || !activeCashSession) return
                       if (!closeChecklist.countedCash || !closeChecklist.reviewedRefundsAndExpenses) {
@@ -3070,6 +3075,7 @@ export default function PharmacyManagement() {
                         setError('Please add a handover note before closing the shift.')
                         return
                       }
+                      setCloseShiftLoading(true)
                       setShowCloseShiftConfirm(false)
                       const closingNotesNum: Record<string, number> = {}
                       CASH_DENOMS.forEach((den) => {
@@ -3135,12 +3141,13 @@ export default function PharmacyManagement() {
                         openCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                       } catch (e: any) {
                         setError(e?.message || 'Failed to close cash session')
+                      } finally {
+                        setCloseShiftLoading(false)
                       }
                     }}
-                    className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700"
                   >
                     Yes, close shift
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

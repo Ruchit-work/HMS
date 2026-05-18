@@ -2,6 +2,7 @@
 
 import { Appointment } from "@/types/patient"
 import { generatePrescriptionPDF } from "@/utils/documents/pdfGenerators"
+import { Button } from "@/components/ui/Button"
 
 // Helper function to parse prescription text
 const parsePrescription = (text: string) => {
@@ -141,22 +142,19 @@ export default function PrescriptionDisplay({
           <span>Prescription & Doctor&apos;s Notes</span>
         </h4>
         {showPdfButton && (
-          <button
-            onClick={handlePdfClick}
-            className="btn-modern btn-modern-success btn-modern-sm flex items-center gap-2"
-          >
+          <Button size="sm" variant="outline" onClick={handlePdfClick}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             Download PDF
-          </button>
+          </Button>
         )}
       </div>
       <div className="space-y-4">
         {/* Final Diagnosis */}
         {((appointment as any).finalDiagnosis && Array.isArray((appointment as any).finalDiagnosis) && (appointment as any).finalDiagnosis.length > 0) && (
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-            <h5 className="text-blue-900 font-semibold mb-3 flex items-center gap-2">
+          <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-200">
+            <h5 className="text-cyan-900 font-semibold mb-3 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -166,16 +164,16 @@ export default function PrescriptionDisplay({
               {(appointment as any).finalDiagnosis.map((diagnosis: string, index: number) => (
                 <span
                   key={index}
-                  className="inline-flex items-center px-3 py-1.5 bg-blue-100 border border-blue-300 rounded-lg text-sm font-medium text-blue-800"
+                  className="inline-flex items-center px-3 py-1.5 bg-cyan-100 border border-cyan-300 rounded-lg text-sm font-medium text-cyan-900"
                 >
                   {diagnosis}
                 </span>
               ))}
             </div>
             {(appointment as any).customDiagnosis && (
-              <div className="mt-3 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
-                <p className="text-sm font-semibold text-purple-900 mb-1">Custom Diagnosis:</p>
-                <p className="text-sm text-purple-800 whitespace-pre-line">{(appointment as any).customDiagnosis}</p>
+              <div className="mt-3 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
+                <p className="text-sm font-semibold text-cyan-900 mb-1">Custom Diagnosis:</p>
+                <p className="text-sm text-cyan-900 whitespace-pre-line">{(appointment as any).customDiagnosis}</p>
               </div>
             )}
           </div>

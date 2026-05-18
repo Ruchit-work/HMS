@@ -302,7 +302,7 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
         <select
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value as any)}
-          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           <option value="30days">Last 30 Days</option>
           <option value="3months">Last 3 Months</option>
@@ -320,7 +320,7 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
               <p className="text-sm text-slate-600 mb-1">Total Receptionists</p>
               <p className="text-3xl font-bold text-slate-800">{receptionists.length}</p>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-cyan-100 rounded-full flex items-center justify-center">
               <span className="text-2xl">👥</span>
             </div>
           </div>
@@ -346,7 +346,7 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
               <p className="text-3xl font-bold text-slate-800">{totalAppointmentsByReceptionists}</p>
               <p className="text-xs text-slate-500 mt-1">By receptionists</p>
             </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-cyan-100 rounded-full flex items-center justify-center">
               <span className="text-2xl">📅</span>
             </div>
           </div>
@@ -359,7 +359,7 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
               <p className="text-3xl font-bold text-slate-800">{bookingRatio.portal.count}</p>
               <p className="text-xs text-slate-500 mt-1">{bookingRatio.portal.percentage.toFixed(1)}% of total</p>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-cyan-100 rounded-full flex items-center justify-center">
               <span className="text-2xl">💻</span>
             </div>
           </div>
@@ -407,7 +407,7 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
             </div>
             <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
               <div 
-                className="bg-gradient-to-r from-blue-500 to-blue-600 h-4 rounded-full transition-all"
+                className="bg-gradient-to-r from-cyan-600 to-teal-600 h-4 rounded-full transition-all"
                 style={{ width: `${bookingRatio.portal.percentage}%` }}
               />
             </div>
@@ -468,10 +468,10 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
       </div>
 
       {/* Note about data tracking */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-800">
+      <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+        <p className="text-sm text-cyan-800">
           <strong>Note:</strong> Currently, individual receptionist tracking is limited. To see per-receptionist metrics, 
-          we need to enhance the data model to include <code className="bg-blue-100 px-1 rounded">receptionistId</code> in 
+          we need to enhance the data model to include <code className="bg-cyan-100 px-1 rounded">receptionistId</code> in 
           appointments and patient records. Currently showing aggregate statistics.
         </p>
       </div>

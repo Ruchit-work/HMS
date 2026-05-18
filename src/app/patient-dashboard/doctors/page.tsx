@@ -108,11 +108,11 @@ export default function DoctorsPage() {
             <div className="text-xs sm:text-sm text-slate-600">Expert Doctors</div>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 text-center border border-slate-200">
-            <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1">{specializations.length - 1}+</div>
+            <div className="text-2xl sm:text-3xl font-bold text-cyan-700 mb-1">{specializations.length - 1}+</div>
             <div className="text-xs sm:text-sm text-slate-600">Specializations</div>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 text-center border border-slate-200">
-            <div className="text-2xl sm:text-3xl font-bold text-purple-600 mb-1">24/7</div>
+            <div className="text-2xl sm:text-3xl font-bold text-cyan-700 mb-1">24/7</div>
             <div className="text-xs sm:text-sm text-slate-600">Availability</div>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 text-center border border-slate-200">
@@ -224,7 +224,7 @@ export default function DoctorsPage() {
                   <div className="pt-4 border-t border-slate-100">
                     <Link
                       href="/patient-dashboard/book-appointment"
-                      className="btn-modern btn-modern-success block w-full text-center"
+                      className="block w-full text-center rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
                     >
                       Book Appointment
                     </Link>
@@ -250,7 +250,7 @@ export default function DoctorsPage() {
             </a>
             <Link
               href="/patient-dashboard/book-appointment"
-              className="btn-modern btn-modern-success"
+              className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
               📅 Book Now
             </Link>

@@ -388,7 +388,7 @@ export default function DoctorAnalyticsPage() {
               </div>
               <Link
                 href="/doctor-dashboard"
-                className="btn-modern bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/30"
+                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 ← Back to Dashboard
               </Link>
@@ -402,7 +402,7 @@ export default function DoctorAnalyticsPage() {
                   onClick={() => setDateRange(range)}
                   className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                     dateRange === range
-                      ? "bg-sky-600 text-white shadow-md scale-105"
+                      ? "bg-[var(--color-primary)] text-white shadow-md scale-105"
                       : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200/70"
                   }`}
                 >
@@ -478,8 +478,8 @@ export default function DoctorAnalyticsPage() {
 
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-11 h-11 bg-indigo-50 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-11 h-11 bg-cyan-50 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -533,8 +533,8 @@ export default function DoctorAnalyticsPage() {
           {/* Most Common Diagnoses */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
@@ -552,18 +552,18 @@ export default function DoctorAnalyticsPage() {
                         index === 0 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white' :
                         index === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-white' :
                         index === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white' :
-                        'bg-blue-100 text-blue-600'
+                        'bg-cyan-100 text-cyan-700'
                       }`}>
                         {index + 1}
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                        <p className="font-semibold text-slate-900 group-hover:text-cyan-700 transition-colors">
                           {item.diagnosis}
                         </p>
                         <div className="flex items-center gap-3 mt-1.5">
                           <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
                             <div
-                              className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-500"
+                              className="bg-gradient-to-r from-cyan-600 to-teal-600 h-2.5 rounded-full transition-all duration-500"
                               style={{ width: `${item.percentage}%` }}
                             ></div>
                           </div>
@@ -647,8 +647,8 @@ export default function DoctorAnalyticsPage() {
           {/* Peak Hours with Visual Chart */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
@@ -670,7 +670,7 @@ export default function DoctorAnalyticsPage() {
                           <div className="flex items-center gap-3">
                             <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden shadow-inner">
                               <div
-                                className="bg-gradient-to-r from-purple-500 to-pink-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                                className="bg-gradient-to-r from-cyan-500 to-teal-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
                                 style={{ width: `${percentage}%` }}
                               >
                                 {percentage > 15 && (
@@ -703,8 +703,8 @@ export default function DoctorAnalyticsPage() {
           {/* Peak Days with Visual Chart */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
@@ -726,7 +726,7 @@ export default function DoctorAnalyticsPage() {
                           <div className="flex items-center gap-3">
                             <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden shadow-inner">
                               <div
-                                className="bg-gradient-to-r from-indigo-500 to-blue-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                                className="bg-gradient-to-r from-cyan-500 to-teal-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
                                 style={{ width: `${percentage}%` }}
                               >
                                 {percentage > 15 && (
@@ -870,18 +870,18 @@ export default function DoctorAnalyticsPage() {
               {analytics.topVisitingPatients.map((patient, index) => (
                 <div 
                   key={patient.patientId} 
-                  className="group p-5 bg-gradient-to-br from-slate-50 to-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+                  className="group p-5 bg-gradient-to-br from-slate-50 to-white rounded-xl border-2 border-slate-200 hover:border-cyan-300 hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
                 >
                   <div className="flex flex-col items-center text-center">
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl mb-3 shadow-md ${
                       index === 0 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white' :
                       index === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-white' :
                       index === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white' :
-                      'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
+                      'bg-gradient-to-br from-cyan-600 to-teal-600 text-white'
                     }`}>
                       {index < 3 ? '🏆' : index + 1}
                     </div>
-                    <p className="font-bold text-slate-900 mb-1 group-hover:text-blue-600 transition-colors">
+                    <p className="font-bold text-slate-900 mb-1 group-hover:text-cyan-700 transition-colors">
                       {patient.patientName}
                     </p>
                     <div className="flex items-center gap-2 mb-2">

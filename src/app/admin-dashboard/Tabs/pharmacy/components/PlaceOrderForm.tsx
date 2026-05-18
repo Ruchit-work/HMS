@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { LowStockAlert, PharmacyMedicine, PharmacySupplier } from '@/types/pharmacy'
 import { MedicineSearchSelect } from './SearchInputs'
+import { Button } from '@/components/ui/Button'
 
 export function PlaceOrderForm({
   branches,
@@ -419,12 +420,12 @@ export function PlaceOrderForm({
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={saving} onClick={(e) => handleSubmit(e, true)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          {saving ? 'Saving…' : 'Save Draft'}
-        </button>
-        <button type="button" disabled={saving} onClick={(e) => handleSubmit(e, false)} className="btn-modern btn-modern-primary btn-modern-sm">
-          {saving ? 'Sending…' : 'Send Purchase Order'}
-        </button>
+        <Button type="button" variant="outline" size="sm" disabled={saving} onClick={(e) => handleSubmit(e, true)} loading={saving} loadingText="Saving…">
+          Save Draft
+        </Button>
+        <Button type="button" size="sm" disabled={saving} onClick={(e) => handleSubmit(e, false)} loading={saving} loadingText="Sending…">
+          Send Purchase Order
+        </Button>
       </div>
     </form>
   )

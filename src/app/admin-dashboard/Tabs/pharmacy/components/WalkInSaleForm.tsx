@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { BarcodeCameraScanner } from '@/components/pharmacy/BarcodeCameraScanner'
 import { CashPaymentPanel } from '@/components/pharmacy/CashTenderModal'
 import type { BranchMedicineStock, PharmacyMedicine } from '@/types/pharmacy'
@@ -495,7 +496,9 @@ export function WalkInSaleForm({
             <span className="text-slate-600">Tax: <strong>₹{taxTotal.toFixed(2)}</strong></span>
             <span className="font-semibold">Total: ₹{netTotal.toFixed(2)}</span>
           </div>
-          <button type="submit" disabled={saving} className="btn-modern btn-modern-primary btn-modern-sm">{saving ? 'Processing…' : 'Complete sale & print bill'}</button>
+          <Button type="submit" variant="primary" size="sm" loading={saving} loadingText="Processing…">
+            Complete sale & print bill
+          </Button>
         </div>
       </div>
       {pendingDispensePayload && pendingBillAmount > 0 && paymentMode === 'cash' && (

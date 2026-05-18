@@ -33,7 +33,7 @@ export default function RoomAvailability({ rows, onManageRooms }: RoomAvailabili
       })}
       <button
         onClick={onManageRooms}
-        className="w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+        className="w-full rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100"
       >
         Manage Rooms
       </button>

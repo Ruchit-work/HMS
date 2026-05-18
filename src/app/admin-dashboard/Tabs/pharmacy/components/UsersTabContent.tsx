@@ -17,7 +17,7 @@ export function UsersTabContent(props: {
         <button
           type="button"
           onClick={onOpenCreatePharmacist}
-          className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+          className="inline-flex items-center justify-center rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           + Create Pharmacist
         </button>

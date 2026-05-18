@@ -124,7 +124,7 @@ export function PharmacyQueueSection({
             onClick={() => onQueueInnerTabChange('walk_in')}
             className={`px-3 py-1.5 rounded-full transition ${
               queueInnerTab === 'walk_in'
-                ? 'bg-[#2563EB] text-white shadow-sm'
+                ? 'bg-[#0891b2] text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -135,7 +135,7 @@ export function PharmacyQueueSection({
             onClick={() => onQueueInnerTabChange('prescriptions')}
             className={`px-3 py-1.5 rounded-full transition ${
               queueInnerTab === 'prescriptions'
-                ? 'bg-[#2563EB] text-white shadow-sm'
+                ? 'bg-[#0891b2] text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -219,7 +219,7 @@ export function PharmacyQueueSection({
                                     onClick={() => onSelectQueueItem(item)}
                                     disabled={!hasActiveCashSession}
                                     title={!hasActiveCashSession ? 'Start a cash session first (Cash & expenses → Start shift)' : ''}
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1d4ed8] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#0891b2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0e7490] transition disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     Dispense
                                   </button>
@@ -250,7 +250,7 @@ export function PharmacyQueueSection({
                           <button
                             type="button"
                             onClick={() => onQueueInnerTabChange('walk_in')}
-                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                            className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800 hover:bg-cyan-100"
                           >
                             Go to Walk-in
                           </button>

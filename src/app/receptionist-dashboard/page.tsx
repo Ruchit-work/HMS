@@ -272,7 +272,7 @@ export default function ReceptionistDashboard() {
   if (!user) return null
 
     return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-50">
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
@@ -326,7 +326,7 @@ export default function ReceptionistDashboard() {
               onClick={() => { setActiveTab("dashboard"); setSidebarOpen(false) }} 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                 activeTab === "dashboard" 
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  ? "bg-[var(--color-primary)] text-white shadow-md" 
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
@@ -343,7 +343,7 @@ export default function ReceptionistDashboard() {
               onClick={() => { setActiveTab("patients"); setSidebarOpen(false) }} 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                 activeTab === "patients" 
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  ? "bg-[var(--color-primary)] text-white shadow-md" 
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
@@ -360,7 +360,7 @@ export default function ReceptionistDashboard() {
               onClick={() => { setActiveTab("doctors"); setSidebarOpen(false) }} 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                 activeTab === "doctors" 
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  ? "bg-[var(--color-primary)] text-white shadow-md" 
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
@@ -378,7 +378,7 @@ export default function ReceptionistDashboard() {
                 onClick={() => { setActiveTab("appointments"); setSidebarOpen(false) }} 
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                   activeTab === "appointments" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    ? "bg-[var(--color-primary)] text-white shadow-md" 
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
@@ -404,7 +404,7 @@ export default function ReceptionistDashboard() {
                 onClick={() => { setActiveTab("admit-requests"); setSidebarOpen(false) }} 
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                   activeTab === "admit-requests" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    ? "bg-[var(--color-primary)] text-white shadow-md" 
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
@@ -419,7 +419,7 @@ export default function ReceptionistDashboard() {
                 count={admitRequestsBadge.displayCount} 
                 position="top-right" 
                 size="sm" 
-                color="purple" 
+                color="blue" 
                 animate 
               />
             </div>
@@ -430,7 +430,7 @@ export default function ReceptionistDashboard() {
                 onClick={() => { setActiveTab("billing"); setSidebarOpen(false) }} 
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                   activeTab === "billing" 
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                    ? "bg-[var(--color-primary)] text-white shadow-md" 
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
@@ -454,7 +454,7 @@ export default function ReceptionistDashboard() {
               onClick={() => { setActiveTab("whatsapp-bookings"); setSidebarOpen(false) }} 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                 activeTab === "whatsapp-bookings" 
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  ? "bg-[var(--color-primary)] text-white shadow-md" 
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
@@ -477,7 +477,7 @@ export default function ReceptionistDashboard() {
               onClick={() => { setActiveTab("documents"); setSidebarOpen(false) }} 
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
                 activeTab === "documents" 
-                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md" 
+                  ? "bg-[var(--color-primary)] text-white shadow-md" 
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
@@ -530,7 +530,7 @@ export default function ReceptionistDashboard() {
             <div className="border-t border-slate-200 pt-2">
               {/* User Info */}
               <div className="flex items-center gap-2 px-1 py-1 mb-2">
-                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-md flex items-center justify-center shadow-sm">
+                <div className="w-6 h-6 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-md flex items-center justify-center shadow-sm">
                   <span className="text-white font-bold text-xs">{userName.charAt(0)}</span>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -614,7 +614,7 @@ export default function ReceptionistDashboard() {
                     onClick={() => setPatientSubTab("all")}
                     className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
                       patientSubTab === "all"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-[var(--color-primary-dark)] -mb-px"
                         : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
@@ -624,7 +624,7 @@ export default function ReceptionistDashboard() {
                     onClick={() => setPatientSubTab("analytics")}
                     className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
                       patientSubTab === "analytics"
-                        ? "bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px"
+                        ? "bg-white border-t border-l border-r border-slate-300 text-[var(--color-primary-dark)] -mb-px"
                         : "text-slate-600 hover:text-slate-900"
                     }`}
                   >

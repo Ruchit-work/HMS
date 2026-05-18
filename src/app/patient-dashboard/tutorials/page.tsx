@@ -28,7 +28,7 @@ export default function PatientPortalTutorial() {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-8">
               <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">📚</span>
                 </div>
                 <h2 className="text-2xl font-bold text-slate-800 mb-2">Patient Portal Guide</h2>
@@ -77,9 +77,9 @@ export default function PatientPortalTutorial() {
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-                <h3 className="font-semibold text-blue-800 mb-3">💡 भारतीय रोगियों के लिए टिप्स</h3>
-                <ul className="space-y-2 text-sm text-blue-700">
+              <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-6 mb-8">
+                <h3 className="font-semibold text-cyan-900 mb-3">💡 भारतीय रोगियों के लिए टिप्स</h3>
+                <ul className="space-y-2 text-sm text-cyan-800">
                   <li>• Book morning slots (9-11 AM) for faster consultation</li>
                   <li>• Carry Aadhaar card and insurance details to hospital</li>
                   <li>• Download appointment slip on your mobile for easy access</li>
@@ -91,7 +91,7 @@ export default function PatientPortalTutorial() {
               <div className="text-center">
                 <Link 
                   href="/patient-dashboard"
-                  className="btn-modern inline-flex items-center gap-2"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
                 >
                   <span>←</span>
                   Back to Dashboard

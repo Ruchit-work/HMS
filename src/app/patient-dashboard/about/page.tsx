@@ -134,7 +134,7 @@ export default function PatientAboutSupport() {
               </div>
 
               <div className="flex gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   👨‍⚕️
                 </div>
                 <div>
@@ -144,7 +144,7 @@ export default function PatientAboutSupport() {
               </div>
 
               <div className="flex gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   💳
                 </div>
                 <div>
@@ -339,7 +339,7 @@ export default function PatientAboutSupport() {
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
                     📞
                   </div>
                   <div>
@@ -349,7 +349,7 @@ export default function PatientAboutSupport() {
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
                     📧
                   </div>
                   <div>

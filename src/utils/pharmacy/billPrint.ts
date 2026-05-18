@@ -221,7 +221,7 @@ export function buildBillHTML(data: BillData): string {
       --border: ${BORDER};
       --text: ${TEXT};
       --muted: ${MUTED};
-      --accent: #1d4ed8;
+      --accent: #0e7490;
       --success-bg: #ecfeff;
       --success-border: #a5f3fc;
     }

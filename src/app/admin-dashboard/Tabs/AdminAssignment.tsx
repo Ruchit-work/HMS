@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/overlays/Modals'
 import { auth, db } from '@/firebase/config'
 import { collection, getDocs, query, orderBy, doc, getDoc, deleteDoc } from 'firebase/firestore'
 import { Hospital } from '@/types/hospital'
+import { Button } from '@/components/ui/Button'
 
 interface Admin {
   id: string
@@ -378,7 +379,7 @@ export default function AdminAssignment() {
             setSuccess(null)
             setShowAddModal(true)
           }}
-          className="btn-modern btn-modern-sm"
+          className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
         > + Create Admin </button>
       </div>
 
@@ -423,8 +424,8 @@ export default function AdminAssignment() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                         admin.isSuperAdmin 
-                          ? 'bg-purple-100 text-purple-800' 
-                          : 'bg-blue-100 text-blue-800'
+                          ? 'bg-cyan-100 text-cyan-900' 
+                          : 'bg-cyan-100 text-cyan-800'
                       }`}>
                         {admin.isSuperAdmin ? 'Super Admin' : 'Admin'}
                       </span>
@@ -434,7 +435,7 @@ export default function AdminAssignment() {
                         {!admin.isSuperAdmin && (
                           <>
                             <button  onClick={() => handleEdit(admin)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-800 bg-cyan-50 rounded hover:bg-cyan-100 transition-colors"
                               title="Edit admin">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -478,7 +479,7 @@ export default function AdminAssignment() {
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">  First Name *  </label>
                     <input type="text"  required value={formData.firstName}  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       placeholder="Enter first name"
                     />
                   </div>
@@ -486,7 +487,7 @@ export default function AdminAssignment() {
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">   Last Name * </label>
                     <input   type="text"required  value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       placeholder="Enter last name"
                     />
                   </div>
@@ -495,7 +496,7 @@ export default function AdminAssignment() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">  Email * </label>
                   <input   type="email"  required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="Enter email address"
                   />
                 </div>
@@ -504,7 +505,7 @@ export default function AdminAssignment() {
                   <label className="block text-sm font-medium text-slate-700 mb-1"> Phone</label>
                   <input type="tel"  value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="Enter phone number (optional)"
                   />
                 </div>
@@ -513,7 +514,7 @@ export default function AdminAssignment() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">  Hospital * </label>
                   <select required  value={formData.hospitalId}
                     onChange={(e) => setFormData({ ...formData, hospitalId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   >
                     <option value="">Select a hospital</option>
                     {hospitals.map((hospital) => (
@@ -529,27 +530,30 @@ export default function AdminAssignment() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">  Password *</label>
                     <input  type="password" required minLength={6} value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       placeholder="Enter password (min 6 characters)"/>
                     <p className="text-xs text-slate-500 mt-1">Password must be at least 6 characters</p>
                   </div>
                 )}
                 {editingAdmin && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-sm text-blue-800">
+                  <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
+                    <p className="text-sm text-cyan-800">
                       <strong>Note:</strong> Password cannot be changed here. The admin can change their password from their profile settings.
                     </p>
                   </div>
                 )}
 
                 <div className="flex justify-end space-x-3 pt-4">
-                  <button  type="button"  onClick={handleCancel} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
-                    disabled={saving} >
+                  <Button type="button" variant="outline" onClick={handleCancel} disabled={saving}>
                     Cancel
-                  </button>
-                  <button type="submit" className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"  disabled={saving}  >
-                    {saving ? (editingAdmin ? 'Updating...' : 'Creating...') : (editingAdmin ? 'Update Admin' : 'Create Admin')}
-                  </button>
+                  </Button>
+                  <Button
+                    type="submit"
+                    loading={saving}
+                    loadingText={editingAdmin ? 'Updating...' : 'Creating...'}
+                  >
+                    {editingAdmin ? 'Update Admin' : 'Create Admin'}
+                  </Button>
                 </div>
               </form>
             </div>

@@ -157,7 +157,7 @@ export function InventoryTabContent(props: {
       )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
-        <input type="search" placeholder="Search medicine by name" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm w-48 max-w-full focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]" />
+        <input type="search" placeholder="Search medicine by name" value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm w-48 max-w-full focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2]" />
         <select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value as InventoryStatusFilter)} className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm">
           <option value="all">All status</option><option value="in_stock">In stock</option><option value="low_stock">Low stock</option><option value="out_of_stock">Out of stock</option>
         </select>

@@ -80,7 +80,7 @@ function ConsultationModeModalContent({
       case "ear":
         return <Ear className="w-6 h-6 text-sky-600" />
       case "nose":
-        return <ScanFace className="w-6 h-6 text-indigo-600" />
+        return <ScanFace className="w-6 h-6 text-cyan-600" />
       case "throat":
         return <Mic className="w-6 h-6 text-rose-600" />
       case "dental":
@@ -98,7 +98,7 @@ function ConsultationModeModalContent({
 
   const modelColors: Record<string, { from: string; to: string; border: string; selectedBorder: string; bg: string; hoverBg: string }> = {
     ear: { from: 'from-sky-50', to: 'to-blue-50', border: 'border-slate-200', selectedBorder: 'border-sky-400', bg: 'bg-sky-500', hoverBg: 'hover:bg-sky-50' },
-    nose: { from: 'from-violet-50', to: 'to-purple-50', border: 'border-slate-200', selectedBorder: 'border-violet-400', bg: 'bg-violet-500', hoverBg: 'hover:bg-violet-50' },
+    nose: { from: 'from-cyan-50', to: 'to-teal-50', border: 'border-slate-200', selectedBorder: 'border-cyan-400', bg: 'bg-cyan-600', hoverBg: 'hover:bg-cyan-50' },
     throat: { from: 'from-rose-50', to: 'to-pink-50', border: 'border-slate-200', selectedBorder: 'border-rose-400', bg: 'bg-rose-500', hoverBg: 'hover:bg-rose-50' },
     dental: { from: 'from-teal-50', to: 'to-cyan-50', border: 'border-slate-200', selectedBorder: 'border-teal-400', bg: 'bg-teal-500', hoverBg: 'hover:bg-teal-50' },
     lungs: { from: 'from-amber-50', to: 'to-orange-50', border: 'border-slate-200', selectedBorder: 'border-amber-400', bg: 'bg-amber-500', hoverBg: 'hover:bg-amber-50' },
@@ -151,21 +151,21 @@ function ConsultationModeModalContent({
             title="Standard consultation with notes and prescription form"
             className={`w-full p-6 rounded-xl border-2 flex items-center gap-6 text-left transition-all duration-200 ${
               selectedMode === "normal"
-                ? "bg-blue-50 border-blue-500 shadow-md shadow-blue-500/10"
-                : "bg-slate-50/70 border-slate-200 hover:border-blue-200 hover:bg-blue-50/50"
+                ? "bg-cyan-50 border-cyan-500 shadow-md shadow-blue-500/10"
+                : "bg-slate-50/70 border-slate-200 hover:border-cyan-200 hover:bg-cyan-50/50"
             }`}
           >
             <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-              selectedMode === "normal" ? "bg-blue-100" : "bg-slate-100"
+              selectedMode === "normal" ? "bg-cyan-100" : "bg-slate-100"
             }`}>
-              <ClipboardList className={`w-7 h-7 ${selectedMode === "normal" ? "text-blue-600" : "text-slate-600"}`} />
+              <ClipboardList className={`w-7 h-7 ${selectedMode === "normal" ? "text-cyan-700" : "text-slate-600"}`} />
             </div>
             <div className="flex-1 min-w-0">
               <h4 className="font-bold text-slate-800 text-lg">General</h4>
               <p className="text-sm text-slate-500 mt-0.5">Standard notes and prescription form</p>
             </div>
             {selectedMode === "normal" && (
-              <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-full bg-[var(--color-primary)] flex items-center justify-center shrink-0">
                 <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>

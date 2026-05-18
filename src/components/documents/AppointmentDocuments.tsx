@@ -327,7 +327,7 @@ export default function AppointmentDocuments({
           <p className="text-red-600 text-sm">{error}</p>
           <button
             onClick={fetchDocuments}
-            className="mt-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+            className="mt-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90 text-sm"
           >
             Retry
           </button>
@@ -374,8 +374,8 @@ export default function AppointmentDocuments({
               onClick={() => setSelectedDocument(doc)}
               className={`flex items-center gap-3 p-3 bg-white border rounded-lg hover:shadow-md transition-all cursor-pointer ${
                 isLinkedToThisAppointment 
-                  ? "border-blue-300 bg-blue-50/30" 
-                  : "border-gray-200 hover:border-blue-300"
+                  ? "border-cyan-300 bg-cyan-50/30" 
+                  : "border-gray-200 hover:border-cyan-300"
               }`}
             >
               <div className="text-2xl">{getFileTypeIcon(doc.fileType)}</div>
@@ -383,7 +383,7 @@ export default function AppointmentDocuments({
                 <div className="flex items-center gap-2">
                   <h4 className="font-medium text-gray-900 truncate">{doc.originalFileName}</h4>
                   {isLinkedToThisAppointment && (
-                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                    <span className="px-1.5 py-0.5 bg-cyan-100 text-cyan-800 text-xs font-medium rounded">
                       Linked
                     </span>
                   )}

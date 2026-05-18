@@ -215,7 +215,7 @@ export default function ServicesPage() {
           title="Our Services"
           subtitle="Comprehensive healthcare services with advanced medical technology"
           icon="🏥"
-          gradient="from-blue-600 to-cyan-700"
+          gradient="from-cyan-600 to-teal-700"
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -228,7 +228,7 @@ export default function ServicesPage() {
                 <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform duration-300">
                   {service.icon}
                 </div>
-                <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">
+                <span className="px-3 py-1 bg-cyan-50 text-cyan-800 text-xs font-semibold rounded-full">
                   {service.category}
                 </span>
               </div>
@@ -257,7 +257,7 @@ export default function ServicesPage() {
                 </div>
               </div>
 
-              <button className="btn-modern w-full mt-4">
+              <button type="button" className="w-full mt-4 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
                 Book Now →
               </button>
             </div>
@@ -265,7 +265,7 @@ export default function ServicesPage() {
         </div>
 
         {/* Contact Section */}
-        <div className="mt-12 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl p-8 text-white">
+        <div className="mt-12 bg-gradient-to-r from-cyan-600 to-teal-600 rounded-2xl p-8 text-white">
           <div className="text-center">
             <h2 className="text-3xl font-bold mb-4">Need Help Choosing a Service?</h2>
             <p className="text-blue-100 mb-6 max-w-2xl mx-auto">
@@ -274,13 +274,13 @@ export default function ServicesPage() {
             <div className="flex flex-wrap justify-center gap-4">
               <a
                 href="tel:1800-XXX-XXXX"
-                className="px-6 py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-all duration-300 hover:scale-105"
+                className="px-6 py-3 bg-white text-cyan-700 font-semibold rounded-lg hover:bg-cyan-50 transition-all duration-300 hover:scale-105"
               >
                 📞 Call: 1800-XXX-XXXX
               </a>
               <Link
                 href="/patient-dashboard/book-appointment"
-                className="btn-modern"
+                className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
               >
                 📅 Book Appointment
               </Link>

@@ -120,7 +120,7 @@ function HospitalSelectionContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-50 py-12 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-slate-900 mb-2">
@@ -144,7 +144,7 @@ function HospitalSelectionContent() {
             </p>
             <button
               onClick={loadHospitals}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90"
             >
               Retry
             </button>
@@ -166,7 +166,7 @@ function HospitalSelectionContent() {
                       <p className="text-sm text-slate-500">Code: {hospital.code}</p>
                     )}
                   </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
                     <span className="text-2xl">🏥</span>
                   </div>
                 </div>
@@ -198,7 +198,7 @@ function HospitalSelectionContent() {
                     handleSelectHospital(hospital.id)
                   }}
                   disabled={selecting}
-                  className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="mt-4 w-full px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {selecting ? 'Selecting...' : 'Select This Hospital'}
                 </button>
@@ -213,7 +213,7 @@ function HospitalSelectionContent() {
               type="checkbox"
               checked={rememberHospital}
               onChange={(e) => setRememberHospital(e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-cyan-700 border-slate-300 rounded focus:ring-blue-500"
             />
             <span className="text-sm text-slate-700">
               Remember this hospital on this device (not recommended on public/shared devices)

@@ -22,8 +22,8 @@ export default function SubTabNavigation<T extends string = string>({ tabs, acti
             className={`px-4 py-2 font-medium text-sm rounded-t-lg transition-all ${
               activeTab === tab.id
                 ? isPharmacy
-                  ? 'bg-white border-t border-l border-r border-[#E5E7EB] -mb-px text-[#2563EB]'
-                  : 'bg-white border-t border-l border-r border-slate-300 text-blue-600 -mb-px'
+                  ? 'bg-white border-t border-l border-r border-[#E5E7EB] -mb-px text-[var(--color-primary)]'
+                  : 'bg-white border-t border-l border-r border-slate-300 text-[var(--color-primary-dark)] -mb-px'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >

@@ -113,8 +113,8 @@ export default function PaymentMethodSection({
 
         {/* Payment Details */}
         {paymentMethod === "card" && (
-          <div className="mt-4 bg-blue-50 rounded-lg p-4 space-y-3 border border-blue-200">
-            <p className="text-sm font-semibold text-blue-800">💳 Card Details</p>
+          <div className="mt-4 bg-cyan-50 rounded-lg p-4 space-y-3 border border-cyan-200">
+            <p className="text-sm font-semibold text-cyan-900">💳 Card Details</p>
             <div>
               <label className="block text-sm text-gray-700 mb-1">Card Number</label>
               <input
@@ -168,8 +168,8 @@ export default function PaymentMethodSection({
         )}
 
         {paymentMethod === "upi" && (
-          <div className="mt-4 bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-200">
-            <p className="text-sm font-semibold text-purple-800">📱 UPI Details</p>
+          <div className="mt-4 bg-cyan-50 rounded-lg p-4 space-y-3 border border-cyan-200">
+            <p className="text-sm font-semibold text-cyan-900">📱 UPI Details</p>
             <div>
               <label className="block text-sm text-gray-700 mb-1">UPI ID</label>
               <input
@@ -186,10 +186,10 @@ export default function PaymentMethodSection({
 
         {/* Amount Summary */}
         {paymentMethod && (
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mt-4 p-4 bg-cyan-50 border border-cyan-200 rounded-lg">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">Amount to Pay:</span>
-              <span className="text-xl font-bold text-blue-700">₹{amountToPay}</span>
+              <span className="text-xl font-bold text-cyan-800">₹{amountToPay}</span>
             </div>
             {showPartialNote && (
               <p className="text-xs text-gray-500 mt-1">

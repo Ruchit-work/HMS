@@ -1,6 +1,7 @@
 "use client"
 
-import { MutableRefObject, useMemo, useState } from "react"
+import { MutableRefObject, useMemo, useRef, useState } from "react"
+import { Button } from "@/components/ui/Button"
 import SectionCard from "@/app/receptionist-dashboard/components/admit-dashboard/SectionCard"
 import RequestTable, { RequestRow } from "@/app/receptionist-dashboard/components/admit-dashboard/RequestTable"
 import InpatientTable, { InpatientRow } from "@/app/receptionist-dashboard/components/admit-dashboard/InpatientTable"
@@ -32,7 +33,9 @@ interface AdmissionsDeskSectionProps {
   plannedAdmissions: Admission[]
   plannedAdmissionsWithin24h: Admission[]
   onPlannedAction: (admissionId: string, action: "ready_to_admit" | "postpone" | "delete") => void
+  onRefreshData?: () => void | Promise<void>
   plannedActionLoadingId?: string | null
+  assignDisabled?: boolean
 }
 
 export default function AdmissionsDeskSection({
@@ -54,9 +57,23 @@ export default function AdmissionsDeskSection({
   plannedAdmissions,
   plannedAdmissionsWithin24h,
   onPlannedAction,
+  onRefreshData,
   plannedActionLoadingId,
+  assignDisabled = false,
 }: AdmissionsDeskSectionProps) {
+  const pendingRequestsRef = useRef<HTMLElement | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [plannedFilter, setPlannedFilter] = useState<"all" | "within24h" | "doctorMissing" | "readyNow">("all")
+
+  const handleRefresh = async () => {
+    if (refreshing || !onRefreshData) return
+    setRefreshing(true)
+    try {
+      await Promise.resolve(onRefreshData())
+    } finally {
+      setRefreshing(false)
+    }
+  }
   const filteredPlannedAdmissions = useMemo(() => {
     const now = Date.now()
     return plannedAdmissions.filter((admission) => {
@@ -73,29 +90,48 @@ export default function AdmissionsDeskSection({
 
   return (
     <div className="space-y-6">
-      <section>
+      <section ref={pendingRequestsRef}>
         <SectionCard
           title="Pending Admission Requests"
           subtitle="Review and process doctor-submitted admission requests"
           actions={
             <>
-              <button
-                onClick={handleOpenDirectAdmitModal}
-                className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700"
-              >
+              <Button size="sm" onClick={handleOpenDirectAdmitModal}>
                 Direct Admit
-              </button>
-              <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
-                Auto Refresh
-              </button>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRefresh}
+                loading={refreshing}
+                loadingText="Refreshing..."
+                disabled={!onRefreshData}
+              >
+                Refresh
+              </Button>
             </>
           }
-          footer={<button className="font-semibold text-violet-700 hover:text-violet-800">View All Requests</button>}
+          footer={
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="font-semibold text-[var(--color-primary-dark)]"
+              onClick={() => pendingRequestsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            >
+              View pending requests
+            </Button>
+          }
         >
           {admitRequestsError ? (
             <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{admitRequestsError}</div>
           ) : null}
-          <RequestTable rows={requestRows} loading={admitRequestsLoading} onAssign={handleAssignFromTable} />
+          <RequestTable
+            rows={requestRows}
+            loading={admitRequestsLoading}
+            onAssign={handleAssignFromTable}
+            assignDisabled={assignDisabled || refreshing}
+          />
         </SectionCard>
       </section>
 
@@ -105,18 +141,12 @@ export default function AdmissionsDeskSection({
           subtitle="Track active inpatients and their status"
           footer={
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleExportFilteredInpatients}
-                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={handleExportFilteredInpatients}>
                 Export CSV
-              </button>
-              <button
-                onClick={setAdmissionsDeskFocusAll}
-                className="inline-flex items-center rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-sm transition hover:bg-violet-100"
-              >
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={setAdmissionsDeskFocusAll}>
                 View All Inpatients
-              </button>
+              </Button>
             </div>
           }
         >
@@ -124,11 +154,11 @@ export default function AdmissionsDeskSection({
             <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{admissionsError}</div>
           ) : null}
           {admissionsDeskFocus !== "all" ? (
-            <div className="mb-3 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+            <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-3 py-2 text-xs text-[var(--color-primary-dark)]">
               <span>Active filter: {admissionsDeskFocusLabel}</span>
-              <button onClick={setAdmissionsDeskFocusAll} className="font-semibold text-violet-700 hover:text-violet-900">
+              <Button type="button" variant="ghost" size="sm" onClick={setAdmissionsDeskFocusAll}>
                 Clear
-              </button>
+              </Button>
             </div>
           ) : null}
           <InpatientTable
@@ -160,7 +190,7 @@ export default function AdmissionsDeskSection({
                 onClick={() => setPlannedFilter(filter.key)}
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${
                   plannedFilter === filter.key
-                    ? "bg-violet-600 text-white"
+                    ? "bg-[var(--color-primary)] text-white"
                     : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
@@ -215,7 +245,7 @@ export default function AdmissionsDeskSection({
                         <td className="px-3 py-2">
                           <span
                             className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              in24h ? "bg-amber-100 text-amber-800" : "bg-violet-100 text-violet-800"
+                              in24h ? "bg-amber-100 text-amber-800" : "bg-cyan-100 text-cyan-800"
                             }`}
                           >
                             {in24h ? "Due in 24h" : "Scheduled"}

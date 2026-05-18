@@ -265,7 +265,7 @@ export default function DocumentUpload({
         onDrop={handleDrop}
         className={`relative border-2 border-dashed rounded-xl p-8 transition-all duration-200 ${
           isDragging 
-            ? "border-blue-500 bg-blue-50/80 scale-[1.02] shadow-lg" 
+            ? "border-cyan-500 bg-cyan-50/80 scale-[1.02] shadow-lg" 
             : "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100/50"
         }`}
       >
@@ -303,14 +303,14 @@ export default function DocumentUpload({
           )}
           <div className="mt-4">
             {isDragging ? (
-              <p className="text-lg font-semibold text-blue-600 animate-pulse">
+              <p className="text-lg font-semibold text-cyan-700 animate-pulse">
                 Drop files here
               </p>
             ) : (
               <>
                 <label
                   htmlFor="file-upload"
-                  className="inline-block cursor-pointer rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-200"
+                  className="inline-block cursor-pointer rounded-lg bg-[var(--color-primary)] px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:opacity-90 hover:shadow-lg transition-all duration-200"
                 >
                   Select files
                 </label>
@@ -324,7 +324,7 @@ export default function DocumentUpload({
                   onChange={handleFileSelect}
                 />
                 <p className="mt-3 text-sm text-gray-600 font-medium">
-                  or <span className="text-blue-600">drag and drop</span> files here
+                  or <span className="text-cyan-700">drag and drop</span> files here
                 </p>
                 <p className="mt-1 text-xs text-gray-500">
                   Supported: JPG, PNG, PDF, DICOM (2MB - 10MB)
@@ -383,7 +383,7 @@ export default function DocumentUpload({
                   <div className="mt-2">
                     <div className="h-1 w-full bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-600 transition-all duration-300"
+                        className="h-full bg-[var(--color-primary)] transition-all duration-300"
                         style={{ width: `${uploadFile.progress}%` }}
                       />
                     </div>
@@ -419,7 +419,7 @@ export default function DocumentUpload({
             <button
               onClick={uploadFiles}
               disabled={uploading || files.length === 0}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {uploading ? "Uploading..." : `Upload ${files.length} file${files.length > 1 ? "s" : ""}`}
             </button>

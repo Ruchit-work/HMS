@@ -5,6 +5,7 @@ import { UserData } from "@/types/patient"
 import { Branch } from "@/types/branch"
 import { doc, updateDoc } from "firebase/firestore"
 import { db } from "@/firebase/config"
+import { Button } from "@/components/ui/Button"
 
 interface PatientInfoStepProps {
   user: { uid: string; email: string | null }
@@ -28,6 +29,7 @@ export default function PatientInfoStep({
   const [editingField, setEditingField] = useState<string | null>(null)
   const [profileDraft, setProfileDraft] = useState<Record<string, unknown>>({})
   const [localUserData, setLocalUserData] = useState<UserData>(userData)
+  const [savingField, setSavingField] = useState<string | null>(null)
 
   const startEdit = (field: string, initial: unknown) => {
     setEditingField(field)
@@ -41,6 +43,7 @@ export default function PatientInfoStep({
 
   const saveField = async (field: string) => {
     if (!user) return
+    setSavingField(field)
     try {
       await updateDoc(doc(db, "patients", user.uid), { 
         [field]: profileDraft[field], 
@@ -49,6 +52,7 @@ export default function PatientInfoStep({
       setLocalUserData(prev => ({ ...prev, [field]: profileDraft[field] as never }))
     } catch {
     } finally {
+      setSavingField(null)
       setEditingField(null)
       setProfileDraft({})
     }
@@ -99,19 +103,19 @@ export default function PatientInfoStep({
                     type="tel" 
                     defaultValue={String(userData?.phoneNumber || "")} 
                     onChange={(e) => setProfileDraft({ phoneNumber: e.target.value })} 
-                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" 
+                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)]" 
                   />
-                  <button type="button" onClick={() => saveField('phoneNumber')} className="btn-modern btn-modern-purple btn-modern-sm">
+                  <Button type="button" size="sm" onClick={() => saveField('phoneNumber')} loading={savingField === 'phoneNumber'} loadingText="Saving">
                     Save
-                  </button>
-                  <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
                   <span className="text-base text-slate-800">{userData?.phoneNumber || "Not provided"}</span>
-                  <button type="button" onClick={() => startEdit('phoneNumber', userData?.phoneNumber)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">
+                  <button type="button" onClick={() => startEdit('phoneNumber', userData?.phoneNumber)} className="text-xs text-cyan-700 hover:text-cyan-900 font-semibold">
                     Edit
                   </button>
                 </div>
@@ -135,19 +139,19 @@ export default function PatientInfoStep({
                     type="text" 
                     defaultValue={String(userData?.allergies || "")} 
                     onChange={(e) => setProfileDraft({ allergies: e.target.value })} 
-                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" 
+                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)]" 
                   />
-                  <button type="button" onClick={() => saveField('allergies')} className="btn-modern btn-modern-purple btn-modern-sm">
+                  <Button type="button" size="sm" onClick={() => saveField('allergies')} loading={savingField === 'allergies'} loadingText="Saving">
                     Save
-                  </button>
-                  <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
                   <span className="text-base text-slate-800">{userData?.allergies || "None reported"}</span>
-                  <button type="button" onClick={() => startEdit('allergies', userData?.allergies)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">
+                  <button type="button" onClick={() => startEdit('allergies', userData?.allergies)} className="text-xs text-cyan-700 hover:text-cyan-900 font-semibold">
                     Edit
                   </button>
                 </div>
@@ -161,19 +165,19 @@ export default function PatientInfoStep({
                     type="text" 
                     defaultValue={String(userData?.currentMedications || "")} 
                     onChange={(e) => setProfileDraft({ currentMedications: e.target.value })} 
-                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500" 
+                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)]" 
                   />
-                  <button type="button" onClick={() => saveField('currentMedications')} className="btn-modern btn-modern-purple btn-modern-sm">
+                  <Button type="button" size="sm" onClick={() => saveField('currentMedications')} loading={savingField === 'currentMedications'} loadingText="Saving">
                     Save
-                  </button>
-                  <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
                   <span className="text-base text-slate-800">{userData?.currentMedications || "None"}</span>
-                  <button type="button" onClick={() => startEdit('currentMedications', userData?.currentMedications)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">
+                  <button type="button" onClick={() => startEdit('currentMedications', userData?.currentMedications)} className="text-xs text-cyan-700 hover:text-cyan-900 font-semibold">
                     Edit
                   </button>
                 </div>
@@ -186,24 +190,24 @@ export default function PatientInfoStep({
                   <select 
                     value={String((profileDraft.smokingHabits ?? localUserData?.smokingHabits) || "")} 
                     onChange={(e) => setProfileDraft({ smokingHabits: e.target.value })} 
-                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)]"
                   >
                     <option value="">Select</option>
                     <option value="Never">Never</option>
                     <option value="Occasionally">Occasionally</option>
                     <option value="Regularly">Regularly</option>
                   </select>
-                  <button type="button" onClick={() => saveField('smokingHabits')} className="btn-modern btn-modern-purple btn-modern-sm">
+                  <Button type="button" size="sm" onClick={() => saveField('smokingHabits')} loading={savingField === 'smokingHabits'} loadingText="Saving">
                     Save
-                  </button>
-                  <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
                   <span className="text-base text-slate-800">{localUserData?.smokingHabits || "Not provided"}</span>
-                  <button type="button" onClick={() => startEdit('smokingHabits', userData?.smokingHabits)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">
+                  <button type="button" onClick={() => startEdit('smokingHabits', userData?.smokingHabits)} className="text-xs text-cyan-700 hover:text-cyan-900 font-semibold">
                     Edit
                   </button>
                 </div>
@@ -216,24 +220,24 @@ export default function PatientInfoStep({
                   <select 
                     value={String((profileDraft.drinkingHabits ?? localUserData?.drinkingHabits) || "")} 
                     onChange={(e) => setProfileDraft({ drinkingHabits: e.target.value })} 
-                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)]"
                   >
                     <option value="">Select</option>
                     <option value="Never">Never</option>
                     <option value="Occasionally">Occasionally</option>
                     <option value="Regularly">Regularly</option>
                   </select>
-                  <button type="button" onClick={() => saveField('drinkingHabits')} className="btn-modern btn-modern-purple btn-modern-sm">
+                  <Button type="button" size="sm" onClick={() => saveField('drinkingHabits')} loading={savingField === 'drinkingHabits'} loadingText="Saving">
                     Save
-                  </button>
-                  <button type="button" onClick={cancelEdit} className="px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-slate-50 px-4 py-3 rounded-lg border border-slate-200">
                   <span className="text-base text-slate-800">{localUserData?.drinkingHabits || "Not provided"}</span>
-                  <button type="button" onClick={() => startEdit('drinkingHabits', userData?.drinkingHabits)} className="text-xs text-purple-600 hover:text-purple-800 font-semibold">
+                  <button type="button" onClick={() => startEdit('drinkingHabits', userData?.drinkingHabits)} className="text-xs text-cyan-700 hover:text-cyan-900 font-semibold">
                     Edit
                   </button>
                 </div>

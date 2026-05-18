@@ -109,7 +109,7 @@ export default function DocumentListCompact({
     return (
       <div className={className}>
         <div className="flex items-center gap-2 text-sm text-gray-600">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[var(--color-primary)]"></div>
           <span>Loading documents...</span>
         </div>
       </div>
@@ -149,7 +149,7 @@ export default function DocumentListCompact({
               onClick={() => setSelectedDocument(doc)}
               className={`w-full text-left px-3 py-2 rounded-md border transition-all hover:shadow-sm ${
                 isLinked
-                  ? "bg-blue-50 border-blue-200 hover:bg-blue-100"
+                  ? "bg-cyan-50 border-cyan-200 hover:bg-cyan-100"
                   : "bg-white border-gray-200 hover:bg-gray-50"
               }`}
             >
@@ -160,7 +160,7 @@ export default function DocumentListCompact({
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-gray-500">{doc.fileType}</span>
                     {isLinked && (
-                      <span className="text-xs text-blue-600 font-medium">• Linked</span>
+                      <span className="text-xs text-cyan-700 font-medium">• Linked</span>
                     )}
                     <span className="text-xs text-gray-400">• {formatDate(doc.uploadedAt)}</span>
                   </div>
@@ -187,7 +187,7 @@ export default function DocumentListCompact({
       {hasMore && !showAll && (
         <button
           onClick={() => setShowAll(true)}
-          className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+          className="mt-2 text-xs text-cyan-700 hover:text-cyan-800 font-medium"
         >
           View all {documents.length} documents →
         </button>

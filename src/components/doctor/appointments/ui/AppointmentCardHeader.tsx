@@ -23,7 +23,7 @@ export default function AppointmentCardHeader({
     >
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
         {/* Patient Avatar */}
-        <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gradient-to-br from-indigo-100 via-sky-100 to-cyan-100 text-indigo-700 font-semibold text-lg flex items-center justify-center shadow-sm">
+        <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gradient-to-br from-cyan-100 via-sky-100 to-teal-100 text-cyan-800 font-semibold text-lg flex items-center justify-center shadow-sm">
           {appointment.patientName.charAt(0).toUpperCase()}
         </div>
 

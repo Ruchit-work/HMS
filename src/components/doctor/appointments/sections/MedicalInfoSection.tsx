@@ -52,7 +52,7 @@ export default function MedicalInfoSection({ appointment, minimal = false }: Med
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 border border-emerald-100/50 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center gap-2 mb-3 pb-2 border-b border-emerald-200">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white shadow-sm">
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center text-white shadow-sm">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
@@ -60,23 +60,23 @@ export default function MedicalInfoSection({ appointment, minimal = false }: Med
         <h4 className="font-semibold text-slate-800 text-sm">Medical Information</h4>
       </div>
       <div className="space-y-2 text-xs">
-        <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
-          <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Chief Complaint</span>
+        <div className="bg-gradient-to-br from-cyan-50/50 to-teal-50/30 rounded-lg p-2.5 border border-cyan-100/50">
+          <span className="text-cyan-700 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Chief Complaint</span>
           <p className="text-slate-900 font-medium text-xs leading-relaxed">
             {appointment.chiefComplaint || "No chief complaint provided"}
           </p>
         </div>
         {appointment.patientAdditionalConcern && (
-          <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
-            <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Additional Details</span>
+          <div className="bg-gradient-to-br from-cyan-50/50 to-teal-50/30 rounded-lg p-2.5 border border-cyan-100/50">
+            <span className="text-cyan-700 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Additional Details</span>
             <p className="text-slate-900 font-medium text-xs leading-relaxed">
               {appointment.patientAdditionalConcern}
             </p>
           </div>
         )}
         {appointment.medicalHistory && (
-          <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
-            <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Medical History</span>
+          <div className="bg-gradient-to-br from-cyan-50/50 to-teal-50/30 rounded-lg p-2.5 border border-cyan-100/50">
+            <span className="text-cyan-700 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Medical History</span>
             <p className="text-slate-900 font-medium text-xs leading-relaxed">
               {appointment.medicalHistory}
             </p>
@@ -96,16 +96,16 @@ export default function MedicalInfoSection({ appointment, minimal = false }: Med
           </div>
         )}
         {appointment.patientCurrentMedications && (
-          <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
-            <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Current Medications</span>
+          <div className="bg-gradient-to-br from-cyan-50/50 to-teal-50/30 rounded-lg p-2.5 border border-cyan-100/50">
+            <span className="text-cyan-700 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Current Medications</span>
             <p className="text-slate-900 font-medium text-xs leading-relaxed">
               {appointment.patientCurrentMedications}
             </p>
           </div>
         )}
         {appointment.patientFamilyHistory && (
-          <div className="bg-gradient-to-br from-purple-50/50 to-pink-50/30 rounded-lg p-2.5 border border-purple-100/50">
-            <span className="text-purple-600 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Family History</span>
+          <div className="bg-gradient-to-br from-cyan-50/50 to-teal-50/30 rounded-lg p-2.5 border border-cyan-100/50">
+            <span className="text-cyan-700 text-[10px] font-semibold uppercase tracking-wide mb-1 block">Family History</span>
             <p className="text-slate-900 font-medium text-xs leading-relaxed">
               {appointment.patientFamilyHistory}
             </p>

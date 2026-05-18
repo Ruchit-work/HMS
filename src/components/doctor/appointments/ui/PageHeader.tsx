@@ -32,8 +32,8 @@ export default function PageHeader({
           href="/doctor-dashboard/book-appointment"
           className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm transition-colors ${
             isDark
-              ? "bg-white text-blue-700 hover:bg-blue-50"
-              : "bg-blue-600 text-white hover:bg-blue-700"
+              ? "bg-white text-cyan-800 hover:bg-cyan-50"
+              : "bg-[var(--color-primary)] text-white hover:opacity-90"
           }`}
           aria-label="Book appointment"
         >

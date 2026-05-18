@@ -28,7 +28,7 @@ export function ActionEmptyState({
               onClick={action.onClick}
               className={
                 action.variant === 'primary'
-                  ? 'rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700'
+                  ? 'rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90'
                   : 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50'
               }
             >
@@ -44,7 +44,7 @@ export function ActionEmptyState({
 export function getPurchaseOrderStatusMeta(status: string | undefined) {
   const normalized = (status || '').toLowerCase()
   if (normalized === 'received') return { label: 'Delivered', badgeClass: 'bg-emerald-100 text-emerald-800' }
-  if (normalized === 'partial') return { label: 'Partial', badgeClass: 'bg-blue-100 text-blue-800' }
+  if (normalized === 'partial') return { label: 'Partial', badgeClass: 'bg-cyan-100 text-cyan-800' }
   if (normalized === 'cancelled') return { label: 'Cancelled', badgeClass: 'bg-slate-100 text-slate-700' }
   if (normalized === 'draft') return { label: 'Draft', badgeClass: 'bg-slate-200 text-slate-700' }
   return { label: 'Sent', badgeClass: 'bg-amber-100 text-amber-800' }
@@ -160,12 +160,12 @@ export function BillingRiskStrip({
         </div>
       )}
       {billingInfo && (
-        <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
-          <p className="text-xs font-medium text-blue-800">{billingInfo}</p>
+        <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+          <p className="text-xs font-medium text-cyan-800">{billingInfo}</p>
           <button
             type="button"
             onClick={onDismissBillingInfo}
-            className="text-xs font-semibold text-blue-700 hover:text-blue-900"
+            className="text-xs font-semibold text-cyan-800 hover:text-cyan-900"
           >
             Dismiss
           </button>

@@ -150,7 +150,7 @@ export default function AIDiagnosisSuggestion({
             <button
               onClick={onCompleteConsultation}
               disabled={updating}
-              className="btn-modern btn-modern-sm flex items-center justify-center gap-2"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
               title="Complete consultation"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

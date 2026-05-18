@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
@@ -17,6 +17,8 @@ import { getAvailableTimeSlots, isSlotInPast, formatTimeDisplay, normalizeTime }
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
 import VoiceInput from "@/components/ui/VoiceInput"
 import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
+import { Button } from "@/components/ui/Button"
+import { assertAppointmentSlotAvailable } from "@/utils/booking/checkAppointmentSlot"
 
 interface BookAppointmentPanelProps {
   patientMode: "existing" | "new"
@@ -55,6 +57,22 @@ const emptyBookingPayment: BookingPaymentData = {
 }
 
 export default function BookAppointmentPanel({ patientMode, onPatientModeChange, onNotification }: BookAppointmentPanelProps) {
+  const scrollYBeforeModeChange = useRef(0)
+  const patientPanelRef = useRef<HTMLDivElement>(null)
+
+  const handlePatientModeChange = useCallback(
+    (mode: "existing" | "new") => {
+      if (mode === patientMode) return
+      scrollYBeforeModeChange.current = window.scrollY
+      onPatientModeChange(mode)
+    },
+    [patientMode, onPatientModeChange]
+  )
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: scrollYBeforeModeChange.current, behavior: "auto" })
+  }, [patientMode])
+
   const [bookLoading, setBookLoading] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
   const [bookErrorFade, setBookErrorFade] = useState(false)
@@ -264,13 +282,13 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
           value: doctorsValue,
           caption: "Available to schedule",
           iconPath: "M19 11H5m7-7v14",
-          iconBg: "bg-emerald-100 text-emerald-600",
+          iconBg: "bg-cyan-100 text-cyan-700",
         },
         {
-          title: patientMode === "existing" ? "Patients Loaded" : "New Patient Form",
+          title: "Patients",
           value: patientsValue,
           caption:
-            patientMode === "existing" ? "Searchable across active records" : "Fill details to create profile",
+            patientMode === "existing" ? "Search active records" : "New profile form",
           iconPath: "M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 8 8s1.79 4 4 4zm0 0c-3.33 0-6 2.24-6 5v1h12v-1c0-2.76-2.67-5-6-5z",
           iconBg: "bg-amber-100 text-amber-600",
         },
@@ -817,18 +835,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       let patientId = selectedPatientId
       let patientPayload: any = null
 
-      // Check slot availability FIRST (before patient creation or payment)
-      const slotCheckResponse = await fetch(
-        `/api/appointments/check-slot?doctorId=${selectedDoctorId}&date=${appointmentDate}&time=${appointmentTime}`
-      )
-      if (!slotCheckResponse.ok) {
-        const slotData = await slotCheckResponse.json().catch(() => ({}))
-        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
-      }
-      const slotData = await slotCheckResponse.json().catch(() => ({}))
-      if (!slotData?.available) {
-        throw new Error(slotData?.error || "This slot is already booked. Please choose another time.")
-      }
+      await assertAppointmentSlotAvailable(selectedDoctorId, appointmentDate, appointmentTime)
 
       if (patientMode === "new") {
         if (!newPatient.firstName || !newPatient.lastName || !newPatient.email) {
@@ -879,34 +886,34 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   }
 
   return (
-    <div className="space-y-8 min-w-0 overflow-x-hidden">
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-6 py-8 shadow-sm">
-        <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-emerald-100 opacity-30" />
+    <div className="space-y-8 min-w-0 overflow-x-hidden [overflow-anchor:none]">
+      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-6 py-8 shadow-sm">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-cyan-100 opacity-30" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-sky-200 opacity-20" />
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-xl space-y-3">
-            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Appointment Desk</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Appointment Desk</span>
             <h2 className="text-3xl font-semibold text-slate-900">Book Appointment</h2>
             <p className="text-sm text-slate-600">
               Coordinate patient visits with guided steps, live doctor availability, and payment clarity in one view.
             </p>
           </div>
           <div className="grid w-full gap-4 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
-            {summaryStats.map((stat) => (
+            {summaryStats.map((stat, index) => (
               <div
-                key={stat.title}
-                className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:shadow-md"
+                key={`booking-stat-${index}`}
+                className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur min-h-[7.5rem]"
               >
                 <div className="flex items-start gap-3">
-                  <span className={`mt-1 inline-flex h-10 w-10 items-center justify-center rounded-xl ${stat.iconBg}`}>
+                  <span className={`mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${stat.iconBg}`}>
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d={stat.iconPath} />
                     </svg>
                   </span>
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{stat.title}</p>
-                    <p className="mt-2 text-xl font-bold text-slate-900">{stat.value}</p>
-                    <p className="mt-1 text-xs text-slate-500">{stat.caption}</p>
+                    <p className="mt-2 text-xl font-bold tabular-nums text-slate-900">{stat.value}</p>
+                    <p className="mt-1 min-h-[2rem] text-xs leading-snug text-slate-500">{stat.caption}</p>
                   </div>
                 </div>
               </div>
@@ -918,22 +925,22 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
           <div className="flex rounded-2xl bg-white/90 p-1 shadow-inner backdrop-blur">
             <button
               type="button"
-              onClick={() => onPatientModeChange("existing")}
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              onClick={() => handlePatientModeChange("existing")}
+              className={`min-w-[9.5rem] rounded-xl px-4 py-2 text-center text-sm font-medium ring-1 transition-colors ${
                 patientMode === "existing"
-                  ? "bg-white text-emerald-600 shadow-sm ring-1 ring-emerald-200"
-                  : "text-slate-500 hover:text-emerald-600"
+                  ? "bg-white text-cyan-700 shadow-sm ring-cyan-200"
+                  : "bg-transparent text-slate-500 ring-transparent hover:bg-white/60 hover:text-cyan-700"
               }`}
             >
               Existing patient
             </button>
             <button
               type="button"
-              onClick={() => onPatientModeChange("new")}
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              onClick={() => handlePatientModeChange("new")}
+              className={`min-w-[9.5rem] rounded-xl px-4 py-2 text-center text-sm font-medium ring-1 transition-colors ${
                 patientMode === "new"
-                  ? "bg-white text-emerald-600 shadow-sm ring-1 ring-emerald-200"
-                  : "text-slate-500 hover:text-emerald-600"
+                  ? "bg-white text-cyan-700 shadow-sm ring-cyan-200"
+                  : "bg-transparent text-slate-500 ring-transparent hover:bg-white/60 hover:text-cyan-700"
               }`}
             >
               New patient
@@ -964,16 +971,23 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
               </div>
             </div>
 
-            <div className="mt-6 space-y-5">
-              {patientMode === "existing" ? (
-                <div className="space-y-4">
+            <div ref={patientPanelRef} className="mt-6 space-y-5">
+              <div className="relative min-h-[34rem]">
+                <div
+                  className={`absolute inset-0 space-y-4 overflow-y-auto pr-1 transition-opacity duration-150 ${
+                    patientMode === "existing"
+                      ? "z-10 opacity-100"
+                      : "pointer-events-none z-0 opacity-0"
+                  }`}
+                  aria-hidden={patientMode !== "existing"}
+                >
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Search patient</label>
                   <div className="relative flex items-center">
                     <input
                       value={searchPatient}
                       onChange={(e) => handleExistingPatientSearch(e.target.value)}
                       placeholder="Search by name, email, phone, or patient ID — or use voice"
-                      className="w-full rounded-xl border border-slate-200 bg-white pl-4 pr-12 py-2.5 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="w-full rounded-xl border border-slate-200 bg-white pl-4 pr-12 py-2.5 text-sm shadow-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                     />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
                       <div className="pointer-events-auto">
@@ -1045,7 +1059,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                               </p>
                             </div>
                             {selectedPatientInfo.bloodGroup && (
-                              <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                              <span className="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800">
                                 {selectedPatientInfo.bloodGroup}
                               </span>
                             )}
@@ -1111,31 +1125,37 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-4">
+                <div
+                  className={`absolute inset-0 space-y-4 overflow-y-auto pr-1 transition-opacity duration-150 ${
+                    patientMode === "new"
+                      ? "z-10 opacity-100"
+                      : "pointer-events-none z-0 opacity-0"
+                  }`}
+                  aria-hidden={patientMode !== "new"}
+                >
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <input
                       placeholder="First name"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.firstName}
                       onChange={(e) => setNewPatient((v) => ({ ...v, firstName: e.target.value }))}
                     />
                     <input
                       placeholder="Last name"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.lastName}
                       onChange={(e) => setNewPatient((v) => ({ ...v, lastName: e.target.value }))}
                     />
                     <input
                       placeholder="Email"
                       type="email"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.email}
                       onChange={(e) => setNewPatient((v) => ({ ...v, email: e.target.value }))}
                     />
                     <input
                       placeholder="Phone"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.phone}
                       onChange={(e) => setNewPatient((v) => ({ ...v, phone: e.target.value }))}
                     />
@@ -1143,7 +1163,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                       <input
                         placeholder="Password"
                         type="password"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                         value={newPatientPassword}
                         onChange={(e) => setNewPatientPassword(e.target.value)}
                       />
@@ -1152,12 +1172,12 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     <input
                       placeholder="Confirm password"
                       type="password"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatientPasswordConfirm}
                       onChange={(e) => setNewPatientPasswordConfirm(e.target.value)}
                     />
                     <select
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.gender}
                       onChange={(e) => setNewPatient((v) => ({ ...v, gender: e.target.value }))}
                     >
@@ -1167,7 +1187,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                       <option value="Other">Other</option>
                     </select>
                     <select
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.bloodGroup}
                       onChange={(e) => setNewPatient((v) => ({ ...v, bloodGroup: e.target.value }))}
                     >
@@ -1182,7 +1202,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                       <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Birthday</label>
                       <input
                         type="date"
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                         max={todayStr}
                         value={newPatient.dateOfBirth}
                         onChange={(e) => setNewPatient((v) => ({ ...v, dateOfBirth: e.target.value }))}
@@ -1190,18 +1210,18 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     </div>
                     <input
                       placeholder="Address"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 sm:col-span-2"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100 sm:col-span-2"
                       value={newPatient.address}
                       onChange={(e) => setNewPatient((v) => ({ ...v, address: e.target.value }))}
                     />
                   </div>
                 </div>
-              )}
+              </div>
 
               <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 shadow-inner">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold text-slate-900">Booking summary</h4>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-700">
                     {patientMode === "existing" ? "Existing" : "New"}
                   </span>
                 </div>
@@ -1254,7 +1274,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                   {/* Searchable Dropdown */}
                   <div
                     ref={symptomDropdownRef}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus-within:border-emerald-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-emerald-100 cursor-pointer"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus-within:border-cyan-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-cyan-100 cursor-pointer"
                     onClick={() => {
                       if (!showSymptomDropdown && symptomDropdownRef.current) {
                         // Calculate position before opening
@@ -1317,7 +1337,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                             }}
                             onClick={(e) => e.stopPropagation()}
                             placeholder="Search symptoms..."
-                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500"
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-100 focus:border-cyan-600"
                             autoFocus
                           />
                         </div>
@@ -1357,8 +1377,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                                 setSymptomSearch("")
                                 setShowSymptomDropdown(false)
                               }}
-                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 ${
-                                symptomCategory === cat.id ? "bg-emerald-100 font-semibold" : ""
+                              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cyan-50 ${
+                                symptomCategory === cat.id ? "bg-cyan-100 font-semibold" : ""
                               }`}
                             >
                               <div className="flex items-center gap-2">
@@ -1385,8 +1405,8 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                             setSymptomSearch("")
                             setShowSymptomDropdown(false)
                           }}
-                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 border-t border-slate-200 ${
-                            symptomCategory === "custom" ? "bg-emerald-100 font-semibold" : ""
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cyan-50 border-t border-slate-200 ${
+                            symptomCategory === "custom" ? "bg-cyan-100 font-semibold" : ""
                           }`}
                         >
                           Custom...
@@ -1403,7 +1423,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                       value={customSymptom}
                       onChange={(e) => setCustomSymptom(e.target.value)}
                       placeholder="Describe patient symptom (e.g., severe back pain)"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                     />
                     <p className="text-xs text-slate-500">
                       Doctor list is not auto-filtered for custom notes. Please pick a doctor manually.
@@ -1426,7 +1446,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                         setSelectedDoctorFee(null)
                       }
                     }}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                   >
                     <option value="">Select doctor</option>
                     {/* Recommended Doctors Section */}
@@ -1466,10 +1486,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     </p>
                   )}
                   {selectedDoctorFee !== null && (
-                    <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                    <div className="mt-3 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-emerald-700">Consultation Fee</span>
-                        <span className="text-lg font-semibold text-emerald-700">
+                        <span className="font-medium text-teal-700">Consultation Fee</span>
+                        <span className="text-lg font-semibold text-teal-700">
                           ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)}
                         </span>
                       </div>
@@ -1490,10 +1510,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     min={todayStr}
                     value={appointmentDate}
                     onChange={(e) => setAppointmentDate(e.target.value)}
-                    className={`mt-2 w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100 ${
+                    className={`mt-2 w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-100 ${
                       isSelectedDateBlocked
                         ? "border-red-400 bg-red-50 text-red-700 focus:ring-red-100"
-                        : "border-slate-200 bg-white focus:border-emerald-500"
+                        : "border-slate-200 bg-white focus:border-cyan-600"
                     }`}
                   />
                   {isSelectedDateBlocked && (
@@ -1515,7 +1535,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                   <select
                     value={appointmentTime}
                     onChange={(e) => setAppointmentTime(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                     disabled={!selectedDoctorId || !appointmentDate || isSelectedDateBlocked}
                   >
                     <option value="">
@@ -1570,8 +1590,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                         <h4 className="text-sm font-semibold text-slate-900">Additional Fees</h4>
                         <p className="text-xs text-slate-500 mt-0.5">Add file charges, blood reports, etc.</p>
                       </div>
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
+                        variant="outline"
                         onClick={() => {
                           const newFee: AdditionalFee = {
                             id: `fee-${Date.now()}-${Math.random()}`,
@@ -1580,10 +1602,9 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                           }
                           setAdditionalFees([...additionalFees, newFee])
                         }}
-                        className="px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
                       >
                         + Add Fee
-                      </button>
+                      </Button>
                     </div>
 
                     {additionalFees.length > 0 && (
@@ -1600,7 +1621,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                                   updated[index] = { ...fee, description: e.target.value }
                                   setAdditionalFees(updated)
                                 }}
-                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-600 focus:border-cyan-600"
                               />
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-slate-600">₹</span>
@@ -1616,7 +1637,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                                   }}
                                   min="0"
                                   step="0.01"
-                                  className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                  className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-600 focus:border-cyan-600"
                                 />
                               </div>
                             </div>
@@ -1664,13 +1685,14 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
               </div>
 
               <div className="flex justify-end">
-                <button
-                  disabled={bookLoading}
+                <Button
                   onClick={handleBookAppointment}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  loading={bookLoading}
+                  loadingText="Booking..."
+                  size="lg"
                 >
-                  {bookLoading ? "Booking..." : "Book Appointment"}
-                </button>
+                  Book Appointment
+                </Button>
               </div>
             </div>
           </div>
@@ -1706,12 +1728,12 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                 {(() => {
                   const doctorToConfirm = doctors.find((d: any) => d.id === pendingDoctorId)
                   return doctorToConfirm ? (
-                    <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100">
+                    <div className="bg-cyan-50 rounded-xl p-4 border-2 border-blue-100">
                       <div className="flex items-start gap-3">
                         <div className="text-3xl">👨‍⚕️</div>
                         <div className="flex-1">
                           <h4 className="font-semibold text-gray-800 mb-1">Selected Doctor</h4>
-                          <p className="text-lg font-bold text-blue-700">
+                          <p className="text-lg font-bold text-teal-700">
                             Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
                           </p>
                           <p className="text-sm text-gray-600 mt-1">
@@ -1738,22 +1760,18 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
 
             {/* Modal Footer */}
             <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
-              <button
+              <Button
+                variant="outline"
                 onClick={() => {
                   setShowDoctorConfirmModal(false)
                   setPendingDoctorId(null)
                 }}
-                className="px-6 py-2.5 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-all font-semibold text-gray-700"
               >
                 Cancel
-              </button>
-              <button
-                onClick={handleConfirmDoctorSelection}
-                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-              >
-                <span>✓</span>
-                <span>Yes, Select This Doctor</span>
-              </button>
+              </Button>
+              <Button onClick={handleConfirmDoctorSelection}>
+                ✓ Yes, Select This Doctor
+              </Button>
             </div>
           </div>
         </div>

@@ -29,10 +29,10 @@ export function QuestionRenderer({
       focus: 'focus:ring-red-500'
     },
     blue: {
-      selected: 'bg-blue-500 text-white border-blue-500',
-      unselected: 'bg-white border-slate-300 text-slate-700 hover:border-blue-300',
-      multiSelected: 'bg-blue-100 border-blue-400 text-blue-800',
-      multiUnselected: 'bg-white border-slate-200 text-slate-700 hover:border-blue-300',
+      selected: 'bg-cyan-500 text-white border-cyan-500',
+      unselected: 'bg-white border-slate-300 text-slate-700 hover:border-cyan-300',
+      multiSelected: 'bg-cyan-100 border-cyan-400 text-cyan-900',
+      multiUnselected: 'bg-white border-slate-200 text-slate-700 hover:border-cyan-300',
       focus: 'focus:ring-blue-500'
     },
     green: {
@@ -43,11 +43,11 @@ export function QuestionRenderer({
       focus: 'focus:ring-green-500'
     },
     purple: {
-      selected: 'bg-purple-500 text-white border-purple-500',
-      unselected: 'bg-white border-slate-300 text-slate-700 hover:border-purple-300',
-      multiSelected: 'bg-purple-100 border-purple-400 text-purple-800',
-      multiUnselected: 'bg-white border-slate-200 text-slate-700 hover:border-purple-300',
-      focus: 'focus:ring-purple-500'
+      selected: 'bg-cyan-500 text-white border-cyan-500',
+      unselected: 'bg-white border-slate-300 text-slate-700 hover:border-cyan-300',
+      multiSelected: 'bg-cyan-100 border-cyan-400 text-cyan-900',
+      multiUnselected: 'bg-white border-slate-200 text-slate-700 hover:border-cyan-300',
+      focus: 'focus:ring-[var(--color-primary)]'
     },
     teal: {
       selected: 'bg-teal-500 text-white border-teal-500',

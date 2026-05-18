@@ -516,7 +516,7 @@ export default function DoctorBookAppointmentPage() {
                           <button
                             key={p.id}
                             type="button"
-                            className="w-full px-4 py-3 text-left text-sm transition-colors duration-300 hover:bg-blue-50/80 border-b border-slate-100 last:border-b-0 first:rounded-t-xl"
+                            className="w-full px-4 py-3 text-left text-sm transition-colors duration-300 hover:bg-cyan-50/80 border-b border-slate-100 last:border-b-0 first:rounded-t-xl"
                             onClick={() => {
                               setSelectedPatientId(p.id)
                               setSearchPatient(label)

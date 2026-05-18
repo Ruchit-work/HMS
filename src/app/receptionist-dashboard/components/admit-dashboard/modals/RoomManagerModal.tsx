@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import type { Room } from "@/types/patient"
 
@@ -123,20 +124,18 @@ export default function RoomManagerModal({
           </div>
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            disabled={roomManageLoading}
-          >
+          <Button type="button" variant="outline" onClick={onClose} disabled={roomManageLoading}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
             onClick={onSubmit}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-            disabled={roomManageLoading}
+            loading={roomManageLoading}
+            loadingText="Saving..."
           >
-            {roomManageLoading ? "Saving..." : roomEditId ? "Update Room" : "Create Room"}
-          </button>
+            {roomEditId ? "Update Room" : "Create Room"}
+          </Button>
         </div>
       </div>
     </div>

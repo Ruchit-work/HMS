@@ -944,7 +944,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         <select
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value as any)}
-          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           <option value="30days">Last 30 Days</option>
           <option value="3months">Last 3 Months</option>
@@ -957,17 +957,17 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Patients */}
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+        <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-lg p-4 border border-cyan-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-700">Total Patients</span>
-            <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="text-sm font-medium text-cyan-800">Total Patients</span>
+            <div className="w-10 h-10 bg-cyan-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
           </div>
-          <p className="text-xl font-bold text-blue-900">{analytics.totalPatients.toLocaleString()}</p>
-          <p className="text-xs text-blue-600 mt-1">All registered patients</p>
+          <p className="text-xl font-bold text-cyan-900">{analytics.totalPatients.toLocaleString()}</p>
+          <p className="text-xs text-cyan-700 mt-1">All registered patients</p>
         </div>
 
         {/* New Patients */}
@@ -985,17 +985,17 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         </div>
 
         {/* Returning Patients */}
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+        <div className="bg-gradient-to-br from-cyan-50 to-teal-100 rounded-lg p-4 border border-cyan-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-purple-700">Returning Patients</span>
-            <div className="w-10 h-10 bg-purple-200 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="text-sm font-medium text-cyan-800">Returning Patients</span>
+            <div className="w-10 h-10 bg-cyan-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </div>
           </div>
-          <p className="text-xl font-bold text-purple-900">{analytics.returningPatients.toLocaleString()}</p>
-          <p className="text-xs text-purple-600 mt-1">2+ appointments</p>
+          <p className="text-xl font-bold text-cyan-900">{analytics.returningPatients.toLocaleString()}</p>
+          <p className="text-xs text-cyan-700 mt-1">2+ appointments</p>
         </div>
 
         {/* Average Visits/Year */}
@@ -1024,7 +1024,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
           <p className="text-lg font-bold text-slate-900 mb-2">{analytics.patientRetentionRate}%</p>
           <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1">
             <div 
-              className="bg-gradient-to-r from-blue-500 to-blue-600 h-1.5 rounded-full transition-all"
+              className="bg-gradient-to-r from-cyan-600 to-teal-600 h-1.5 rounded-full transition-all"
               style={{ width: `${Math.min(analytics.patientRetentionRate, 100)}%` }}
             />
           </div>
@@ -1052,22 +1052,22 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
         </div>
 
         {/* Peak Visiting Hour */}
-        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 border border-indigo-200 shadow-sm">
+        <div className="bg-gradient-to-br from-cyan-50 to-teal-100 rounded-lg p-3 border border-cyan-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-indigo-700">Peak Visiting Hour</span>
-            <div className="w-6 h-6 bg-indigo-200 rounded-lg flex items-center justify-center">
-              <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="text-xs font-medium text-cyan-800">Peak Visiting Hour</span>
+            <div className="w-6 h-6 bg-cyan-200 rounded-lg flex items-center justify-center">
+              <svg className="w-3.5 h-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
-          <p className="text-base font-bold text-indigo-900 mb-1">{analytics.peakVisitingHour.hour12}</p>
-          <p className="text-xs text-indigo-600 mb-1">
+          <p className="text-base font-bold text-cyan-900 mb-1">{analytics.peakVisitingHour.hour12}</p>
+          <p className="text-xs text-cyan-600 mb-1">
             {analytics.peakVisitingHour.count} {analytics.peakVisitingHour.count === 1 ? 'appointment' : 'appointments'}
           </p>
-          <div className="w-full bg-indigo-200 rounded-full h-1">
+          <div className="w-full bg-cyan-200 rounded-full h-1">
             <div 
-              className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-1 rounded-full transition-all"
+              className="bg-gradient-to-r from-cyan-600 to-teal-600 h-1 rounded-full transition-all"
               style={{ width: `${Math.min((analytics.peakVisitingHour.count / Math.max(analytics.totalAppointments, 1)) * 100, 100)}%` }}
             />
           </div>
@@ -1116,10 +1116,10 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
               // Get season color scheme
               const seasonColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
                 'Winter': {
-                  bg: 'from-blue-50 to-cyan-50',
-                  border: 'border-blue-200',
-                  text: 'text-blue-700',
-                  accent: 'bg-blue-500'
+                  bg: 'from-cyan-50 to-cyan-50',
+                  border: 'border-cyan-200',
+                  text: 'text-cyan-800',
+                  accent: 'bg-cyan-500'
                 },
                 'Spring': {
                   bg: 'from-green-50 to-emerald-50',
@@ -1248,7 +1248,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
               <p className="text-sm text-slate-600 mt-1">Most common diseases by age group</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-br from-violet-100 to-violet-200 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
@@ -1265,10 +1265,10 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   accent: 'bg-pink-500'
                 },
                 '18-29 (Young Adult)': {
-                  bg: 'from-blue-50 to-indigo-50',
-                  border: 'border-blue-200',
-                  text: 'text-blue-700',
-                  accent: 'bg-blue-500'
+                  bg: 'from-cyan-50 to-teal-50',
+                  border: 'border-cyan-200',
+                  text: 'text-cyan-800',
+                  accent: 'bg-cyan-500'
                 },
                 '30-44 (Adult)': {
                   bg: 'from-green-50 to-emerald-50',
@@ -1283,10 +1283,10 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   accent: 'bg-amber-500'
                 },
                 '60+ (Senior)': {
-                  bg: 'from-purple-50 to-violet-50',
-                  border: 'border-purple-200',
-                  text: 'text-purple-700',
-                  accent: 'bg-purple-500'
+                  bg: 'from-cyan-50 to-teal-50',
+                  border: 'border-cyan-200',
+                  text: 'text-cyan-800',
+                  accent: 'bg-cyan-500'
                 },
                 'Unknown': {
                   bg: 'from-slate-50 to-gray-50',
@@ -1369,12 +1369,12 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
 
       {/* Diagnoses Section - Consolidated */}
       {(analytics.mostCommonDiagnoses.length > 0 || analytics.diagnosisTrends.length > 0 || analytics.symptomDiagnosisCorrelation.length > 0) && (
-        <div className="bg-white rounded-lg p-6 border-2 border-blue-200 shadow-lg">
+        <div className="bg-white rounded-lg p-6 border-2 border-cyan-200 shadow-lg">
           {/* Main Section Header */}
-          <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-blue-100">
+          <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-cyan-100">
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center shadow-sm">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-14 h-14 bg-gradient-to-br from-cyan-100 to-cyan-200 rounded-xl flex items-center justify-center shadow-sm">
+                <svg className="w-8 h-8 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
@@ -1393,11 +1393,11 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   <h3 className="text-lg font-semibold text-slate-800">Most Common Diagnoses</h3>
                   <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Top {analytics.mostCommonDiagnoses.length}</span>
                 </div>
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-100">
                   <div className="space-y-3">
                     {analytics.mostCommonDiagnoses.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-4">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-800 font-semibold text-sm flex-shrink-0">
                           {idx + 1}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1407,7 +1407,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                           </div>
                           <div className="w-full bg-slate-200 rounded-full h-2">
                             <div
-                              className="bg-blue-600 h-2 rounded-full transition-all"
+                              className="bg-[var(--color-primary)] h-2 rounded-full transition-all"
                               style={{ width: `${Math.min(item.percentage, 100)}%` }}
                             />
                           </div>
@@ -1463,10 +1463,10 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   <h3 className="text-lg font-semibold text-slate-800">Symptom → Diagnosis Correlation</h3>
                   <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Top {analytics.symptomDiagnosisCorrelation.length} symptoms</span>
                 </div>
-                <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                <div className="bg-cyan-50 rounded-lg p-4 border border-cyan-100">
                   <div className="space-y-4">
                     {analytics.symptomDiagnosisCorrelation.map((item, idx) => (
-                      <div key={idx} className="border-b border-purple-200 pb-4 last:border-b-0 last:pb-0">
+                      <div key={idx} className="border-b border-cyan-200 pb-4 last:border-b-0 last:pb-0">
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="font-semibold text-slate-800">{item.symptom}</h4>
                           <span className="text-sm text-slate-600">{item.totalCases} cases</span>
@@ -1475,10 +1475,10 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                           {item.topDiagnoses.map((diag, diagIdx) => (
                             <div
                               key={diagIdx}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-100 border border-purple-200 rounded-lg"
+                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-cyan-100 border border-cyan-200 rounded-lg"
                             >
-                              <span className="text-sm font-medium text-purple-900">{diag.diagnosis}</span>
-                              <span className="text-xs text-purple-700">
+                              <span className="text-sm font-medium text-cyan-900">{diag.diagnosis}</span>
+                              <span className="text-xs text-cyan-800">
                                 {diag.count} ({diag.percentage.toFixed(1)}%)
                               </span>
                             </div>
@@ -1514,10 +1514,10 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
               // Get gender color scheme
               const genderColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
                 'Male': {
-                  bg: 'from-blue-50 to-cyan-50',
-                  border: 'border-blue-200',
-                  text: 'text-blue-700',
-                  accent: 'bg-blue-500'
+                  bg: 'from-cyan-50 to-cyan-50',
+                  border: 'border-cyan-200',
+                  text: 'text-cyan-800',
+                  accent: 'bg-cyan-500'
                 },
                 'Female': {
                   bg: 'from-pink-50 to-rose-50',
@@ -1526,10 +1526,10 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   accent: 'bg-pink-500'
                 },
                 'Other': {
-                  bg: 'from-purple-50 to-violet-50',
-                  border: 'border-purple-200',
-                  text: 'text-purple-700',
-                  accent: 'bg-purple-500'
+                  bg: 'from-cyan-50 to-teal-50',
+                  border: 'border-cyan-200',
+                  text: 'text-cyan-800',
+                  accent: 'bg-cyan-500'
                 },
                 'Unknown': {
                   bg: 'from-slate-50 to-gray-50',
@@ -1638,19 +1638,19 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   }
                 } else if (index === 1) {
                   return {
-                    bg: 'from-blue-50 to-cyan-50',
-                    border: 'border-blue-200',
-                    text: 'text-blue-700',
-                    accent: 'bg-blue-500',
-                    badge: 'bg-blue-100 text-blue-700'
+                    bg: 'from-cyan-50 to-cyan-50',
+                    border: 'border-cyan-200',
+                    text: 'text-cyan-800',
+                    accent: 'bg-cyan-500',
+                    badge: 'bg-cyan-100 text-cyan-800'
                   }
                 } else if (index === 2) {
                   return {
-                    bg: 'from-purple-50 to-violet-50',
-                    border: 'border-purple-200',
-                    text: 'text-purple-700',
-                    accent: 'bg-purple-500',
-                    badge: 'bg-purple-100 text-purple-700'
+                    bg: 'from-cyan-50 to-teal-50',
+                    border: 'border-cyan-200',
+                    text: 'text-cyan-800',
+                    accent: 'bg-cyan-500',
+                    badge: 'bg-cyan-100 text-cyan-800'
                   }
                 } else {
                   return {
@@ -1757,7 +1757,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   <div className="flex items-center gap-2 mb-1">
                     <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
                       <div 
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-4 rounded-full transition-all"
+                        className="bg-gradient-to-r from-cyan-600 to-teal-600 h-4 rounded-full transition-all"
                         style={{ width: `${(month.totalPatients / analytics.totalPatients) * 100}%` }}
                       />
                     </div>
@@ -1781,7 +1781,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
             {analytics.topVisitingPatients.slice(0, 5).map((patient, idx) => (
               <div key={patient.patientId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-bold text-blue-600">
+                  <div className="w-8 h-8 bg-cyan-100 rounded-full flex items-center justify-center text-sm font-bold text-cyan-700">
                     {idx + 1}
                   </div>
                   <div>
@@ -1816,7 +1816,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                   </div>
                   <div className="w-full bg-slate-100 rounded-full h-2">
                     <div 
-                      className="bg-gradient-to-r from-purple-500 to-purple-600 h-2 rounded-full"
+                      className="bg-gradient-to-r from-cyan-600 to-teal-600 h-2 rounded-full"
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
@@ -1844,7 +1844,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2">
                       <div 
-                        className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 rounded-full"
+                        className="bg-gradient-to-r from-cyan-600 to-teal-600 h-2 rounded-full"
                         style={{ width: `${percentage}%` }}
                       />
                     </div>

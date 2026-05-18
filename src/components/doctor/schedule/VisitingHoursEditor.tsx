@@ -89,8 +89,8 @@ export default function VisitingHoursEditor({ value, onChange }: VisitingHoursEd
 
   return (
     <div className="space-y-2">
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-        <p className="text-xs text-blue-800 font-medium flex items-center gap-2">
+      <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3 mb-3">
+        <p className="text-xs text-cyan-900 font-medium flex items-center gap-2">
           <span>ℹ️</span>
           <span>Lunch break (1-2 PM) recommended. Each appointment: 15 min.</span>
         </p>

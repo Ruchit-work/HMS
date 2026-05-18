@@ -1,4 +1,5 @@
 'use client'
+import { Button } from '@/components/ui/Button'
 
 import React, { useRef, useState } from 'react'
 import type { PharmacyMedicine, PharmacyPurchaseOrder } from '@/types/pharmacy'
@@ -66,7 +67,7 @@ export function TransferStockForm({
         showGeneric={false}
       />
       <input type="number" min="1" placeholder="Quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" required />
-      <button type="submit" disabled={saving} className="btn-modern btn-modern-primary btn-modern-sm">Transfer</button>
+      <Button type="submit" size="sm" loading={saving} loadingText="Saving...">Transfer</Button>
     </form>
   )
 }
@@ -277,7 +278,7 @@ export function ReceiveByFileForm({
             className="rounded border border-slate-300 px-2 py-1.5 text-sm w-32"
           />
         </div>
-        <button type="submit" disabled={parsing || !uploadEnabled} className="btn-modern btn-modern-primary btn-modern-sm">
+        <button type="submit" disabled={parsing || !uploadEnabled} className="inline-flex items-center justify-center rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
           {parsing ? 'Parsing…' : 'Upload and preview'}
         </button>
       </form>
@@ -423,7 +424,7 @@ export function ReceiveByFileForm({
             <button
               type="button"
               onClick={clearPreview}
-              className="btn-modern btn-modern-secondary"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
             >
               Clear / Discard
             </button>
@@ -431,7 +432,7 @@ export function ReceiveByFileForm({
               type="button"
               onClick={handleConfirm}
               disabled={confirming}
-              className="btn-modern btn-modern-primary"
+              className="inline-flex items-center justify-center rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {confirming ? 'Confirming…' : 'Confirm and mark order Delivered'}
             </button>

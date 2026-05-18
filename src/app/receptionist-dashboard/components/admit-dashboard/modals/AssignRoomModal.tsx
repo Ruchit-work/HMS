@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
 import type { Room } from "@/types/patient"
 
 type RoomTypeOption = {
@@ -79,10 +80,10 @@ export default function AssignRoomModal({
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-2xl">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between hms-panel-header text-white rounded-t-2xl">
           <div>
             <h3 className="text-lg font-semibold">Assign Room</h3>
-            <p className="text-sm text-blue-100">Confirm room allocation for the selected admission request</p>
+            <p className="text-sm text-white/80">Confirm room allocation for the selected admission request</p>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-white/20 flex items-center justify-center">
             <span className="text-xl">×</span>
@@ -96,7 +97,7 @@ export default function AssignRoomModal({
                 <p className="text-xs text-gray-500 mt-0.5">Doctor: {selectedAdmitRequest.doctorName || "—"}</p>
               </div>
               {selectedAdmitRequest.patientId && (
-                <span className="text-xs font-mono px-2 py-1 bg-purple-100 text-purple-700 rounded-full border border-purple-200">
+                <span className="text-xs font-mono px-2 py-1 bg-cyan-100 text-cyan-800 rounded-full border border-cyan-200">
                   ID: {selectedAdmitRequest.patientId}
                 </span>
               )}
@@ -116,7 +117,7 @@ export default function AssignRoomModal({
                 setAssignRoomType(e.target.value)
                 setAssignRoomId("")
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
             >
               <option value="">Show all available types</option>
               {availableRoomTypes.map((type) => (
@@ -139,7 +140,7 @@ export default function AssignRoomModal({
               <select
                 value={assignRoomId}
                 onChange={(e) => setAssignRoomId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
               >
                 <option value="">Select room</option>
                 {availableRoomsForType.map((room) => (
@@ -163,7 +164,7 @@ export default function AssignRoomModal({
                     min="0"
                     value={assignInitialDeposit}
                     onChange={(e) => setAssignInitialDeposit(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm [appearance:textfield] focus:ring-2 focus:ring-blue-500 focus:border-transparent [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm [appearance:textfield] focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     placeholder="e.g. 5000"
                   />
                 </div>
@@ -193,26 +194,25 @@ export default function AssignRoomModal({
               value={assignNotes}
               onChange={(e) => setAssignNotes(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
               placeholder="Add room or admission notes for the medical team..."
             />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              disabled={assignLoading}
-            >
+            <Button type="button" variant="outline" onClick={onClose} disabled={assignLoading}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
               onClick={onConfirm}
-              disabled={assignLoading || !assignRoomId}
-              className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              loading={assignLoading}
+              loadingText="Assigning..."
+              disabled={!assignRoomId}
             >
-              {assignLoading ? "Assigning..." : "Confirm Admission"}
-            </button>
+              Confirm Admission
+            </Button>
           </div>
         </div>
       </div>

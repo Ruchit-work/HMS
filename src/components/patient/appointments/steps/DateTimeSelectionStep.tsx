@@ -42,7 +42,7 @@ export default function DateTimeSelectionStep({
 
   return (
     <div className={`space-y-4 ${slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left'}`}>
-      <div className="bg-white border-2 border-purple-200 rounded-xl p-6">
+      <div className="bg-white border-2 border-cyan-200 rounded-xl p-6">
         <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <span className="text-2xl">📅</span>
           <span>Choose Date & Time</span>
@@ -59,7 +59,7 @@ export default function DateTimeSelectionStep({
             value={appointmentData.date}
             onChange={(e) => onDateChange(e.target.value)}
             min={new Date().toISOString().split('T')[0]}
-            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
             required
           />
           
@@ -174,7 +174,7 @@ export default function DateTimeSelectionStep({
             )}
             {/* Doctor's visiting hours for selected day */}
             {selectedDoctorData.visitingHours && (
-              <div className="mb-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3">
+              <div className="mb-4 bg-gradient-to-r from-cyan-50 to-teal-50 border border-cyan-200 rounded-lg p-3">
                 <p className="text-xs text-slate-600 font-medium">
                   Doctor's hours on {new Date(appointmentData.date).toLocaleDateString('en-US', { weekday: 'long' })}:
                 </p>
@@ -186,7 +186,7 @@ export default function DateTimeSelectionStep({
 
             {loadingSlots ? (
               <div className="text-center py-8">
-                <svg className="animate-spin h-8 w-8 mx-auto text-purple-600" viewBox="0 0 24 24">
+                <svg className="animate-spin h-8 w-8 mx-auto text-cyan-600" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
@@ -215,7 +215,7 @@ export default function DateTimeSelectionStep({
                     <span className="text-[11px] sm:text-xs text-slate-600">Past ({pastTimeSlots.length})</span>
                   </div>
                   <div className="flex items-center gap-1 sm:gap-2">
-                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-purple-500 border border-purple-600"></div>
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-cyan-600 border border-cyan-700"></div>
                     <span className="text-[11px] sm:text-xs text-slate-600">Your Selection</span>
                   </div>
                 </div>
@@ -240,7 +240,7 @@ export default function DateTimeSelectionStep({
                         className={`
                           px-2 py-2 sm:px-3 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all
                           ${isSelected
-                            ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-300 transform scale-105'
+                            ? 'bg-[var(--color-primary)] text-white shadow-md ring-2 ring-cyan-300 transform scale-105'
                             : isPast
                             ? 'bg-gray-100 border-2 border-gray-300 text-gray-400 cursor-not-allowed opacity-60'
                             : isBooked
@@ -267,8 +267,8 @@ export default function DateTimeSelectionStep({
 
         {/* Selected Appointment Summary */}
         {appointmentData.date && appointmentData.time && (
-          <div className="mt-6 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl p-4 animate-fade-in">
-            <p className="text-xs text-purple-700 font-semibold mb-2">✓ Appointment Confirmed</p>
+          <div className="mt-6 bg-gradient-to-r from-cyan-50 to-teal-50 border-2 border-cyan-300 rounded-xl p-4 animate-fade-in">
+            <p className="text-xs text-cyan-700 font-semibold mb-2">✓ Appointment Confirmed</p>
             <p className="text-lg font-bold text-slate-800">
               {new Date(appointmentData.date).toLocaleDateString('en-US', { 
                 weekday: 'long', 
@@ -277,7 +277,7 @@ export default function DateTimeSelectionStep({
                 day: 'numeric' 
               })}
             </p>
-            <p className="text-2xl font-bold text-purple-600 mt-1">
+            <p className="text-2xl font-bold text-cyan-600 mt-1">
               {formatTimeDisplay(appointmentData.time)}
             </p>
             <p className="text-xs text-slate-600 mt-2">Duration: 15 minutes</p>

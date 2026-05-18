@@ -8,6 +8,7 @@ import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import type { Branch } from '@/types/branch'
 import Notification from '@/components/ui/feedback/Notification'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { Button } from '@/components/ui/Button'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 
 interface Pharmacist {
@@ -51,8 +52,8 @@ function AddPharmacistModalContent({
       <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 sm:px-10 pt-7 pb-5 rounded-t-2xl shrink-0">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5h4.01M7 20h4c1.103 0 2-.897 2-2V6c0-1.103-.897-2-2-2h-4c-1.103 0-2 .897-2 2v12c0 1.103.897 2 2 2zM7 6V4c0-1.103.897-2 2-2h4c1.103 0 2 .897 2 2v2" />
               </svg>
             </div>
@@ -82,7 +83,7 @@ function AddPharmacistModalContent({
               required
               value={formData.firstName}
               onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
-              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               placeholder="Enter first name"
             />
           </div>
@@ -93,7 +94,7 @@ function AddPharmacistModalContent({
               required
               value={formData.lastName}
               onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
-              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               placeholder="Enter last name"
             />
           </div>
@@ -104,7 +105,7 @@ function AddPharmacistModalContent({
               required
               value={formData.email}
               onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               placeholder="Enter email address"
             />
           </div>
@@ -114,7 +115,7 @@ function AddPharmacistModalContent({
               type="tel"
               value={formData.phone}
               onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               placeholder="Enter phone number"
             />
           </div>
@@ -126,7 +127,7 @@ function AddPharmacistModalContent({
               minLength={6}
               value={formData.password}
               onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               placeholder="Min 6 characters"
             />
             <p className="text-sm text-slate-500 mt-1.5">Password must be at least 6 characters</p>
@@ -145,7 +146,7 @@ function AddPharmacistModalContent({
                 required
                 value={formData.branchId}
                 onChange={(e) => setFormData(prev => ({ ...prev, branchId: e.target.value }))}
-                className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-white"
               >
                 <option value="">{branches.length === 0 ? 'No branches configured' : 'Select a branch'}</option>
                 {branches.map(branch => (
@@ -156,21 +157,12 @@ function AddPharmacistModalContent({
           </div>
         </div>
         <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
-          <button
-            type="button"
-            onClick={requestClose}
-            disabled={saving}
-            className="px-6 py-3 text-base border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50"
-          >
+          <Button type="button" variant="outline" size="lg" onClick={requestClose} disabled={saving}>
             Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-6 py-3 text-base bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Creating...' : 'Create Pharmacist'}
-          </button>
+          </Button>
+          <Button type="submit" size="lg" loading={saving} loadingText="Creating...">
+            Create Pharmacist
+          </Button>
         </div>
       </form>
     </div>
@@ -418,7 +410,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
             })
             setShowAddModal(true)
           }}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <span className="text-lg leading-none">+</span>
             <span>Create Pharmacist</span>
@@ -527,7 +519,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
                     type="text"
                     value={editingPharmacist.firstName}
                     onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, firstName: e.target.value } : prev)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                   />
                 </div>
                 <div>
@@ -536,7 +528,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
                     type="text"
                     value={editingPharmacist.lastName}
                     onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, lastName: e.target.value } : prev)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                   />
                 </div>
                 <div>
@@ -545,7 +537,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
                     type="tel"
                     value={editingPharmacist.phone ?? ''}
                     onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, phone: e.target.value } : prev)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                   />
                 </div>
                 <div>
@@ -553,7 +545,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
                   <select
                     value={editingPharmacist.branchId ?? ''}
                     onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, branchId: e.target.value, branchName: branches.find(b => b.id === e.target.value)?.name ?? prev.branchName } : prev)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-white"
                   >
                     <option value="">Select branch</option>
                     {branches.map((b) => (
@@ -564,22 +556,12 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
               </div>
             </div>
             <div className="border-t border-slate-200 px-6 py-4 flex justify-end gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => setEditingPharmacist(null)}
-                disabled={saving}
-                className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingPharmacist(null)} disabled={saving}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleEditSave}
-                disabled={saving}
-                className="px-5 py-2 text-sm rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Save changes'}
-              </button>
+              </Button>
+              <Button type="button" size="sm" onClick={handleEditSave} loading={saving} loadingText="Saving…">
+                Save changes
+              </Button>
             </div>
           </div>
         </RevealModal>

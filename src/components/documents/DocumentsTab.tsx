@@ -559,7 +559,7 @@ export default function DocumentsTab({
           onClick={() => setPanelTab("documents")}
           className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors ${
             panelTab === "documents"
-              ? "border-blue-600 text-blue-600 bg-white"
+              ? "border-[var(--color-primary)] text-cyan-700 bg-white"
               : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
           }`}
         >
@@ -570,7 +570,7 @@ export default function DocumentsTab({
           onClick={() => setPanelTab("consent-videos")}
           className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors ${
             panelTab === "consent-videos"
-              ? "border-blue-600 text-blue-600 bg-white"
+              ? "border-[var(--color-primary)] text-cyan-700 bg-white"
               : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
           }`}
         >
@@ -609,7 +609,7 @@ export default function DocumentsTab({
         {canUpload && (patientUid || initialPatientUid || selectedPatient) && (
           <button
             onClick={() => setShowUpload(!showUpload)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+            className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90 font-medium"
           >
             {showUpload ? "Cancel Upload" : "Upload Document"}
           </button>
@@ -743,7 +743,7 @@ export default function DocumentsTab({
           <p className="text-red-600">{error}</p>
           <button
             onClick={() => fetchDocuments()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            className="mt-4 px-4 py-2 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90"
           >
             Retry
           </button>
@@ -790,7 +790,7 @@ export default function DocumentsTab({
                   {!patientUid && !initialPatientUid && (
                     <div className="mt-1">
                       {patientNames[doc.patientUid] || patientNames[doc.patientId] ? (
-                        <p className="text-xs text-blue-600 font-medium">
+                        <p className="text-xs text-cyan-700 font-medium">
                           Patient: {patientNames[doc.patientUid] || patientNames[doc.patientId]}
                         </p>
                       ) : (
@@ -816,7 +816,7 @@ export default function DocumentsTab({
           <button
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loadingMore ? (
               <>

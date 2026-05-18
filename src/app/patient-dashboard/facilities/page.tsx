@@ -209,13 +209,13 @@ export default function FacilitiesPage() {
           title="Our Facilities"
           subtitle="World-class infrastructure and medical technology for superior healthcare"
           icon="🏢"
-          gradient="from-purple-600 to-pink-600"
+          gradient="from-teal-600 to-cyan-700"
         />
 
         {/* Statistics Banner */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-xl p-6 text-center border border-slate-200 hover:shadow-lg transition-all">
-            <div className="text-3xl font-bold text-blue-600 mb-1">500+</div>
+            <div className="text-3xl font-bold text-cyan-700 mb-1">500+</div>
             <div className="text-sm text-slate-600">Total Beds</div>
           </div>
           <div className="bg-white rounded-xl p-6 text-center border border-slate-200 hover:shadow-lg transition-all">
@@ -223,7 +223,7 @@ export default function FacilitiesPage() {
             <div className="text-sm text-slate-600">Operation Theaters</div>
           </div>
           <div className="bg-white rounded-xl p-6 text-center border border-slate-200 hover:shadow-lg transition-all">
-            <div className="text-3xl font-bold text-purple-600 mb-1">50+</div>
+            <div className="text-3xl font-bold text-cyan-700 mb-1">50+</div>
             <div className="text-sm text-slate-600">ICU Beds</div>
           </div>
           <div className="bg-white rounded-xl p-6 text-center border border-slate-200 hover:shadow-lg transition-all">
@@ -239,7 +239,7 @@ export default function FacilitiesPage() {
               key={facility.id}
               className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
             >
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6">
+              <div className="bg-gradient-to-br from-cyan-50 to-teal-50 p-6">
                 <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center text-4xl shadow-md mb-4">
                   {facility.icon}
                 </div>
@@ -249,7 +249,7 @@ export default function FacilitiesPage() {
                 <p className="text-sm text-slate-600 mb-3">
                   {facility.description}
                 </p>
-                <div className="inline-block px-3 py-1 bg-white rounded-full text-sm font-semibold text-purple-600">
+                <div className="inline-block px-3 py-1 bg-white rounded-full text-sm font-semibold text-cyan-700">
                   {facility.capacity}
                 </div>
               </div>
@@ -286,16 +286,16 @@ export default function FacilitiesPage() {
         </div>
 
         {/* Virtual Tour CTA */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-8 text-white text-center">
+        <div className="bg-gradient-to-r from-teal-600 to-cyan-700 rounded-2xl p-8 text-white text-center">
           <h2 className="text-3xl font-bold mb-4">Experience Our Facilities</h2>
-          <p className="text-purple-100 mb-6 max-w-2xl mx-auto">
+          <p className="text-cyan-100 mb-6 max-w-2xl mx-auto">
             Schedule a visit to tour our state-of-the-art facilities and meet our expert medical team
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <button className="px-6 py-3 bg-white text-purple-600 font-semibold rounded-lg hover:bg-purple-50 transition-all duration-300 hover:scale-105">
+            <button className="px-6 py-3 bg-white text-cyan-700 font-semibold rounded-lg hover:bg-cyan-50 transition-all duration-300 hover:scale-105">
               🎥 Virtual Tour
             </button>
-            <button className="btn-modern btn-modern-purple">
+            <button type="button" className="rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-teal-700 hover:bg-teal-50">
               📅 Schedule Visit
             </button>
           </div>

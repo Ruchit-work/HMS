@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { BarcodeCameraScanner } from '@/components/pharmacy/BarcodeCameraScanner'
 import type { BranchMedicineStock, MedicineBatch, PharmacyMedicine } from '@/types/pharmacy'
 import { generateBillPDFAndPrint } from '@/utils/pharmacy/billPrint'
@@ -500,10 +501,12 @@ export function DispenseModal({
               <span className="text-slate-800 font-semibold">Total: ₹{netTotal.toFixed(2)}</span>
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={onClose} className="btn-modern btn-modern-sm">Cancel</button>
-              <button type="submit" disabled={saving} className="btn-modern btn-modern-primary btn-modern-sm">
-                {saving ? 'Processing…' : 'Complete sale & print bill'}
-              </button>
+              <Button type="button" variant="outline" size="sm" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" size="sm" loading={saving} loadingText="Processing…">
+                Complete sale & print bill
+              </Button>
             </div>
           </div>
         </form>

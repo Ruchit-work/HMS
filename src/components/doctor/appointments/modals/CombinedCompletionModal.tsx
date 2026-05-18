@@ -47,36 +47,36 @@ export default function CombinedCompletionModal({
 
         <div className="p-6 space-y-6">
           {/* Patient Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-900 mb-2">Patient Information</h4>
+          <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+            <h4 className="font-semibold text-cyan-900 mb-2">Patient Information</h4>
             <p className="text-slate-700">{appointment.patientName || 'Patient'}</p>
           </div>
 
           {/* All Anatomy Types */}
           {dataEntries.map((data, idx) => (
-            <div key={idx} className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-4">
-              <h4 className="font-bold text-purple-900 mb-3 text-lg capitalize">{data.anatomyType} Anatomy</h4>
+            <div key={idx} className="bg-gradient-to-br from-cyan-50 to-teal-50 border-2 border-cyan-200 rounded-lg p-4">
+              <h4 className="font-bold text-cyan-900 mb-3 text-lg capitalize">{data.anatomyType} Anatomy</h4>
               
               {data.selectedPartInfo && (
                 <div className="mb-3">
-                  <p className="text-sm font-semibold text-purple-800 mb-1">Selected Part:</p>
+                  <p className="text-sm font-semibold text-cyan-800 mb-1">Selected Part:</p>
                   <p className="text-slate-700">{data.selectedPartInfo.name}</p>
                 </div>
               )}
 
               {data.selectedDisease && (
                 <div className="mb-3">
-                  <p className="text-sm font-semibold text-purple-800 mb-1">Diagnosis:</p>
+                  <p className="text-sm font-semibold text-cyan-800 mb-1">Diagnosis:</p>
                   <p className="text-slate-700">{data.selectedDisease.name}</p>
                 </div>
               )}
 
               {data.medicines.length > 0 && (
                 <div className="mb-3">
-                  <p className="text-sm font-semibold text-purple-800 mb-2">Medicines ({data.medicines.filter(m => m.name && m.name.trim()).length}):</p>
+                  <p className="text-sm font-semibold text-cyan-800 mb-2">Medicines ({data.medicines.filter(m => m.name && m.name.trim()).length}):</p>
                   <div className="space-y-2">
                     {data.medicines.filter(m => m.name && m.name.trim()).map((med, medIdx) => (
-                      <div key={medIdx} className="bg-white rounded p-2 border border-purple-300">
+                      <div key={medIdx} className="bg-white rounded p-2 border border-cyan-300">
                         <p className="font-medium text-slate-800">{med.name}</p>
                         {med.dosage && <p className="text-xs text-slate-600">Dosage: {med.dosage}</p>}
                         {med.frequency && <p className="text-xs text-slate-600">Frequency: {med.frequency}</p>}
@@ -89,7 +89,7 @@ export default function CombinedCompletionModal({
 
               {data.notes && (
                 <div>
-                  <p className="text-sm font-semibold text-purple-800 mb-1">Notes:</p>
+                  <p className="text-sm font-semibold text-cyan-800 mb-1">Notes:</p>
                   <p className="text-slate-700 whitespace-pre-wrap text-sm">{data.notes}</p>
                 </div>
               )}
@@ -135,7 +135,7 @@ export default function CombinedCompletionModal({
           </button>
           <button
             onClick={onConfirm}
-            className="btn-modern btn-modern-success flex-1 flex items-center justify-center gap-2"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             Confirm & Complete All
           </button>

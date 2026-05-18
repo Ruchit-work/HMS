@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Button } from "@/components/ui/Button"
 import { auth } from "@/firebase/config"
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth"
 
@@ -191,13 +192,14 @@ export function ChangePasswordSection({
           />
         </div>
         <div className="md:col-span-2 flex gap-3">
-          <button
+          <Button
             type="submit"
-            disabled={changing}
-            className={`btn-modern ${accent === "purple" ? "btn-modern-purple" : "btn-modern-success"} disabled:opacity-50`}
+            variant="primary"
+            loading={changing}
+            loadingText="Updating..."
           >
-            {changing ? "Updating..." : "Change Password"}
-          </button>
+            Change Password
+          </Button>
         </div>
       </form>
     </div>

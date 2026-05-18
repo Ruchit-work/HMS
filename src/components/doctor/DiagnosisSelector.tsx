@@ -83,7 +83,7 @@ export default function DiagnosisSelector({
 
   const getCategoryColor = (category: EntDiagnosis["category"]) => {
     switch (category) {
-      case "ear": return "bg-blue-50 border-blue-200 text-blue-700"
+      case "ear": return "bg-cyan-50 border-cyan-200 text-cyan-800"
       case "nose": return "bg-green-50 border-green-200 text-green-700"
       case "throat": return "bg-red-50 border-red-200 text-red-700"
       default: return "bg-gray-50 border-gray-200 text-gray-700"
@@ -145,12 +145,12 @@ export default function DiagnosisSelector({
                           }}
                           className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
                             isSelected
-                              ? "bg-blue-100 text-blue-900 font-medium"
+                              ? "bg-cyan-100 text-cyan-900 font-medium"
                               : "hover:bg-slate-50 text-slate-700"
                           }`}
                         >
                           <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                            isSelected ? "bg-blue-600 border-blue-600" : "border-slate-300"
+                            isSelected ? "bg-[var(--color-primary)] border-[var(--color-primary)]" : "border-slate-300"
                           }`}>
                             {isSelected && (
                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,12 +181,12 @@ export default function DiagnosisSelector({
                     }}
                     className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
                       selectedDiagnoses.includes(CUSTOM_DIAGNOSIS_OPTION)
-                        ? "bg-purple-100 text-purple-900 font-medium"
+                        ? "bg-cyan-100 text-cyan-900 font-medium"
                         : "hover:bg-slate-50 text-slate-700"
                     }`}
                   >
                     <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                      selectedDiagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? "bg-purple-600 border-purple-600" : "border-slate-300"
+                      selectedDiagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? "bg-cyan-600 border-cyan-600" : "border-slate-300"
                     }`}>
                       {selectedDiagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) && (
                         <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,7 +244,7 @@ export default function DiagnosisSelector({
                   disabled={readOnly}
                   placeholder="Enter custom diagnosis..."
                   rows={2}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm ${
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent text-sm ${
                     readOnly ? "bg-slate-50 text-slate-500 cursor-not-allowed" : ""
                   }`}
                 />

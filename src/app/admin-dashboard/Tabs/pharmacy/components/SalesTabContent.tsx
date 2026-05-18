@@ -81,7 +81,7 @@ export function SalesTabContent(props: {
               key={range}
               type="button"
               onClick={() => setOverviewDateRange(range)}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[#0891b2] text-white border-[#0891b2]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
             >
               {range === 'today' ? 'Today' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '6m' ? '6m' : range === 'year' ? 'Year' : 'All'}
             </button>
@@ -140,8 +140,8 @@ export function SalesTabContent(props: {
                 <svg viewBox="0 0 400 120" className="h-full w-full overflow-visible" preserveAspectRatio="none">
                   <defs>
                     <linearGradient id="salesTrendGradSalesTab" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#2563EB" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#0891b2" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#0891b2" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   {(() => {
@@ -155,7 +155,7 @@ export function SalesTabContent(props: {
                     return (
                       <>
                         <polyline fill="url(#salesTrendGradSalesTab)" points={areaPoints} />
-                        <polyline fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+                        <polyline fill="none" stroke="#0891b2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
                       </>
                     )
                   })()}
@@ -185,8 +185,8 @@ export function SalesTabContent(props: {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
           <h3 className="font-semibold text-slate-800">Dispensation records</h3>
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" value={salesDate} onChange={(e) => setSalesDate(e.target.value)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
-            <select value={salesPaymentFilter} onChange={(e) => setSalesPaymentFilter(e.target.value)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            <input type="date" value={salesDate} onChange={(e) => setSalesDate(e.target.value)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" />
+            <select value={salesPaymentFilter} onChange={(e) => setSalesPaymentFilter(e.target.value)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]">
               <option value="all">All payments</option>
               <option value="cash">Cash</option>
               <option value="upi">UPI</option>
@@ -194,9 +194,9 @@ export function SalesTabContent(props: {
               <option value="credit">Credit</option>
               <option value="other">Other / Insurance</option>
             </select>
-            <input type="number" inputMode="decimal" value={salesMinAmount} onChange={(e) => setSalesMinAmount(e.target.value)} placeholder="Min amount" className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
-            <input type="number" inputMode="decimal" value={salesMaxAmount} onChange={(e) => setSalesMaxAmount(e.target.value)} placeholder="Max amount" className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
-            <input type="text" value={salesSearch} onChange={(e) => setSalesSearch(e.target.value)} placeholder="Search by invoice, name, phone, medicine…" className="w-full sm:w-64 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+            <input type="number" inputMode="decimal" value={salesMinAmount} onChange={(e) => setSalesMinAmount(e.target.value)} placeholder="Min amount" className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" />
+            <input type="number" inputMode="decimal" value={salesMaxAmount} onChange={(e) => setSalesMaxAmount(e.target.value)} placeholder="Max amount" className="w-24 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" />
+            <input type="text" value={salesSearch} onChange={(e) => setSalesSearch(e.target.value)} placeholder="Search by invoice, name, phone, medicine…" className="w-full sm:w-64 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]" />
             {(salesDate || salesSearch || salesPaymentFilter !== 'all' || salesMinAmount || salesMaxAmount) && (
               <button
                 type="button"
@@ -254,7 +254,7 @@ export function SalesTabContent(props: {
                   const isSelected = selectedSaleDetail?.id === s.id
                   return (
                     <React.Fragment key={s.id}>
-                      <tr className={`border-t border-slate-200 cursor-pointer hover:bg-slate-50 ${isSelected ? 'bg-blue-50/40' : ''}`} onClick={() => onToggleSaleDetail(s)}>
+                      <tr className={`border-t border-slate-200 cursor-pointer hover:bg-slate-50 ${isSelected ? 'bg-cyan-50/40' : ''}`} onClick={() => onToggleSaleDetail(s)}>
                         <td className="p-3 font-mono text-xs">{s.invoiceNumber ?? '—'}</td>
                         <td className="p-3">{dateStr}</td>
                         <td className="p-3">{name}</td>
@@ -264,7 +264,7 @@ export function SalesTabContent(props: {
                         <td className="p-3 max-w-xs truncate" title={meds}>{meds}</td>
                         <td className="p-3 text-right">₹{s.netAmount ?? s.totalAmount ?? 0}</td>
                       </tr>
-                      <tr className={`border-t border-slate-200 transition-all duration-200 ease-out ${isSelected ? 'bg-blue-50/50' : 'bg-[#EEF3FF]'} ${isSelected ? 'animate-[fadeExpand_0.2s_ease-out] opacity-100' : 'hidden opacity-0'}`}>
+                      <tr className={`border-t border-slate-200 transition-all duration-200 ease-out ${isSelected ? 'bg-cyan-50/50' : 'bg-[#EEF3FF]'} ${isSelected ? 'animate-[fadeExpand_0.2s_ease-out] opacity-100' : 'hidden opacity-0'}`}>
                         <td colSpan={8} className="p-0 align-top">
                           <div ref={isSelected ? saleDetailRef : undefined} className="mx-3 mb-3 rounded-xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-md" style={{ borderRadius: 12 }}>
                             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-slate-100">

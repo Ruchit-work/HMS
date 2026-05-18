@@ -250,7 +250,7 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
 
               {/* Duration Display for Range */}
               {useRange && startDate && endDate && new Date(startDate) <= new Date(endDate) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-xs text-blue-800">
+                <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-2 text-xs text-cyan-900">
                   <span className="font-semibold">
                     Duration: {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
                   </span>

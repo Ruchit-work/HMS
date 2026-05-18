@@ -11,6 +11,7 @@ import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns/campaigns"
 import CampaignCarousel from "@/components/patient/ui/CampaignCarousel"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import { Button } from "@/components/ui/Button"
 import VisitingHoursEditor from "@/components/doctor/schedule/VisitingHoursEditor"
 import BlockedDatesManager from "@/components/doctor/schedule/BlockedDatesManager"
 import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
@@ -342,7 +343,7 @@ export default function DoctorDashboard() {
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center">
                   <span className="text-lg">🏥</span>
                 </div>
                 <div>
@@ -393,7 +394,7 @@ export default function DoctorDashboard() {
                 <p className="text-2xl font-bold text-slate-900 mt-1">{totalPatients}</p>
                 <p className="text-xs text-slate-500 mt-1">Unique patients</p>
               </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
                 <span className="text-xl">👥</span>
               </div>
             </div>
@@ -434,7 +435,7 @@ export default function DoctorDashboard() {
                 </p>
                 <p className="text-xs text-slate-500 mt-1">Upcoming appointments</p>
               </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
                 <span className="text-xl">📊</span>
               </div>
             </div>
@@ -463,7 +464,7 @@ export default function DoctorDashboard() {
           <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-slate-200">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center">
                   <span className="text-lg">📅</span>
                 </div>
                 <div>
@@ -528,13 +529,13 @@ export default function DoctorDashboard() {
                         className={`p-4 rounded-lg border transition-all hover:shadow-md cursor-pointer ${
                           isPast
                             ? 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                            : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                            : 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-sm font-bold ${
-                              isPast ? 'bg-slate-200 text-slate-600' : 'bg-blue-600 text-white'
+                              isPast ? 'bg-slate-200 text-slate-600' : 'bg-[var(--color-primary)] text-white'
                             }`}>
                               {time12hr.split(' ')[0]}
                             </div>
@@ -550,27 +551,19 @@ export default function DoctorDashboard() {
                             </div>
                           </div>
                           {!isPast && (
-                            <button
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="primary"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 viewAppointmentDetails(apt)
                               }}
-                              disabled={navigatingAppointmentId === apt.id}
-                              className={`btn-modern btn-modern-sm transition-all ${
-                                navigatingAppointmentId === apt.id ? "opacity-70 cursor-not-allowed" : ""
-                              }`}
+                              loading={navigatingAppointmentId === apt.id}
+                              loadingText="Opening..."
                             >
-                              {navigatingAppointmentId === apt.id ? (
-                                <span className="inline-flex items-center gap-2">
-                                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                                  </svg>
-                                  Opening...
-                                </span>
-                              ) : (
-                                "View Details"
-                              )}
-                            </button>
+                              View Details
+                            </Button>
                           )}
                           {isPast && (
                             <span className="text-sm text-slate-500">Click to open</span>
@@ -593,9 +586,9 @@ export default function DoctorDashboard() {
                 <Link
                   href="/doctor-dashboard/appointments"
                   prefetch={true}
-                  className="flex items-center gap-3 p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors group"
+                  className="flex items-center gap-3 p-3 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors group"
                 >
-                  <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 bg-[var(--color-primary)] rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
                     📋
                   </div>
                   <div className="flex-1">
@@ -621,9 +614,9 @@ export default function DoctorDashboard() {
                 <Link
                   href="/doctor-dashboard/profile"
                   prefetch={true}
-                  className="flex items-center gap-3 p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors group"
+                  className="flex items-center gap-3 p-3 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors group"
                 >
-                  <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
+                  <div className="w-10 h-10 bg-cyan-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
                     👤
                   </div>
                   <div className="flex-1">
@@ -679,11 +672,11 @@ export default function DoctorDashboard() {
           <div className="lg:col-span-2 relative bg-white rounded-xl p-6 shadow-sm border border-slate-200 overflow-hidden">
             {/* Background Pattern */}
             <div className="absolute inset-0 opacity-5">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-blue-500"></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 via-teal-500 to-sky-500"></div>
               <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <pattern id="schedule-pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <circle cx="20" cy="20" r="1.5" fill="currentColor" className="text-indigo-600" />
+                    <circle cx="20" cy="20" r="1.5" fill="currentColor" className="text-cyan-600" />
                   </pattern>
                 </defs>
                 <rect width="100%" height="100%" fill="url(#schedule-pattern)" />
@@ -694,7 +687,7 @@ export default function DoctorDashboard() {
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
+                  <div className="w-10 h-10 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-lg flex items-center justify-center shadow-md">
                     <span className="text-lg">🕐</span>
                   </div>
                   <div>
@@ -702,27 +695,15 @@ export default function DoctorDashboard() {
                     <p className="text-sm text-slate-500">Configure your availability</p>
                   </div>
                 </div>
-                <button
+                <Button
+                  type="button"
+                  variant="primary"
                   onClick={handleSaveSchedule}
-                  disabled={savingSchedule}
-                  className="btn-modern btn-modern-purple inline-flex items-center justify-center gap-2"
+                  loading={savingSchedule}
+                  loadingText="Saving..."
                 >
-                  {savingSchedule ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <span>Save Changes</span>
-                  )}
-                </button>
+                  Save Changes
+                </Button>
               </div>
               
               <VisitingHoursEditor 
@@ -759,13 +740,16 @@ export default function DoctorDashboard() {
                     <p className="text-sm font-medium text-amber-800">Unsaved changes</p>
                     <p className="text-xs text-amber-700">{blockedDrafts.length} date(s) to save</p>
                   </div>
-                  <button
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
                     onClick={handleSaveSchedule}
-                    disabled={savingSchedule}
-                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                    loading={savingSchedule}
+                    loadingText="Saving..."
                   >
-                    {savingSchedule ? "Saving..." : "Save Changes"}
-                  </button>
+                    Save Changes
+                  </Button>
                 </div>
               </div>
             )}
@@ -785,11 +769,11 @@ export default function DoctorDashboard() {
               </div>
             </div>
             <div className="relative">
-              <Link 
+              <Link
                 href="/doctor-dashboard/appointments"
-                className="btn-modern btn-modern-sm flex items-center gap-2"
+                className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
-                <span>View All</span>
+                View All
               </Link>
               <NotificationBadge 
                 count={appointmentsBadge.displayCount}
@@ -812,10 +796,10 @@ export default function DoctorDashboard() {
                 .sort(compareAppointmentsByDateTime)
                 .slice(0, 5)
                 .map((appointment) => (
-                <div key={appointment.id} className="p-4 border border-slate-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all">
+                <div key={appointment.id} className="p-4 border border-slate-200 rounded-lg hover:border-cyan-300 hover:shadow-sm transition-all">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-lg font-semibold text-blue-600">
+                      <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center text-lg font-semibold text-cyan-700">
                         {appointment.patientName?.[0]?.toUpperCase() || "👤"}
                       </div>
                       <div>
@@ -843,7 +827,7 @@ export default function DoctorDashboard() {
                       </span>
                       <button
                         onClick={() => viewAppointmentDetails(appointment)}
-                        className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="px-3 py-1 text-sm text-cyan-700 hover:text-cyan-800 hover:bg-cyan-50 rounded-lg transition-colors"
                       >
                         View
                       </button>
@@ -855,7 +839,7 @@ export default function DoctorDashboard() {
                 <div className="text-center pt-4">
                   <Link 
                     href="/doctor-dashboard/appointments"
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    className="text-sm text-cyan-700 hover:text-cyan-800 font-medium"
                   >
                     View {appointments.length - 5} more appointments →
                   </Link>

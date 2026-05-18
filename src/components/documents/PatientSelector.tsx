@@ -174,7 +174,7 @@ export default function PatientSelector({
           )}
           {loading && (
             <div className="absolute right-10 top-1/2 -translate-y-1/2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[var(--color-primary)]"></div>
             </div>
           )}
           <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
@@ -215,7 +215,7 @@ export default function PatientSelector({
                 e.preventDefault()
                 handleSelectPatient(patient)
               }}
-              className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
+              className="w-full text-left px-4 py-3 hover:bg-cyan-50 transition-colors border-b border-gray-100 last:border-b-0"
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -235,11 +235,11 @@ export default function PatientSelector({
       )}
 
       {selectedPatient && (
-        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
-          <p className="text-sm font-medium text-blue-900">
+        <div className="mt-2 p-3 bg-cyan-50 border border-cyan-200 rounded-md">
+          <p className="text-sm font-medium text-cyan-900">
             Selected: {selectedPatient.firstName} {selectedPatient.lastName}
           </p>
-          <p className="text-xs text-blue-700 mt-1">
+          <p className="text-xs text-cyan-800 mt-1">
             Patient ID: {selectedPatient.patientId} | UID: {selectedPatient.uid}
           </p>
         </div>

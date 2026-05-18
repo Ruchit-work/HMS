@@ -1616,7 +1616,7 @@ function DoctorAppointmentsContent() {
                             case "ear":
                               return <Ear className="w-5 h-5 text-sky-600" />
                             case "nose":
-                              return <ScanFace className="w-5 h-5 text-indigo-600" />
+                              return <ScanFace className="w-5 h-5 text-cyan-600" />
                             case "throat":
                               return <Mic className="w-5 h-5 text-rose-600" />
                             case "dental":
@@ -1645,7 +1645,7 @@ function DoctorAppointmentsContent() {
                                 onClick={() => openNormalConsultation(selectedAppointment.id)}
                                 className={`flex-shrink-0 w-20 sm:w-24 rounded-xl border-2 px-3 py-2.5 flex flex-col items-center justify-center gap-1 transition-all hover:shadow-md ${
                                   isNormal
-                                    ? "border-blue-400 bg-blue-50/80 text-blue-800"
+                                    ? "border-cyan-400 bg-cyan-50/80 text-cyan-900"
                                     : "border-slate-200 bg-slate-50/50 text-slate-800 hover:border-slate-300 hover:bg-slate-100"
                                 }`}
                               >
@@ -1668,7 +1668,7 @@ function DoctorAppointmentsContent() {
                                     onClick={() => openAnatomyFromQuickCard(selectedAppointment.id, model.type)}
                                     className={`flex-shrink-0 w-20 sm:w-24 rounded-xl border-2 px-3 py-2.5 flex flex-col items-center justify-center gap-1 transition-all hover:shadow-md ${
                                       isAdded
-                                        ? "border-blue-400 bg-blue-50/80 text-blue-800"
+                                        ? "border-cyan-400 bg-cyan-50/80 text-cyan-900"
                                         : "border-slate-200 bg-slate-50/50 text-slate-800 hover:border-slate-300 hover:bg-slate-100"
                                     }`}
                                   >
@@ -1699,7 +1699,7 @@ function DoctorAppointmentsContent() {
                           <button
                             type="button"
                             onClick={() => handleDownloadVisitPdf(selectedAppointment)}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0 0l-4-4m4 4l4-4" />
@@ -1735,7 +1735,7 @@ function DoctorAppointmentsContent() {
                                       (diag: string, idx: number) => (
                                         <span
                                           key={idx}
-                                          className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 border border-blue-100"
+                                          className="inline-flex items-center rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-800 border border-blue-100"
                                         >
                                           {diag}
                                         </span>
@@ -2050,7 +2050,7 @@ function DoctorAppointmentsContent() {
                                     }
                                     className={`group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full font-medium text-xs transition-all shrink-0 ${
                                       isActive
-                                        ? "bg-blue-600 text-white shadow-sm"
+                                        ? "bg-[var(--color-primary)] text-white shadow-sm"
                                         : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
                                     }`}
                                   >
@@ -2079,7 +2079,7 @@ function DoctorAppointmentsContent() {
                                       }}
                                       className={`ml-1.5 flex items-center justify-center w-5 h-5 rounded-full cursor-pointer transition-colors opacity-0 group-hover:opacity-100 ${
                                         isActive
-                                          ? "hover:bg-blue-500/80 text-white"
+                                          ? "hover:bg-cyan-500/80 text-white"
                                           : "hover:bg-slate-200 text-slate-500"
                                       }`}
                                       aria-label={`Remove ${details?.label ?? tab}`}
@@ -2104,7 +2104,7 @@ function DoctorAppointmentsContent() {
                                 onClick={() =>
                                   handleAddAnotherAnatomy(selectedAppointment.id)
                                 }
-                                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all shrink-0"
+                                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-dashed border-slate-300 text-slate-600 hover:border-cyan-400 hover:text-cyan-700 hover:bg-cyan-50 transition-all shrink-0"
                               >
                                 <svg
                                   className="w-4 h-4"
@@ -2409,8 +2409,8 @@ function DoctorAppointmentsContent() {
               ) : (
                 <div className="flex h-full items-center justify-center text-xs text-slate-500 animate-fade-in">
                   <div className="text-center px-4">
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center shadow-md transform transition-all duration-300 hover:scale-110">
-                      <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-cyan-100 to-teal-100 flex items-center justify-center shadow-md transform transition-all duration-300 hover:scale-110">
+                      <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
@@ -2620,7 +2620,7 @@ function DoctorAppointmentsContent() {
       {lastVisitModal.open && lastVisitModal.appointment && lastVisitModal.recommendation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in">
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-scale-in">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50/50">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-cyan-50 to-teal-50/50">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Last Visit Details</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
@@ -2670,7 +2670,7 @@ function DoctorAppointmentsContent() {
                     {lastVisitModal.recommendation.finalDiagnosis.map((diag, idx) => (
                       <span
                         key={idx}
-                        className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 border border-blue-100"
+                        className="inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-800 border border-blue-100"
                       >
                         {diag}
                       </span>

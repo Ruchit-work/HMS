@@ -9,6 +9,7 @@ import Notification from '@/components/ui/feedback/Notification'
 import { auth, db } from '@/firebase/config'
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore'
 import type { Branch } from '@/types/branch'
+import { Button } from '@/components/ui/Button'
 
 interface Receptionist {
   id: string
@@ -167,21 +168,12 @@ function AddReceptionistModalContent({
           </div>
         </div>
         <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
-          <button
-            type="button"
-            onClick={requestClose}
-            disabled={saving}
-            className="px-6 py-3 text-base border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50"
-          >
+          <Button type="button" variant="outline" size="lg" onClick={requestClose} disabled={saving}>
             Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-6 py-3 text-base bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Creating...' : 'Create Receptionist'}
-          </button>
+          </Button>
+          <Button type="submit" size="lg" loading={saving} loadingText="Creating...">
+            Create Receptionist
+          </Button>
         </div>
       </form>
     </div>
@@ -577,7 +569,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
             })
             setShowAddModal(true)
           }}
-          className="btn-modern btn-modern-sm"
+          className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Create Receptionist
         </button>
@@ -688,7 +680,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
                       required
                       value={editFormData.firstName}
                       onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       placeholder="Enter first name"
                     />
                   </div>
@@ -702,7 +694,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
                       required
                       value={editFormData.lastName}
                       onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       placeholder="Enter last name"
                     />
                   </div>
@@ -732,7 +724,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
                     required
                     value={editFormData.phone}
                     onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="Enter phone number"
                   />
                 </div>
@@ -746,7 +738,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
                     required={branches.length > 0}
                     value={editFormData.branchId}
                     onChange={(e) => setEditFormData({ ...editFormData, branchId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] bg-white"
                     disabled={branchesLoading}
                   >
                     <option value="">
@@ -770,21 +762,12 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleEditCancel}
-                    className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
-                    disabled={saving}
-                  >
+                  <Button type="button" variant="outline" onClick={handleEditCancel} disabled={saving}>
                     Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={saving}
-                  >
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
+                  </Button>
+                  <Button type="submit" loading={saving} loadingText="Saving...">
+                    Save Changes
+                  </Button>
                 </div>
               </form>
             </div>

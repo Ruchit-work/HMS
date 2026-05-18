@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
 import type { Room } from "@/types/patient"
 import type { Dispatch, SetStateAction } from "react"
 
@@ -88,18 +89,12 @@ export default function IpdSettingsSection({
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900">Custom Operation Packages</h3>
           <div className="flex gap-2">
-            <button
-              onClick={handleSeedRecommendedPackages}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
+            <Button type="button" variant="outline" size="sm" onClick={handleSeedRecommendedPackages}>
               Add Recommended Templates
-            </button>
-            <button
-              onClick={handleOpenCreatePackage}
-              className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700"
-            >
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={handleOpenCreatePackage}>
               New Package
-            </button>
+            </Button>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -190,20 +185,19 @@ export default function IpdSettingsSection({
           />
         </div>
         <div className="flex justify-end gap-2">
-          <button
-            onClick={resetPackageForm}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
-            disabled={packageManageLoading}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={resetPackageForm} disabled={packageManageLoading}>
             Reset
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
             onClick={handleSubmitPackage}
-            className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-            disabled={packageManageLoading}
+            loading={packageManageLoading}
+            loadingText="Saving..."
           >
-            {packageManageLoading ? "Saving..." : packageEditId ? "Update Package" : "Create Package"}
-          </button>
+            {packageEditId ? "Update Package" : "Create Package"}
+          </Button>
         </div>
 
         <div className="rounded-xl border border-slate-200">
@@ -242,12 +236,9 @@ export default function IpdSettingsSection({
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900">Room Master</h3>
-          <button
-            onClick={handleOpenCreateRoom}
-            className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700"
-          >
+          <Button type="button" variant="primary" size="sm" onClick={handleOpenCreateRoom}>
             Add Room
-          </button>
+          </Button>
         </div>
         <div className="rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">

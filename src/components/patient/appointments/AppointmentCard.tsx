@@ -74,7 +74,7 @@ export default function AppointmentCard({
         <div className="p-6 bg-white border-t">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Doctor Details */}
-            <div className="bg-blue-50 rounded-lg p-4">
+            <div className="bg-cyan-50 rounded-lg p-4">
               <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <span>👨‍⚕️</span>
                 <span>Doctor Information</span>
@@ -92,7 +92,7 @@ export default function AppointmentCard({
             </div>
 
             {/* Appointment Details */}
-            <div className="bg-purple-50 rounded-lg p-4">
+            <div className="bg-cyan-50 rounded-lg p-4">
               <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <span>📅</span>
                 <span>Appointment Details</span>
@@ -111,7 +111,7 @@ export default function AppointmentCard({
                   <p className="mt-1">
                     <span className={`px-2 py-1 rounded text-xs font-semibold ${
                       appointment.status === "confirmed"
-                        ? "bg-blue-600 text-white"
+                        ? "bg-[var(--color-primary)] text-white"
                         : appointment.status === "completed"
                         ? "bg-green-600 text-white"
                         : "bg-red-600 text-white"
@@ -227,7 +227,7 @@ export default function AppointmentCard({
                 </div>
 
                 {/* Payment & Refund Info */}
-                <div className="md:col-span-2 bg-blue-50 rounded-lg p-4">
+                <div className="md:col-span-2 bg-cyan-50 rounded-lg p-4">
                   <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <span>💰</span>
                     <span>Payment & Refund Details</span>
@@ -256,7 +256,7 @@ export default function AppointmentCard({
                       </div>
                     )}
                     {appointment.refundStatus && (
-                      <div className="pt-2 border-t border-blue-200">
+                      <div className="pt-2 border-t border-cyan-200">
                         <p className="text-green-600 font-semibold">✓ Refund {appointment.refundStatus}</p>
                         {appointment.paymentType === "partial" && appointment.cancellationPolicy === "with_fee" && appointment.cancellationFee && appointment.cancellationFee >= appointment.paymentAmount && (
                           <p className="text-xs text-orange-600 mt-1">
@@ -272,7 +272,7 @@ export default function AppointmentCard({
 
             {/* Payment Info (For active and completed appointments) */}
             {(appointment.status === "confirmed" || appointment.status === "completed") && appointment.paymentAmount && (
-              <div className="md:col-span-2 bg-blue-50 rounded-lg p-4">
+              <div className="md:col-span-2 bg-cyan-50 rounded-lg p-4">
                 <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span>💳</span>
                   <span>Payment Details</span>
@@ -285,7 +285,7 @@ export default function AppointmentCard({
                   
                   {appointment.paymentType === "partial" && (
                     <>
-                      <div className="flex justify-between items-center text-blue-700">
+                      <div className="flex justify-between items-center text-cyan-800">
                         <span>Paid Online (10%):</span>
                         <span className="font-bold">₹{appointment.paymentAmount}</span>
                       </div>
@@ -303,7 +303,7 @@ export default function AppointmentCard({
                     </div>
                   )}
                   
-                  <div className="flex justify-between items-center pt-2 border-t border-blue-200">
+                  <div className="flex justify-between items-center pt-2 border-t border-cyan-200">
                     <span className="text-gray-600">Payment Method:</span>
                     <span className="font-medium text-gray-900 capitalize">{appointment.paymentMethod}</span>
                   </div>
@@ -315,7 +315,7 @@ export default function AppointmentCard({
                     </div>
                   )}
                   
-                  <div className="pt-2 border-t border-blue-200">
+                  <div className="pt-2 border-t border-cyan-200">
                     <p className="text-green-600 font-semibold">✓ Payment Successful</p>
                     {appointment.paymentType === "partial" && (
                       <p className="text-orange-600 text-xs mt-1">

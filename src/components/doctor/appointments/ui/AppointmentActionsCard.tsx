@@ -58,16 +58,16 @@ export default function AppointmentActionsCard({
           onClick={onOpenDocuments}
           className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
         >
-          <FolderIcon className="w-4 h-4 text-blue-600 shrink-0" />
+          <FolderIcon className="w-4 h-4 text-cyan-700 shrink-0" />
           Documents &amp; reports
         </button>
         {onOpenConsentVideo && (
           <button
             type="button"
             onClick={onOpenConsentVideo}
-            className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-blue-200 bg-blue-50/50 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
+            className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-cyan-200 bg-cyan-50/50 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-cyan-100 hover:border-cyan-300 transition-colors cursor-pointer"
           >
-            <PlayIcon className="w-4 h-4 text-blue-600 shrink-0" />
+            <PlayIcon className="w-4 h-4 text-cyan-700 shrink-0" />
             Consent video
           </button>
         )}

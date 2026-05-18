@@ -31,8 +31,8 @@ export default function CollapsibleSection({
 
   const headerPadding = minimal ? "px-2 py-1.5" : compact ? "px-3 py-2" : "px-4 py-3"
   const titleClass = minimal
-    ? `font-medium text-xs ${subdued ? "text-slate-600" : "text-blue-900"}`
-    : `font-semibold text-sm ${subdued ? "text-slate-700" : "text-blue-900"}`
+    ? `font-medium text-xs ${subdued ? "text-slate-600" : "text-cyan-900"}`
+    : `font-semibold text-sm ${subdued ? "text-slate-700" : "text-cyan-900"}`
   const chevronSize = minimal ? "w-3 h-3" : "w-4 h-4"
   const contentPadding = minimal ? "p-2" : compact ? "p-3" : "p-4"
 
@@ -40,7 +40,7 @@ export default function CollapsibleSection({
     <div className={`rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden ${className}`}>
       <div
         className={`flex items-center justify-between gap-2 border-b border-slate-200 ${
-          subdued ? "bg-slate-50/80" : "bg-blue-50/80"
+          subdued ? "bg-slate-50/80" : "bg-cyan-50/80"
         } ${!isOpen ? "border-b-0" : ""} ${headerPadding}`}
       >
         <button

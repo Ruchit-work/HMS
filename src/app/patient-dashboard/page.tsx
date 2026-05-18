@@ -97,7 +97,7 @@ export default function PatientDashboard() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-slate-600 mb-4">No hospital selected. Please select a hospital to continue.</p>
-          <Link href="/hospital-selection" className="btn-modern btn-modern-sm inline-block">
+          <Link href="/hospital-selection" className="inline-flex h-8 items-center rounded-lg bg-[var(--color-primary)] px-3 text-xs font-semibold text-white hover:opacity-90">
             Select Hospital
           </Link>
         </div>
@@ -256,10 +256,10 @@ export default function PatientDashboard() {
           
           <Link 
             href="/patient-dashboard/tutorials" 
-            className="bg-white border-2 border-indigo-200 rounded-xl p-4 hover:border-indigo-400 hover:shadow-lg transition-all group"
+            className="bg-white border-2 border-cyan-200 rounded-xl p-4 hover:border-cyan-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                 <span className="text-2xl">📚</span>
               </div>
               <div>
@@ -272,10 +272,10 @@ export default function PatientDashboard() {
           <Link 
             href="/patient-dashboard/appointments"
             prefetch={true}
-            className="bg-white border-2 border-blue-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-lg transition-all group"
+            className="bg-white border-2 border-cyan-200 rounded-xl p-4 hover:border-cyan-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                 <span className="text-2xl">📝</span>
                 </div>
                     <div>
@@ -304,10 +304,10 @@ export default function PatientDashboard() {
           <Link 
             href="/patient-dashboard/services"
             prefetch={true}
-            className="bg-white border-2 border-blue-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-lg transition-all group"
+            className="bg-white border-2 border-cyan-200 rounded-xl p-4 hover:border-cyan-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                 <span className="text-2xl">🏥</span>
                       </div>
                 <div>
@@ -320,10 +320,10 @@ export default function PatientDashboard() {
           <Link 
             href="/patient-dashboard/facilities"
             prefetch={true}
-            className="bg-white border-2 border-purple-200 rounded-xl p-4 hover:border-purple-400 hover:shadow-lg transition-all group"
+            className="bg-white border-2 border-cyan-200 rounded-xl p-4 hover:border-cyan-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                 <span className="text-2xl">🏢</span>
                       </div>
                 <div>
@@ -335,10 +335,10 @@ export default function PatientDashboard() {
           
           <Link 
             href="/patient-dashboard/profile" 
-            className="bg-white border-2 border-purple-200 rounded-xl p-4 hover:border-purple-400 hover:shadow-lg transition-all group"
+            className="bg-white border-2 border-cyan-200 rounded-xl p-4 hover:border-cyan-400 hover:shadow-lg transition-all group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                 <span className="text-2xl">👤</span>
                       </div>
                 <div>

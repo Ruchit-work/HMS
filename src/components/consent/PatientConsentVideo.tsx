@@ -375,7 +375,7 @@ export default function PatientConsentVideo({
                     type="button"
                     onClick={() => handlePlayConsent(c.id)}
                     disabled={playVideoLoading}
-                    className="text-blue-600 hover:underline disabled:opacity-50"
+                    className="text-cyan-700 hover:underline disabled:opacity-50"
                   >
                     {playVideoLoading ? "Loading…" : "Play"}
                   </button>
@@ -403,7 +403,9 @@ export default function PatientConsentVideo({
         cancelText="Cancel"
         confirmLoading={deletingId === confirmDeleteId}
         loadingText="Deleting..."
-        onConfirm={() => confirmDeleteId && deleteConsent(confirmDeleteId)}
+        onConfirm={() => {
+          if (confirmDeleteId) void deleteConsent(confirmDeleteId)
+        }}
         onCancel={() => setConfirmDeleteId(null)}
       />
 

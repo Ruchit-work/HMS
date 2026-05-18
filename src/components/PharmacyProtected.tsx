@@ -10,9 +10,9 @@ interface PharmacyProtectedProps {
   fallback?: React.ReactNode
 }
 
-const PHARMACY_ALLOWED_ROLES = ['admin', 'pharmacy'] as const
+const PHARMACY_ALLOWED_ROLES = ['pharmacy'] as const
 
-/** Allows access for both admin and pharmacy roles (pharmacy portal). */
+/** Pharmacy portal is for pharmacist logins only; admins use the admin dashboard. */
 export default function PharmacyProtected({ children, fallback }: PharmacyProtectedProps) {
   const router = useRouter()
   const { user, loading } = useAuth()
@@ -23,6 +23,10 @@ export default function PharmacyProtected({ children, fallback }: PharmacyProtec
       router.replace('/auth/login?role=pharmacy')
       return
     }
+    if (user.role === 'admin') {
+      router.replace('/admin-dashboard')
+      return
+    }
     if (!PHARMACY_ALLOWED_ROLES.includes(user.role as typeof PHARMACY_ALLOWED_ROLES[number])) {
       router.replace('/auth/login?role=pharmacy')
     }
@@ -30,6 +34,10 @@ export default function PharmacyProtected({ children, fallback }: PharmacyProtec
 
   if (loading) {
     return <LoadingSpinner message="Verifying access..." />
+  }
+
+  if (user?.role === 'admin') {
+    return <LoadingSpinner message="Redirecting to admin dashboard..." />
   }
 
   if (!user) {
@@ -42,7 +50,7 @@ export default function PharmacyProtected({ children, fallback }: PharmacyProtec
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
-          <p className="text-gray-600 mb-4">You need pharmacy or admin access to open this portal.</p>
+          <p className="text-gray-600 mb-4">You need a pharmacist login to open this portal.</p>
           <button
             onClick={() => router.push('/auth/login?role=pharmacy')}
             className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
@@ -52,6 +60,10 @@ export default function PharmacyProtected({ children, fallback }: PharmacyProtec
         </div>
       </div>
     )
+  }
+
+  if (user.role !== 'pharmacy') {
+    return <LoadingSpinner message="Verifying access..." />
   }
 
   return <>{children}</>

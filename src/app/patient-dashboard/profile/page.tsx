@@ -13,6 +13,7 @@ import PageHeader from "@/components/ui/layout/PageHeader"
 import { UserData, NotificationData } from "@/types/patient"
 import { calculateAge } from "@/utils/shared/date"
 import { ConfirmDialog } from "@/components/ui/overlays/Modals"
+import { Button } from "@/components/ui/Button"
 
 export default function PatientProfilePage() {
   const { user, loading: authLoading } = useAuth("patient")
@@ -129,7 +130,7 @@ export default function PatientProfilePage() {
           title="Patient Profile"
           subtitle="View and manage your personal information and appointment statistics"
           icon="👤"
-          gradient="from-purple-600 to-pink-600"
+          gradient="from-teal-600 to-cyan-700"
         />
 
 
@@ -137,7 +138,7 @@ export default function PatientProfilePage() {
         <div className="space-y-6">
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
             <div className="flex items-center gap-5 flex-wrap">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold shadow-lg">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold shadow-lg">
                   {userData.firstName?.[0]}{userData.lastName?.[0]}
                 </div>
               <div className="flex-1 min-w-[220px]">
@@ -159,15 +160,12 @@ export default function PatientProfilePage() {
                 )}
               </div>
               <div className="flex gap-3 ml-auto">
-                  <button
-                    onClick={() => setLogoutConfirmOpen(true)}
-                  className="btn-modern btn-modern-danger flex items-center gap-2"
-                  >
+                  <Button type="button" variant="danger" onClick={() => setLogoutConfirmOpen(true)}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
                     Logout
-                  </button>
+                  </Button>
               </div>
             </div>
           </div>
@@ -176,12 +174,9 @@ export default function PatientProfilePage() {
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-md">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-slate-800">Personal Information</h3>
-                <button
-                  onClick={() => setIsEditing(!isEditing)}
-                  className="btn-modern btn-modern-purple btn-modern-sm"
-                >
+                <Button type="button" variant={isEditing ? "outline" : "primary"} size="sm" onClick={() => setIsEditing(!isEditing)}>
                   {isEditing ? "Cancel" : "Edit Profile"}
-                </button>
+                </Button>
               </div>
               
               {isEditing ? (
@@ -249,7 +244,7 @@ export default function PatientProfilePage() {
                     {userData.familyHistory ? (
                       <div className="flex flex-wrap gap-1.5">
                         {userData.familyHistory.split(',').map((item) => (
-                          <span key={item.trim()} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                          <span key={item.trim()} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200">
                             {item.trim()}
                           </span>
                         ))}
@@ -384,7 +379,7 @@ function ProfileEditForm({
             type="text"
             value={formData.firstName}
             onChange={(e) => setFormData({...formData, firstName: e.target.value})}
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
             required
           />
         </div>
@@ -394,7 +389,7 @@ function ProfileEditForm({
             type="text"
             value={formData.lastName}
             onChange={(e) => setFormData({...formData, lastName: e.target.value})}
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
             required
           />
         </div>
@@ -404,7 +399,7 @@ function ProfileEditForm({
             type="tel"
             value={formData.phoneNumber}
             onChange={(e) => setFormData({...formData, phoneNumber: e.target.value})}
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
           />
         </div>
         <div>
@@ -413,7 +408,7 @@ function ProfileEditForm({
             type="date"
             value={formData.dateOfBirth}
             onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})}
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
           />
         </div>
         <div>
@@ -421,7 +416,7 @@ function ProfileEditForm({
           <select
             value={formData.gender}
             onChange={(e) => setFormData({...formData, gender: e.target.value})}
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
           >
             <option value="">Select Gender</option>
             <option value="Male">Male</option>
@@ -434,7 +429,7 @@ function ProfileEditForm({
           <select
             value={formData.bloodGroup}
             onChange={(e) => setFormData({...formData, bloodGroup: e.target.value})}
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
           >
             <option value="">Select Blood Group</option>
             <option value="A+">A+</option>
@@ -454,7 +449,7 @@ function ProfileEditForm({
         <textarea
           value={formData.address}
           onChange={(e) => setFormData({...formData, address: e.target.value})}
-          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
           rows={3}
         />
       </div>
@@ -464,7 +459,7 @@ function ProfileEditForm({
           type="text"
           value={formData.occupation}
           onChange={(e) => setFormData({...formData, occupation: e.target.value})}
-          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
           placeholder="e.g., Teacher, Software Engineer"
         />
       </div>
@@ -488,7 +483,7 @@ function ProfileEditForm({
               type="text"
               value={formData.allergies}
               onChange={(e) => setFormData({...formData, allergies: e.target.value})}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               placeholder="List any allergies"
             />
           </div>
@@ -501,7 +496,7 @@ function ProfileEditForm({
               type="text"
               value={formData.currentMedications}
               onChange={(e) => setFormData({...formData, currentMedications: e.target.value})}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               placeholder="List current medications"
             />
           </div>
@@ -535,10 +530,10 @@ function ProfileEditForm({
                       const next = Array.from(current).join(', ')
                       setFormData({...formData, familyHistory: next})
                     }}
-                    className={`px-3 py-2 rounded-full border transition-all text-sm ${isChecked ? 'bg-purple-50 border-purple-300 text-purple-800' : 'bg-white border-slate-300 hover:border-slate-400'}`}
+                    className={`px-3 py-2 rounded-full border transition-all text-sm ${isChecked ? 'bg-cyan-50 border-cyan-300 text-cyan-900' : 'bg-white border-slate-300 hover:border-slate-400'}`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex h-3.5 w-3.5 rounded-full border ${isChecked ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}></span>
+                      <span className={`inline-flex h-3.5 w-3.5 rounded-full border ${isChecked ? 'bg-[var(--color-primary)] border-[var(--color-primary)]' : 'border-slate-300'}`}></span>
                       <span>{cond}</span>
                     </div>
                   </button>
@@ -550,7 +545,7 @@ function ProfileEditForm({
                 type="text"
                 value={formData.familyHistory}
                 onChange={(e) => setFormData({...formData, familyHistory: e.target.value})}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
                 placeholder="Other (optional). You can type or edit selections"
               />
             </div>
@@ -563,7 +558,7 @@ function ProfileEditForm({
             <select
               value={formData.drinkingHabits}
               onChange={(e) => setFormData({...formData, drinkingHabits: e.target.value})}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
             >
               <option value="">Select</option>
               <option value="Never">Never</option>
@@ -579,7 +574,7 @@ function ProfileEditForm({
             <select
               value={formData.smokingHabits}
               onChange={(e) => setFormData({...formData, smokingHabits: e.target.value})}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
             >
               <option value="">Select</option>
               <option value="Never">Never</option>
@@ -639,7 +634,7 @@ function ProfileEditForm({
               type="number"
               value={formData.heightCm ?? ''}
               onChange={(e) => setFormData({...formData, heightCm: e.target.value ? Number(e.target.value) : (undefined as unknown as number)})}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               min={0}
             />
           </div>
@@ -652,7 +647,7 @@ function ProfileEditForm({
               type="number"
               value={formData.weightKg ?? ''}
               onChange={(e) => setFormData({...formData, weightKg: e.target.value ? Number(e.target.value) : (undefined as unknown as number)})}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
               min={0}
             />
           </div>
@@ -660,20 +655,12 @@ function ProfileEditForm({
       </div>
 
       <div className="flex gap-4 pt-6">
-        <button
-          type="submit"
-          disabled={updating}
-          className="btn-modern btn-modern-purple disabled:opacity-50"
-        >
-          {updating ? "Updating..." : "Save Changes"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-6 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition-colors"
-        >
+        <Button type="submit" variant="primary" loading={updating} loadingText="Updating...">
+          Save Changes
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   )

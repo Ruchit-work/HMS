@@ -1,5 +1,7 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
+
 interface RequestRow {
   id: string
   patientName: string
@@ -15,6 +17,7 @@ interface RequestTableProps {
   rows: RequestRow[]
   loading?: boolean
   onAssign: (id: string) => void
+  assignDisabled?: boolean
 }
 
 const priorityClassMap = {
@@ -23,7 +26,7 @@ const priorityClassMap = {
   low: "bg-emerald-50 text-emerald-700 border-emerald-200",
 } as const
 
-export default function RequestTable({ rows, loading, onAssign }: RequestTableProps) {
+export default function RequestTable({ rows, loading, onAssign, assignDisabled = false }: RequestTableProps) {
   if (loading && rows.length === 0) {
     return <p className="py-10 text-center text-sm text-slate-500">Loading admission requests...</p>
   }
@@ -51,7 +54,7 @@ export default function RequestTable({ rows, loading, onAssign }: RequestTablePr
               <td className="px-3 py-3 font-mono text-xs text-slate-500">{row.id}</td>
               <td className="px-3 py-3">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-violet-100 text-xs font-semibold text-violet-700 flex items-center justify-center">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-primary)]/15 text-xs font-semibold text-[var(--color-primary-dark)]">
                     {row.patientName
                       .split(" ")
                       .map((part) => part[0])
@@ -77,12 +80,15 @@ export default function RequestTable({ rows, loading, onAssign }: RequestTablePr
               </td>
               <td className="px-3 py-3 text-xs text-slate-500">{row.requestedAt}</td>
               <td className="px-3 py-3 text-right">
-                <button
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="primary"
                   onClick={() => onAssign(row.id)}
-                  className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+                  disabled={assignDisabled}
                 >
                   Assign Room
-                </button>
+                </Button>
               </td>
             </tr>
           ))}

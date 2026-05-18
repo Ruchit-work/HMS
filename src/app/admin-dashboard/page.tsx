@@ -30,11 +30,10 @@ import PharmacistManagement from "./Tabs/PharmacistManagement"
 import DoctorPerformanceAnalytics from "./Tabs/DoctorPerformanceAnalytics"
 import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnalytics"
 import BranchManagement from "./Tabs/BranchManagement"
-import PharmacyManagement from "./Tabs/PharmacyManagement"
-import { PharmacyPortalProvider } from "@/contexts/PharmacyPortalContext"
 import AdminProtected from "@/components/AdminProtected"
 import AdminDashboardOverview from "./components/AdminDashboardOverview"
 import TabButton from "@/components/admin/TabButton"
+import { Button } from "@/components/ui/Button"
 import AdminPageHeader from "@/components/admin/AdminPageHeader"
 import SubTabNavigation from "@/components/admin/SubTabNavigation"
 import {
@@ -636,7 +635,7 @@ export default function AdminDashboard() {
 
   return (
     <AdminProtected allowedRoles={["admin"]}>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/40 to-teal-50/30">
       {/* Mobile Menu Button - Only show when sidebar is closed */}
       {!sidebarOpen && (
         <button
@@ -852,7 +851,7 @@ export default function AdminDashboard() {
             <div className="border-t border-slate-200 pt-2">
               {/* User Info */}
               <div className="flex items-center gap-2 px-1 py-1 mb-2">
-                <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-md flex items-center justify-center shadow-sm">
+                <div className="w-6 h-6 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-md flex items-center justify-center shadow-sm">
                   <span className="text-white font-bold text-xs">
                     {userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
                   </span>
@@ -864,15 +863,18 @@ export default function AdminDashboard() {
               </div>
               
               {/* Logout Button */}
-              <button 
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                className="w-full"
                 onClick={() => setLogoutConfirmOpen(true)}
-                className="btn-modern btn-modern-danger btn-modern-sm w-full flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                <span>Logout</span>
-              </button>
+                Logout
+              </Button>
             </div>
           </div>
         </nav>
@@ -930,7 +932,7 @@ export default function AdminDashboard() {
                           }
                         }
                       }}
-                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] min-w-[180px]"
                     >
                       {userHospitals.map((hospital) => (
                         <option key={hospital.id} value={hospital.id}>
@@ -946,7 +948,7 @@ export default function AdminDashboard() {
                     <select
                       value={selectedBranchId}
                       onChange={(e) => setSelectedBranchId(e.target.value)}
-                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]"
+                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] min-w-[160px]"
                     >
                       <option value="all">All branches</option>
                       {branches.map((branch) => (
@@ -956,17 +958,6 @@ export default function AdminDashboard() {
                       ))}
                     </select>
                   </div>
-                )}
-                {(activeHospital as any)?.enablePharmacy && (
-                  <Link
-                    href="/pharmacy"
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 h-10 text-sm font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                    </svg>
-                    <span>Open Pharmacy Portal</span>
-                  </Link>
                 )}
               </>
             }
@@ -1095,19 +1086,19 @@ export default function AdminDashboard() {
                   <div className="space-y-6">
                     {/* Quick Stats Overview */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+                      <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-xl p-6 border border-cyan-200">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-blue-700">Patient Analytics</span>
-                          <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
-                            <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <span className="text-sm font-medium text-cyan-800">Patient Analytics</span>
+                          <div className="w-10 h-10 bg-cyan-200 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
                           </div>
                         </div>
-                        <p className="text-xs text-blue-600 mt-2">Demographics, trends, seasonal diseases, area distribution</p>
+                        <p className="text-xs text-cyan-700 mt-2">Demographics, trends, seasonal diseases, area distribution</p>
                         <button
                           onClick={() => setAnalyticsSubTab("patients")}
-                          className="mt-4 text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+                          className="mt-4 text-xs font-semibold text-cyan-700 hover:text-cyan-800 underline"
                         >
                           View Details →
                         </button>
@@ -1131,19 +1122,19 @@ export default function AdminDashboard() {
                         </button>
                       </div>
 
-                      <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+                      <div className="bg-gradient-to-br from-cyan-50 to-teal-100 rounded-xl p-6 border border-cyan-200">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-purple-700">Doctor Performance</span>
-                          <div className="w-10 h-10 bg-purple-200 rounded-lg flex items-center justify-center">
-                            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <span className="text-sm font-medium text-cyan-800">Doctor Performance</span>
+                          <div className="w-10 h-10 bg-cyan-200 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                           </div>
                         </div>
-                        <p className="text-xs text-purple-600 mt-2">Patient count, revenue, consultation time, peak hours</p>
+                        <p className="text-xs text-cyan-700 mt-2">Patient count, revenue, consultation time, peak hours</p>
                         <button
                           onClick={() => setAnalyticsSubTab("doctors")}
-                          className="mt-4 text-xs font-semibold text-purple-600 hover:text-purple-700 underline"
+                          className="mt-4 text-xs font-semibold text-cyan-700 hover:text-cyan-800 underline"
                         >
                           View Details →
                         </button>
@@ -1171,13 +1162,13 @@ export default function AdminDashboard() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <button
                           onClick={() => setAnalyticsSubTab("patients")}
-                          className="text-left p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+                          className="text-left p-4 bg-cyan-50 hover:bg-cyan-100 rounded-lg border border-cyan-200 transition-colors"
                         >
                           <div className="flex items-center gap-3 mb-2">
                             <span className="text-2xl">👥</span>
-                            <span className="font-semibold text-blue-800">Patient Analytics</span>
+                            <span className="font-semibold text-cyan-800">Patient Analytics</span>
                           </div>
-                          <p className="text-xs text-blue-600">View patient demographics, trends, and insights</p>
+                          <p className="text-xs text-cyan-700">View patient demographics, trends, and insights</p>
                         </button>
 
                         <button
@@ -1193,13 +1184,13 @@ export default function AdminDashboard() {
 
                         <button
                           onClick={() => setAnalyticsSubTab("doctors")}
-                          className="text-left p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                          className="text-left p-4 bg-cyan-50 hover:bg-cyan-100 rounded-lg border border-cyan-200 transition-colors"
                         >
                           <div className="flex items-center gap-3 mb-2">
                             <span className="text-2xl">👨‍⚕️</span>
-                            <span className="font-semibold text-purple-800">Doctor Performance</span>
+                            <span className="font-semibold text-cyan-900">Doctor Performance</span>
                           </div>
-                          <p className="text-xs text-purple-600">Doctor metrics and performance analytics</p>
+                          <p className="text-xs text-cyan-700">Doctor metrics and performance analytics</p>
                         </button>
 
                         <button

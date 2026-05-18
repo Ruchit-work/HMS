@@ -251,7 +251,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 ? `+${metrics.newThisMonth} onboarded this month`
                 : 'No new additions this month',
             deltaClass: metrics.newThisMonth ? 'text-emerald-600' : 'text-slate-500',
-            iconClass: 'bg-blue-100 text-blue-600',
+            iconClass: 'bg-cyan-100 text-cyan-700',
             icon: (
                 <>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -264,7 +264,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             value: metrics.activeCount.toLocaleString(),
             caption: `${metrics.specialists.toLocaleString()} distinct specializations covered`,
             delta: 'Fully verified and treating patients',
-            deltaClass: 'text-blue-600',
+            deltaClass: 'text-cyan-700',
             iconClass: 'bg-emerald-100 text-emerald-600',
             icon: (
                 <>
@@ -622,12 +622,12 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             
             <div className="relative space-y-6">
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="relative border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-blue-50 px-6 py-6">
-                        <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 translate-x-12 -translate-y-8 rounded-full bg-blue-100 opacity-40 blur-3xl" />
+                    <div className="relative border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-cyan-50 px-6 py-6">
+                        <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 translate-x-12 -translate-y-8 rounded-full bg-cyan-100 opacity-40 blur-3xl" />
                         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                             <div className="max-w-3xl space-y-3">
-                                <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700 shadow-sm">
-                                    <span className="inline-flex h-2 w-2 rounded-full bg-blue-500" />
+                                <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-800 shadow-sm">
+                                    <span className="inline-flex h-2 w-2 rounded-full bg-cyan-500" />
                                     Medical workforce
                                 </span>
                                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Doctor Management</h2>
@@ -639,7 +639,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                 {allowAdd ? (
                                     <button
                                         onClick={openAddDoctorModal}
-                                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
                                         type="button"
                                     >
                                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -648,8 +648,8 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                         Add doctor
                             </button>
                                 ) : (
-                                    <div className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white/70 px-3 py-2 text-xs font-semibold text-blue-600 shadow-inner">
-                                        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
+                                    <div className="inline-flex items-center gap-2 rounded-lg border border-cyan-200 bg-white/70 px-3 py-2 text-xs font-semibold text-cyan-700 shadow-inner">
+                                        <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
                                         Registration handled centrally
                         </div>
                                 )}
@@ -666,7 +666,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                     key={item.label}
                                     className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-inner"
                                 >
-                                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
+                                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
                                     <span>{item.label}</span>
                                     <span className="text-slate-900">{item.value}</span>
                                 </div>
@@ -696,7 +696,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                             </svg>
                                         </span>
                                     </div>
-                                    <div className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-blue-50 opacity-30" />
+                                    <div className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-cyan-50 opacity-30" />
                                 </div>
                             ))}
                         </div>
@@ -713,7 +713,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                             value={search}
                                             onChange={(e) => setSearch(e.target.value)}
                                             placeholder="Search by name, email, specialization, or doctor ID…"
-                                            className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                                         />
                                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                             <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -723,7 +723,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                     </div>
                                 </div>
                                 {user?.role === 'admin' && (
-                                    <div className="rounded-xl border border-dashed border-blue-200 bg-white/70 px-4 py-3 text-xs text-slate-500">
+                                    <div className="rounded-xl border border-dashed border-cyan-200 bg-white/70 px-4 py-3 text-xs text-slate-500">
                                         Keep an eye on pending approvals to ensure timely onboarding of new specialists.
                                     </div>
                                 )}
@@ -733,7 +733,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                     {displayedDoctors.length.toLocaleString()} doctor{displayedDoctors.length === 1 ? '' : 's'} match the current view.
                                 </p>
                                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                                    <span className="inline-flex h-2 w-2 rounded-full bg-blue-400" />
+                                    <span className="inline-flex h-2 w-2 rounded-full bg-cyan-400" />
                                     Active
                                     {user?.role === 'admin' && (
                                         <>
@@ -756,7 +756,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                             onClick={() => setActiveTab('active')}
                                         className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                                 activeTab === 'active'
-                                                ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                                                ? 'border-cyan-500 bg-cyan-50 text-cyan-800 shadow-sm'
                                                 : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700'
                             }`}
                         >
@@ -797,7 +797,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                 <tr>
                                     <td colSpan={8} className="px-6 py-12 text-center">
                                         <div className="flex flex-col items-center">
-                                                        <svg className="mb-2 h-8 w-8 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
+                                                        <svg className="mb-2 h-8 w-8 animate-spin text-cyan-700" fill="none" viewBox="0 0 24 24">
                                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                             </svg>
@@ -888,7 +888,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                                     <td className="px-3 py-4">
                                                         <div className="flex items-center gap-1.5">
                                                 <button 
-                                                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                                                className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100"
                                                     onClick={() => handleView(doctor)}
                                                                 type="button"
                                                 >
@@ -1007,8 +1007,8 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                     {/* Professional Information */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                         <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-8 h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-5 h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                             </div>

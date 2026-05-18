@@ -61,7 +61,7 @@ export default function Home() {
         </header>
 
         {/* HERO SECTION */}
-        <section className="mt-10 grid gap-10 rounded-3xl bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-10 text-white shadow-sm lg:mt-16 lg:grid-cols-[minmax(0,_1.05fr)_minmax(0,_1.1fr)] lg:px-10 lg:py-12 lg:items-center">
+        <section className="mt-10 grid gap-10 rounded-3xl bg-gradient-to-r from-cyan-600 to-teal-600 px-6 py-10 text-white shadow-sm lg:mt-16 lg:grid-cols-[minmax(0,_1.05fr)_minmax(0,_1.1fr)] lg:px-10 lg:py-12 lg:items-center">
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-50">
               <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -88,13 +88,13 @@ export default function Home() {
                   setPortalLoading(true)
                   router.push("/auth/login")
                 }}
-                className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 ${
+                className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-cyan-800 shadow-sm transition hover:bg-cyan-50 ${
                   portalLoading ? "ring-2 ring-offset-2 ring-blue-300 animate-pulse" : ""
                 }`}
               >
                 {portalLoading ? (
                   <>
-                    <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
                     Opening portal…
                   </>
                 ) : (
@@ -146,7 +146,7 @@ export default function Home() {
                   <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                   Live hospital overview
                 </span>
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-slate-700">
+                <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] text-slate-700">
                   Today · Multi‑branch
                 </span>
               </div>
@@ -272,9 +272,9 @@ export default function Home() {
             ].map((card) => (
               <div
                 key={card.title}
-                className="group rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition hover:border-blue-500/60 hover:bg-blue-50"
+                className="group rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition hover:border-cyan-500/60 hover:bg-cyan-50"
               >
-                <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 group-hover:bg-blue-100">
+                <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 group-hover:bg-cyan-100">
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
                     <path
                       d="M12 3l7 4v5c0 5-3 7-7 9-4-2-7-4-7-9V7l7-4z"
@@ -318,11 +318,11 @@ export default function Home() {
             ].map((label) => (
               <div
                 key={label}
-                className="group rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition hover:border-blue-500/70 hover:bg-blue-50"
+                className="group rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm transition hover:border-cyan-500/70 hover:bg-cyan-50"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-slate-900">{label}</p>
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-cyan-50 text-cyan-700">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
                       <path
                         d="M9 5l7 7-7 7"
@@ -343,7 +343,7 @@ export default function Home() {
         </section>
 
         {/* PRODUCT PREVIEW SECTION */}
-        <section className="mt-16 rounded-3xl border border-slate-200 bg-blue-50/70 p-6 shadow-sm sm:p-8">
+        <section className="mt-16 rounded-3xl border border-slate-200 bg-cyan-50/70 p-6 shadow-sm sm:p-8">
           <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">
             Designed for Simplicity and Efficiency
           </h2>
@@ -484,7 +484,7 @@ export default function Home() {
 
         {/* CALL TO ACTION SECTION */}
         <section className="mt-16">
-          <div className="relative overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-r from-blue-600 via-blue-500 to-blue-400 p-6 shadow-sm sm:p-8">
+          <div className="relative overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-r from-cyan-600 via-teal-500 to-cyan-400 p-6 shadow-sm sm:p-8">
             <div className="absolute -right-20 -top-20 h-48 w-48 rounded-full bg-blue-300/30 blur-3xl" />
             <div className="relative flex flex-col items-start gap-4 text-blue-50 md:flex-row md:items-center md:justify-between">
               <div>
@@ -499,13 +499,13 @@ export default function Home() {
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Link
                   href="/auth/login"
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-cyan-800 shadow-sm hover:bg-cyan-50"
                 >
                   Login to Healthcare Portal
                 </Link>
                 <Link
                   href="/auth/signup"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-blue-50/80 bg-blue-500/10 px-5 py-2.5 text-sm font-semibold text-blue-50 hover:bg-blue-500/20"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-blue-50/80 bg-cyan-500/10 px-5 py-2.5 text-sm font-semibold text-blue-50 hover:bg-cyan-500/20"
                 >
                   Create an Account
                 </Link>

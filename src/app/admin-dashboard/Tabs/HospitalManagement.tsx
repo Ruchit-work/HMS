@@ -9,6 +9,7 @@ import Notification from '@/components/ui/feedback/Notification'
 import { auth, db } from '@/firebase/config'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { Hospital } from '@/types/hospital'
+import { Button } from '@/components/ui/Button'
 
 interface HospitalFormData {
   name: string
@@ -222,7 +223,7 @@ export default function HospitalManagement() {
             setFormData({ name: '', code: '', address: '', phone: '', email: '', multipleBranchesEnabled: false, enableAnalytics: true, enablePharmacy: false })
             setShowAddModal(true)
           }}
-          className="btn-modern btn-modern-sm"
+          className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Add Hospital
         </button>
@@ -276,7 +277,7 @@ export default function HospitalManagement() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
                         onClick={() => handleEdit(hospital)}
-                        className="text-blue-600 hover:text-blue-900"
+                        className="text-cyan-700 hover:text-cyan-900"
                       >
                         Edit
                       </button>
@@ -316,7 +317,7 @@ export default function HospitalManagement() {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="Enter hospital name"
                   />
                 </div>
@@ -330,7 +331,7 @@ export default function HospitalManagement() {
                     required
                     value={formData.code}
                     onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="e.g., HMS001"
                     disabled={!!editingHospital}
                   />
@@ -347,7 +348,7 @@ export default function HospitalManagement() {
                     required
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     placeholder="Enter hospital address"
                     rows={3}
                   />
@@ -367,7 +368,7 @@ export default function HospitalManagement() {
                       onChange={(e) => setFormData({ ...formData, multipleBranchesEnabled: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]" />
                   </label>
                 </div>
 
@@ -386,7 +387,7 @@ export default function HospitalManagement() {
                         onChange={(e) => setFormData({ ...formData, enableAnalytics: e.target.checked })}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]" />
                     </label>
                   </div>
 
@@ -404,7 +405,7 @@ export default function HospitalManagement() {
                         onChange={(e) => setFormData({ ...formData, enablePharmacy: e.target.checked })}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]" />
                     </label>
                   </div>
                 </div>
@@ -419,7 +420,7 @@ export default function HospitalManagement() {
                       required
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       placeholder="Enter phone number"
                     />
                   </div>
@@ -433,28 +434,19 @@ export default function HospitalManagement() {
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       placeholder="Enter email address"
                     />
                   </div>
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
-                    disabled={saving}
-                  >
+                  <Button type="button" variant="outline" onClick={handleCancel} disabled={saving}>
                     Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn-modern btn-modern-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={saving}
-                  >
-                    {saving ? 'Saving...' : editingHospital ? 'Update Hospital' : 'Create Hospital'}
-                  </button>
+                  </Button>
+                  <Button type="submit" loading={saving} loadingText="Saving...">
+                    {editingHospital ? 'Update Hospital' : 'Create Hospital'}
+                  </Button>
                 </div>
               </form>
             </div>

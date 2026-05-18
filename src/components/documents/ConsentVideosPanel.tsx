@@ -276,7 +276,7 @@ export default function ConsentVideosPanel({
       ) : error ? (
         <div className="text-center py-12">
           <p className="text-red-600">{error}</p>
-          <button onClick={() => fetchConsents()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+          <button onClick={() => fetchConsents()} className="mt-4 px-4 py-2 bg-[var(--color-primary)] text-white rounded-md hover:opacity-90">
             Retry
           </button>
         </div>
@@ -301,7 +301,7 @@ export default function ConsentVideosPanel({
                   </p>
                   <p className="text-xs text-gray-400 mt-1">{formatDate(c.uploadedAt)}</p>
                   {(c.patientName || !patientUid) && (
-                    <p className="text-xs text-blue-600 mt-1">{c.patientName || `Patient: ${c.patientId}`}</p>
+                    <p className="text-xs text-cyan-700 mt-1">{c.patientName || `Patient: ${c.patientId}`}</p>
                   )}
                 </div>
               </div>
@@ -310,7 +310,7 @@ export default function ConsentVideosPanel({
                   type="button"
                   onClick={() => handlePlayConsent(c.id)}
                   disabled={playVideoLoading}
-                  className="inline-flex items-center px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex items-center px-3 py-1.5 rounded-md bg-[var(--color-primary)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50"
                 >
                   {playVideoLoading ? "Loading…" : "Play"}
                 </button>
@@ -337,7 +337,9 @@ export default function ConsentVideosPanel({
         cancelText="Cancel"
         confirmLoading={deleting}
         loadingText="Deleting..."
-        onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+        onConfirm={() => {
+          if (confirmDeleteId) void handleDelete(confirmDeleteId)
+        }}
         onCancel={() => setConfirmDeleteId(null)}
       />
 

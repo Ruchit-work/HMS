@@ -700,7 +700,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
         <select
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value as any)}
-          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           <option value="7days">Last 7 Days</option>
           <option value="30days">Last 30 Days</option>
@@ -728,17 +728,17 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
         </div>
 
         {/* Monthly Revenue */}
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+        <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-xl p-6 border border-cyan-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-700">Monthly Revenue</span>
-            <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="text-sm font-medium text-cyan-800">Monthly Revenue</span>
+            <div className="w-10 h-10 bg-cyan-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
           </div>
-          <p className="text-3xl font-bold text-blue-900">₹{analytics.monthlyRevenue.toLocaleString('en-IN')}</p>
-          <p className="text-xs text-blue-600 mt-1">Last 30 days</p>
+          <p className="text-3xl font-bold text-cyan-900">₹{analytics.monthlyRevenue.toLocaleString('en-IN')}</p>
+          <p className="text-xs text-cyan-700 mt-1">Last 30 days</p>
         </div>
 
         {/* Outstanding Payments */}
@@ -756,17 +756,17 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
         </div>
 
         {/* Average Transaction */}
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+        <div className="bg-gradient-to-br from-cyan-50 to-teal-100 rounded-xl p-6 border border-cyan-200">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-purple-700">Avg Transaction</span>
-            <div className="w-10 h-10 bg-purple-200 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="text-sm font-medium text-cyan-800">Avg Transaction</span>
+            <div className="w-10 h-10 bg-cyan-200 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
           </div>
-          <p className="text-3xl font-bold text-purple-900">₹{analytics.averageTransactionValue.toLocaleString('en-IN')}</p>
-          <p className="text-xs text-purple-600 mt-1">Per transaction</p>
+          <p className="text-3xl font-bold text-cyan-900">₹{analytics.averageTransactionValue.toLocaleString('en-IN')}</p>
+          <p className="text-xs text-cyan-700 mt-1">Per transaction</p>
         </div>
       </div>
 
@@ -845,7 +845,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
             {(analytics.revenueByDoctor || []).slice(0, 5).map((doctor, idx) => (
               <div key={doctor.doctorId} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-bold text-blue-600 flex-shrink-0">
+                  <div className="w-8 h-8 bg-cyan-100 rounded-full flex items-center justify-center text-sm font-bold text-cyan-700 flex-shrink-0">
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -882,7 +882,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2">
                       <div 
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full"
+                        className="bg-gradient-to-r from-cyan-600 to-teal-600 h-2 rounded-full"
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
@@ -914,7 +914,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2">
                       <div 
-                        className="bg-gradient-to-r from-purple-500 to-purple-600 h-2 rounded-full"
+                        className="bg-gradient-to-r from-cyan-600 to-teal-600 h-2 rounded-full"
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
@@ -963,7 +963,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 capitalize">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 capitalize">
                         {payment.type}
                       </span>
                     </td>
@@ -1017,14 +1017,14 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
       {/* Revenue Prediction & Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Next Month Revenue Prediction */}
-        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200 shadow-sm">
+        <div className="bg-gradient-to-br from-cyan-50 to-teal-50 rounded-xl p-6 border border-cyan-200 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-slate-800">Next Month Prediction</h3>
               <p className="text-xs text-slate-600 mt-1">Based on past 6 months</p>
             </div>
-            <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
             </div>
@@ -1033,7 +1033,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
           <div className="space-y-4">
             <div>
               <p className="text-xs font-semibold text-slate-600 mb-1">Predicted Revenue</p>
-              <p className="text-3xl font-bold text-indigo-900">
+              <p className="text-3xl font-bold text-cyan-900">
                 ₹{analytics.nextMonthPrediction.predictedRevenue.toLocaleString('en-IN')}
               </p>
             </div>
@@ -1112,10 +1112,10 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
                 
                 const seasonColors: Record<string, { bg: string; border: string; text: string; accent: string }> = {
                   'Winter': {
-                    bg: 'from-blue-50 to-cyan-50',
-                    border: 'border-blue-200',
-                    text: 'text-blue-700',
-                    accent: 'bg-blue-500'
+                    bg: 'from-cyan-50 to-cyan-50',
+                    border: 'border-cyan-200',
+                    text: 'text-cyan-800',
+                    accent: 'bg-cyan-500'
                   },
                   'Spring': {
                     bg: 'from-green-50 to-emerald-50',

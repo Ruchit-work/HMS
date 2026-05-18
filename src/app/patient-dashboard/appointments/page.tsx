@@ -19,6 +19,7 @@ import { UserData, Appointment, NotificationData, BillingRecord } from "@/types/
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
 import Footer from "@/components/ui/layout/Footer"
 import Link from "next/link"
+import { Button } from "@/components/ui/Button"
 
 export default function PatientAppointments() {
   const [userData, setUserData] = useState<UserData | null>(null)
@@ -181,7 +182,7 @@ export default function PatientAppointments() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-slate-600 mb-4">No hospital selected. Please select a hospital to continue.</p>
-          <Link href="/hospital-selection" className="btn-modern btn-modern-sm inline-block">
+          <Link href="/hospital-selection" className="inline-flex h-8 items-center rounded-lg bg-[var(--color-primary)] px-3 text-xs font-semibold text-white hover:opacity-90">
             Select Hospital
           </Link>
         </div>
@@ -368,7 +369,7 @@ export default function PatientAppointments() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 min-h-screen">
 
           {/* Page Header */}
-          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
+          <div className="bg-gradient-to-r from-teal-600 to-cyan-700 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-4xl">
@@ -376,17 +377,14 @@ export default function PatientAppointments() {
                 </div>
                 <div>
                   <h1 className="text-3xl font-bold">My Appointments</h1>
-                  <p className="text-indigo-100 text-sm mt-1">View and manage all your appointments</p>
+                  <p className="text-white/80 text-sm mt-1">View and manage all your appointments</p>
                 </div>
               </div>
               <div className="w-full sm:w-auto">
                 <Link href="/patient-dashboard/book-appointment" prefetch={true} className="block">
-                  <button className="btn-modern w-full group inline-flex items-center justify-center gap-3">
-                    <svg className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    <span className="text-sm sm:text-base">Book New Appointment</span>
-                  </button>
+                  <Button type="button" variant="secondary" className="w-full">
+                    Book New Appointment
+                  </Button>
                 </Link>
               </div>
             </div>
@@ -398,11 +396,11 @@ export default function PatientAppointments() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-600 mb-1">Confirmed</p>
-                  <p className="text-3xl font-bold text-blue-600">
+                  <p className="text-3xl font-bold text-cyan-700">
                     {confirmedAppointments.length}
                   </p>
                 </div>
-                <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
+                <div className="w-14 h-14 bg-cyan-100 rounded-xl flex items-center justify-center">
                   <span className="text-3xl">📅</span>
                 </div>
               </div>
@@ -472,7 +470,7 @@ export default function PatientAppointments() {
                     onClick={() => setActiveTab("confirmed")}
                     className={`w-full sm:flex-1 px-4 sm:px-6 py-3 sm:py-4 font-semibold transition-all text-sm sm:text-base ${
                       activeTab === "confirmed"
-                        ? "bg-blue-50 text-blue-600 border-b-2 border-blue-600"
+                        ? "bg-cyan-50 text-cyan-700 border-b-2 border-[var(--color-primary)]"
                         : "text-slate-600 hover:bg-slate-50"
                     }`}
                   >

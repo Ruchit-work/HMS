@@ -1,4 +1,5 @@
 import React from 'react'
+import { Button } from '@/components/ui/Button'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import { RefundCashModal } from '@/components/pharmacy/RefundCashModal'
 import type { RefundNotesRecord } from '@/components/pharmacy/RefundCashModal'
@@ -71,6 +72,8 @@ export function CashExpensesShiftContent(props: {
   onSaveExpense: () => Promise<void>
   onConfirmExpenseCash: (notes: RefundNotesRecord) => Promise<void>
   onApplyExpenseFilters: () => Promise<void>
+  openCounterLoading?: boolean
+  saveExpenseLoading?: boolean
 }) {
   const {
     cashExpensePeriod,
@@ -115,6 +118,8 @@ export function CashExpensesShiftContent(props: {
     onSaveExpense,
     onConfirmExpenseCash,
     onApplyExpenseFilters,
+    openCounterLoading = false,
+    saveExpenseLoading = false,
   } = props
 
   return (
@@ -305,10 +310,15 @@ export function CashExpensesShiftContent(props: {
                     <div><p className="text-slate-500">Difference</p><p className={`font-semibold tabular-nums ${closeShiftPreview.difference === 0 ? 'text-emerald-700' : closeShiftPreview.difference > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{closeShiftPreview.difference === 0 ? '₹0.00' : closeShiftPreview.difference > 0 ? `+₹${closeShiftPreview.difference.toFixed(2)}` : `−₹${Math.abs(closeShiftPreview.difference).toFixed(2)}`}</p></div>
                   </div>
                 </div>
-                <button type="button" className={`w-full inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-[0.98] active:shadow-inner focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 transition-all duration-150 ease-out ${closeCounterButtonClicked ? 'ring-2 ring-rose-300 ring-offset-2 ring-offset-white' : ''}`} onClick={onCloseShiftClick}>
-                  <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="lg"
+                  className={`w-full ${closeCounterButtonClicked ? 'ring-2 ring-rose-300 ring-offset-2' : ''}`}
+                  onClick={onCloseShiftClick}
+                >
                   Close Shift & Generate Report
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -321,10 +331,9 @@ export function CashExpensesShiftContent(props: {
                     <div><span className="text-emerald-700 block text-xs">Closing amount</span><span className="font-semibold text-emerald-900 tabular-nums">₹{lastClosedSummary.closingCashTotal.toFixed(2)}</span></div>
                     <div><span className="text-emerald-700 block text-xs">Profit (shift)</span><span className="font-semibold text-emerald-900 tabular-nums">₹{lastClosedSummary.profit.toFixed(2)}</span></div>
                     <div className="flex items-end">
-                      <button type="button" onClick={onStartNewShift} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+                      <Button type="button" variant="primary" size="sm" onClick={onStartNewShift}>
                         Start new shift
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   <p className="text-xs text-emerald-700">Enter opening cash below and open counter to start the next shift.</p>
@@ -376,7 +385,9 @@ export function CashExpensesShiftContent(props: {
                     <span>Opening cash total</span>
                     <span className="font-semibold text-slate-900">₹{CASH_DENOMS.reduce((sum, den) => sum + Math.max(0, Number(cashOpeningNotes[den] || 0)) * Number(den), 0).toFixed(2)}</span>
                   </div>
-                  <button type="button" className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700" onClick={onOpenCounter}>Open counter</button>
+                  <Button type="button" variant="primary" size="sm" loading={openCounterLoading} loadingText="Opening…" onClick={onOpenCounter}>
+                    Open counter
+                  </Button>
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-xs text-slate-600 space-y-2">
@@ -456,7 +467,9 @@ export function CashExpensesShiftContent(props: {
               </select>
             </label>
           </div>
-          <button type="button" className="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" onClick={onSaveExpense}>Save expense</button>
+          <Button type="button" variant="primary" size="md" className="w-full" loading={saveExpenseLoading} loadingText="Saving…" onClick={onSaveExpense}>
+            Save expense
+          </Button>
           {pendingExpensePayload && (
             <RefundCashModal
               isOpen={showExpenseCashModal}

@@ -5,6 +5,8 @@ import { auth } from "@/firebase/config"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import { Admission, AdmissionRequest, Room } from "@/types/patient"
 import { RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/Button"
+import { ipdSubTabClass } from "@/app/receptionist-dashboard/components/admit-dashboard/ipdUi"
 import AdmissionHistoryPanel from "@/app/receptionist-dashboard/Tabs/AdmissionHistoryPanel"
 import AssignRoomModal from "@/app/receptionist-dashboard/components/admit-dashboard/modals/AssignRoomModal"
 import DirectAdmitModal from "@/app/receptionist-dashboard/components/admit-dashboard/modals/DirectAdmitModal"
@@ -252,6 +254,8 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [depositTopupNote, setDepositTopupNote] = useState("")
   const [depositTopupPaymentMode, setDepositTopupPaymentMode] = useState("cash")
   const [depositTopupLoading, setDepositTopupLoading] = useState(false)
+  const [admissionDetailsSaving, setAdmissionDetailsSaving] = useState(false)
+  const [billingProcessing, setBillingProcessing] = useState(false)
   const [roomManagerOpen, setRoomManagerOpen] = useState(false)
   const [roomEditId, setRoomEditId] = useState<string | null>(null)
   const [roomManageLoading, setRoomManageLoading] = useState(false)
@@ -714,34 +718,42 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     }
   }
 
+  const persistAdmissionDetails = async (admission: Admission) => {
+    const currentUser = auth.currentUser
+    if (!currentUser) {
+      throw new Error("You must be logged in to update admission")
+    }
+    const token = await currentUser.getIdToken()
+    const res = await fetch(`/api/receptionist/admissions/${admission.id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        expectedDischargeAt: admission.expectedDischargeAt || null,
+        notes: admission.notes || null,
+        charges: admission.charges || {},
+        paymentTerms: admission.paymentTerms || "standard",
+        operationPackage: admission.operationPackage || null,
+      }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data?.error || "Failed to save admission details")
+    }
+  }
+
   const handleSaveAdmissionDetails = async (admission: Admission) => {
+    if (admissionDetailsSaving || billingProcessing) return
+    setAdmissionDetailsSaving(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to update admission")
-      }
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/admissions/${admission.id}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          expectedDischargeAt: admission.expectedDischargeAt || null,
-          notes: admission.notes || null,
-          charges: admission.charges || {},
-          paymentTerms: admission.paymentTerms || "standard",
-          operationPackage: admission.operationPackage || null,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to save admission details")
-      }
+      await persistAdmissionDetails(admission)
       notify({ type: "success", message: "Admission details updated." })
     } catch (error: any) {
       notify({ type: "error", message: error?.message || "Failed to save admission details" })
+    } finally {
+      setAdmissionDetailsSaving(false)
     }
   }
 
@@ -788,8 +800,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   }
 
   const handleProcessBilling = async (admission: Admission) => {
+    if (admissionDetailsSaving || billingProcessing) return
+    setBillingProcessing(true)
     try {
-      await handleSaveAdmissionDetails(admission)
+      await persistAdmissionDetails(admission)
       const currentUser = auth.currentUser
       if (!currentUser) {
         throw new Error("You must be logged in to process billing")
@@ -811,6 +825,8 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
       onOpenBilling?.(String(data?.billingId || admission.id))
     } catch (error: any) {
       notify({ type: "error", message: error?.message || "Failed to process billing" })
+    } finally {
+      setBillingProcessing(false)
     }
   }
 
@@ -1613,11 +1629,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
             role="tab"
             aria-selected={activeSubTab === "admitted"}
             onClick={() => setActiveSubTab("admitted")}
-            className={`-mb-px rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-              activeSubTab === "admitted"
-                ? "border-violet-600 bg-violet-50 text-violet-700"
-                : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
+            className={ipdSubTabClass(activeSubTab === "admitted")}
           >
             Admissions Desk
           </button>
@@ -1625,11 +1637,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
             role="tab"
             aria-selected={activeSubTab === "dashboard"}
             onClick={() => setActiveSubTab("dashboard")}
-            className={`-mb-px rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-              activeSubTab === "dashboard"
-                ? "border-violet-600 bg-violet-50 text-violet-700"
-                : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
+            className={ipdSubTabClass(activeSubTab === "dashboard")}
           >
             IPD Dashboard
           </button>
@@ -1637,11 +1645,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
             role="tab"
             aria-selected={activeSubTab === "history"}
             onClick={() => setActiveSubTab("history")}
-            className={`-mb-px rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-              activeSubTab === "history"
-                ? "border-violet-600 bg-violet-50 text-violet-700"
-                : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
+            className={ipdSubTabClass(activeSubTab === "history")}
           >
             History
           </button>
@@ -1649,11 +1653,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
             role="tab"
             aria-selected={activeSubTab === "settings"}
             onClick={() => setActiveSubTab("settings")}
-            className={`-mb-px rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-              activeSubTab === "settings"
-                ? "border-violet-600 bg-violet-50 text-violet-700"
-                : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
+            className={ipdSubTabClass(activeSubTab === "settings")}
           >
             Settings
           </button>
@@ -1739,6 +1739,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         plannedAdmissions={plannedAdmissions}
         plannedAdmissionsWithin24h={plannedAdmissionsWithin24h}
         onPlannedAction={handlePlannedAdmissionAction}
+        onRefreshData={async () => {
+          await Promise.all([fetchAdmitRequests(), fetchAdmissions(), fetchRooms()])
+        }}
+        assignDisabled={assignModalOpen || assignLoading}
         plannedActionLoadingId={plannedActionLoadingId}
         />
       )}
@@ -1881,32 +1885,27 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
                 : "This will change status from scheduled to admitted and occupy the assigned room."}
             </p>
             <div className="mt-5 flex justify-end gap-3">
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                   setPlannedConfirmModalOpen(false)
                   setPlannedConfirmAdmissionId(null)
                   setPlannedConfirmAction(null)
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 disabled={Boolean(plannedActionLoadingId)}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant={plannedConfirmAction === "delete" ? "danger" : "primary"}
                 onClick={handleConfirmPlannedAction}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
-                  plannedConfirmAction === "delete" ? "bg-rose-600 hover:bg-rose-700" : "bg-violet-600 hover:bg-violet-700"
-                }`}
-                disabled={Boolean(plannedActionLoadingId)}
+                loading={Boolean(plannedActionLoadingId)}
+                loadingText="Processing..."
               >
-                {plannedActionLoadingId
-                  ? "Processing..."
-                  : plannedConfirmAction === "delete"
-                    ? "Delete Admission"
-                    : "Ready to Admit"}
-              </button>
+                {plannedConfirmAction === "delete" ? "Delete Admission" : "Ready to Admit"}
+              </Button>
             </div>
           </div>
         </div>
@@ -1931,26 +1930,28 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
               />
             </div>
             <div className="mt-5 flex justify-end gap-3">
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                   setPostponeModalOpen(false)
                   setPostponeAdmissionId(null)
                   setPostponeDateTime("")
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 disabled={Boolean(plannedActionLoadingId)}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="primary"
                 onClick={handleConfirmPostpone}
-                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-                disabled={!postponeDateTime || Boolean(plannedActionLoadingId)}
+                loading={Boolean(plannedActionLoadingId)}
+                loadingText="Saving..."
+                disabled={!postponeDateTime}
               >
-                {plannedActionLoadingId ? "Saving..." : "Save"}
-              </button>
+                Save
+              </Button>
             </div>
           </div>
         </div>
@@ -1983,26 +1984,28 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
               </select>
             </div>
             <div className="mt-5 flex justify-end gap-3">
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => {
                   setAssignDoctorReadyModalOpen(false)
                   setAssignDoctorReadyAdmissionId(null)
                   setAssignDoctorReadyDoctorId("")
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 disabled={Boolean(plannedActionLoadingId)}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="primary"
                 onClick={handleConfirmAssignDoctorAndReady}
-                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-                disabled={!assignDoctorReadyDoctorId || Boolean(plannedActionLoadingId)}
+                loading={Boolean(plannedActionLoadingId)}
+                loadingText="Processing..."
+                disabled={!assignDoctorReadyDoctorId}
               >
-                {plannedActionLoadingId ? "Processing..." : "Assign & Ready to Admit"}
-              </button>
+                Assign & Ready to Admit
+              </Button>
             </div>
           </div>
         </div>
@@ -2024,6 +2027,8 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         depositPaymentModes={DEPOSIT_PAYMENT_MODES as unknown as Array<{ value: string; label: string }>}
         handleAddDepositTopup={handleAddDepositTopup}
         depositTopupLoading={depositTopupLoading}
+        admissionDetailsSaving={admissionDetailsSaving}
+        billingProcessing={billingProcessing}
         handleSaveAdmissionDetails={handleSaveAdmissionDetails}
         handleProcessBilling={handleProcessBilling}
       />

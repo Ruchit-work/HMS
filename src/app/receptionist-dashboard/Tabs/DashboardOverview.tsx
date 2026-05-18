@@ -318,8 +318,8 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
           { label: 'Walk-in Patients', value: stats.walkInPatients, iconBg: 'bg-emerald-100', iconCl: 'text-emerald-600', onClick: () => onTabChange?.('patients') },
           { label: 'WhatsApp Bookings', value: stats.pendingWhatsAppBookings, iconBg: 'bg-amber-100', iconCl: 'text-amber-600', onClick: () => onTabChange?.('whatsapp-bookings') },
           { label: 'Pending Billing', value: stats.pendingBilling, iconBg: 'bg-rose-100', iconCl: 'text-rose-600', onClick: () => onTabChange?.('billing') },
-          { label: 'Completed Visits', value: stats.completedVisits, iconBg: 'bg-violet-100', iconCl: 'text-violet-600', onClick: () => onTabChange?.('appointments') },
-          { label: 'Doctors Available', value: stats.doctorsAvailableToday, iconBg: 'bg-indigo-100', iconCl: 'text-indigo-600', onClick: () => onTabChange?.('doctors') },
+          { label: 'Completed Visits', value: stats.completedVisits, iconBg: 'bg-teal-100', iconCl: 'text-teal-600', onClick: () => onTabChange?.('appointments') },
+          { label: 'Doctors Available', value: stats.doctorsAvailableToday, iconBg: 'bg-cyan-100', iconCl: 'text-cyan-600', onClick: () => onTabChange?.('doctors') },
         ].map((card) => (
           <button
             key={card.label}
@@ -351,7 +351,7 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
             <button
               type="button"
               onClick={() => onTabChange?.('admit-requests')}
-              className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+              className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800 hover:bg-cyan-100"
             >
               Open IPD
             </button>
@@ -514,8 +514,8 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
               <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center"><svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg></div>
               <span className="text-xs font-medium text-slate-700 text-center">WhatsApp Booking</span>
             </button>
-            <button type="button" onClick={() => onTabChange?.('billing')} className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-violet-200 hover:bg-violet-50/50 transition-all">
-              <div className="h-10 w-10 rounded-lg bg-violet-100 flex items-center justify-center"><svg className="h-5 w-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg></div>
+            <button type="button" onClick={() => onTabChange?.('billing')} className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-cyan-200 hover:bg-cyan-50/50 transition-all">
+              <div className="h-10 w-10 rounded-lg bg-cyan-100 flex items-center justify-center"><svg className="h-5 w-5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg></div>
               <span className="text-xs font-medium text-slate-700 text-center">Create Billing</span>
             </button>
             <button type="button" onClick={() => onTabChange?.('book-appointment')} className="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-teal-200 hover:bg-teal-50/50 transition-all">

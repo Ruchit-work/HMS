@@ -256,7 +256,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
         <select
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value as any)}
-          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           <option value="30days">Last 30 Days</option>
           <option value="3months">Last 3 Months</option>
@@ -277,7 +277,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
             <div className="flex items-start justify-between mb-6">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                  <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                     {doctor.doctorName.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -287,7 +287,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
                 </div>
               </div>
               {idx < 3 && (
-                <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">
+                <span className="px-3 py-1 bg-cyan-100 text-cyan-800 text-xs font-bold rounded-full">
                   #{idx + 1}
                 </span>
               )}
@@ -298,7 +298,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
               {/* Total Patients Seen */}
               <div className="bg-white rounded-lg p-4 border border-slate-200">
                 <p className="text-xs font-semibold text-slate-600 mb-1">Total Patients</p>
-                <p className="text-2xl font-bold text-blue-600">{doctor.totalPatientsSeen}</p>
+                <p className="text-2xl font-bold text-cyan-700">{doctor.totalPatientsSeen}</p>
                 <p className="text-xs text-slate-500 mt-1">Unique patients</p>
               </div>
 
@@ -314,7 +314,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
               {/* Average Consultation Time */}
               <div className="bg-white rounded-lg p-4 border border-slate-200">
                 <p className="text-xs font-semibold text-slate-600 mb-1">Avg Consultation</p>
-                <p className="text-2xl font-bold text-purple-600">{doctor.averageConsultationTime}</p>
+                <p className="text-2xl font-bold text-cyan-700">{doctor.averageConsultationTime}</p>
                 <p className="text-xs text-slate-500 mt-1">minutes</p>
               </div>
 
@@ -334,10 +334,10 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
                   {doctor.peakActiveHours.map((hourData, hourIdx) => (
                     <div
                       key={hourIdx}
-                      className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2"
+                      className="bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-indigo-700">
+                        <span className="text-xs font-semibold text-cyan-800">
                           {hourData.hour12}
                         </span>
                         <span className="text-xs text-slate-600">
@@ -356,7 +356,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    <div className="w-3 h-3 bg-cyan-500 rounded-full"></div>
                     <span className="text-sm font-medium text-slate-700">Appointments</span>
                   </div>
                   <div className="text-right">
@@ -370,7 +370,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2">
                   <div
-                    className="bg-blue-500 h-2 rounded-full"
+                    className="bg-cyan-500 h-2 rounded-full"
                     style={{ width: `${doctor.appointmentVsWalkInRatio.appointmentPercentage}%` }}
                   />
                 </div>

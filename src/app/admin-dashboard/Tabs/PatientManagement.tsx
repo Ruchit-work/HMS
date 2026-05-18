@@ -105,7 +105,7 @@ function GenerateReportModalContent({
   const requestClose = useRevealModalClose()
   return (
     <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-      <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4">
+      <div className="border-b border-slate-200 bg-gradient-to-r from-green-50 to-cyan-50 px-6 py-4">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-bold text-slate-900">Generate Patient Report</h3>
           <button
@@ -245,7 +245,7 @@ function AddPatientModalContent({
   }
   return (
     <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden">
-      <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-between">
+      <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-cyan-600 to-teal-700 text-white flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center">
             <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -254,12 +254,12 @@ function AddPatientModalContent({
           </div>
           <div>
             <h3 className="text-lg sm:text-xl font-bold">Add Patient</h3>
-            <p className="text-blue-100 text-xs sm:text-sm">Create a new patient record</p>
+            <p className="text-cyan-100 text-xs sm:text-sm">Create a new patient record</p>
           </div>
         </div>
         <button
           onClick={handleCancel}
-          className="text-white hover:text-blue-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg"
+          className="text-white hover:text-cyan-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg"
         >
           <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -805,7 +805,7 @@ export default function PatientManagement({
             caption: 'All registered patients in the system',
             delta: metrics.newThisMonth ? `+${metrics.newThisMonth} this month` : 'No new registrations this month',
             deltaClass: metrics.newThisMonth ? 'text-emerald-600' : 'text-slate-500',
-            iconClass: 'bg-blue-100 text-blue-600',
+            iconClass: 'bg-cyan-100 text-cyan-700',
             icon: (
                 <>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -818,7 +818,7 @@ export default function PatientManagement({
             value: metrics.active.toLocaleString(),
             caption: 'Patients with active portal access',
             delta: `${metrics.inactive.toLocaleString()} inactive`,
-            deltaClass: 'text-blue-600',
+            deltaClass: 'text-cyan-700',
             iconClass: 'bg-emerald-100 text-emerald-600',
             icon: (
                 <>
@@ -832,8 +832,8 @@ export default function PatientManagement({
             value: metrics.newThisMonth.toLocaleString(),
             caption: 'Registrations in the current month',
             delta: metrics.total ? `${Math.round((metrics.newThisMonth / Math.max(metrics.total, 1)) * 100)}% of total` : '—',
-            deltaClass: 'text-purple-600',
-            iconClass: 'bg-purple-100 text-purple-600',
+            deltaClass: 'text-cyan-700',
+            iconClass: 'bg-cyan-100 text-cyan-700',
             icon: (
                 <>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2.5 2.5M12 22a10 10 0 100-20 10 10 0 000 20z" />
@@ -1180,12 +1180,12 @@ export default function PatientManagement({
           )}
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="relative border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-blue-50 px-6 py-6">
-              <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 translate-x-12 -translate-y-8 rounded-full bg-blue-100 opacity-40 blur-3xl" />
+            <div className="relative border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-cyan-50 px-6 py-6">
+              <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 translate-x-12 -translate-y-8 rounded-full bg-cyan-100 opacity-40 blur-3xl" />
               <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="max-w-3xl space-y-3">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700 shadow-sm">
-                    <span className="inline-flex h-2 w-2 rounded-full bg-blue-500" />  Patient registry  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-800 shadow-sm">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-cyan-500" />  Patient registry  </span>
                   <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">  Patient Management</h2>
                   <p className="text-sm sm:text-base text-slate-600">
                     Maintain accurate patient records, oversee status changes,
@@ -1221,7 +1221,7 @@ export default function PatientManagement({
                     {allowAdd && (
                       <button
                         onClick={openAddPatientModal}
-                        className="group relative inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/30 transition-all duration-200 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 active:translate-y-0"
+                        className="group relative inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-700 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/30 transition-all duration-200 hover:from-cyan-700 hover:to-teal-800 hover:shadow-xl hover:shadow-cyan-500/40 hover:-translate-y-0.5 active:translate-y-0"
                         type="button"
                       >
                         <div className="flex items-center justify-center">
@@ -1255,7 +1255,7 @@ export default function PatientManagement({
                     key={item.label}
                     className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-inner"
                   >
-                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-blue-400" />
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
                     <span>{item.label}</span>
                     <span className="text-slate-900">{item.value}</span>
                   </div>
@@ -1302,7 +1302,7 @@ export default function PatientManagement({
                         </svg>
                       </span>
                     </div>
-                    <div className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-blue-50 opacity-30" />
+                    <div className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-cyan-50 opacity-30" />
                   </div>
                 ))}
               </div>
@@ -1319,7 +1319,7 @@ export default function PatientManagement({
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search by name, email, phone, or patient ID…"
-                        className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                       />
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                         <svg
@@ -1345,7 +1345,7 @@ export default function PatientManagement({
                     <select
                       value={pageSize}
                       onChange={(e) => setPageSize(Number(e.target.value))}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     >
                       {[10, 15, 20].map((size) => (
                         <option key={size} value={size}>
@@ -1371,7 +1371,7 @@ export default function PatientManagement({
                             onClick={() => setStatusFilter(tab.key)}
                             className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                               active
-                                ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm"
+                                ? "border-cyan-500 bg-cyan-50 text-cyan-800 shadow-sm"
                                 : "border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700"
                             }`}
                           >
@@ -1526,7 +1526,7 @@ export default function PatientManagement({
                             <tr className="hover:bg-slate-50" key={patient.id}>
                               <td className="px-3 py-4">
                                 <div className="flex items-center gap-3">
-                                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-600">
+                                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-cyan-100 text-sm font-semibold text-cyan-700">
                                     {patient.firstName.charAt(0)}
                                   </span>
                                   <div className="flex flex-col">
@@ -1573,7 +1573,7 @@ export default function PatientManagement({
                               <td className="px-3 py-4">
                                 <div className="flex items-center gap-1.5">
                                   <button
-                                    className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                    className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100"
                                     onClick={() => handleView(patient)}
                                     type="button"
                                   >
@@ -1671,9 +1671,9 @@ export default function PatientManagement({
               {/* Personal Information */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
                 <div className="flex items-center space-x-2 mb-4">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
                     <svg
-                      className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600"
+                      className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-700"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1901,9 +1901,9 @@ export default function PatientManagement({
               {/* Appointment Information */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 lg:col-span-2">
                 <div className="flex items-center space-x-2 mb-4">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <div className="w-8 h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
                     <svg
-                      className="w-5 h-5 text-purple-600"
+                      className="w-5 h-5 text-cyan-700"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1926,17 +1926,17 @@ export default function PatientManagement({
                       <button
                         type="button"
                         onClick={() => setAppointmentViewFilter('all')}
-                        className={`text-left bg-blue-50 rounded-lg p-4 border transition-all ${
-                          appointmentViewFilter === 'all' ? 'border-blue-500 ring-2 ring-blue-100' : 'border-blue-200 hover:border-blue-300'
+                        className={`text-left bg-cyan-50 rounded-lg p-4 border transition-all ${
+                          appointmentViewFilter === 'all' ? 'border-cyan-500 ring-2 ring-cyan-100' : 'border-cyan-200 hover:border-cyan-300'
                         }`}
                       >
-                        <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">
+                        <div className="text-xs font-semibold text-cyan-700 uppercase tracking-wide mb-1">
                           Total Appointments
                         </div>
-                        <div className="text-2xl font-bold text-blue-900">
+                        <div className="text-2xl font-bold text-cyan-900">
                           {selectedPatient.appointmentDetails.total}
                         </div>
-                        <div className="text-[11px] text-blue-700 mt-1">Click to view details</div>
+                        <div className="text-[11px] text-cyan-800 mt-1">Click to view details</div>
                       </button>
                       <button
                         type="button"
@@ -2049,7 +2049,7 @@ export default function PatientManagement({
                             <span className="text-sm font-medium text-gray-900">Status:</span>
                             <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${
                               selectedPatient.appointmentDetails.nextAppointment.status === "confirmed"
-                                ? "bg-blue-100 text-blue-700"
+                                ? "bg-cyan-100 text-cyan-800"
                                 : selectedPatient.appointmentDetails.nextAppointment.status === "pending" || selectedPatient.appointmentDetails.nextAppointment.status === "whatsapp_pending"
                                 ? "bg-yellow-100 text-yellow-700"
                                 : "bg-gray-100 text-gray-700"

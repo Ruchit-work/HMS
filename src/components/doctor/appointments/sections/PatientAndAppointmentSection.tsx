@@ -57,16 +57,16 @@ export default function PatientAndAppointmentSection({
               onClick={onOpenDocuments}
               className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-md shadow-sm hover:shadow transition-all cursor-pointer"
             >
-              <FolderIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <FolderIcon className="w-3.5 h-3.5 text-cyan-700 shrink-0" />
               Documents &amp; reports
             </button>
             {onOpenConsentVideo && (
               <button
                 type="button"
                 onClick={onOpenConsentVideo}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-blue-200 bg-blue-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border-2 border-cyan-200 bg-cyan-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 hover:bg-cyan-100 hover:border-cyan-300 transition-colors cursor-pointer"
               >
-                <PlayIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <PlayIcon className="w-3.5 h-3.5 text-cyan-700 shrink-0" />
                 Consent video
               </button>
             )}

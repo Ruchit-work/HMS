@@ -263,20 +263,20 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-purple-800 text-white shadow-lg">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-teal-800 text-white shadow-lg">
         <div className="relative px-6 py-10 sm:px-10">
           <div className="absolute inset-y-0 right-0 hidden w-48 translate-x-16 rotate-12 rounded-full bg-white/10 blur-3xl sm:block" />
           <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-200/80"> Billing & Payments </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-cyan-200/80"> Billing & Payments </p>
               <h2 className="text-3xl font-bold leading-tight sm:text-4xl"> Monitor all billing records and payments.</h2>
-              <p className="text-sm text-purple-100/90 sm:text-base">
+              <p className="text-sm text-white/90/90 sm:text-base">
                 View comprehensive billing history, track revenue, and monitor outstanding dues across all appointments and admissions.
               </p>
-              <div className="flex flex-wrap gap-2 text-xs text-purple-100/90">
-                <span className="rounded-full border border-purple-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
+              <div className="flex flex-wrap gap-2 text-xs text-white/90/90">
+                <span className="rounded-full border border-cyan-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
                   Complete overview  </span>
-                <span className="rounded-full border border-purple-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
+                <span className="rounded-full border border-cyan-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
                   Revenue tracking </span>
               </div>
             </div>
@@ -285,9 +285,9 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                 <div key={card.label}
                   className="relative overflow-hidden rounded-2xl border border-white/20 bg-white/15 p-4 shadow-md backdrop-blur"  >
                   <div className="absolute right-3 top-3 text-lg">{card.icon}</div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-100/90">{card.label}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/90/90">{card.label}</p>
                   <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
-                  <p className="mt-2 text-[12px] text-purple-100/80">{card.caption}</p>
+                  <p className="mt-2 text-[12px] text-white/90/80">{card.caption}</p>
                   <div className={`absolute inset-0 -z-10 bg-gradient-to-br ${card.tone} opacity-20`} />
                 </div>
               ))}
@@ -305,7 +305,7 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <div className="relative sm:w-48">
               <input  type="date" value={billingDateFilter}
-                onChange={(e) => setBillingDateFilter(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                onChange={(e) => setBillingDateFilter(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-100"
               />
               {billingDateFilter && (
                 <button type="button" onClick={() => setBillingDateFilter("")}
@@ -317,7 +317,7 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
             <div className="relative sm:w-72">
               <input type="text"   value={billingSearchTerm}onChange={(e) => setBillingSearchTerm(e.target.value)}
                 placeholder="Search by patient name, ID, doctor name, or bill ID"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-100"
               />
               {billingSearchTerm && (
                 <button type="button"   onClick={() => setBillingSearchTerm("")}
@@ -326,8 +326,8 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-cyan-50 border border-cyan-200 rounded-lg text-xs font-semibold text-cyan-800">
+              <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
               <span>Auto-Refresh</span>
             </div>
           </div>
@@ -343,14 +343,14 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                   <button  key={tab.value}  onClick={() => setBillingTypeFilter(tab.value)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       isActive
-                        ? "border-purple-500 bg-purple-50 text-purple-700 shadow-sm"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                        ? "border-[var(--color-primary)] bg-cyan-50 text-cyan-800 shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800"
                     }`}
                   >
                     {tab.label}
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] ${
-                        isActive ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500"
+                        isActive ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-500"
                       }`}
                     >
                       {tab.count}
@@ -370,13 +370,13 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                     onClick={() => setBillingStatusFilter(tab.value)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       isActive
-                        ? "border-purple-500 bg-purple-50 text-purple-700 shadow-sm"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                        ? "border-[var(--color-primary)] bg-cyan-50 text-cyan-800 shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800"
                     }`}
                   >
                     {tab.label}
                     <span   className={`rounded-full px-2 py-0.5 text-[11px] ${
-                        isActive ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500"
+                        isActive ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-500"
                       }`}
                     >
                       {tab.count}
@@ -436,14 +436,14 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                 return (
                   <article
                     key={record.id}
-                    className="group rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
+                    className="group rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-md"
                   >
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div className="flex-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
                             record.type === "admission" 
-                              ? "bg-blue-100 text-blue-700" 
+                              ? "bg-cyan-100 text-cyan-800" 
                               : "bg-green-100 text-green-700"
                           }`}>
                             {record.type === "admission" ? "🏥 Admission" : "📅 Appointment"}
@@ -574,7 +574,7 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                     className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
                       currentPage === 1
                         ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800"
                     }`}
                   >
                     Previous
@@ -585,7 +585,7 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                     className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
                       currentPage === totalPages
                         ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800"
                     }`}
                   >  Next </button>
                 </div>

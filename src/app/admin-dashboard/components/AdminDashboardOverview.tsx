@@ -185,8 +185,8 @@ export default function AdminDashboardOverview({
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Patients</p>
               <p className="text-2xl font-bold text-slate-900 mt-1">{displayStats.totalPatients}</p>
             </div>
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </div>
@@ -224,8 +224,8 @@ export default function AdminDashboardOverview({
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Today&apos;s Revenue</p>
               <p className="text-2xl font-bold text-slate-900 mt-1">₹{displayStats.todayRevenue.toLocaleString()}</p>
             </div>
-            <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
               </svg>
             </div>
@@ -267,7 +267,7 @@ export default function AdminDashboardOverview({
             <select
               value={trendView}
               onChange={(e) => setTrendView(e.target.value as "weekly" | "monthly" | "yearly")}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
             >
               <option value="weekly">This Week</option>
               <option value="monthly">This Month</option>
@@ -299,7 +299,7 @@ export default function AdminDashboardOverview({
                     return `${x},${y}`
                   }).join(" ")}
                   fill="none"
-                  stroke="#3b82f6"
+                  stroke="#0891b2"
                   strokeWidth="3"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -309,7 +309,7 @@ export default function AdminDashboardOverview({
                   const y = chartSize.height - chartPadding.bottom - (p.count / safeTrendCount) * innerHeight
                   return (
                     <g key={i}>
-                      <circle cx={x} cy={y} r="4" fill="#3b82f6" />
+                      <circle cx={x} cy={y} r="4" fill="#0891b2" />
                       <text x={x} y={y - 10} className="text-xs font-semibold fill-slate-700" textAnchor="middle">{p.count}</text>
                       <text x={x} y={chartSize.height - 12} className="text-xs font-medium fill-slate-600" textAnchor="middle">{p.label}</text>
                     </g>
@@ -325,9 +325,9 @@ export default function AdminDashboardOverview({
         <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border border-slate-200">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Appointment Status</h3>
           <div className="space-y-3">
-            <StatCard label="Scheduled" value={appointmentStatusCounts.scheduled} icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>} bgColor="bg-blue-50" borderColor="border-blue-100" iconBgColor="bg-blue-500" />
+            <StatCard label="Scheduled" value={appointmentStatusCounts.scheduled} icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>} bgColor="bg-cyan-50" borderColor="border-cyan-100" iconBgColor="bg-cyan-500" />
             <StatCard label="Waiting" value={appointmentStatusCounts.waiting} icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} bgColor="bg-amber-50" borderColor="border-amber-100" iconBgColor="bg-amber-500" />
-            <StatCard label="In Consultation" value={appointmentStatusCounts.inConsultation} icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} bgColor="bg-violet-50" borderColor="border-violet-100" iconBgColor="bg-violet-500" />
+            <StatCard label="In Consultation" value={appointmentStatusCounts.inConsultation} icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} bgColor="bg-cyan-50" borderColor="border-cyan-100" iconBgColor="bg-cyan-600" />
             <StatCard label="Completed" value={appointmentStatusCounts.completed} icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>} bgColor="bg-green-50" borderColor="border-green-100" iconBgColor="bg-green-500" />
             <StatCard label="Cancelled" value={appointmentStatusCounts.cancelled} icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>} bgColor="bg-red-50" borderColor="border-red-100" iconBgColor="bg-red-500" />
           </div>
@@ -470,14 +470,14 @@ export default function AdminDashboardOverview({
                           <div className="text-xs text-slate-500">{apt.appointmentTime}</div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getVisitType(apt) === "Walk-in" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getVisitType(apt) === "Walk-in" ? "bg-cyan-100 text-cyan-800" : "bg-teal-100 text-teal-800"}`}>
                             {getVisitType(apt)}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
                             apt.status === "completed" ? "bg-green-100 text-green-800" :
-                            apt.status === "confirmed" ? "bg-blue-100 text-blue-800" :
+                            apt.status === "confirmed" ? "bg-cyan-100 text-cyan-800" :
                             apt.status === "cancelled" ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-800"
                           }`}>
                             {apt.status}
@@ -499,7 +499,7 @@ export default function AdminDashboardOverview({
             )}
             {filteredRecentAppointments.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-200 flex justify-center">
-                <button type="button" onClick={() => setActiveTab("appointments")} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                <button type="button" onClick={() => setActiveTab("appointments")} className="text-sm font-medium text-cyan-700 hover:text-cyan-800">
                   View all appointments →
                 </button>
               </div>
@@ -512,7 +512,7 @@ export default function AdminDashboardOverview({
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-slate-900">Doctor Performance</h3>
-          <button type="button" onClick={() => { setActiveTab("analytics"); setSidebarOpen(false); }} className="text-sm font-medium text-blue-600 hover:text-blue-700">
+          <button type="button" onClick={() => { setActiveTab("analytics"); setSidebarOpen(false); }} className="text-sm font-medium text-cyan-700 hover:text-cyan-800">
             Full analytics →
           </button>
         </div>

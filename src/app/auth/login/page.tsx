@@ -8,6 +8,7 @@ import { getDoc, doc, collection, getDocs, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import { Button } from "@/components/ui/Button"
 
 type DashboardRole = "patient" | "doctor" | "admin" | "receptionist" | "pharmacy"
 const STAFF_ROLES: DashboardRole[] = ["admin", "doctor", "receptionist", "pharmacy"]
@@ -650,7 +651,7 @@ function LoginContent() {
               <span className="font-medium">Secure Login</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-600">
-              <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-4 h-4 text-cyan-700" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
               <span className="font-medium">HIPAA Compliant</span>
@@ -773,13 +774,9 @@ function LoginContent() {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-modern btn-modern-success w-full"
-                >
-                  {loading ? "Signing in..." : "Sign In"}
-                </button>
+                <Button type="submit" variant="primary" className="w-full" loading={loading} loadingText="Signing in...">
+                  Sign In
+                </Button>
               </form>
             ) : (
               <form onSubmit={handleOtpSubmit} className="space-y-5">
@@ -831,13 +828,16 @@ function LoginContent() {
                   </button>
                 </div>
 
-                <button
+                <Button
                   type="submit"
-                  disabled={otpVerifying || otpCode.length !== 6}
-                  className="btn-modern btn-modern-success w-full"
+                  variant="primary"
+                  className="w-full"
+                  loading={otpVerifying}
+                  loadingText="Verifying..."
+                  disabled={otpCode.length !== 6}
                 >
-                  {otpVerifying ? "Verifying..." : "Verify & Continue"}
-                </button>
+                  Verify & Continue
+                </Button>
               </form>
             )}
           
@@ -860,18 +860,18 @@ function LoginContent() {
 
             {/* Info Box for Admin/Receptionist/Pharmacy - No signup available */}
             {(role === "admin" || role === "receptionist" || role === "pharmacy") && (
-              <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+              <div className="mt-6 p-4 bg-gradient-to-r from-cyan-50 to-teal-50 border border-cyan-200 rounded-lg">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0">
-                    <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-cyan-700 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-blue-900 mb-1">
+                    <p className="text-sm font-medium text-cyan-900 mb-1">
                       Need an account?
                     </p>
-                    <p className="text-xs text-blue-700 leading-relaxed">
+                    <p className="text-xs text-cyan-800 leading-relaxed">
                       {role === "admin" 
                         ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
                         : role === "pharmacy"
@@ -899,32 +899,32 @@ function LoginContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Patient1@gmail.com"); setPassword("Patient1@gmail.com"); }}>
+                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Patient1@gmail.com"); setPassword("Patient1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient</td>
                   </tr>
-                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Doctor1@gmail.com"); setPassword("Doctor1@gmail.com"); }}>
+                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Doctor1@gmail.com"); setPassword("Doctor1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor</td>
                   </tr>
-                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
+                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Bardoli)</td>
                   </tr>
-                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Navsari1@gmail.com"); setPassword("Navsari1@gmail.com"); }}>
+                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Navsari1@gmail.com"); setPassword("Navsari1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Navsari1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Navsari1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Navsari)</td>
                   </tr>
-                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Surat1@gmail.com"); setPassword("Surat1@gmail.com"); }}>
+                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Surat1@gmail.com"); setPassword("Surat1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Surat1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Surat1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Surat)</td>
                   </tr>
-                  <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
+                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Sardar1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Sardar1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
@@ -934,7 +934,7 @@ function LoginContent() {
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy1@gmail.com</td>
                     <td className="px-2 py-2 text-slate-600 border-b border-gray-100 font-medium">Pharmacy (Portal)</td>
                   </tr>
-                  <tr className="hover:bg-blue-50 cursor-pointer" hidden={true}  onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
+                  <tr className="hover:bg-cyan-50 cursor-pointer" hidden={true}  onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
                     <td className="px-2 py-2 text-slate-600">Admin1@gmail.com</td>
                       <td className="px-2 py-2 text-slate-600">Admin1@gmail.com</td>
                       <td className="px-2 py-2 text-slate-600"> Super Admin</td>
@@ -966,17 +966,17 @@ function LoginContent() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Yatharthhospital@gmail.com"); setPassword("Yatharth@123"); }}>
+                      <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Yatharthhospital@gmail.com"); setPassword("Yatharth@123"); }}>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharthhospital@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharth@123</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
                       </tr>
-                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("YTH1@gmail.com"); setPassword("YTH1@gmail.com"); }}>
+                      <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("YTH1@gmail.com"); setPassword("YTH1@gmail.com"); }}>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">YTH1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">YTH1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist</td>
                       </tr>
-                      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => { setIdentifier("Shrey1@gmail.com"); setPassword("Shrey1@gmail.com"); }}>
+                      <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Shrey1@gmail.com"); setPassword("Shrey1@gmail.com"); }}>
                         <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600">Doctor</td>
@@ -1016,7 +1016,7 @@ function LoginContent() {
                     </thead>
                     <tbody>
                       <tr
-                        className="hover:bg-blue-50 cursor-pointer"
+                        className="hover:bg-cyan-50 cursor-pointer"
                         onClick={() => {
                           setIdentifier("Jivandeep@gmail.com");
                           setPassword("Jivandeep@gmail.com");

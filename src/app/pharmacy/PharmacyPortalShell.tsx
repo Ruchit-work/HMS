@@ -1,43 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { usePharmacyPortal } from '@/contexts/PharmacyPortalContext'
 import type { PharmacyPortalTabId } from '@/contexts/PharmacyPortalContext'
-
-const TAB_LABELS: Record<PharmacyPortalTabId, string> = {
-  overview: 'Overview',
-  inventory: 'Inventory',
-  queue: 'Dispense & Billing',
-  sales: 'Sales Records',
-  cash_and_expenses: 'Cash & Expenses',
-  returns: 'Sales Returns',
-  orders: 'Orders',
-  transfers: 'Transfers',
-  reports: 'Reports',
-  users: 'Pharmacy Users',
-  suppliers: 'Suppliers',
-  settings: 'Settings',
-}
-
-const TAB_SUBTITLES: Record<PharmacyPortalTabId, string> = {
-  overview: 'Pharmacy sales results, charts and recent sales',
-  inventory: 'Stock levels, barcode lookup and bulk import',
-  queue: 'Dispense prescriptions and sell to walk-in customers',
-  sales: 'View and track all pharmacy sales',
-  cash_and_expenses: 'Daily income & expense, billing counter, shifts and expenses',
-  returns: 'Process medicine sales returns and refunds',
-  orders: 'Place and receive purchase orders',
-  transfers: 'Transfer stock between branches',
-  reports: 'Expiry, valuation, sales and reorder reports',
-  users: 'Manage pharmacy login credentials',
-  suppliers: 'Manage suppliers and contacts',
-  settings: 'Cashiers, counters and pharmacy settings',
-}
+import GroupedNav from '@/components/ui/navigation/GroupedNav'
+import { ConfirmDialog } from '@/components/ui/overlays/Modals'
+import {
+  PHARMACY_TAB_LABELS,
+  PHARMACY_TAB_SUBTITLES,
+  buildPharmacyPortalNavSections,
+} from '@/app/pharmacy/pharmacyNavConfig'
 
 const navIcons: Record<PharmacyPortalTabId, React.ReactNode> = {
   overview: (
@@ -87,7 +64,6 @@ const ACTIVE_TAB_STORAGE_KEY = 'pharmacy-active-tab'
 
 export default function PharmacyPortalShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const isPharmacyUser = user?.role === 'pharmacy'
   const { activeHospitalId, userHospitals, setActiveHospital, isSuperAdmin } = useMultiHospital()
   const portal = usePharmacyPortal()
@@ -135,6 +111,7 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
         'inventory',
         'queue',
         'sales',
+        'returns',
         'cash_and_expenses',
         'orders',
         'transfers',
@@ -196,42 +173,45 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
     window.location.href = '/auth/login?role=pharmacy'
   }
 
+  const navSections = useMemo(
+    () =>
+      buildPharmacyPortalNavSections({ isSuperAdmin, isAdmin: false, alertTotal }).map((section) => ({
+        ...section,
+        items: section.items.map((item) => ({
+          ...item,
+          icon: navIcons[item.id],
+        })),
+      })),
+    [isSuperAdmin, alertTotal]
+  )
+
+  const selectTab = (tabId: PharmacyPortalTabId) => {
+    if (!portal) return
+    portal.setActiveTab(tabId)
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId)
+      }
+    } catch {
+      // ignore storage errors
+    }
+    setSidebarOpen(false)
+  }
+
   if (!portal) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F0F4F8' }}>
-        <p className="text-[#607D8B] text-sm font-medium">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--color-neutral-50)]">
+        <p className="text-sm font-medium text-slate-500">Loading...</p>
       </div>
     )
   }
-
-  const primary = '#1565C0'
-  const primaryLight = '#E3F2FD'
-  const bgPage = '#F0F4F8'
-
-  const tabList: { id: PharmacyPortalTabId; label: string }[] = [
-    { id: 'queue', label: TAB_LABELS.queue },                // 1. Dispense & Billing
-    { id: 'returns', label: TAB_LABELS.returns },            // 2. Sales Returns
-    { id: 'sales', label: TAB_LABELS.sales },                // 3. Sales Records
-    { id: 'cash_and_expenses', label: TAB_LABELS.cash_and_expenses }, // 4. Cash & Expenses
-    { id: 'inventory', label: TAB_LABELS.inventory },        // 5. Inventory
-    { id: 'orders', label: TAB_LABELS.orders },              // 6. Orders
-    ...(isSuperAdmin ? [{ id: 'transfers' as const, label: TAB_LABELS.transfers }] : []),
-    { id: 'reports', label: TAB_LABELS.reports },            // 7. Reports
-    { id: 'suppliers', label: TAB_LABELS.suppliers },        // 8. Suppliers
-    ...(isAdmin ? [{ id: 'users' as const, label: TAB_LABELS.users }] : []),
-    { id: 'settings', label: TAB_LABELS.settings },         // Settings (cashiers, counters)
-    { id: 'overview', label: TAB_LABELS.overview },          // Overview
-  ]
 
   const currentBranchName =
     portal.branches.find((b) => b.id === portal.branchFilter)?.name ??
     (portal.branchFilter === 'all' ? (portal.branches.length > 0 ? 'All branches' : undefined) : undefined)
 
-  const isReadOnlyAdminTab =
-    isAdmin && (portal.activeTab === 'queue' || portal.activeTab === 'suppliers' || portal.activeTab === 'orders')
-
   return (
-    <div className="min-h-screen" style={{ backgroundColor: bgPage, fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div className="min-h-screen bg-[var(--color-neutral-50)]" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
       {/* Mobile menu button */}
       {!sidebarOpen && (
         <button
@@ -265,8 +245,8 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
         {/* Same height as main header row (72px) + line (4px) = 76px so bottom lines align */}
         <div className="flex items-center justify-between h-[76px] px-5 shrink-0" style={{ borderBottom: '1px solid #CFD8DC', backgroundColor: '#E3F2FD' }}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: primaryLight }}>
-              <svg className="w-5 h-5 shrink-0" fill="none" stroke={primary} viewBox="0 0 24 24">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/15">
+              <svg className="h-5 w-5 shrink-0 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
               </svg>
             </div>
@@ -286,64 +266,25 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
         </div>
 
         <nav className="flex-1 flex flex-col pt-4 px-3 overflow-y-auto">
-          <div className="flex-1 space-y-0.5">
-            {tabList.map((tab) => {
-              const isActive = portal.activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    portal.setActiveTab(tab.id)
-                    try {
-                      if (typeof window !== 'undefined') {
-                        window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab.id)
-                      }
-                    } catch {
-                      // ignore storage errors
-                    }
-                    setSidebarOpen(false)
-                  }}
-                  className={`w-full flex items-center gap-3 rounded-lg py-2.5 px-3 transition-colors duration-200 ${
-                    isActive ? 'text-[#1565C0]' : 'text-[#455A64] hover:bg-[#E3E8EF]'
-                  }`}
-                  style={isActive ? { backgroundColor: primaryLight } : undefined}
-                >
-                  <span style={{ color: isActive ? primary : undefined }}>{navIcons[tab.id]}</span>
-                  <span className={`text-sm ${isActive ? 'font-semibold' : 'font-medium'}`} style={{ color: isActive ? primary : undefined }}>
-                    {tab.label}
-                  </span>
-                  {tab.id === 'overview' && alertTotal > 0 && (
-                    <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#C62828] px-1.5 text-xs font-semibold text-white">
-                      {alertTotal > 99 ? '99+' : alertTotal}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+          <GroupedNav
+            sections={navSections}
+            activeId={portal.activeTab}
+            onSelect={selectTab}
+            variant="sidebar"
+          />
 
           {/* Branch selection moved to top header */}
 
           <div className="px-2 pb-4 pt-2" style={{ borderTop: '1px solid #CFD8DC' }}>
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/80">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: primaryLight }}>
-                <span className="font-semibold text-sm" style={{ color: primary }}>{displayName.charAt(0)}</span>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/15">
+                <span className="text-sm font-semibold text-[var(--color-primary-dark)]">{displayName.charAt(0)}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-[#111827] truncate">{displayName}</p>
                 <p className="text-xs text-[#6B7280]">Pharmacy</p>
               </div>
             </div>
-            {isAdmin && (
-              <Link
-                href="/admin-dashboard"
-                className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#374151] hover:bg-[#F3F4F6] border border-[#E5E7EB] transition-colors text-sm font-medium"
-              >
-                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                Admin Dashboard
-              </Link>
-            )}
             <button
               type="button"
               onClick={() => setShowLogoutConfirm(true)}
@@ -364,23 +305,12 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
           <div className={`flex flex-col sm:flex-row sm:items-center gap-4 min-h-[56px] sm:min-h-[72px] lg:h-[72px] px-4 sm:px-6 lg:px-8 ${!sidebarOpen ? 'pl-14 sm:pl-16 lg:pl-8' : ''}`}>
             <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-3 mb-1 sm:mb-0">
-                {isAdmin && (
-                  <Link
-                    href="/admin-dashboard"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#CFD8DC] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#E3F2FD] transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7 7-7M3 12h18" />
-                    </svg>
-                    <span>Back to admin</span>
-                  </Link>
-                )}
                 <div className="text-left">
                   <h1 className="text-2xl font-semibold text-[#263238] truncate capitalize">
-                    {TAB_LABELS[portal.activeTab]}
+                    {PHARMACY_TAB_LABELS[portal.activeTab]}
                   </h1>
                   <p className="text-sm text-[#607D8B] mt-0.5 truncate">
-                    {TAB_SUBTITLES[portal.activeTab]}
+                    {PHARMACY_TAB_SUBTITLES[portal.activeTab]}
                   </p>
                 </div>
               </div>
@@ -409,93 +339,29 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
                   </div>
                 )}
               </div>
-              {/* Branch selector for admins; static label for pharmacists */}
-              {isAdmin && portal.branches.length > 0 ? (
-                <select
-                  value={portal.branchFilter}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (v === portal.branchFilter) return
-                    if (window.confirm('Change branch? Data will filter by the new branch.')) {
-                      portal.setBranchFilter(v)
-                      try {
-                        if (typeof window !== 'undefined') {
-                          window.localStorage.setItem(BRANCH_FILTER_STORAGE_KEY, v)
-                        }
-                      } catch {
-                        // ignore storage errors
-                      }
-                    }
-                  }}
-                  className="hidden sm:inline-block rounded-lg border border-[#CFD8DC] bg-white px-2.5 py-2 text-xs sm:text-sm text-[#263238] focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 focus:border-[#1565C0] max-w-[200px]"
-                >
-                  <option value="all">All branches</option>
-                  {portal.branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              ) : (
-                currentBranchName && (
-                  <div className="hidden sm:flex items-center rounded-lg border border-[#CFD8DC] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] max-w-[200px]">
-                    <span className="mr-1 text-[#6B7280]">Branch:</span>
-                    <span className="truncate">{currentBranchName}</span>
-                  </div>
-                )
+              {currentBranchName && (
+                <div className="hidden max-w-[200px] items-center rounded-lg border border-[#CFD8DC] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] sm:flex">
+                  <span className="mr-1 text-[#6B7280]">Branch:</span>
+                  <span className="truncate">{currentBranchName}</span>
+                </div>
               )}
             </div>
           </div>
         </header>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-x-hidden">
-          {isAdmin && (
-            <div className="mb-3 flex justify-center">
-              <div className="rounded-full bg-white/90 border border-[#CBD5E1] px-4 py-1 text-[11px] font-medium text-[#475569] shadow-sm">
-                Logged in as Admin – some pharmacy actions may be view-only. Use a pharmacist login for full dispensing access.
-              </div>
-            </div>
-          )}
-          {isReadOnlyAdminTab ? (
-            <div className="relative">
-              <div className="pointer-events-none select-none opacity-70">
-                {children}
-              </div>
-              <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
-                <div className="rounded-full bg-white/95 border border-[#F97316] px-4 py-1 text-[11px] font-semibold text-[#EA580C] shadow-sm">
-                  Admin can view but not change data on this tab. Switch to another tab or use a pharmacist login to perform actions.
-                </div>
-              </div>
-            </div>
-          ) : (
-            children
-          )}
+          {children}
         </main>
       </div>
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200 p-6">
-            <h2 className="text-base font-semibold text-slate-900 mb-2">Logout from pharmacy portal?</h2>
-            <p className="text-sm text-slate-600 mb-4">
-              You will be signed out of the pharmacy portal. You can log in again anytime.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowLogoutConfirm(false)}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={performLogout}
-                className="px-4 py-2 rounded-lg bg-[#C62828] text-sm font-semibold text-white hover:bg-[#b71c1c]"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        title="Logout from pharmacy portal?"
+        message="You will be signed out of the pharmacy portal. You can log in again anytime."
+        confirmText="Logout"
+        cancelText="Cancel"
+        onConfirm={performLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   )
 }

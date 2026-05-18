@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/Button"
 import type { Room } from "@/types/patient"
 
 type ExistingPatientOption = {
@@ -172,17 +173,17 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
       <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-3xl max-h-[92vh] flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-rose-600 to-rose-700 text-white rounded-t-2xl">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between hms-panel-header text-white rounded-t-2xl">
           <div>
             <h3 className="text-lg font-semibold">Direct Patient Admit</h3>
-            <p className="text-sm text-rose-100">Emergency admit now or pre-plan admission date and time</p>
+            <p className="text-sm text-white/80">Emergency admit now or pre-plan admission date and time</p>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-white/20">
             ×
           </button>
         </div>
         <div className="px-6 py-5 space-y-4 bg-gray-50 rounded-b-2xl overflow-y-auto">
-          <div className="space-y-2 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+          <div className="space-y-2 rounded-xl border border-cyan-100 bg-cyan-50/40 p-3">
             <label className="block text-sm font-medium text-gray-700">Patient Name (auto-suggest existing patients)</label>
             <input
               value={directPatientName}
@@ -487,16 +488,19 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
           <div className="flex justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200" disabled={directAdmitLoading}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={directAdmitLoading}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
               onClick={onCreateAdmission}
-              className="px-4 py-2 text-sm font-semibold text-white bg-rose-600 rounded-lg hover:bg-rose-700 disabled:opacity-60"
-              disabled={directAdmitLoading || !assignRoomId}
+              loading={directAdmitLoading}
+              loadingText="Creating..."
+              disabled={!assignRoomId}
             >
-              {directAdmitLoading ? "Creating..." : "Create Admission"}
-            </button>
+              Create Admission
+            </Button>
           </div>
         </div>
       </div>

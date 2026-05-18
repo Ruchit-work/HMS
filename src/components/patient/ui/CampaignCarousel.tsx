@@ -113,9 +113,9 @@ export default function CampaignCarousel({ campaigns }: CampaignCarouselProps) {
   const gradients = [
     "from-sky-600 via-sky-500 to-cyan-500",
     "from-emerald-600 via-teal-500 to-emerald-400",
-    "from-purple-600 via-fuchsia-500 to-rose-500",
+    "from-cyan-600 via-teal-500 to-emerald-500",
     "from-orange-600 via-amber-500 to-yellow-400",
-    "from-indigo-600 via-blue-500 to-cyan-400",
+    "from-teal-600 via-cyan-500 to-sky-400",
   ]
 
   // Auto-advance carousel every 5 seconds (only if not paused and multiple campaigns)
