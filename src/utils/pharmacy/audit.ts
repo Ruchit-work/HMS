@@ -1,6 +1,6 @@
 import { getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
 
-export type PharmacyAuditAction =
+type PharmacyAuditAction =
   | 'dispense_completed'
   | 'sales_return_completed'
   | 'transfer_completed'

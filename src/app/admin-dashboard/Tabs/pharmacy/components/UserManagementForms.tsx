@@ -1,73 +1,8 @@
 'use client'
 import { Button } from '@/components/ui/Button'
 
-import React, { useState } from 'react'
+import React from 'react'
 import { useRevealModalClose } from '@/components/ui/overlays/RevealModal'
-
-export function CreatePharmacyUserForm({
-  branches,
-  onSuccess,
-  onError,
-  getToken,
-}: {
-  branches: Array<{ id: string; name: string }>
-  onSuccess: (message: string) => void
-  onError: (e: string) => void
-  getToken: () => Promise<string | null>
-}) {
-  const [saving, setSaving] = useState(false)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [branchId, setBranchId] = useState('')
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email.trim() || !password) { onError('Email and password required'); return }
-    if (password.length < 6) { onError('Password must be at least 6 characters'); return }
-    setSaving(true)
-    try {
-      const token = await getToken()
-      if (!token) { onError('Not authenticated'); return }
-      const res = await fetch('/api/admin/create-pharmacist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          branchId: branchId || undefined,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create user')
-      onSuccess(`Pharmacy user created. They can login at /auth/login?role=pharmacy with email: ${email.trim()} and the password you set.`)
-      setEmail(''); setPassword(''); setFirstName(''); setLastName(''); setBranchId('')
-    } catch (err: any) {
-      onError(err.message || 'Failed')
-    } finally {
-      setSaving(false)
-    }
-  }
-  return (
-    <form onSubmit={handleSubmit} className="space-y-2">
-      <input type="email" placeholder="Email (login ID) *" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" required />
-      <input type="password" placeholder="Password (min 6) *" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" minLength={6} required />
-      <div className="grid grid-cols-2 gap-2">
-        <input type="text" placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="rounded border border-slate-300 px-2 py-1.5 text-sm" />
-        <input type="text" placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="rounded border border-slate-300 px-2 py-1.5 text-sm" />
-      </div>
-      {branches.length > 0 && (
-        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-          <option value="">All branches (optional)</option>
-          {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-      )}
-      <Button type="submit" size="sm" loading={saving} loadingText="Saving...">Create pharmacy user</Button>
-    </form>
-  )
-}
 
 export function AddPharmacistModalContent({
   form,

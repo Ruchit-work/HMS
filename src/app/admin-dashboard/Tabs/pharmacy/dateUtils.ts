@@ -1,6 +1,6 @@
 import type { PharmacySale } from '@/types/pharmacy'
 
-export const toDateOnly = (value: unknown): string => {
+const toDateOnly = (value: unknown): string => {
   if (typeof value === 'string') {
     const parsed = new Date(value)
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)

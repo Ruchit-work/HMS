@@ -1,6 +1,6 @@
 import React from 'react'
 
-export type EmptyStateAction = {
+type EmptyStateAction = {
   label: string
   onClick: () => void
   variant?: 'primary' | 'secondary'
@@ -87,7 +87,7 @@ export function QueueFiltersBar({
           type="search"
           value={queueSearch}
           onChange={(e) => onQueueSearchChange(e.target.value)}
-          placeholder="Search patient, doctor or branch"
+          placeholder="Search prescription queue (patient, doctor, branch)…"
           className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700"
         />
         <select
@@ -184,6 +184,8 @@ export function DaysCoverBadge({ daysCover }: { daysCover: number | null }) {
   )
 }
 
+import { REQUIRE_SHIFT_HANDOVER_NOTE } from '../constants'
+
 type CloseChecklistState = {
   countedCash: boolean
   reviewedRefundsAndExpenses: boolean
@@ -266,7 +268,14 @@ export function ShiftCloseChecklist({
         </label>
       )}
       <label className="block">
-        <span className="block text-sm font-medium text-slate-700 mb-1.5">Handover note <span className="text-rose-600">*</span></span>
+        <span className="block text-sm font-medium text-slate-700 mb-1.5">
+          Handover note{' '}
+          {REQUIRE_SHIFT_HANDOVER_NOTE ? (
+            <span className="text-rose-600">*</span>
+          ) : (
+            <span className="text-slate-400 font-normal">(optional — testing)</span>
+          )}
+        </span>
         <textarea
           value={closeHandoverNote}
           onChange={(e) => onCloseHandoverNoteChange(e.target.value)}

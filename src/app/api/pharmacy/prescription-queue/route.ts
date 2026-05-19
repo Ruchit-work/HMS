@@ -74,9 +74,15 @@ export async function GET(request: NextRequest) {
       duration: m.duration,
     })) ?? []
 
+    const resolvedPatientName =
+      (typeof data.patientName === 'string' && data.patientName.trim()) ||
+      [data.patientFirstName, data.patientLastName].filter((p) => typeof p === 'string' && p.trim()).join(' ').trim() ||
+      (typeof data.patientFullName === 'string' && data.patientFullName.trim()) ||
+      'Unknown'
+
     queue.push({
       appointmentId: id,
-      patientName: data.patientName || 'Unknown',
+      patientName: resolvedPatientName,
       doctorName: data.doctorName || 'Unknown',
       appointmentDate: data.appointmentDate || '',
       branchId: data.branchId,

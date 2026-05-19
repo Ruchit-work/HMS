@@ -170,6 +170,10 @@ export interface PharmacyCashSession {
   openedByName?: string
   /** Display name of person who closed the shift */
   closedByName?: string
+  /** Notes for the next cashier / audit trail */
+  handoverNote?: string
+  /** Reason code when close variance is non-zero */
+  varianceReason?: string
   /** Optional reference to configured cashier profile */
   cashierProfileId?: string
   /** Optional reference to configured billing counter */

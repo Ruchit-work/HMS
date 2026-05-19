@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { BarcodeCameraScanner } from '@/components/pharmacy/BarcodeCameraScanner'
 import type { BranchMedicineStock, MedicineBatch, PharmacyMedicine } from '@/types/pharmacy'
+import { CashPaymentPanel } from '@/components/pharmacy/CashTenderModal'
 import { generateBillPDFAndPrint } from '@/utils/pharmacy/billPrint'
 import { MedicineSearchSelect, POSMedicineSearch } from './SearchInputs'
 import type { QueueItem } from '../types'
@@ -19,6 +20,7 @@ export function DispenseModal({
   getToken,
   onOpenAddMedicine,
   inline = false,
+  hasActiveSession = true,
 }: {
   queueItem: QueueItem
   medicines: PharmacyMedicine[]
@@ -30,12 +32,21 @@ export function DispenseModal({
   getToken: () => Promise<string | null>
   onOpenAddMedicine?: (barcode: string) => void
   inline?: boolean
+  hasActiveSession?: boolean
 }) {
   const branchId = queueItem.branchId || ''
   const branchStock = stock.filter((s) => s.branchId === branchId)
   const [saving, setSaving] = useState(false)
-  const [pendingDispensePayload, setPendingDispensePayload] = useState<Array<{ medicineId: string; quantity: number }> | null>(null)
-  const [, setPendingBillAmount] = useState(0)
+  const [pendingDispensePayload, setPendingDispensePayload] = useState<{
+    lines: Array<{ medicineId: string; quantity: number }>
+    billAmount: number
+    idempotencyKey: string
+  } | null>(null)
+  const [pendingBillAmount, setPendingBillAmount] = useState(0)
+  const [cashCheckoutId, setCashCheckoutId] = useState<string | null>(null)
+  const cashConfirmLockRef = useRef(false)
+  const [taxPercent, setTaxPercent] = useState(0)
+  const [discountAmount, setDiscountAmount] = useState(0)
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
   const displayMedicines = useMemo(() => {
     const seen = new Set<string>()
@@ -115,49 +126,63 @@ export function DispenseModal({
     }
   }, [lines, branchStock, updateLine, addLine])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!branchId) {
-      onError('Appointment has no branch. Cannot dispense.')
-      return
-    }
-    const payload = lines
-      .filter((l) => l.medicineId && Number(l.quantity) > 0)
-      .map((l) => ({ medicineId: l.medicineId, quantity: Math.floor(Number(l.quantity) || 0) }))
-    if (payload.length === 0) {
-      onError('Select at least one medicine and enter quantity.')
-      return
-    }
-    const orderLinesForTotal = lines
-      .filter((l) => l.medicineId && Number(l.quantity) > 0)
-      .map((l) => {
-        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === l.medicineId)
-        const qty = Math.max(0, Number(l.quantity) || 0)
-        const rate = med ? Number(med.sellingPrice) || 0 : 0
-        return { amount: qty * rate }
-      })
-    const gross = orderLinesForTotal.reduce((sum, l) => sum + l.amount, 0)
-    const disc = Math.max(0, Number(discountAmount) || 0)
-    const taxable = Math.max(0, gross - disc)
-    const taxPct = taxPercent / 100
-    const netTotalBill = taxable + taxable * taxPct
-    setPendingDispensePayload(payload)
-    setPendingBillAmount(netTotalBill)
+  const getAvailable = (medicineId: string) => {
+    const st = branchStock.find((s) => s.medicineId === medicineId)
+    return st ? st.totalQuantity ?? 0 : 0
   }
 
-  const _doDispenseWithCash = async (
+  const printBill = (payload: Array<{ medicineId: string; quantity: number }>) => {
+    const billLines = payload.map((p) => {
+      const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
+      const qty = p.quantity
+      const rate = med ? Number(med.sellingPrice) || 0 : 0
+      const amount = qty * rate
+      const tax = amount * (taxPercent / 100)
+      return { name: med?.name ?? '', qty, rate, amount, tax }
+    })
+    const billGross = billLines.reduce((s, l) => s + l.amount, 0)
+    const billDiscount = Math.max(0, Number(discountAmount) || 0)
+    const billTaxable = Math.max(0, billGross - billDiscount)
+    const billTax = billTaxable * (taxPercent / 100)
+    const billNet = billTaxable + billTax
+    generateBillPDFAndPrint({
+      type: 'prescription',
+      patientName: queueItem.patientName,
+      customerPhone: undefined,
+      doctorName: queueItem.doctorName,
+      date: new Date().toISOString(),
+      branchName: queueItem.branchName ?? queueItem.branchId ?? '',
+      lines: billLines,
+      grossTotal: billGross,
+      discountAmount: billDiscount > 0 ? billDiscount : undefined,
+      taxTotal: billTax,
+      taxPercent,
+      netTotal: billNet,
+      paymentMethod: 'cash',
+    })
+  }
+
+  const executeDispense = async (
+    payload: Array<{ medicineId: string; quantity: number }>,
     amountReceived: number,
-    changeGiven: number
+    changeGiven: number,
+    idempotencyKey: string
   ) => {
-    const payload = pendingDispensePayload
-    if (!payload || !branchId) return
+    if (!branchId) {
+      onError('Appointment has no branch. Cannot dispense.')
+      return false
+    }
     setSaving(true)
     try {
       const token = await getToken()
-      if (!token) { onError('Not authenticated'); return }
+      if (!token) { onError('Not authenticated'); return false }
       const res = await fetch('/api/pharmacy/dispense', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-idempotency-key': idempotencyKey,
+        },
         body: JSON.stringify({
           appointmentId: queueItem.appointmentId,
           branchId,
@@ -171,47 +196,109 @@ export function DispenseModal({
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Dispense failed')
-      const billLines = payload.map((p) => {
-        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
-        const qty = p.quantity
-        const rate = med ? Number(med.sellingPrice) || 0 : 0
-        const amount = qty * rate
-        const tax = amount * (taxPercent / 100)
-        return { name: med?.name ?? '', qty, rate, amount, tax }
-      })
-      const billGross = billLines.reduce((s, l) => s + l.amount, 0)
-      const billDiscount = Math.max(0, Number(discountAmount) || 0)
-      const billTaxable = Math.max(0, billGross - billDiscount)
-      const billTax = billTaxable * (taxPercent / 100)
-      const billNet = billTaxable + billTax
-      const dispensedAtIso = new Date().toISOString()
-      generateBillPDFAndPrint({
-        type: 'prescription',
-        patientName: queueItem.patientName,
-        customerPhone: undefined,
-        doctorName: queueItem.doctorName,
-        date: dispensedAtIso,
-        branchName: queueItem.branchName ?? queueItem.branchId ?? '',
-        lines: billLines,
-        grossTotal: billGross,
-        discountAmount: billDiscount > 0 ? billDiscount : undefined,
-        taxTotal: billTax,
-        taxPercent,
-        netTotal: billNet,
-        paymentMethod: 'cash',
-      })
+      printBill(payload)
       setPendingDispensePayload(null)
+      setPendingBillAmount(0)
+      setCashCheckoutId(null)
       onSuccess()
       onClose()
-    } catch (err: any) {
-      onError(err?.message || 'Dispense failed')
+      return true
+    } catch (err: unknown) {
+      onError(err instanceof Error ? err.message : 'Dispense failed')
+      return false
     } finally {
       setSaving(false)
     }
   }
 
-  const [taxPercent, setTaxPercent] = useState(0)
-  const [discountAmount, setDiscountAmount] = useState(0)
+  const doDispenseWithCash = async (amountReceived: number, changeGiven: number) => {
+    if (saving || cashConfirmLockRef.current) return
+    const pending = pendingDispensePayload
+    if (!pending) return
+    cashConfirmLockRef.current = true
+    setPendingDispensePayload(null)
+    setPendingBillAmount(0)
+    setCashCheckoutId(null)
+    const ok = await executeDispense(pending.lines, amountReceived, changeGiven, pending.idempotencyKey)
+    if (!ok) {
+      setPendingDispensePayload(pending)
+      setPendingBillAmount(pending.billAmount)
+      setCashCheckoutId(pending.idempotencyKey)
+    }
+    cashConfirmLockRef.current = false
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (pendingDispensePayload) {
+      onError('Complete or cancel the cash payment below before starting another dispense.')
+      return
+    }
+    if (!hasActiveSession) {
+      onError('Start a cash session first (Cash & expenses → Start shift).')
+      return
+    }
+    if (!branchId) {
+      onError('Appointment has no branch. Cannot dispense.')
+      return
+    }
+    if (!queueItem.appointmentId) {
+      onError('Appointment ID missing. Cannot dispense.')
+      return
+    }
+    const validLines = lines.filter((l) => l.medicineId && Number(l.quantity) > 0)
+    const duplicateCheck = new Set<string>()
+    for (const line of validLines) {
+      if (duplicateCheck.has(line.medicineId)) {
+        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === line.medicineId)
+        onError(`Duplicate medicine line for ${med?.name ?? 'medicine'}. Merge quantities before dispensing.`)
+        return
+      }
+      duplicateCheck.add(line.medicineId)
+    }
+    for (const l of validLines) {
+      const available = getAvailable(l.medicineId)
+      const qty = Math.floor(Number(l.quantity) || 0)
+      if (available <= 0) {
+        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === l.medicineId)
+        onError(`${med?.name ?? 'Medicine'} is out of stock. Cannot dispense.`)
+        return
+      }
+      if (qty > available) {
+        const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === l.medicineId)
+        onError(`Insufficient stock for ${med?.name ?? 'medicine'}. Available: ${available}, requested: ${qty}.`)
+        return
+      }
+    }
+    const payload = validLines.map((l) => ({
+      medicineId: l.medicineId,
+      quantity: Math.floor(Number(l.quantity) || 0),
+    }))
+    if (payload.length === 0) {
+      onError('Select at least one medicine and enter quantity.')
+      return
+    }
+    const gross = payload.reduce((sum, p) => {
+      const med = displayMedicines.find((m) => (m.medicineId ?? m.id) === p.medicineId)
+      return sum + p.quantity * (med ? Number(med.sellingPrice) || 0 : 0)
+    }, 0)
+    const disc = Math.max(0, Number(discountAmount) || 0)
+    const taxable = Math.max(0, gross - disc)
+    const netTotalBill = taxable + taxable * (taxPercent / 100)
+
+    if (netTotalBill <= 0) {
+      const checkoutId = crypto.randomUUID()
+      await executeDispense(payload, 0, 0, checkoutId)
+      return
+    }
+
+    const checkoutId = crypto.randomUUID()
+    setCashCheckoutId(checkoutId)
+    setPendingDispensePayload({ lines: payload, billAmount: netTotalBill, idempotencyKey: checkoutId })
+    setPendingBillAmount(netTotalBill)
+  }
+
+  const showCashPanel = !!pendingDispensePayload && pendingBillAmount > 0
   const selectedCount = lines.filter((l) => l.medicineId && Number(l.quantity) > 0).length
   const orderLines = lines
     .map((l) => {
@@ -500,14 +587,47 @@ export function DispenseModal({
               <span className="text-slate-800 font-semibold">Total: ₹{netTotal.toFixed(2)}</span>
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={saving}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" size="sm" loading={saving} loadingText="Processing…">
-                Complete sale & print bill
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={saving}
+                loadingText="Processing…"
+                disabled={!hasActiveSession || selectedCount === 0 || !!pendingDispensePayload || saving}
+                title={
+                  !hasActiveSession
+                    ? 'Start a cash session first (Cash & expenses → Start shift)'
+                    : showCashPanel
+                      ? 'Confirm cash received in the panel below'
+                      : 'Review totals, then confirm cash payment below'
+                }
+              >
+                {showCashPanel ? 'Awaiting cash confirmation' : 'Review & open cash panel'}
               </Button>
             </div>
           </div>
+          {showCashPanel && (
+            <div className="mt-2 border-t border-slate-200 pt-4">
+              <CashPaymentPanel
+                key={cashCheckoutId ?? 'dispense-cash'}
+                billAmount={pendingBillAmount}
+                onConfirm={doDispenseWithCash}
+                confirmLabel="Confirm dispense & print bill"
+                isProcessing={saving}
+                disabled={saving}
+                resetKey={cashCheckoutId ?? undefined}
+                onCancel={() => {
+                  if (saving) return
+                  setPendingDispensePayload(null)
+                  setPendingBillAmount(0)
+                  setCashCheckoutId(null)
+                }}
+              />
+            </div>
+          )}
         </form>
       </div>
     </>

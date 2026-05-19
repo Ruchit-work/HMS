@@ -2,7 +2,7 @@
  * Pharmacy bill: modern HTML template + html2pdf.js export.
  */
 
-export interface BillLine {
+interface BillLine {
   name: string
   qty: number
   rate: number
@@ -15,7 +15,7 @@ export interface BillLine {
   gstPercent?: number
 }
 
-export interface BillData {
+interface BillData {
   type: "prescription" | "walk_in"
   patientName: string
   customerPhone?: string
@@ -171,7 +171,7 @@ async function sendToPrintBridge(
   }
 }
 
-export function buildBillHTML(data: BillData): string {
+function buildBillHTML(data: BillData): string {
   const dt = normalizeDateTime(data.date)
   const hasDoctor = Boolean(data.doctorName && String(data.doctorName).trim())
   const paymentMethod = (data.paymentMethod || "cash").toUpperCase()
@@ -654,7 +654,7 @@ export function generateBillPDFAndPrint(data: BillData): void {
   void generateBillPDF(data)
 }
 
-export async function generateBillPDF(data: BillData): Promise<void> {
+async function generateBillPDF(data: BillData): Promise<void> {
   if (typeof window === "undefined") return
 
   const html2pdf = await ensureHtml2PdfLoaded()

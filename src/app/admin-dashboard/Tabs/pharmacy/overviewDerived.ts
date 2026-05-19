@@ -2,14 +2,12 @@ import type {
   BranchMedicineStock,
   ExpiryAlert,
   PharmacyMedicine,
-  PharmacyPurchaseOrder,
   PharmacySale,
 } from '@/types/pharmacy'
 import { daysUntilExpiryForBatch, getNearestExpiry } from './inventoryFilters'
 
 type BranchOption = { id: string; name: string }
 
-export type RecordPeriod = 'weekly' | 'monthly' | 'six_months' | 'year' | 'all'
 export type OverviewDateRange = 'today' | '7d' | '30d' | '6m' | 'year' | 'all'
 export type InventoryHealthFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'expiring_soon' | 'dead_stock'
 
@@ -18,87 +16,6 @@ export const toDate = (value: unknown): Date | null => {
   if (typeof value === 'string') return new Date(value)
   const parsed = (value as { toDate?: () => Date })?.toDate?.()
   return parsed ? new Date(parsed) : null
-}
-
-export const computeRecordTotals = ({
-  recordPeriod,
-  branchFilter,
-  sales,
-  purchaseOrders,
-}: {
-  recordPeriod: RecordPeriod
-  branchFilter: string
-  sales: PharmacySale[]
-  purchaseOrders: PharmacyPurchaseOrder[]
-}) => {
-  const now = Date.now()
-  const periodMs: Record<RecordPeriod, number | null> = {
-    weekly: 7 * 24 * 60 * 60 * 1000,
-    monthly: 30 * 24 * 60 * 60 * 1000,
-    six_months: 180 * 24 * 60 * 60 * 1000,
-    year: 365 * 24 * 60 * 60 * 1000,
-    all: null,
-  }
-  const cutoff = periodMs[recordPeriod] ? now - periodMs[recordPeriod]! : 0
-  const salesFiltered = (branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter))
-    .filter((s) => {
-      const d = toDate(s.dispensedAt)
-      return Boolean(d && (recordPeriod === 'all' || d.getTime() >= cutoff))
-    })
-  const ordersFiltered = (branchFilter === 'all' ? purchaseOrders : purchaseOrders.filter((o) => o.branchId === branchFilter))
-    .filter((o) => {
-      const d = toDate(o.createdAt)
-      return Boolean(d && (recordPeriod === 'all' || d.getTime() >= cutoff))
-    })
-  const salesRecordTotal = salesFiltered.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0)
-  const purchaseRecordTotal = ordersFiltered.reduce((sum, o) => sum + (Number(o.totalCost) || 0), 0)
-  return { salesRecordTotal, purchaseRecordTotal }
-}
-
-export const computeLast7DaysSales = ({
-  branchFilter,
-  sales,
-}: {
-  branchFilter: string
-  sales: PharmacySale[]
-}) => {
-  const now = new Date()
-  const dayMs = 24 * 60 * 60 * 1000
-  const salesFiltered = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
-  return [6, 5, 4, 3, 2, 1, 0].map((daysAgo) => {
-    const start = new Date(now)
-    start.setHours(0, 0, 0, 0)
-    start.setTime(start.getTime() - daysAgo * dayMs)
-    const end = new Date(start.getTime() + dayMs)
-    const dayTotal = salesFiltered.reduce((sum, s) => {
-      const d = toDate(s.dispensedAt)
-      if (!d || d < start || d >= end) return sum
-      return sum + (Number(s.totalAmount) || 0)
-    }, 0)
-    return { label: start.toLocaleDateString('en-IN', { weekday: 'short' }), value: dayTotal }
-  })
-}
-
-export const computePieChartData = ({
-  salesRecordTotal,
-  purchaseRecordTotal,
-  suppliersCount,
-}: {
-  salesRecordTotal: number
-  purchaseRecordTotal: number
-  suppliersCount: number
-}) => {
-  const salesVal = salesRecordTotal || 0
-  const purchaseVal = purchaseRecordTotal || 0
-  const suppliersVal = Math.max(suppliersCount * 5000, 0)
-  const noSalesVal = Math.max(10000 - salesVal - purchaseVal - suppliersVal, 0)
-  const total = salesVal + purchaseVal + suppliersVal + noSalesVal
-  return [
-    { label: 'Purchases', value: purchaseVal, color: '#5EEAD4' },
-    { label: 'Suppliers', value: suppliersVal, color: '#86EFAC' },
-    { label: 'Sales', value: salesVal, color: '#F9A8D4' },
-    { label: 'No Sales', value: noSalesVal, color: 'var(--color-neutral-200)' },
-  ].map((s) => ({ ...s, pct: total > 0 ? (s.value / total) * 100 : 25 }))
 }
 
 const buildRangeCutoff = (overviewDateRange: OverviewDateRange): number | null => {
@@ -226,6 +143,61 @@ export const computeSalesTrendData = ({
   return result
 }
 
+const MEDICINE_FORM_TYPES = ['Tablets', 'Capsules', 'Syrups', 'Injections', 'Ointments', 'Drops'] as const
+type MedicineFormType = (typeof MEDICINE_FORM_TYPES)[number]
+
+const FORM_TYPE_SYNONYMS: Record<string, MedicineFormType> = {
+  tablet: 'Tablets',
+  tablets: 'Tablets',
+  tab: 'Tablets',
+  capsule: 'Capsules',
+  capsules: 'Capsules',
+  cap: 'Capsules',
+  caps: 'Capsules',
+  syrup: 'Syrups',
+  syrups: 'Syrups',
+  liquid: 'Syrups',
+  suspension: 'Syrups',
+  injection: 'Injections',
+  injections: 'Injections',
+  injectable: 'Injections',
+  vial: 'Injections',
+  ampoule: 'Injections',
+  ointment: 'Ointments',
+  ointments: 'Ointments',
+  cream: 'Ointments',
+  gel: 'Ointments',
+  lotion: 'Ointments',
+  drop: 'Drops',
+  drops: 'Drops',
+}
+
+const matchMedicineFormType = (...candidates: Array<string | null | undefined>): MedicineFormType | null => {
+  for (const raw of candidates) {
+    const text = (raw ?? '').trim()
+    if (!text) continue
+    const key = text.toLowerCase()
+    if (FORM_TYPE_SYNONYMS[key]) return FORM_TYPE_SYNONYMS[key]
+    const exact = MEDICINE_FORM_TYPES.find((form) => form.toLowerCase() === key)
+    if (exact) return exact
+    for (const [syn, form] of Object.entries(FORM_TYPE_SYNONYMS)) {
+      if (key.includes(syn)) return form
+    }
+  }
+  return null
+}
+
+/** Label for overview donut: dosage form when detectable, else catalog category text. */
+const resolveMedicineDistributionLabel = (medicine: PharmacyMedicine): string => {
+  const form = matchMedicineFormType(medicine.category, medicine.unit, medicine.packSize ?? undefined)
+  if (form) return form
+  const category = (medicine.category ?? '').trim()
+  if (category) {
+    return category.charAt(0).toUpperCase() + category.slice(1)
+  }
+  return 'Uncategorized'
+}
+
 export const computeCategoryDistribution = ({
   medicines,
   stock,
@@ -235,23 +207,27 @@ export const computeCategoryDistribution = ({
   stock: BranchMedicineStock[]
   branchFilter: string
 }) => {
-  const categoryList = ['Tablets', 'Capsules', 'Syrups', 'Injections', 'Ointments', 'Drops']
   const branchStock = branchFilter === 'all' ? stock : stock.filter((s) => s.branchId === branchFilter)
   const medicineIds = new Set(branchStock.map((s) => s.medicineId))
   const map = new Map<string, number>()
-  categoryList.forEach((c) => map.set(c, 0))
-  map.set('Other', 0)
   medicines.forEach((m) => {
-    if (!medicineIds.has(m.medicineId ?? m.id)) return
-    const cat = (m as PharmacyMedicine & { category?: string }).category || ''
-    const normalized = categoryList.find((c) => c.toLowerCase() === (cat || '').toLowerCase()) || 'Other'
-    map.set(normalized, (map.get(normalized) ?? 0) + 1)
+    const id = m.medicineId ?? m.id
+    if (!medicineIds.has(id)) return
+    const label = resolveMedicineDistributionLabel(m)
+    map.set(label, (map.get(label) ?? 0) + 1)
   })
-  const colors = ['var(--color-primary)', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE', 'var(--color-neutral-200)']
-  return Array.from(map.entries())
+  const colors = ['var(--color-primary)', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE', '#64748B', 'var(--color-neutral-200)']
+  const sorted = Array.from(map.entries())
     .filter(([, count]) => count > 0)
-    .map(([name, count], i) => ({ name, count, color: colors[i % colors.length] }))
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => b[1] - a[1])
+  const maxSlices = 7
+  const top = sorted.slice(0, maxSlices)
+  const rest = sorted.slice(maxSlices)
+  const merged =
+    rest.length > 0
+      ? [...top, ['Other', rest.reduce((sum, [, count]) => sum + count, 0)] as [string, number]]
+      : top
+  return merged.map(([name, count], i) => ({ name, count, color: colors[i % colors.length] }))
 }
 
 export const computeCategoryDonutData = (

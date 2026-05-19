@@ -55,7 +55,7 @@ import { AddSupplierForm, EditSupplierForm } from './pharmacy/components/Supplie
 import { TransfersTabContent } from './pharmacy/components/TransfersTabContent'
 import { AddPharmacistModalContent } from './pharmacy/components/UserManagementForms'
 import { UsersTabContent } from './pharmacy/components/UsersTabContent'
-import { CASH_DENOMS, RETURN_REASON_OPTIONS, createEmptyCashNotes } from './pharmacy/constants'
+import { CASH_DENOMS, REQUIRE_SHIFT_HANDOVER_NOTE, RETURN_REASON_OPTIONS, createEmptyCashNotes } from './pharmacy/constants'
 import {
   computeCloseShiftPreview,
   computeDailySummaryDayRows,
@@ -111,7 +111,7 @@ import {
 } from './pharmacy/overviewDerived'
 import type { QueueItem } from './pharmacy/types'
 
-type PharmacySubTab = 'overview' | 'inventory' | 'queue' | 'sales' | 'returns' | 'suppliers' | 'orders' | 'transfers' | 'analytics' | 'reports' | 'users' | 'cash_and_expenses' | 'settings'
+type PharmacySubTab = 'overview' | 'inventory' | 'queue' | 'sales' | 'returns' | 'suppliers' | 'orders' | 'transfers' | 'reports' | 'users' | 'cash_and_expenses' | 'settings'
 
 export default function PharmacyManagement() {
   const { user: authUser } = useAuth()
@@ -1381,6 +1381,7 @@ export default function PharmacyManagement() {
                 medicines={medicines}
                 stock={stock}
                 hospitalId={activeHospitalId ?? ''}
+                hasActiveSession={!!activeCashSession}
                 onSuccess={() => {
                   keepFullscreenAfterSaleRef.current = true
                   setSuccess('Medicine dispensed; stock updated.')
@@ -2812,6 +2813,20 @@ export default function PharmacyManagement() {
                           </span>
                         </div>
                       </div>
+                      {(s.handoverNote || s.varianceReason) && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-sm">
+                          <h3 className="font-semibold text-slate-800">Handover</h3>
+                          {s.handoverNote && (
+                            <p className="text-slate-700 whitespace-pre-wrap">{s.handoverNote}</p>
+                          )}
+                          {s.varianceReason && (
+                            <p className="text-xs text-slate-500">
+                              Variance reason:{' '}
+                              <span className="font-medium text-slate-700">{s.varianceReason.replace(/_/g, ' ')}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
                       <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
                         <p className="text-xs font-medium text-emerald-700 mb-1">Total income</p>
                         <p className="text-xl font-bold text-emerald-900 tabular-nums">₹{totalIncome.toFixed(2)}</p>
@@ -2952,6 +2967,7 @@ export default function PharmacyManagement() {
         {showCloseShiftConfirm && activeCashSession && (
           <RevealModal
             isOpen
+            contentClassName="!max-w-md max-h-[min(90dvh,720px)]"
             onClose={() => {
               setShowCloseShiftConfirm(false)
               setCloseChecklist({
@@ -2963,12 +2979,12 @@ export default function PharmacyManagement() {
               setCloseHandoverNote('')
             }}
           >
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80">
-              <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-5 rounded-t-2xl shrink-0">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-auto max-h-[min(90dvh,720px)] flex flex-col overflow-hidden border border-slate-200/80">
+              <div className="shrink-0 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-5 rounded-t-2xl">
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">Close shift</h2>
                 <p className="text-sm text-slate-500 mt-1">Confirm closing this shift. Start and close times are recorded.</p>
               </div>
-              <div className="p-6 sm:p-8 space-y-5">
+              <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-5">
                 <p className="text-slate-700 font-medium">Are you sure you want to close this shift?</p>
                 <ShiftCloseChecklist
                   difference={closeShiftPreview.difference}
@@ -2983,7 +2999,8 @@ export default function PharmacyManagement() {
                   closeChecklist={closeChecklist}
                   onCloseChecklistChange={setCloseChecklist}
                 />
-                <div className="flex justify-end gap-3 pt-2">
+              </div>
+              <div className="shrink-0 border-t border-slate-200 bg-white px-6 sm:px-8 py-4 flex justify-end gap-3 rounded-b-2xl">
                   <button
                     type="button"
                     onClick={() => {
@@ -3021,7 +3038,7 @@ export default function PharmacyManagement() {
                         setError('Please select a variance reason before closing.')
                         return
                       }
-                      if (closeHandoverNote.trim().length < 5) {
+                      if (REQUIRE_SHIFT_HANDOVER_NOTE && closeHandoverNote.trim().length < 5) {
                         setError('Please add a handover note before closing the shift.')
                         return
                       }
@@ -3040,7 +3057,7 @@ export default function PharmacyManagement() {
                         closingCashTotal: closingTotal,
                         closedByName: closedByName || undefined,
                         varianceReason: closeVarianceReason || undefined,
-                        handoverNote: closeHandoverNote.trim(),
+                        handoverNote: closeHandoverNote.trim() || undefined,
                         cashSales: sessionSales
                           .filter((s) => s.paymentMode === 'cash')
                           .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
@@ -3098,7 +3115,6 @@ export default function PharmacyManagement() {
                   >
                     Yes, close shift
                   </Button>
-                </div>
               </div>
             </div>
           </RevealModal>

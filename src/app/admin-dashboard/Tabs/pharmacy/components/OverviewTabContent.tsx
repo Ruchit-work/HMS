@@ -291,7 +291,8 @@ export function OverviewTabContent(props: {
           )}
         </div>
         <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Medicine Category Distribution</h3>
+          <h3 className="text-lg font-semibold text-slate-800 mb-1">Medicine Category Distribution</h3>
+          <p className="text-xs text-slate-500 mb-4">Form (tablets, syrup…) when set; otherwise your catalog category (e.g. Analgesic).</p>
           {categoryDonutData.length === 0 || (categoryDonutData.length === 1 && categoryDonutData[0].name === 'No data') ? (
             <div className="flex h-44 items-center justify-center rounded-lg border border-dashed border-[var(--color-neutral-200)] bg-slate-50/50 text-slate-500 text-sm">No category data</div>
           ) : (

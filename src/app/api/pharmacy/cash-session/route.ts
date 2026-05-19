@@ -141,6 +141,8 @@ export async function POST(request: NextRequest) {
     const closingNotes = (body.closingNotes || {}) as Record<string, number>
     const closingCashTotal = Number(body.closingCashTotal) || 0
     const closedByName = typeof body.closedByName === 'string' ? body.closedByName.trim() || undefined : undefined
+    const handoverNote = typeof body.handoverNote === 'string' ? body.handoverNote.trim() || undefined : undefined
+    const varianceReason = typeof body.varianceReason === 'string' ? body.varianceReason.trim() || undefined : undefined
     const metrics = {
       cashSales: Number(body.cashSales) || 0,
       upiSales: Number(body.upiSales) || 0,
@@ -177,6 +179,8 @@ export async function POST(request: NextRequest) {
       status,
       closedAt: now,
       ...(closedByName != null && { closedByName }),
+      ...(handoverNote != null && { handoverNote }),
+      ...(varianceReason != null && { varianceReason }),
     })
 
     return NextResponse.json({
@@ -193,6 +197,8 @@ export async function POST(request: NextRequest) {
         status,
         closedAt: now,
         ...(closedByName != null && { closedByName }),
+        ...(handoverNote != null && { handoverNote }),
+        ...(varianceReason != null && { varianceReason }),
       } as PharmacyCashSession,
     })
   }

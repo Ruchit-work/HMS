@@ -37,7 +37,7 @@ export function PharmacyBillingPanel({
   getToken: () => Promise<string | null>
   onOpenAddMedicine?: (barcode: string) => void
   posSearchRef?: React.RefObject<HTMLInputElement | null>
-  /** Optional: pending prescriptions to power unified patient/prescription search */
+  /** Optional: pending prescriptions to power prescription lookup on walk-in POS */
   queueItems?: QueueItem[]
   /** If false, user must start a cash session before completing sales */
   hasActiveSession?: boolean
@@ -64,8 +64,14 @@ export function PharmacyBillingPanel({
     customerName: string
     customerPhone: string
     lines: Array<{ medicineId: string; quantity: number; batchId?: string }>
+    appointmentId?: string
+    billAmount: number
+    idempotencyKey: string
   } | null>(null)
   const [pendingBillAmount, setPendingBillAmount] = useState(0)
+  const [billingAppointmentId, setBillingAppointmentId] = useState<string | null>(null)
+  const [cashCheckoutId, setCashCheckoutId] = useState<string | null>(null)
+  const cashConfirmLockRef = useRef(false)
   const [searchPatientQuery, setSearchPatientQuery] = useState('')
   const [searchPatientOpen, setSearchPatientOpen] = useState(false)
   const [hasHeldBill, setHasHeldBill] = useState(false)
@@ -83,17 +89,31 @@ export function PharmacyBillingPanel({
     return out
   }, [medicines, scannedMedicines])
 
+  const pendingPrescriptionCount = queueItems?.length ?? 0
+
   const matchingQueueItems = useMemo(() => {
-    if (!queueItems || !searchPatientQuery.trim()) return []
-    const q = searchPatientQuery.trim().toLowerCase()
-    return queueItems
-      .filter((item) => {
-        const inPatient = item.patientName.toLowerCase().includes(q)
-        const inDoctor = item.doctorName.toLowerCase().includes(q)
-        const inAppt = item.appointmentId.toLowerCase().includes(q)
-        return inPatient || inDoctor || inAppt
-      })
-      .slice(0, 8)
+    if (!queueItems?.length) return []
+    const q = searchPatientQuery.trim().toLowerCase().replace(/\s+/g, ' ')
+    if (!q) return queueItems.filter((item) => !item.dispensed).slice(0, 8)
+
+    const tokens = q.split(' ').filter(Boolean)
+    const matchesQuery = (item: QueueItem) => {
+      const haystack = [
+        item.patientName,
+        item.doctorName,
+        item.appointmentId,
+        item.branchName ?? '',
+        item.branchId ?? '',
+        item.medicineText ?? '',
+        item.appointmentDate ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+      if (haystack.includes(q)) return true
+      return tokens.every((t) => haystack.includes(t))
+    }
+
+    return queueItems.filter((item) => !item.dispensed && matchesQuery(item)).slice(0, 12)
   }, [queueItems, searchPatientQuery])
 
   useEffect(() => {
@@ -202,6 +222,11 @@ export function PharmacyBillingPanel({
 
   const loadFromQueueItem = useCallback(
     (item: QueueItem) => {
+      setPendingDispensePayload(null)
+      setPendingBillAmount(0)
+      setCashCheckoutId(null)
+      setBillingAppointmentId(item.appointmentId)
+      setBillingInfo(`Prescription loaded: ${item.patientName} · ${item.doctorName}`)
       setCustomerName(item.patientName)
       setDoctorName(item.doctorName)
       // phone is not available on QueueItem; user can still type it
@@ -261,6 +286,10 @@ export function PharmacyBillingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (pendingDispensePayload) {
+      onError('Complete or cancel the cash payment below before starting another bill.')
+      return
+    }
     if (!hasActiveSession) {
       onError('Please start a cash session first (Cash & expenses → Start shift).')
       return
@@ -327,11 +356,16 @@ export function PharmacyBillingPanel({
     const billTax = taxable * (taxPercent / 100)
     const net = taxable + billTax
     if (paymentMode === 'cash') {
+      const checkoutId = crypto.randomUUID()
+      setCashCheckoutId(checkoutId)
       setPendingDispensePayload({
         branchId: effectiveBranchId,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         lines: payload,
+        appointmentId: billingAppointmentId ?? undefined,
+        billAmount: net,
+        idempotencyKey: checkoutId,
       })
       setPendingBillAmount(net)
       return
@@ -340,15 +374,21 @@ export function PharmacyBillingPanel({
     try {
       const token = await getToken()
       if (!token) { onError('Not authenticated'); return }
+      const checkoutId = crypto.randomUUID()
       const res = await fetch('/api/pharmacy/dispense', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-idempotency-key': checkoutId,
+        },
         body: JSON.stringify({
           branchId: effectiveBranchId,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           paymentMode,
           lines: payload,
+          appointmentId: billingAppointmentId ?? undefined,
         }),
       })
       const data = await res.json()
@@ -389,6 +429,7 @@ export function PharmacyBillingPanel({
       setDiscountAmount(0)
       setLines([])
       setBillingInfo(null)
+      setBillingAppointmentId(null)
       refocusSearchInput()
     } catch (err: any) {
       onError(err?.message || 'Failed')
@@ -401,21 +442,31 @@ export function PharmacyBillingPanel({
     amountReceived: number,
     changeGiven: number
   ) => {
+    if (saving || cashConfirmLockRef.current) return
     const pending = pendingDispensePayload
     if (!pending) return
+    cashConfirmLockRef.current = true
+    setPendingDispensePayload(null)
+    setPendingBillAmount(0)
+    setCashCheckoutId(null)
     setSaving(true)
     try {
       const token = await getToken()
       if (!token) { onError('Not authenticated'); return }
       const res = await fetch('/api/pharmacy/dispense', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-idempotency-key': pending.idempotencyKey,
+        },
         body: JSON.stringify({
           branchId: pending.branchId,
           customerName: pending.customerName,
           customerPhone: pending.customerPhone,
           paymentMode: 'cash',
           lines: pending.lines,
+          appointmentId: pending.appointmentId,
           amountReceived,
           tenderNotes: {},
           changeNotes: {},
@@ -453,7 +504,6 @@ export function PharmacyBillingPanel({
         netTotal: net,
         paymentMethod: 'cash',
       })
-      setPendingDispensePayload(null)
       onSuccess()
       setCustomerName('')
       setCustomerPhone('')
@@ -461,11 +511,16 @@ export function PharmacyBillingPanel({
       setDiscountAmount(0)
       setLines([])
       setBillingInfo(null)
+      setBillingAppointmentId(null)
       refocusSearchInput()
     } catch (err: any) {
       onError(err?.message || 'Failed')
+      setPendingDispensePayload(pending)
+      setPendingBillAmount(pending.billAmount)
+      setCashCheckoutId(pending.idempotencyKey)
     } finally {
       setSaving(false)
+      cashConfirmLockRef.current = false
     }
   }
 
@@ -513,26 +568,37 @@ export function PharmacyBillingPanel({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0 bg-white rounded-xl border border-[var(--color-neutral-200)] shadow-sm overflow-hidden">
-      {/* Universal patient / prescription search */}
+      {/* Load pending prescription into walk-in sale */}
       <div className="shrink-0 p-4 border-b border-[var(--color-neutral-200)] bg-white" ref={patientSearchRef}>
-        <label className="block text-xs font-medium text-slate-500 mb-1">Search patient / prescription</label>
+        <label className="block text-xs font-medium text-slate-500 mb-1">Search prescription</label>
+        <p className="text-[11px] text-slate-500 mb-1.5">
+          {pendingPrescriptionCount > 0
+            ? `${pendingPrescriptionCount} pending — pick one to load medicines into this sale`
+            : 'No pending prescriptions for the current branch. Check Prescription queue tab or set branch to All.'}
+        </p>
         <div className="relative">
           <input
-            type="text"
+            type="search"
             value={searchPatientQuery}
             onChange={(e) => {
               setSearchPatientQuery(e.target.value)
               setSearchPatientOpen(true)
             }}
             onFocus={() => setSearchPatientOpen(true)}
-            placeholder="Type patient name, doctor or prescription ID..."
-            className="w-full rounded-xl border border-[var(--color-neutral-200)] bg-[#F9FAFB] px-3 py-2.5 pl-10 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
+            placeholder={pendingPrescriptionCount > 0 ? 'Type patient name, doctor, or click to browse…' : 'No prescriptions to search'}
+            disabled={pendingPrescriptionCount === 0}
+            className="w-full rounded-xl border border-[var(--color-neutral-200)] bg-[#F9FAFB] px-3 py-2.5 pl-10 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] disabled:opacity-60 disabled:cursor-not-allowed"
           />
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
-          {searchPatientOpen && matchingQueueItems.length > 0 && (
+          {searchPatientOpen && pendingPrescriptionCount > 0 && (
             <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg max-h-64 overflow-auto text-sm">
+              {matchingQueueItems.length === 0 && searchPatientQuery.trim() ? (
+                <p className="px-3 py-3 text-slate-500 text-xs">
+                  No match for &ldquo;{searchPatientQuery.trim()}&rdquo;. Try doctor name, date, or appointment ID.
+                </p>
+              ) : null}
               {matchingQueueItems.map((item) => (
                 <button
                   key={item.appointmentId}
@@ -548,7 +614,9 @@ export function PharmacyBillingPanel({
                   <span className="text-xs text-slate-500 truncate">
                     {item.doctorName} · {item.appointmentDate} · {item.branchName ?? item.branchId ?? '—'}
                   </span>
-                  <span className="text-[11px] text-slate-400 truncate">Prescription ID: {item.appointmentId}</span>
+                  <span className="text-[11px] text-slate-400 truncate">
+                    {item.medicines.length} medicine{item.medicines.length === 1 ? '' : 's'}
+                  </span>
                 </button>
               ))}
             </div>
@@ -987,7 +1055,7 @@ export function PharmacyBillingPanel({
             className="ml-auto rounded-full px-6"
             loading={saving}
             loadingText="Processing…"
-            disabled={!canCompleteSale || !hasActiveSession}
+            disabled={!canCompleteSale || !hasActiveSession || !!pendingDispensePayload || saving}
             title={
               !hasActiveSession
                 ? 'Start a cash session first (Cash & expenses → Start shift)'
@@ -1007,10 +1075,19 @@ export function PharmacyBillingPanel({
         {showCashPanel && (
           <div className="mt-3">
             <CashPaymentPanel
+              key={cashCheckoutId ?? 'cash-checkout'}
               billAmount={pendingBillAmount}
               onConfirm={doDispenseWithCash}
               confirmLabel="Confirm & complete sale"
-              onCancel={() => setPendingDispensePayload(null)}
+              isProcessing={saving}
+              disabled={saving}
+              resetKey={cashCheckoutId ?? undefined}
+              onCancel={() => {
+                if (saving) return
+                setPendingDispensePayload(null)
+                setPendingBillAmount(0)
+                setCashCheckoutId(null)
+              }}
             />
           </div>
         )}

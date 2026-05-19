@@ -8,7 +8,6 @@ import InteractiveThroatSVG from '@/components/doctor/anatomy/svg/InteractiveThr
 import InteractiveLungsSVG from '@/components/doctor/anatomy/svg/InteractiveLungsSVG'
 import InteractiveMouthSVG from '@/components/doctor/anatomy/svg/InteractiveMouthSVG'
 import InteractiveFemaleReproductiveSVG from '@/components/doctor/anatomy/svg/InteractiveFemaleReproductiveSVG'
-// import InteractiveKidneySVG from '@/components/doctor/anatomy/svg/InteractiveKidneySVG' // Commented out: module not found
 import { earPartsData, type Disease } from '@/constants/earDiseases'
 import { nosePartsData } from '@/constants/noseDiseases'
 import { throatPartsData } from '@/constants/throatDiseases'

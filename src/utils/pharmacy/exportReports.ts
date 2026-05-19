@@ -63,21 +63,3 @@ export function exportToPdf(
   })
   doc.save(`${filename}.pdf`)
 }
-
-export function printReport(printRef: HTMLElement | null, title: string): void {
-  if (!printRef) return
-  const win = window.open('', '_blank')
-  if (!win) return
-  win.document.write(`
-    <!DOCTYPE html><html><head><title>${title}</title>
-    <style>body{font-family:system-ui,sans-serif;padding:1rem;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;} th{background:#f1f5f9;}</style>
-    </head><body><h2>${title}</h2>${printRef.innerHTML}</body></html>`)
-  win.document.close()
-  win.focus()
-  setTimeout(() => {
-    win.print()
-    win.close()
-  }, 300)
-}
-
-export { safeNum }

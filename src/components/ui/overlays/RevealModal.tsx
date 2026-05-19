@@ -155,7 +155,7 @@ export function RevealModal({
     <RevealModalContext.Provider value={{ requestClose }}>
       <style dangerouslySetInnerHTML={{ __html: revealModalStyles }} />
       <div
-        className={`fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 ${overlayClasses} ${overlayClassName}`}
+        className={`fixed inset-0 bg-slate-900/60 backdrop-blur-md overflow-y-auto ${overlayClasses} ${overlayClassName}`}
         style={{ zIndex }}
         role="dialog"
         aria-modal="true"
@@ -166,12 +166,14 @@ export function RevealModal({
             : undefined
         }
       >
-        <div
-          ref={contentRef}
-          className={`${contentClasses} ${contentClassName}`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {children}
+        <div className="flex min-h-full w-full items-center justify-center p-4 sm:p-6">
+          <div
+            ref={contentRef}
+            className={`${contentClasses} ${contentClassName} mx-auto w-full max-w-[min(100%,42rem)]`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </RevealModalContext.Provider>

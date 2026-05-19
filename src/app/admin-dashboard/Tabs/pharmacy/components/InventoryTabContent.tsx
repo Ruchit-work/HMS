@@ -6,13 +6,13 @@ import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import Pagination from '@/components/ui/navigation/Pagination'
 import type { BranchMedicineStock, MedicineBatch, PharmacyMedicine, PharmacyPurchaseOrder, PharmacySupplier } from '@/types/pharmacy'
 import { DaysCoverBadge } from './RealWorldUiBlocks'
+import { AddStockForm } from './InventoryForms'
 import { ReceiveByFileForm } from './StockTransferAndImportForms'
 import { BarcodeScanInput } from './SearchInputs'
 import { MedicineFileUploader } from './Uploaders'
+import type { InventoryExpiryFilter, InventoryStatusFilter } from '../inventoryFilters'
 
 type BranchOption = { id: string; name: string }
-type InventoryStatusFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock'
-type InventoryExpiryFilter = 'all' | 'expiring_soon' | 'expired'
 
 export function InventoryTabContent(props: {
   isViewOnly: boolean
@@ -136,6 +136,28 @@ export function InventoryTabContent(props: {
           getToken={getToken}
           branchIdForSimpleUpload={!isViewOnly ? branchFilter : undefined}
         />
+      )}
+
+      {!isViewOnly && activeHospitalId && (
+        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-800 mb-1">Add stock manually</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Increase quantity for an existing medicine (batch and expiry optional). For bulk import, use the file sections below.
+          </p>
+          <AddStockForm
+            branches={branches}
+            medicines={medicines}
+            selectedBranchId={branchFilter !== 'all' ? branchFilter : undefined}
+            selectedBranchName={branchFilter !== 'all' ? branches.find((b) => b.id === branchFilter)?.name : undefined}
+            onSuccess={() => {
+              setSuccess('Stock added successfully.')
+              fetchPharmacy()
+            }}
+            onError={(e) => setError(e)}
+            getToken={getToken}
+            hospitalId={activeHospitalId}
+          />
+        </div>
       )}
 
       {activeHospitalId && (

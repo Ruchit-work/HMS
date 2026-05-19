@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 
 import { Appointment as AppointmentType } from "@/types/patient"
 import { CompletionFormEntry } from "@/types/appointments"
 import { DocumentMetadata } from "@/types/document"
 import { MedicineSuggestion } from "@/utils/medicineSuggestions"
 import AIPrescriptionSuggestion from "@/components/doctor/appointments/ai/AIPrescriptionSuggestion"
+import AIDiagnosisSuggestion from "@/components/doctor/appointments/ai/AIDiagnosisSuggestion"
+import { formatAIDiagnosisForNotes } from "@/utils/appointments/diagnosisParsers"
 import MedicineForm from "@/components/doctor/appointments/forms/MedicineForm"
 import DocumentUpload from "@/components/documents/DocumentUpload"
 import { parseAiPrescription } from "@/utils/appointments/prescriptionParsers"
@@ -22,6 +24,9 @@ interface CompletionFormProps {
   aiPrescription: { medicine: string; notes: string } | undefined
   loadingAiPrescription: boolean
   showAiPrescriptionSuggestion: boolean
+  aiDiagnosisText?: string
+  loadingAiDiagnosis: boolean
+  showAiDiagnosisSuggestion: boolean
   removedAiMedicines: number[]
   showDocumentUpload: boolean
   updating: boolean
@@ -33,6 +38,9 @@ interface CompletionFormProps {
   onAiPrescriptionRemoveAll: (indices: number[]) => void
   onAiPrescriptionRegenerate: () => void
   onDeclinePrescription: () => void
+  onGenerateAiDiagnosis: () => void
+  onAiDiagnosisRegenerate: () => void
+  onDeclineAiDiagnosis: () => void
   onCopyPreviousPrescription: () => void
   onDocumentUploadToggle: () => void
   onDocumentUploadSuccess: (document: DocumentMetadata) => void
@@ -53,6 +61,9 @@ export default function CompletionForm({
   aiPrescription,
   loadingAiPrescription,
   showAiPrescriptionSuggestion,
+  aiDiagnosisText,
+  loadingAiDiagnosis,
+  showAiDiagnosisSuggestion,
   removedAiMedicines,
   showDocumentUpload,
   updating,
@@ -64,6 +75,9 @@ export default function CompletionForm({
   onAiPrescriptionRemoveAll,
   onAiPrescriptionRegenerate,
   onDeclinePrescription,
+  onGenerateAiDiagnosis,
+  onAiDiagnosisRegenerate,
+  onDeclineAiDiagnosis,
   onCopyPreviousPrescription,
   onDocumentUploadToggle,
   onDocumentUploadSuccess,
@@ -74,12 +88,17 @@ export default function CompletionForm({
   formId,
 }: CompletionFormProps) {
   const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved">("idle")
+  const [suggestionApplied, setSuggestionApplied] = useState(false)
   const draftSavedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const completionDataRef = useRef(completionData)
+  const notesTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
+
+  completionDataRef.current = completionData
 
   const handleNotesChange = (notes: string) => {
     onCompletionDataChange({
-      ...completionData,
+      ...completionDataRef.current,
       notes,
     })
     setDraftStatus("saving")
@@ -94,10 +113,34 @@ export default function CompletionForm({
 
   const handleMedicinesChange = (medicines: CompletionFormEntry["medicines"]) => {
     onCompletionDataChange({
-      ...completionData,
+      ...completionDataRef.current,
       medicines,
     })
   }
+
+  const handleApplyDiagnosisToNotes = useCallback(() => {
+    const raw = (aiDiagnosisText || '').trim()
+    if (!raw) return
+
+    const summary = formatAIDiagnosisForNotes(raw).trim() || raw.replace(/\*\*/g, '').trim()
+    if (!summary) return
+
+    const existing = (completionDataRef.current.notes || '').trim()
+    const block = `--- Clinical data suggestion ---\n${summary}`
+    const merged = existing ? `${existing}\n\n${block}` : block
+
+    onCompletionDataChange({
+      ...completionDataRef.current,
+      notes: merged,
+    })
+    setSuggestionApplied(true)
+    setDraftStatus('saved')
+    window.setTimeout(() => setSuggestionApplied(false), 2500)
+    window.setTimeout(() => {
+      notesTextareaRef.current?.focus()
+      notesTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+  }, [aiDiagnosisText, onCompletionDataChange])
 
   useEffect(() => {
     return () => {
@@ -191,7 +234,13 @@ export default function CompletionForm({
               />
             </div>
           </div>
+          {suggestionApplied && (
+            <p className="mx-3 mb-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              Suggestion added to consultation notes above.
+            </p>
+          )}
           <textarea
+            ref={notesTextareaRef}
             value={completionData.notes || ""}
             onChange={(e) => handleNotesChange(e.target.value)}
             rows={3}
@@ -201,6 +250,38 @@ export default function CompletionForm({
             required
           />
         </div>
+      </section>
+
+      {/* Section 1b — clinical data suggestion */}
+      <section className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Clinical data suggestion</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Suggested diagnosis from complaint, history, and patient profile</p>
+          </div>
+          {!showAiDiagnosisSuggestion && !loadingAiDiagnosis && !aiDiagnosisText && (
+            <button
+              type="button"
+              onClick={onGenerateAiDiagnosis}
+              className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Generate suggestion
+            </button>
+          )}
+        </div>
+        {(showAiDiagnosisSuggestion || loadingAiDiagnosis) && (
+          <AIDiagnosisSuggestion
+            appointment={appointment}
+            aiDiagnosisText={aiDiagnosisText}
+            isLoading={loadingAiDiagnosis}
+            showCompletionForm={Boolean(formId)}
+            updating={updating}
+            onClose={onDeclineAiDiagnosis}
+            onRegenerate={onAiDiagnosisRegenerate}
+            onApplyToNotes={aiDiagnosisText?.trim() ? handleApplyDiagnosisToNotes : undefined}
+            onCompleteConsultation={() => onSubmit({} as React.FormEvent)}
+          />
+        )}
       </section>
 
       {/* Divider */}

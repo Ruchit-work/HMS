@@ -2,7 +2,7 @@ type QueryValue = string | number | boolean | null | undefined
 
 type QueryParams = Record<string, QueryValue>
 
-export type PharmacyApiResult<T = Record<string, unknown>> = {
+type PharmacyApiResult<T = Record<string, unknown>> = {
   ok: boolean
   status: number
   data: T

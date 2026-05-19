@@ -50,26 +50,6 @@ export type CloseShiftPreview = {
   difference: number
 }
 
-export const computeDailySummary = (
-  sales: PharmacySale[],
-  expenses: PharmacyExpense[],
-  branchFilter: string
-) => {
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const baseSales = branchFilter === 'all' ? sales : sales.filter((s) => s.branchId === branchFilter)
-  const todaySalesTotal = baseSales.reduce((sum, s) => {
-    const saleDateStr = getSaleDateStr(s)
-    if (saleDateStr !== todayStr) return sum
-    return sum + Number(s.netAmount ?? s.totalAmount ?? 0)
-  }, 0)
-  const todayExpenseTotal = expenses.reduce((sum, e) => {
-    const dateStr = getExpenseDateStr(e)
-    if (dateStr !== todayStr) return sum
-    return sum + Number(e.amount ?? 0)
-  }, 0)
-  return { todayStr, todaySalesTotal, todayExpenseTotal, net: todaySalesTotal - todayExpenseTotal }
-}
-
 export const computeRecentSalesToday = (filteredSales: PharmacySale[]): PharmacySale[] => {
   const todayStr = new Date().toISOString().slice(0, 10)
   return filteredSales

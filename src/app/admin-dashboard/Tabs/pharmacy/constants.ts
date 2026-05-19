@@ -1,5 +1,8 @@
 export const CASH_DENOMS = ['500', '200', '100', '50', '20', '10', '5', '2', '1'] as const
 
+/** TEMP: set to true before production — handover note required when closing a cash shift */
+export const REQUIRE_SHIFT_HANDOVER_NOTE = false
+
 export const RETURN_REASON_OPTIONS: Array<{
   value: 'damaged' | 'wrong_medicine' | 'doctor_changed' | 'patient_request' | 'expired' | 'other'
   label: string
@@ -11,18 +14,6 @@ export const RETURN_REASON_OPTIONS: Array<{
   { value: 'expired', label: 'Near expiry / expiry concern' },
   { value: 'other', label: 'Other reason' },
 ]
-
-/** Align with @theme tokens in globals.css */
-export const PHARMACY_UI = {
-  primary: 'var(--color-primary)',
-  primaryDark: 'var(--color-primary-dark)',
-  bg: '#f8fafc',
-  card: '#ffffff',
-  border: '#e2e8f0',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-} as const
 
 export const createEmptyCashNotes = (): Record<string, string> => ({
   '500': '',

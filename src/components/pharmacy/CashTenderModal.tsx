@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 
 export type NotesRecord = Record<string, number>
@@ -18,6 +18,11 @@ export interface CashPaymentPanelProps {
   mode?: 'sale' | 'refund' | 'adjustment'
   /** Kept for backwards compatibility; no longer used in UI */
   availableNotes?: NotesRecord
+  /** Disables inputs and confirm while payment is processing */
+  disabled?: boolean
+  isProcessing?: boolean
+  /** Change to reset amount field (e.g. new checkout session id) */
+  resetKey?: string | number
 }
 
 export function CashPaymentPanel({
@@ -26,26 +31,37 @@ export function CashPaymentPanel({
   confirmLabel,
   onCancel,
   mode: _mode = 'sale',
+  disabled = false,
+  isProcessing = false,
+  resetKey,
 }: CashPaymentPanelProps) {
   const [amountReceivedInput, setAmountReceivedInput] = useState('')
+  const [confirmLocked, setConfirmLocked] = useState(false)
   const amountReceived = Math.max(0, Number(amountReceivedInput) || 0)
+
+  useEffect(() => {
+    setAmountReceivedInput('')
+    setConfirmLocked(false)
+  }, [billAmount, resetKey])
 
   const changeToReturn = useMemo(() => {
     const diff = amountReceived - billAmount
     return diff > 0 ? diff : 0
   }, [amountReceived, billAmount])
 
-  const canConfirm = amountReceived >= billAmount && billAmount > 0
+  const blocked = disabled || isProcessing || confirmLocked
+  const canConfirm = amountReceived >= billAmount && billAmount > 0 && !blocked
   const isSufficient = amountReceived >= billAmount && billAmount > 0
 
   const handleClearAll = () => {
+    if (blocked) return
     setAmountReceivedInput('')
   }
 
   const handleConfirm = () => {
-    if (!canConfirm) return
+    if (!canConfirm || blocked) return
+    setConfirmLocked(true)
     onConfirm(amountReceived, changeToReturn)
-    handleClearAll()
   }
 
   return (
@@ -58,7 +74,7 @@ export function CashPaymentPanel({
           </p>
         </div>
         {onCancel && (
-          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={blocked}>
             Cancel
           </Button>
         )}
@@ -80,13 +96,15 @@ export function CashPaymentPanel({
           value={amountReceivedInput}
           onChange={(e) => setAmountReceivedInput(e.target.value)}
           placeholder="Enter received amount"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+          disabled={blocked}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
         />
         <div className="flex items-center justify-end">
           <button
             type="button"
             onClick={handleClearAll}
-            className="text-[11px] font-medium text-slate-500 hover:text-rose-600"
+            disabled={blocked}
+            className="text-[11px] font-medium text-slate-500 hover:text-rose-600 disabled:opacity-50 disabled:pointer-events-none"
           >
             Reset amount
           </button>
@@ -127,19 +145,22 @@ export function CashPaymentPanel({
       </div>
 
       <div className="mt-auto pt-1 flex flex-col gap-2">
-        <Button type="button" variant="primary" size="lg" className="w-full" onClick={handleConfirm} disabled={!canConfirm}>
+        <Button
+          type="button"
+          variant="primary"
+          size="lg"
+          className="w-full"
+          onClick={handleConfirm}
+          disabled={!canConfirm}
+          loading={isProcessing || confirmLocked}
+          loadingText="Processing payment…"
+        >
           {confirmLabel || 'Confirm & complete sale'}
         </Button>
-        <Button type="button" variant="outline" size="md" className="w-full" onClick={handleClearAll}>
+        <Button type="button" variant="outline" size="md" className="w-full" onClick={handleClearAll} disabled={blocked}>
           Reset amounts
         </Button>
       </div>
     </div>
   )
 }
-
-/**
- * Backwards-compat alias – kept so existing imports don't break if still used elsewhere.
- * The new design is panel-based and no longer uses a modal internally.
- */
-export const CashTenderModal = CashPaymentPanel

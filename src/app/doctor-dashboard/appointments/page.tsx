@@ -86,6 +86,7 @@ function DoctorAppointmentsContent() {
   const [historyTabFilters, setHistoryTabFilters] = useState<{ text: string; date: string }>({ text: "", date: "" })
   const [aiDiagnosis, setAiDiagnosis] = useState<{ [key: string]: string }>({})
   const [loadingAiDiagnosis, setLoadingAiDiagnosis] = useState<{ [key: string]: boolean }>({})
+  const [showAiDiagnosisSuggestion, setShowAiDiagnosisSuggestion] = useState<{ [key: string]: boolean }>({})
   const [showHistory, setShowHistory] = useState<{ [key: string]: boolean }>({})
   const [showDocumentUpload, setShowDocumentUpload] = useState<{ [key: string]: boolean }>({})
   const [selectedHistoryDocument, setSelectedHistoryDocument] = useState<DocumentMetadata | null>(null)
@@ -656,8 +657,17 @@ function DoctorAppointmentsContent() {
 
   const formatMedicinesAsText = formatMedicinesAsTextUtil
 
-  const _getAIDiagnosisSuggestion = async (appointment: AppointmentType) => {
-    setLoadingAiDiagnosis({ ...loadingAiDiagnosis, [appointment.id]: true })
+  const getAIDiagnosisSuggestion = useCallback(async (appointment: AppointmentType) => {
+    if (!appointment.chiefComplaint?.trim()) {
+      setNotification({
+        type: "error",
+        message: "Chief complaint is required before generating a clinical data suggestion.",
+      })
+      return
+    }
+
+    setLoadingAiDiagnosis((prev) => ({ ...prev, [appointment.id]: true }))
+    setShowAiDiagnosisSuggestion((prev) => ({ ...prev, [appointment.id]: true }))
 
     try {
       const ageValue = calculateAge(appointment.patientDateOfBirth)
@@ -706,7 +716,7 @@ function DoctorAppointmentsContent() {
 
       const currentUser = auth.currentUser
       if (!currentUser) {
-        throw new Error("You must be logged in to generate AI diagnosis")
+        throw new Error("You must be logged in to generate a clinical suggestion")
       }
       const token = await currentUser.getIdToken()
 
@@ -726,13 +736,13 @@ function DoctorAppointmentsContent() {
 
       const diagnosisText = data?.[0]?.generated_text || "Unable to generate diagnosis"
 
-      setAiDiagnosis({ ...aiDiagnosis, [appointment.id]: diagnosisText })
+      setAiDiagnosis((prev) => ({ ...prev, [appointment.id]: diagnosisText }))
 
-      setNotification({ type: "success", message: "AI diagnosis suggestion generated!" })
+      setNotification({ type: "success", message: "Clinical data suggestion is ready." })
     } catch (error: unknown) {
       const errorResponse = (error as { response?: { data?: unknown; status?: number } }).response
 
-      let errorMessage = "Failed to get AI diagnosis"
+      let errorMessage = "Failed to generate clinical data suggestion"
 
       if (errorResponse?.data) {
         if (typeof errorResponse.data === "object") {
@@ -767,8 +777,12 @@ function DoctorAppointmentsContent() {
         message: errorMessage,
       })
     } finally {
-      setLoadingAiDiagnosis({ ...loadingAiDiagnosis, [appointment.id]: false })
+      setLoadingAiDiagnosis((prev) => ({ ...prev, [appointment.id]: false }))
     }
+  }, [])
+
+  const handleDeclineAiDiagnosis = (appointmentId: string) => {
+    setShowAiDiagnosisSuggestion((prev) => ({ ...prev, [appointmentId]: false }))
   }
 
   const handleGenerateAiPrescription = useCallback(async (appointmentId: string, _showNotification: boolean = true) => {
@@ -1467,6 +1481,36 @@ function DoctorAppointmentsContent() {
     showAiPrescriptionSuggestion,
     consultationMode,
     handleGenerateAiPrescription,
+  ])
+
+  useEffect(() => {
+    appointments.forEach((apt) => {
+      const isFormOpen = showCompletionForm[apt.id]
+      const hasDiagnosis = !!aiDiagnosis[apt.id]
+      const isLoading = !!loadingAiDiagnosis[apt.id]
+      const explicitlyHidden = showAiDiagnosisSuggestion[apt.id] === false
+      const isAnatomyMode = consultationMode[apt.id] === "anatomy"
+
+      if (
+        isFormOpen &&
+        !hasDiagnosis &&
+        !isLoading &&
+        !explicitlyHidden &&
+        !isAnatomyMode &&
+        apt.chiefComplaint?.trim()
+      ) {
+        setShowAiDiagnosisSuggestion((prev) => ({ ...prev, [apt.id]: true }))
+        getAIDiagnosisSuggestion(apt)
+      }
+    })
+  }, [
+    appointments,
+    showCompletionForm,
+    aiDiagnosis,
+    loadingAiDiagnosis,
+    showAiDiagnosisSuggestion,
+    consultationMode,
+    getAIDiagnosisSuggestion,
   ])
 
   if (loading) {
@@ -2246,6 +2290,13 @@ function DoctorAppointmentsContent() {
                             showAiPrescriptionSuggestion[selectedAppointment.id] ||
                             false
                           }
+                          aiDiagnosisText={aiDiagnosis[selectedAppointment.id]}
+                          loadingAiDiagnosis={
+                            loadingAiDiagnosis[selectedAppointment.id] || false
+                          }
+                          showAiDiagnosisSuggestion={
+                            showAiDiagnosisSuggestion[selectedAppointment.id] !== false
+                          }
                           removedAiMedicines={
                             removedAiMedicines[selectedAppointment.id] || []
                           }
@@ -2324,6 +2375,19 @@ function DoctorAppointmentsContent() {
                           }}
                           onDeclinePrescription={() =>
                             handleDeclinePrescription(selectedAppointment.id)
+                          }
+                          onGenerateAiDiagnosis={() => {
+                            setShowAiDiagnosisSuggestion((prev) => ({
+                              ...prev,
+                              [selectedAppointment.id]: true,
+                            }))
+                            getAIDiagnosisSuggestion(selectedAppointment)
+                          }}
+                          onAiDiagnosisRegenerate={() =>
+                            getAIDiagnosisSuggestion(selectedAppointment)
+                          }
+                          onDeclineAiDiagnosis={() =>
+                            handleDeclineAiDiagnosis(selectedAppointment.id)
                           }
                           onCopyPreviousPrescription={() =>
                             handleCopyPreviousPrescription(selectedAppointment.id)
