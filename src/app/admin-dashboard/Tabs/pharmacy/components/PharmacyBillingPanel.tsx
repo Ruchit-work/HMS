@@ -512,9 +512,9 @@ export function PharmacyBillingPanel({
   const showCashPanel = paymentMode === 'cash' && !!pendingDispensePayload && pendingBillAmount > 0
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0 bg-white rounded-xl border border-[#E5E7EB] shadow-sm overflow-hidden">
+    <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0 bg-white rounded-xl border border-[var(--color-neutral-200)] shadow-sm overflow-hidden">
       {/* Universal patient / prescription search */}
-      <div className="shrink-0 p-4 border-b border-[#E5E7EB] bg-white" ref={patientSearchRef}>
+      <div className="shrink-0 p-4 border-b border-[var(--color-neutral-200)] bg-white" ref={patientSearchRef}>
         <label className="block text-xs font-medium text-slate-500 mb-1">Search patient / prescription</label>
         <div className="relative">
           <input
@@ -526,7 +526,7 @@ export function PharmacyBillingPanel({
             }}
             onFocus={() => setSearchPatientOpen(true)}
             placeholder="Type patient name, doctor or prescription ID..."
-            className="w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 pl-10 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]"
+            className="w-full rounded-xl border border-[var(--color-neutral-200)] bg-[#F9FAFB] px-3 py-2.5 pl-10 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
           />
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -557,7 +557,7 @@ export function PharmacyBillingPanel({
       </div>
 
       {/* Customer information - vertical layout; Branch & Date beside heading */}
-      <div className="shrink-0 p-4 border-b border-[#E5E7EB] bg-[#F8FAFC]">
+      <div className="shrink-0 p-4 border-b border-[var(--color-neutral-200)] bg-[var(--color-neutral-50)]">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
           <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Customer</h3>
           <span className="text-slate-400">·</span>
@@ -567,7 +567,7 @@ export function PharmacyBillingPanel({
           <span className="text-slate-400">·</span>
           <span className="text-sm text-slate-600">{today}</span>
           {!selectedBranchId && (
-            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="ml-1 rounded-lg border border-[#E5E7EB] bg-white px-2 py-1 text-sm focus:ring-2 focus:ring-[#0891b2]/20" required>
+            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="ml-1 rounded-lg border border-[var(--color-neutral-200)] bg-white px-2 py-1 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/20" required>
               <option value="">Select branch</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -577,7 +577,7 @@ export function PharmacyBillingPanel({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Customer Name</label>
-              <input type="text" placeholder="Name *" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]" required />
+              <input type="text" placeholder="Name *" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]" required />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -593,7 +593,7 @@ export function PharmacyBillingPanel({
                     setNoPhoneHospitalPatient(checked)
                     if (checked) setCustomerPhone('')
                   }}
-                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#0891b2] focus:ring-[#0891b2]/30"
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]/30"
                 />
                
               </label>
@@ -610,10 +610,10 @@ export function PharmacyBillingPanel({
                 setCustomerPhone(cleaned)
               }}
               disabled={noPhoneHospitalPatient}
-              className={`w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:border-[#0891b2] focus:ring-[#0891b2]/20 ${
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)]/20 ${
                 phoneHighlight && !customerPhone.trim() && !noPhoneHospitalPatient
                   ? 'border-red-400 bg-rose-50'
-                  : 'border-[#E5E7EB] bg-white'
+                  : 'border-[var(--color-neutral-200)] bg-white'
               } ${noPhoneHospitalPatient ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
             />
           </div>
@@ -625,12 +625,12 @@ export function PharmacyBillingPanel({
                 placeholder="Doctor"
                 value={doctorName}
                 onChange={(e) => setDoctorName(e.target.value)}
-                className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]"
+                className="w-full rounded-lg border border-[var(--color-neutral-200)] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
               />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Address</label>
-              <input type="text" placeholder="Address (optional)" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2]" />
+              <input type="text" placeholder="Address (optional)" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]" />
             </div>
           </div>
           <div>
@@ -641,7 +641,7 @@ export function PharmacyBillingPanel({
                   key={opt.id}
                   type="button"
                   onClick={() => setPaymentMode(opt.id === 'other' ? 'other' : opt.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${paymentMode === (opt.id === 'other' ? 'other' : opt.id) ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white text-slate-600 border-[#E5E7EB] hover:bg-slate-50'}`}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${paymentMode === (opt.id === 'other' ? 'other' : opt.id) ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white text-slate-600 border-[var(--color-neutral-200)] hover:bg-slate-50'}`}
                 >
                   {opt.label}
                 </button>
@@ -653,7 +653,7 @@ export function PharmacyBillingPanel({
       </div>
 
       {/* Medicine search + scan */}
-      <div className="shrink-0 p-4 border-b border-[#E5E7EB]">
+      <div className="shrink-0 p-4 border-b border-[var(--color-neutral-200)]">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
           <div className="flex flex-col gap-0.5">
             <label className="block text-sm font-medium text-slate-700">Add medicine</label>
@@ -758,7 +758,7 @@ export function PharmacyBillingPanel({
               <col className="w-[6%]" />
             </colgroup>
             <thead>
-              <tr className="border-b border-[#E5E7EB] bg-slate-50/80">
+              <tr className="border-b border-[var(--color-neutral-200)] bg-slate-50/80">
                 <th className="text-left py-2 px-3 text-slate-600 font-semibold">Medicine</th>
                 <th className="text-left py-2 px-3 text-slate-600 font-semibold">Batch</th>
                 <th className="text-right py-2 px-3 text-slate-600 font-semibold">Expiry</th>
@@ -831,7 +831,7 @@ export function PharmacyBillingPanel({
                         <select
                           value={line.batchId ?? ''}
                           onChange={(e) => updateLine(idx, 'batchId', e.target.value)}
-                          className="w-full max-w-full rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-[11px] text-slate-700 focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2] min-w-0"
+                          className="w-full max-w-full rounded-lg border border-[var(--color-neutral-200)] bg-white px-2.5 py-1.5 text-[11px] text-slate-700 focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] min-w-0"
                           title="Batch"
                         >
                           {batches.map((b) => (
@@ -871,8 +871,8 @@ export function PharmacyBillingPanel({
                           onChange={(e) => handleQtyChange(e.target.value)}
                           placeholder="0"
                           disabled={outOfStock}
-                          className={`w-16 rounded-full border px-2.5 py-1 text-xs text-right font-medium focus:ring-2 focus:ring-[#0891b2]/20 focus:border-[#0891b2] ${
-                            outOfStock ? 'border-red-200 bg-slate-100 text-slate-500 cursor-not-allowed' : 'border-[#E5E7EB] text-slate-800'
+                          className={`w-16 rounded-full border px-2.5 py-1 text-xs text-right font-medium focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] ${
+                            outOfStock ? 'border-red-200 bg-slate-100 text-slate-500 cursor-not-allowed' : 'border-[var(--color-neutral-200)] text-slate-800'
                           }`}
                         />
                         <span className="text-[10px] text-slate-500">
@@ -925,7 +925,7 @@ export function PharmacyBillingPanel({
       </div>
 
       {/* Totals */}
-      <div className="sticky bottom-0 z-10 shrink-0 p-4 border-t border-[#E5E7EB] bg-[#F8FAFC]/95 backdrop-blur space-y-2">
+      <div className="sticky bottom-0 z-10 shrink-0 p-4 border-t border-[var(--color-neutral-200)] bg-[var(--color-neutral-50)]/95 backdrop-blur space-y-2">
         <div className="flex justify-between text-sm text-slate-600">
           <span>Items</span>
           <span className="font-medium text-slate-800">{orderLines.length}</span>
@@ -946,7 +946,7 @@ export function PharmacyBillingPanel({
           <span>Tax ({taxPercent}%)</span>
           <span className="tabular-nums">₹{taxTotal.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between items-center pt-2 border-t border-[#E5E7EB]">
+        <div className="flex justify-between items-center pt-2 border-t border-[var(--color-neutral-200)]">
           <span className="text-base font-semibold text-slate-800">Total payable</span>
           <span className="text-2xl font-bold text-[var(--color-primary)] tabular-nums">₹{netTotal.toFixed(2)}</span>
         </div>
@@ -967,7 +967,7 @@ export function PharmacyBillingPanel({
               step={0.5}
               value={taxPercent}
               onChange={(e) => setTaxPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-              className="w-20 rounded-lg border border-[#E5E7EB] px-2 py-1.5 text-xs text-right"
+              className="w-20 rounded-lg border border-[var(--color-neutral-200)] px-2 py-1.5 text-xs text-right"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -978,7 +978,7 @@ export function PharmacyBillingPanel({
               min={0}
               value={discountAmount}
               onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value) || 0))}
-              className="w-24 rounded-lg border border-[#E5E7EB] px-2 py-1.5 text-xs text-right"
+              className="w-24 rounded-lg border border-[var(--color-neutral-200)] px-2 py-1.5 text-xs text-right"
             />
           </div>
           <Button

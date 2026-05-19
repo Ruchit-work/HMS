@@ -14,8 +14,8 @@ export const RETURN_REASON_OPTIONS: Array<{
 
 /** Align with @theme tokens in globals.css */
 export const PHARMACY_UI = {
-  primary: '#0891b2',
-  primaryDark: '#0e7490',
+  primary: 'var(--color-primary)',
+  primaryDark: 'var(--color-primary-dark)',
   bg: '#f8fafc',
   card: '#ffffff',
   border: '#e2e8f0',

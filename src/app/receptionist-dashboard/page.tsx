@@ -272,7 +272,7 @@ export default function ReceptionistDashboard() {
   if (!user) return null
 
     return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-50">
+    <div className="hms-portal-shell">
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
@@ -289,14 +289,9 @@ export default function ReceptionistDashboard() {
       {sidebarOpen && (<div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />)}
 
       {/* Professional Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-slate-200/50 transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
-        {/* Header */}
-        <div className="relative h-20 px-6 bg-sky-100/90 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
-          <div className="absolute inset-0 pointer-events-none"></div>
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/40 rounded-full"></div>
-          <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/30 rounded-full"></div>
-          
-          <div className="relative flex items-center gap-4">
+      <div className={`fixed inset-y-0 left-0 z-40 w-72 hms-sidebar transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
+        <div className="hms-sidebar-header flex items-center justify-between">
+          <div className="relative z-[1] flex items-center gap-4">
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-sky-200 shadow-sm">
               <svg className="w-6 h-6 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -310,7 +305,7 @@ export default function ReceptionistDashboard() {
           
           <button 
             onClick={() => setSidebarOpen(false)} 
-            className="lg:hidden relative p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200"
+            className="lg:hidden relative z-[1] p-2 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-lg transition-all duration-200"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -558,11 +553,11 @@ export default function ReceptionistDashboard() {
 
       {/* Main Content */}
       <div className="lg:ml-72 min-w-0 overflow-x-hidden">
-        <header className="bg-white/80 backdrop-blur-xl shadow-sm border-b border-slate-200/50">
+        <header className="hms-sticky-header">
           <div className={`py-6 px-6 sm:px-8 lg:px-6 ${!sidebarOpen ? 'pl-16 sm:pl-20 lg:pl-6' : ''}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
               <div className="flex-1 text-center sm:text-left">
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent capitalize">
+                <h1 className="hms-title text-2xl sm:text-3xl capitalize">
                   {activeTab === "dashboard"
                     ? "Reception Dashboard"
                     : activeTab === "patients"
@@ -579,7 +574,7 @@ export default function ReceptionistDashboard() {
                     ? "WhatsApp Bookings"
                     : "Book Appointment"}
                 </h1>
-                <p className="text-slate-600 mt-2 text-sm sm:text-base">
+                <p className="hms-subtitle mt-2 text-sm sm:text-base">
                   {activeTab === "dashboard"
                     ? "Action-focused overview: appointments, queue, doctors, and quick tasks"
                     : activeTab === "patients"
@@ -601,12 +596,12 @@ export default function ReceptionistDashboard() {
           </div>
         </header>
 
-        <main className="p-6 sm:p-8 space-y-6 min-w-0 overflow-x-hidden">
+        <main className="hms-page space-y-6 min-w-0 overflow-x-hidden">
           {activeTab === "dashboard" && (
             <DashboardOverview onTabChange={(tab) => setActiveTab(tab)} receptionistBranchId={receptionistBranchId} />
           )}
           {activeTab === "patients" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50">
+            <div className="hms-content-card rounded-2xl">
               {/* Patient Sub-Tabs */}
               <div className="border-b border-slate-200 px-8 pt-8">
                 <div className="flex gap-4">
@@ -648,12 +643,12 @@ export default function ReceptionistDashboard() {
             </div>
           )}
           {activeTab === "doctors" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+            <div className="hms-content-card rounded-2xl p-8">
               <DoctorManagement canDelete={false} canAdd={false} disableAdminGuard={true} />
             </div>
           )}
           {activeTab === "appointments" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+            <div className="hms-content-card rounded-2xl p-8">
               <AppoinmentManagement
                 disableAdminGuard={true}
                 receptionistBranchId={receptionistBranchId}
@@ -661,7 +656,7 @@ export default function ReceptionistDashboard() {
             </div>
           )}
           {activeTab === "admit-requests" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+            <div className="hms-content-card rounded-2xl p-8">
               <AdmitRequestsPanel
                 onNotification={(payload) => setNotification(payload)}
                 onOpenBilling={(admissionId) => {
@@ -672,7 +667,7 @@ export default function ReceptionistDashboard() {
             </div>
           )}
           {activeTab === "billing" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+            <div className="hms-content-card rounded-2xl p-8">
               <BillingHistoryPanel
                 onNotification={(payload) => setNotification(payload)}
                 focusBillingQuery={billingFocusQuery}
@@ -681,7 +676,7 @@ export default function ReceptionistDashboard() {
             </div>
           )}
           {activeTab === "book-appointment" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+            <div className="hms-content-card rounded-2xl p-8">
               <BookAppointmentPanel
                 patientMode={patientMode}
                 onPatientModeChange={setPatientMode}
@@ -690,7 +685,7 @@ export default function ReceptionistDashboard() {
             </div>
           )}
           {activeTab === "whatsapp-bookings" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+            <div className="hms-content-card rounded-2xl p-8">
               <WhatsAppBookingsPanel
                 receptionistBranchId={receptionistBranchId}
                 onNotification={(payload) => setNotification(payload)}
@@ -699,7 +694,7 @@ export default function ReceptionistDashboard() {
             </div>
           )}
           {activeTab === "documents" && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 p-8">
+            <div className="hms-content-card rounded-2xl p-8">
               <DocumentsTab
                 canUpload={true}
                 canEdit={true}

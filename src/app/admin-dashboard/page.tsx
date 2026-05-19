@@ -32,7 +32,9 @@ import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnal
 import BranchManagement from "./Tabs/BranchManagement"
 import AdminProtected from "@/components/AdminProtected"
 import AdminDashboardOverview from "./components/AdminDashboardOverview"
+import AdminAccountPanel from "./components/AdminAccountPanel"
 import TabButton from "@/components/admin/TabButton"
+import SidebarAccountButton from "@/components/admin/SidebarAccountButton"
 import { Button } from "@/components/ui/Button"
 import AdminPageHeader from "@/components/admin/AdminPageHeader"
 import SubTabNavigation from "@/components/admin/SubTabNavigation"
@@ -128,7 +130,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get("tab")
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "branches" | "staff">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "branches" | "staff" | "account">("overview")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
   const [analyticsSubTab, setAnalyticsSubTab] = useState<"overview" | "patients" | "financial" | "doctors" | "receptionists">("overview")
@@ -179,7 +181,7 @@ export default function AdminDashboard() {
   // Sync activeTab with URL (limited set)
   useEffect(() => {
     if (!tabFromUrl) return
-    if (["overview","patients","doctors","campaigns","appointments","billing","analytics","hospitals","admins","branches","staff"].includes(tabFromUrl)) {
+    if (["overview","patients","doctors","campaigns","appointments","billing","analytics","hospitals","admins","branches","staff","account"].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl as any)
     } else if (tabFromUrl === "receptionists" || tabFromUrl === "pharmacists") {
       setActiveTab("staff")
@@ -635,7 +637,7 @@ export default function AdminDashboard() {
 
   return (
     <AdminProtected allowedRoles={["admin"]}>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/40 to-teal-50/30">
+      <div className="hms-portal-shell">
       {/* Mobile Menu Button - Only show when sidebar is closed */}
       {!sidebarOpen && (
         <button
@@ -651,15 +653,11 @@ export default function AdminDashboard() {
       {sidebarOpen && (<div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />)}
 
       {/* Professional Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-40 w-72 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-slate-200/50 transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
+      <div className={`fixed inset-y-0 left-0 z-40 w-72 hms-sidebar transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
         {/* Header */}
-        <div className="relative h-20 px-6 bg-sky-100/90 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)] flex items-center justify-between overflow-hidden border-b border-slate-200">
-          <div className="absolute inset-0 pointer-events-none" />
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/40 rounded-full"></div>
-          <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/30 rounded-full"></div>
-          
-          <div className="relative flex items-center gap-4">
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-sky-200 shadow-sm">
+        <div className="hms-sidebar-header flex items-center justify-between">
+          <div className="relative z-[1] flex items-center gap-4">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-cyan-200 shadow-sm">
               <svg className="w-6 h-6 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
@@ -672,7 +670,7 @@ export default function AdminDashboard() {
           
           <button 
             onClick={() => setSidebarOpen(false)} 
-            className="lg:hidden relative p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200"
+            className="lg:hidden relative z-[1] p-2 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-lg transition-all duration-200"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -849,19 +847,14 @@ export default function AdminDashboard() {
           {/* Logout Section - Fixed at Bottom */}
           <div className="px-3 pb-3 mt-2">
             <div className="border-t border-slate-200 pt-2">
-              {/* User Info */}
-              <div className="flex items-center gap-2 px-1 py-1 mb-2">
-                <div className="w-6 h-6 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-md flex items-center justify-center shadow-sm">
-                  <span className="text-white font-bold text-xs">
-                    {userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-slate-900 truncate">{userData.firstName || "Admin"}</p>
-                  <p className="text-xs text-slate-500">Administrator</p>
-                </div>
-              </div>
-              
+              <SidebarAccountButton
+                active={activeTab === "account"}
+                onClick={() => { setActiveTab("account"); setSidebarOpen(false) }}
+                displayName={userData.firstName || userData.name || "Admin"}
+                roleLabel={isSuperAdmin ? "Super Administrator" : "Administrator"}
+                initial={userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
+              />
+
               {/* Logout Button */}
               <Button
                 type="button"
@@ -898,6 +891,7 @@ export default function AdminDashboard() {
               activeTab === "admins" ? "Admin Assignment" :
               activeTab === "branches" ? "Branch Management" :
               activeTab === "staff" ? "Staff Management" :
+              activeTab === "account" ? "My Account" :
               "Dashboard"
             }
             description={
@@ -912,6 +906,7 @@ export default function AdminDashboard() {
               activeTab === "admins" ? "Create and assign admins to hospitals" :
               activeTab === "branches" ? "Create and manage branches for your hospital" :
               activeTab === "staff" ? "Create and manage receptionists & pharmacists for your hospital" :
+              activeTab === "account" ? "View your profile and update your login password" :
               "Administrative dashboard"
             }
             controls={
@@ -965,7 +960,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* Content Area */}
-        <main className="p-6">
+        <main className="hms-page min-w-0">
           {activeTab === "overview" && (
             <AdminDashboardOverview
               displayStats={displayStats}
@@ -996,7 +991,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "patients" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+            <div className="hms-content-card rounded-2xl">
               <SubTabNavigation
                 tabs={[
                   { id: "all", label: "All Patients" },
@@ -1013,25 +1008,25 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "doctors" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+            <div className="hms-content-card rounded-2xl p-6">
               <DoctorManagement selectedBranchId={selectedBranchId} />
             </div>
           )}
 
           {activeTab === "campaigns" && !isSuperAdmin && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+            <div className="hms-content-card rounded-2xl p-6">
               <CampaignManagement />
             </div>
           )}
 
           {activeTab === "appointments" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+            <div className="hms-content-card rounded-2xl p-6">
               <AppoinmentManagement selectedBranchId={selectedBranchId} />
             </div>
           )}
 
           {activeTab === "billing" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+            <div className="hms-content-card rounded-2xl">
               <SubTabNavigation
                 tabs={[
                   { id: "all", label: "All Records" },
@@ -1048,7 +1043,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "staff" && !isSuperAdmin && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+            <div className="hms-content-card rounded-2xl">
               <SubTabNavigation
                 tabs={[
                   { id: "receptionists", label: "Receptionists" },
@@ -1069,7 +1064,7 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "analytics" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl">
+            <div className="hms-content-card rounded-2xl">
               <SubTabNavigation
                 tabs={[
                   { id: "overview", label: "Overview" },
@@ -1216,15 +1211,24 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "hospitals" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+            <div className="hms-content-card rounded-2xl p-6">
               <HospitalManagement />
             </div>
           )}
 
           {activeTab === "admins" && (
-            <div className="bg-white/70 backdrop-blur-xl shadow-xl border border-slate-200/50 rounded-2xl p-6">
+            <div className="hms-content-card rounded-2xl p-6">
               <AdminAssignment />
             </div>
+          )}
+
+          {activeTab === "account" && user?.email && (
+            <AdminAccountPanel
+              userEmail={user.email}
+              displayName={userData.firstName || userData.name || "Admin"}
+              isSuperAdmin={isSuperAdmin}
+              onNotify={(type, message) => setNotification({ type, message })}
+            />
           )}
 
         </main>

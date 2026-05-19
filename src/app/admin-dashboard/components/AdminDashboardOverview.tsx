@@ -29,7 +29,7 @@ export interface DashboardStatsForOverview {
   topDepartments: Array<{ department: string; count: number }>
 }
 
-type AdminTabId = "overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "branches" | "staff"
+type AdminTabId = "overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "branches" | "staff" | "account"
 
 interface AdminDashboardOverviewProps {
   displayStats: DashboardStatsForOverview

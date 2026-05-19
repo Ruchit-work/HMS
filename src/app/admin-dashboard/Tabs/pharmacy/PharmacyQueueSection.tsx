@@ -118,13 +118,13 @@ export function PharmacyQueueSection({
           </div>
         )}
 
-        <div className="inline-flex rounded-full border border-[#E5E7EB] bg-[#F9FAFB] p-0.5 text-xs font-medium text-slate-600">
+        <div className="inline-flex rounded-full border border-[var(--color-neutral-200)] bg-[#F9FAFB] p-0.5 text-xs font-medium text-slate-600">
           <button
             type="button"
             onClick={() => onQueueInnerTabChange('walk_in')}
             className={`px-3 py-1.5 rounded-full transition ${
               queueInnerTab === 'walk_in'
-                ? 'bg-[#0891b2] text-white shadow-sm'
+                ? 'bg-[var(--color-primary)] text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -135,7 +135,7 @@ export function PharmacyQueueSection({
             onClick={() => onQueueInnerTabChange('prescriptions')}
             className={`px-3 py-1.5 rounded-full transition ${
               queueInnerTab === 'prescriptions'
-                ? 'bg-[#0891b2] text-white shadow-sm'
+                ? 'bg-[var(--color-primary)] text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -144,23 +144,23 @@ export function PharmacyQueueSection({
         </div>
 
         {queueInnerTab === 'walk_in' && (
-          <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden min-h-[480px] lg:min-h-[calc(100vh-12rem)] flex flex-col">
+          <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white shadow-sm overflow-hidden min-h-[480px] lg:min-h-[calc(100vh-12rem)] flex flex-col">
             <div className="flex-1 min-h-0 flex flex-col px-4 py-4 lg:px-5 lg:py-5">
               {renderWalkInPanel()}
             </div>
-            <p className="px-4 pb-4 text-xs text-slate-500 border-t border-[#E5E7EB] bg-[#F8FAFC]">
+            <p className="px-4 pb-4 text-xs text-slate-500 border-t border-[var(--color-neutral-200)] bg-[var(--color-neutral-50)]">
               Shortcut: <kbd className="px-1.5 py-0.5 rounded bg-slate-100 font-mono">F2</kbd> focus search · Scan barcode or type name
             </p>
           </div>
         )}
 
         {queueInnerTab === 'prescriptions' && (
-          <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden min-h-[320px] lg:min-h-[calc(100vh-16rem)] flex flex-col">
+          <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white shadow-sm overflow-hidden min-h-[320px] lg:min-h-[calc(100vh-16rem)] flex flex-col">
             {selectedQueueItem ? (
               renderDispensePanel(selectedQueueItem)
             ) : (
               <>
-                <div className="shrink-0 px-4 py-3 border-b border-[#E5E7EB] bg-[#F8FAFC] flex items-center justify-between">
+                <div className="shrink-0 px-4 py-3 border-b border-[var(--color-neutral-200)] bg-[var(--color-neutral-50)] flex items-center justify-between">
                   <h3 className="font-semibold text-slate-800">Prescription queue</h3>
                   <span className="text-sm text-slate-600">{pendingQueue.length} pending</span>
                 </div>
@@ -196,7 +196,7 @@ export function PharmacyQueueSection({
                       </thead>
                       <tbody>
                         {filteredQueue.slice(0, 50).map(({ item, waitingMinutes }) => (
-                          <tr key={item.appointmentId} className={`border-t border-[#E5E7EB] transition ${waitingMinutes >= 30 ? 'bg-rose-50/50 hover:bg-rose-50' : 'hover:bg-slate-50/80'}`}>
+                          <tr key={item.appointmentId} className={`border-t border-[var(--color-neutral-200)] transition ${waitingMinutes >= 30 ? 'bg-rose-50/50 hover:bg-rose-50' : 'hover:bg-slate-50/80'}`}>
                             <td className="p-3 font-medium text-slate-900">{item.patientName}</td>
                             <td className="p-3 text-slate-700">{item.doctorName}</td>
                             <td className="p-3 text-slate-600">{item.appointmentDate}</td>
@@ -219,7 +219,7 @@ export function PharmacyQueueSection({
                                     onClick={() => onSelectQueueItem(item)}
                                     disabled={!hasActiveCashSession}
                                     title={!hasActiveCashSession ? 'Start a cash session first (Cash & expenses → Start shift)' : ''}
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#0891b2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0e7490] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--color-primary-dark)] transition disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     Dispense
                                   </button>

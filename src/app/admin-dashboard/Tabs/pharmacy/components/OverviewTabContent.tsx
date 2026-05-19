@@ -1,4 +1,7 @@
 import React from 'react'
+import { Button } from '@/components/ui/Button'
+import { FilterChip } from '@/components/ui/FilterChip'
+import { TableShell } from '@/components/ui/layout/TableShell'
 import type { ExpiryAlert, LowStockAlert, PharmacySale } from '@/types/pharmacy'
 import type { OverviewDateRange } from '../overviewDerived'
 
@@ -86,30 +89,29 @@ export function OverviewTabContent(props: {
   } = props
 
   return (
-    <div className="space-y-8 rounded-xl bg-[#F7F9FC] p-6" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="hms-section">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#1e293b]">Overview</h2>
-          <p className="mt-1 text-sm text-slate-600">Pharmacy performance and inventory insights</p>
+          <h2 className="hms-heading text-2xl">Overview</h2>
+          <p className="hms-subtitle mt-1">Pharmacy performance and inventory insights</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap rounded-xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden">
+          <div className="flex flex-wrap gap-2">
             {(['today', '7d', '30d', '6m', 'year', 'all'] as OverviewDateRange[]).map((range) => (
-              <button
+              <FilterChip
                 key={range}
-                type="button"
+                active={overviewDateRange === range}
                 onClick={() => setOverviewDateRange(range)}
-                className={`px-3 py-2.5 text-sm font-medium transition sm:px-4 ${overviewDateRange === range ? 'bg-[#0891b2] text-white' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 {range === 'today' ? 'Today' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '6m' ? '6 month' : range === 'year' ? 'Year' : 'All time'}
-              </button>
+              </FilterChip>
             ))}
           </div>
           {branches.length > 1 && (
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
-              className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm focus:border-[#0891b2] focus:outline-none focus:ring-1 focus:ring-[#0891b2]"
+              className="rounded-xl border border-[var(--color-neutral-200)] bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
             >
               <option value="all">All branches</option>
               {branches.map((b) => (
@@ -121,7 +123,7 @@ export function OverviewTabContent(props: {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition hover:shadow-md">
+        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm transition hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-slate-500">Total Medicines</p>
@@ -134,7 +136,7 @@ export function OverviewTabContent(props: {
           type="button"
           onClick={() => applyInventoryQuickFilter('low_stock')}
           disabled={lowStock.length === 0}
-          className={`rounded-xl border border-[#E5E7EB] bg-white p-6 text-left shadow-sm transition ${
+          className={`rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 text-left shadow-sm transition ${
             lowStock.length > 0 ? 'hover:shadow-md hover:border-amber-300' : 'cursor-not-allowed opacity-80'
           }`}
         >
@@ -146,7 +148,7 @@ export function OverviewTabContent(props: {
             </div>
           </div>
         </button>
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition hover:shadow-md">
+        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm transition hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-slate-500">Sales Returns</p>
@@ -159,7 +161,7 @@ export function OverviewTabContent(props: {
           type="button"
           onClick={() => applyInventoryQuickFilter('expiring_soon')}
           disabled={expiring.length === 0}
-          className={`rounded-xl border border-[#E5E7EB] bg-white p-6 text-left shadow-sm transition ${
+          className={`rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 text-left shadow-sm transition ${
             expiring.length > 0 ? 'hover:shadow-md hover:border-rose-300' : 'cursor-not-allowed opacity-80'
           }`}
         >
@@ -171,7 +173,7 @@ export function OverviewTabContent(props: {
             </div>
           </div>
         </button>
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition hover:shadow-md">
+        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm transition hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-slate-500">{overviewDateRange === 'today' ? "Today's Sales" : overviewDateRange === '7d' ? 'Sales (7 days)' : overviewDateRange === '30d' ? 'Sales (30 days)' : overviewDateRange === '6m' ? 'Sales (6 months)' : overviewDateRange === 'year' ? 'Sales (Year)' : 'Sales (All time)'}</p>
@@ -180,7 +182,7 @@ export function OverviewTabContent(props: {
             </div>
           </div>
         </div>
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition hover:shadow-md">
+        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm transition hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-slate-500">Pending Prescriptions</p>
@@ -191,12 +193,12 @@ export function OverviewTabContent(props: {
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-slate-800 mb-3">Payments by mode</h3>
         <p className="text-xs text-slate-500 mb-3">Number of bills and total amount collected by each payment method{branchFilter !== 'all' && ' for this branch'}.</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm">
-            <thead className="bg-slate-50 border-b border-[#E5E7EB]">
+        <TableShell>
+          <table className="min-w-[320px] w-full text-xs sm:text-sm">
+            <thead className="bg-slate-50 border-b border-[var(--color-neutral-200)]">
               <tr>
                 <th className="text-left px-3 py-2 font-medium text-slate-700">Payment mode</th>
                 <th className="text-right px-3 py-2 font-medium text-slate-700">Bills</th>
@@ -209,7 +211,7 @@ export function OverviewTabContent(props: {
                 if (!row) return null
                 const label = mode === 'cash' ? 'Cash' : mode === 'upi' ? 'UPI' : mode === 'card' ? 'Card' : mode === 'credit' ? 'Credit' : mode === 'other' ? 'Other / Insurance' : 'Not set'
                 return (
-                  <tr key={mode} className="border-b border-[#E5E7EB] last:border-0">
+                  <tr key={mode} className="border-b border-[var(--color-neutral-200)] last:border-0">
                     <td className="px-3 py-2 text-slate-800">{label}</td>
                     <td className="px-3 py-2 text-right text-slate-700">{row.count}</td>
                     <td className="px-3 py-2 text-right font-medium text-slate-900">₹{row.amount.toFixed(2)}</td>
@@ -218,21 +220,21 @@ export function OverviewTabContent(props: {
               })}
             </tbody>
           </table>
-        </div>
+        </TableShell>
       </div>
 
-      <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-slate-800 mb-4">Pharmacy Sales Trend</h3>
         <p className="text-sm text-slate-500 mb-4">Sales {overviewDateRange === 'today' ? 'today' : overviewDateRange === '7d' ? 'for last 7 days' : overviewDateRange === '30d' ? 'for last 30 days' : overviewDateRange === '6m' ? 'by month (6 months)' : overviewDateRange === 'year' ? 'by month (year)' : 'by month (last 12 months)'}</p>
         <div className="h-56 w-full">
           {salesTrendData.length === 0 ? (
-            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-[#E5E7EB] bg-slate-50/50 text-slate-500 text-sm">No sales data</div>
+            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-[var(--color-neutral-200)] bg-slate-50/50 text-slate-500 text-sm">No sales data</div>
           ) : (
             <svg viewBox="0 0 400 160" className="h-full w-full overflow-visible" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="salesLineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#0891b2" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#0891b2" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               {(() => {
@@ -246,11 +248,11 @@ export function OverviewTabContent(props: {
                 return (
                   <>
                     <polyline fill="url(#salesLineGrad)" points={areaPoints} />
-                    <polyline fill="none" stroke="#0891b2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+                    <polyline fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts} />
                     {salesTrendData.map((d, i) => {
                       const x = (i / (salesTrendData.length - 1 || 1)) * 380 + 10
                       const y = 140 - (d.value / maxVal) * 120
-                      return <circle key={i} cx={x} cy={y} r="3" fill="#0891b2" />
+                      return <circle key={i} cx={x} cy={y} r="3" fill="var(--color-primary)" />
                     })}
                   </>
                 )
@@ -266,10 +268,10 @@ export function OverviewTabContent(props: {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+        <div className="lg:col-span-2 rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Top Selling Medicines</h3>
           {topSellingMedicines.length === 0 ? (
-            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-[#E5E7EB] bg-slate-50/50 text-slate-500 text-sm">No sales data</div>
+            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-[var(--color-neutral-200)] bg-slate-50/50 text-slate-500 text-sm">No sales data</div>
           ) : (
             <div className="flex flex-col gap-3">
               {topSellingMedicines.map((m, i) => {
@@ -279,7 +281,7 @@ export function OverviewTabContent(props: {
                   <div key={i} className="flex items-center gap-3">
                     <span className="w-32 truncate text-sm font-medium text-slate-700" title={m.name}>{m.name}</span>
                     <div className="flex-1 h-8 rounded-lg bg-slate-100 overflow-hidden">
-                      <div className="h-full rounded-lg bg-[#0891b2] transition-all duration-300" style={{ width: `${Math.max(w, 4)}%` }} />
+                      <div className="h-full rounded-lg bg-[var(--color-primary)] transition-all duration-300" style={{ width: `${Math.max(w, 4)}%` }} />
                     </div>
                     <span className="text-sm font-semibold text-slate-900 w-12 text-right">{m.count}</span>
                   </div>
@@ -288,10 +290,10 @@ export function OverviewTabContent(props: {
             </div>
           )}
         </div>
-        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Medicine Category Distribution</h3>
           {categoryDonutData.length === 0 || (categoryDonutData.length === 1 && categoryDonutData[0].name === 'No data') ? (
-            <div className="flex h-44 items-center justify-center rounded-lg border border-dashed border-[#E5E7EB] bg-slate-50/50 text-slate-500 text-sm">No category data</div>
+            <div className="flex h-44 items-center justify-center rounded-lg border border-dashed border-[var(--color-neutral-200)] bg-slate-50/50 text-slate-500 text-sm">No category data</div>
           ) : (
             <>
               <div className="relative h-40 w-40 mx-auto">
@@ -323,13 +325,13 @@ export function OverviewTabContent(props: {
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-2 mb-4">
           <h3 className="text-lg font-semibold text-slate-800">Inventory Health Status</h3>
           {inventoryHealthFilter !== 'all' && (
-            <button type="button" onClick={() => setInventoryHealthFilter('all')} className="text-xs font-medium text-slate-600 hover:text-slate-900 underline">
+            <Button type="button" variant="link" size="sm" onClick={() => setInventoryHealthFilter('all')}>
               Clear filter
-            </button>
+            </Button>
           )}
         </div>
         <div className="flex flex-wrap gap-4">
@@ -342,7 +344,7 @@ export function OverviewTabContent(props: {
       </div>
 
       {inventoryHealthFilter !== 'all' && (
-        <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
+        <div className="mt-4 rounded-xl border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-semibold text-slate-800">
               {inventoryHealthFilter === 'low_stock' ? 'Low stock medicines' : inventoryHealthFilter === 'out_of_stock' ? 'Out of stock medicines' : inventoryHealthFilter === 'expiring_soon' ? 'Expiring soon medicines' : inventoryHealthFilter === 'dead_stock' ? 'Dead stock medicines (last 3 months)' : 'In stock medicines'}
@@ -354,7 +356,7 @@ export function OverviewTabContent(props: {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs sm:text-sm">
-                <thead className="bg-slate-50 border-b border-[#E5E7EB]">
+                <thead className="bg-slate-50 border-b border-[var(--color-neutral-200)]">
                   <tr>
                     <th className="text-left px-3 py-2 font-medium text-slate-700">Medicine</th>
                     <th className="text-left px-3 py-2 font-medium text-slate-700">Branch</th>
@@ -366,7 +368,7 @@ export function OverviewTabContent(props: {
                 </thead>
                 <tbody>
                   {inventoryHealthItems.slice(0, 50).map((row) => (
-                    <tr key={row.id} className="border-t border-[#E5E7EB] hover:bg-slate-50/60 transition">
+                    <tr key={row.id} className="border-t border-[var(--color-neutral-200)] hover:bg-slate-50/60 transition">
                       <td className="px-3 py-2 font-medium text-slate-900">{row.medicineName}</td>
                       <td className="px-3 py-2 text-slate-600">{row.branchName}</td>
                       <td className="px-3 py-2 text-right font-medium text-slate-900">{row.qty}</td>
@@ -383,11 +385,11 @@ export function OverviewTabContent(props: {
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-[#E5E7EB] px-6 py-4"><h3 className="text-lg font-semibold text-slate-800">Expiring Medicines</h3></div>
+        <div className="lg:col-span-2 rounded-xl border border-[var(--color-neutral-200)] bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-[var(--color-neutral-200)] px-6 py-4"><h3 className="text-lg font-semibold text-slate-800">Expiring Medicines</h3></div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-[#E5E7EB]">
+              <thead className="bg-slate-50 border-b border-[var(--color-neutral-200)]">
                 <tr>
                   <th className="text-left p-3 font-medium text-slate-700">Medicine Name</th>
                   <th className="text-left p-3 font-medium text-slate-700">Batch</th>
@@ -403,7 +405,7 @@ export function OverviewTabContent(props: {
                   expiring.slice(0, 8).map((a, i) => {
                     const urgent = a.daysUntilExpiry <= 7
                     return (
-                      <tr key={i} className={`border-t border-[#E5E7EB] transition hover:bg-slate-50/50 ${urgent ? 'bg-rose-50/50' : ''}`}>
+                      <tr key={i} className={`border-t border-[var(--color-neutral-200)] transition hover:bg-slate-50/50 ${urgent ? 'bg-rose-50/50' : ''}`}>
                         <td className="p-3 font-medium text-slate-900">{a.medicineName}</td>
                         <td className="p-3 text-slate-600">{a.batchNumber}</td>
                         <td className="p-3 text-slate-600">{a.expiryDate}</td>
@@ -418,9 +420,9 @@ export function OverviewTabContent(props: {
           </div>
         </div>
         <div className="space-y-6">
-          <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden">
-            <div className="border-b border-[#E5E7EB] px-6 py-4"><h3 className="text-lg font-semibold text-slate-800">Recent Pharmacy Sales</h3></div>
-            <div className="divide-y divide-[#E5E7EB] max-h-64 overflow-y-auto">
+          <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-[var(--color-neutral-200)] px-6 py-4"><h3 className="text-lg font-semibold text-slate-800">Recent Pharmacy Sales</h3></div>
+            <div className="divide-y divide-[var(--color-neutral-200)] max-h-64 overflow-y-auto">
               {recentSalesFiltered.length === 0 ? (
                 <p className="p-4 text-sm text-slate-500 text-center">No recent sales.</p>
               ) : (
@@ -441,7 +443,7 @@ export function OverviewTabContent(props: {
               )}
             </div>
           </div>
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+          <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-slate-800 mb-4">Purchase Orders</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between rounded-lg bg-amber-50 border border-amber-200 px-4 py-2"><span className="text-sm font-medium text-amber-800">Pending</span><span className="font-bold text-amber-900">{poStatusCounts.pending}</span></div>
@@ -452,10 +454,10 @@ export function OverviewTabContent(props: {
         </div>
       </div>
 
-      <div className={`rounded-xl border p-5 ${isPharmacyPortal ? 'border-[#E0E0E0] bg-white shadow-sm' : 'border-slate-200 bg-slate-50/50'}`}>
-        <h3 className={`font-semibold mb-3 ${isPharmacyPortal ? 'text-[#263238] text-lg' : 'text-slate-800'}`}>Top selling / most prescribed</h3>
+      <div className={`rounded-xl border p-5 ${isPharmacyPortal ? 'border-[var(--color-neutral-200)] bg-white shadow-sm' : 'border-slate-200 bg-slate-50/50'}`}>
+        <h3 className={`font-semibold mb-3 ${isPharmacyPortal ? 'text-[var(--color-neutral-900)] text-lg' : 'text-slate-800'}`}>Top selling / most prescribed</h3>
         {!analytics ? (
-          <p className="text-sm text-[#607D8B]">Loading...</p>
+          <p className="text-sm text-[var(--color-neutral-500)]">Loading...</p>
         ) : (() => {
           const list = analytics.mostPrescribed || []
           const headerQ = headerSearchQuery.trim().toLowerCase()
@@ -464,14 +466,14 @@ export function OverviewTabContent(props: {
             <>
               <ul className="space-y-2">
                 {filteredList.map((m, i) => (
-                  <li key={i} className="flex justify-between items-center text-sm py-1 border-b border-[#E0E0E0] last:border-0">
-                    <span className={isPharmacyPortal ? 'text-[#263238]' : 'text-slate-700'}>{m.medicineName}</span>
-                    <span className={`font-medium ${isPharmacyPortal ? 'text-[#0891b2]' : 'text-slate-900'}`}>{m.count} sold</span>
+                  <li key={i} className="flex justify-between items-center text-sm py-1 border-b border-[var(--color-neutral-200)] last:border-0">
+                    <span className={isPharmacyPortal ? 'text-[var(--color-neutral-900)]' : 'text-slate-700'}>{m.medicineName}</span>
+                    <span className={`font-medium ${isPharmacyPortal ? 'text-[var(--color-primary)]' : 'text-slate-900'}`}>{m.count} sold</span>
                   </li>
                 ))}
               </ul>
               {filteredList.length === 0 && (
-                <p className="text-sm text-[#607D8B] py-2">{list.length === 0 ? 'No sales data yet. Dispense prescriptions to see most prescribed medicines.' : 'No medicines match your search.'}</p>
+                <p className="text-sm text-[var(--color-neutral-500)] py-2">{list.length === 0 ? 'No sales data yet. Dispense prescriptions to see most prescribed medicines.' : 'No medicines match your search.'}</p>
               )}
             </>
           )

@@ -81,7 +81,7 @@ export function QueueFiltersBar({
   showClear: boolean
 }) {
   return (
-    <div className="shrink-0 border-b border-[#E5E7EB] bg-white px-4 py-3">
+    <div className="shrink-0 border-b border-[var(--color-neutral-200)] bg-white px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"

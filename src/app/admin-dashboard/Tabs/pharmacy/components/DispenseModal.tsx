@@ -517,7 +517,7 @@ export function DispenseModal({
   if (inline) {
     return (
       <div className="flex flex-col min-h-0">
-        <div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden flex flex-col min-h-[480px]">
+        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white shadow-sm overflow-hidden flex flex-col min-h-[480px]">
           {content}
         </div>
       </div>

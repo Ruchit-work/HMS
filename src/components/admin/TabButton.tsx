@@ -1,5 +1,6 @@
 import { ReactNode } from "react"
 import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
+import { NavTab } from "@/components/ui/navigation/NavTab"
 
 interface TabButtonProps {
   id: string
@@ -22,33 +23,14 @@ export default function TabButton({
   icon,
   label,
   badgeCount,
-  badgeProps = {}
+  badgeProps = {},
 }: TabButtonProps) {
-  const isActive = activeTab === id
-  
   return (
     <div className="relative">
-      <button 
-        onClick={onClick} 
-        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
-          isActive
-            ? "bg-[var(--color-primary)] text-white shadow-md" 
-            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-        }`}
-      >
-        <div className={`p-1.5 rounded-md ${isActive ? "bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
-          {icon}
-        </div>
-        <span className="font-medium text-sm">{label}</span>
-      </button>
-      {badgeCount !== undefined && (
-        <NotificationBadge 
-          count={badgeCount}
-          position="top-right"
-          {...badgeProps}
-        />
-      )}
+      <NavTab active={activeTab === id} onClick={onClick} icon={icon} label={label} />
+      {badgeCount !== undefined ? (
+        <NotificationBadge count={badgeCount} position="top-right" {...badgeProps} />
+      ) : null}
     </div>
   )
 }
-

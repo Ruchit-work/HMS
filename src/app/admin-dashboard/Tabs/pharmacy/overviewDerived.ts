@@ -97,7 +97,7 @@ export const computePieChartData = ({
     { label: 'Purchases', value: purchaseVal, color: '#5EEAD4' },
     { label: 'Suppliers', value: suppliersVal, color: '#86EFAC' },
     { label: 'Sales', value: salesVal, color: '#F9A8D4' },
-    { label: 'No Sales', value: noSalesVal, color: '#E5E7EB' },
+    { label: 'No Sales', value: noSalesVal, color: 'var(--color-neutral-200)' },
   ].map((s) => ({ ...s, pct: total > 0 ? (s.value / total) * 100 : 25 }))
 }
 
@@ -247,7 +247,7 @@ export const computeCategoryDistribution = ({
     const normalized = categoryList.find((c) => c.toLowerCase() === (cat || '').toLowerCase()) || 'Other'
     map.set(normalized, (map.get(normalized) ?? 0) + 1)
   })
-  const colors = ['#0891b2', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE', '#E5E7EB']
+  const colors = ['var(--color-primary)', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE', 'var(--color-neutral-200)']
   return Array.from(map.entries())
     .filter(([, count]) => count > 0)
     .map(([name, count], i) => ({ name, count, color: colors[i % colors.length] }))
@@ -259,7 +259,7 @@ export const computeCategoryDonutData = (
 ) => {
   const total = categoryDistribution.reduce((s, c) => s + c.count, 0)
   if (total === 0) {
-    return [{ name: 'No data', count: 1, pct: 100, color: '#E5E7EB' }]
+    return [{ name: 'No data', count: 1, pct: 100, color: 'var(--color-neutral-200)' }]
   }
   return categoryDistribution.map((c) => ({ ...c, pct: (c.count / total) * 100 }))
 }

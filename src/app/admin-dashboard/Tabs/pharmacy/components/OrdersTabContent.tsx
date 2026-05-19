@@ -1,4 +1,6 @@
 import React from 'react'
+import { Button } from '@/components/ui/Button'
+import { TableShell } from '@/components/ui/layout/TableShell'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import Pagination from '@/components/ui/navigation/Pagination'
 import type { LowStockAlert, PharmacyMedicine, PharmacyPurchaseOrder, PharmacySupplier, PurchaseOrderLine } from '@/types/pharmacy'
@@ -105,12 +107,13 @@ export function OrdersTabContent(props: {
         />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <h3 className="font-semibold text-slate-800 mb-3 px-1">Purchase orders</h3>
+      <div className="space-y-3">
+        <h3 className="font-semibold text-slate-800 px-1">Purchase orders</h3>
         {loading ? (
           <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
         ) : (
-          <table className="w-full text-sm">
+          <TableShell>
+          <table className="min-w-[900px] w-full text-sm">
             <thead className="bg-slate-100 sticky top-0 z-10">
               <tr>
                 <th className="text-left p-3 font-medium text-slate-700">Order #</th>
@@ -148,19 +151,20 @@ export function OrdersTabContent(props: {
                     <td className="p-3 text-sm text-slate-600">{receivedStr}</td>
                     <td className="p-3">
                       <div className="flex flex-wrap gap-1">
-                        <button type="button" onClick={() => setSelectedOrderDetail(o)} className="text-sky-600 hover:text-sky-800 font-medium text-sm">View</button>
+                        <Button type="button" variant="link" size="sm" onClick={() => setSelectedOrderDetail(o)}>View</Button>
                         {o.status === 'pending' && !isViewOnly && (
-                          <button
+                          <Button
                             type="button"
+                            variant="success"
+                            size="sm"
                             onClick={() => {
                               setReceiveOrder(o)
                               setReceiveDetailsForm((o.items ?? []).map(() => ({ batchNumber: '', expiryDate: '', manufacturingDate: '' })))
                               setReceiveSupplierInvoice('')
                             }}
-                            className="text-emerald-600 hover:text-emerald-800 font-medium text-sm"
                           >
                             Receive
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </td>
@@ -169,6 +173,7 @@ export function OrdersTabContent(props: {
               })}
             </tbody>
           </table>
+          </TableShell>
         )}
         {!loading && purchaseOrders.length === 0 && (
           <ActionEmptyState

@@ -126,15 +126,15 @@ export function EditSupplierForm({
   }
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <input type="text" placeholder="Supplier name *" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
-      <input type="text" placeholder="Contact person" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} className="w-full rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
-      <input type="text" placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
-      <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
-      <input type="text" placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
-      <input type="text" placeholder="Payment terms (e.g. Net 30)" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} className="w-full rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
+      <input type="text" placeholder="Supplier name *" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
+      <input type="text" placeholder="Contact person" value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
+      <input type="text" placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
+      <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
+      <input type="text" placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
+      <input type="text" placeholder="Payment terms (e.g. Net 30)" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} className="w-full rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
       <div className="grid grid-cols-2 gap-2">
-        <input type="number" min="0" placeholder="Lead time (days)" value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} className="rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
-        <input type="number" min="0" step="0.01" placeholder="Min order value" value={minOrderValue} onChange={(e) => setMinOrderValue(e.target.value)} className="rounded-lg border border-[#E0E0E0] px-3 py-2 text-sm text-[#263238]" />
+        <input type="number" min="0" placeholder="Lead time (days)" value={leadTimeDays} onChange={(e) => setLeadTimeDays(e.target.value)} className="rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
+        <input type="number" min="0" step="0.01" placeholder="Min order value" value={minOrderValue} onChange={(e) => setMinOrderValue(e.target.value)} className="rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm text-[var(--color-neutral-900)]" />
       </div>
       <div className="flex gap-2 pt-2">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>

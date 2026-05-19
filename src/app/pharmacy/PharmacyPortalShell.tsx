@@ -9,6 +9,7 @@ import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { usePharmacyPortal } from '@/contexts/PharmacyPortalContext'
 import type { PharmacyPortalTabId } from '@/contexts/PharmacyPortalContext'
 import GroupedNav from '@/components/ui/navigation/GroupedNav'
+import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/overlays/Modals'
 import {
   PHARMACY_TAB_LABELS,
@@ -211,18 +212,18 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
     (portal.branchFilter === 'all' ? (portal.branches.length > 0 ? 'All branches' : undefined) : undefined)
 
   return (
-    <div className="min-h-screen bg-[var(--color-neutral-50)]" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div className="hms-portal-shell">
       {/* Mobile menu button */}
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-[60] lg:hidden bg-white p-2.5 rounded-lg shadow-sm border border-[#E0E0E0] hover:bg-[#F5F5F5] transition-colors duration-200"
+          className="fixed top-4 left-4 z-[60] lg:hidden bg-white p-2.5 rounded-lg shadow-sm border border-[var(--color-neutral-200)] hover:bg-[var(--color-neutral-100)] transition-colors duration-200"
           aria-label="Open menu"
         >
           <div className="flex flex-col items-center justify-center w-5 h-5 gap-1">
-            <span className="block w-5 h-0.5 bg-[#455A64] rounded-full" />
-            <span className="block w-5 h-0.5 bg-[#455A64] rounded-full" />
-            <span className="block w-5 h-0.5 bg-[#455A64] rounded-full" />
+            <span className="block w-5 h-0.5 bg-[var(--color-neutral-600)] rounded-full" />
+            <span className="block w-5 h-0.5 bg-[var(--color-neutral-600)] rounded-full" />
+            <span className="block w-5 h-0.5 bg-[var(--color-neutral-600)] rounded-full" />
           </div>
         </button>
       )}
@@ -237,13 +238,11 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
 
       {/* Light sidebar - soft blue-grey tint + accent */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col transform transition-transform duration-300 ease-out ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 hms-sidebar flex flex-col transform transition-transform duration-300 ease-out ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
-        style={{ backgroundColor: '#EEF2F7', borderRight: '1px solid #CFD8DC' }}
       >
-        {/* Same height as main header row (72px) + line (4px) = 76px so bottom lines align */}
-        <div className="flex items-center justify-between h-[76px] px-5 shrink-0" style={{ borderBottom: '1px solid #CFD8DC', backgroundColor: '#E3F2FD' }}>
+        <div className="hms-sidebar-header flex h-[76px] shrink-0 items-center justify-between px-5">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/15">
               <svg className="h-5 w-5 shrink-0 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,14 +250,14 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
               </svg>
             </div>
             <div>
-              <h1 className="text-[#263238] text-sm font-semibold">HMS Pharmacy</h1>
-              <p className="text-[#607D8B] text-xs">Inventory &amp; Dispensing</p>
+              <h1 className="text-[var(--color-neutral-900)] text-sm font-semibold">HMS Pharmacy</h1>
+              <p className="text-[var(--color-neutral-500)] text-xs">Inventory &amp; Dispensing</p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 text-[#607D8B] hover:text-[#263238] hover:bg-[#F5F5F5] rounded-lg transition-colors"
+            className="lg:hidden p-2 text-[var(--color-neutral-500)] hover:text-[var(--color-neutral-900)] hover:bg-[var(--color-neutral-100)] rounded-lg transition-colors"
             aria-label="Close menu"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -275,24 +274,26 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
 
           {/* Branch selection moved to top header */}
 
-          <div className="px-2 pb-4 pt-2" style={{ borderTop: '1px solid #CFD8DC' }}>
+          <div className="px-2 pb-4 pt-2" style={{ borderTop: '1px solid var(--color-neutral-300)' }}>
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/80">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/15">
                 <span className="text-sm font-semibold text-[var(--color-primary-dark)]">{displayName.charAt(0)}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#111827] truncate">{displayName}</p>
-                <p className="text-xs text-[#6B7280]">Pharmacy</p>
+                <p className="text-sm font-medium text-[var(--color-neutral-900)] truncate">{displayName}</p>
+                <p className="text-xs text-[var(--color-neutral-500)]">Pharmacy</p>
               </div>
             </div>
-            <button
+            <Button
               type="button"
+              variant="danger"
+              size="sm"
+              className="mt-2 w-full"
               onClick={() => setShowLogoutConfirm(true)}
-              className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#C62828] hover:bg-[#FFEBEE] border border-[#FFCDD2] transition-colors text-sm font-medium bg-white/60"
             >
-              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
               Logout
-            </button>
+            </Button>
           </div>
         </nav>
       </aside>
@@ -300,16 +301,16 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
       {/* Main content - no overflow on wrapper so sticky header can stick to viewport */}
       <div className="lg:ml-64 min-w-0 flex flex-col min-h-screen">
         {/* Top header: stays fixed at top when scrolling */}
-        <header className="sticky top-0 z-30 shrink-0 shadow-sm" style={{ backgroundColor: '#F0F4F8' }}>
+        <header className="hms-sticky-header">
           {/* 72px row on desktop so with 4px blue line = 76px total, matching sidebar header; on mobile min-height allows wrap */}
           <div className={`flex flex-col sm:flex-row sm:items-center gap-4 min-h-[56px] sm:min-h-[72px] lg:h-[72px] px-4 sm:px-6 lg:px-8 ${!sidebarOpen ? 'pl-14 sm:pl-16 lg:pl-8' : ''}`}>
             <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-3 mb-1 sm:mb-0">
-                <div className="text-left">
-                  <h1 className="text-2xl font-semibold text-[#263238] truncate capitalize">
+                <div className="text-left min-w-0">
+                  <h1 className="hms-title truncate capitalize">
                     {PHARMACY_TAB_LABELS[portal.activeTab]}
                   </h1>
-                  <p className="text-sm text-[#607D8B] mt-0.5 truncate">
+                  <p className="hms-subtitle truncate">
                     {PHARMACY_TAB_SUBTITLES[portal.activeTab]}
                   </p>
                 </div>
@@ -320,7 +321,7 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
                 <button
                   type="button"
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className="p-2 rounded-lg text-[#607D8B] hover:bg-[#E3E8EF] hover:text-[#263238] transition-colors relative"
+                  className="p-2 rounded-lg text-[var(--color-neutral-500)] hover:bg-[var(--color-neutral-100)] hover:text-[var(--color-neutral-900)] transition-colors relative"
                   aria-label="Notifications"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
@@ -329,18 +330,18 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
                   )}
                 </button>
                 {notificationsOpen && (
-                  <div className="absolute right-0 top-full mt-1 w-72 rounded-xl border border-[#E0E0E0] bg-white shadow-lg py-2 z-50">
-                    <p className="px-4 py-2 text-sm font-medium text-[#263238]">Notifications</p>
+                  <div className="absolute right-0 top-full mt-1 w-72 rounded-xl border border-[var(--color-neutral-200)] bg-white shadow-lg py-2 z-50">
+                    <p className="px-4 py-2 text-sm font-medium text-[var(--color-neutral-900)]">Notifications</p>
                     {alertTotal > 0 ? (
-                      <p className="px-4 py-2 text-sm text-[#607D8B]">You have {alertTotal} alert(s) (low stock / expiring).</p>
+                      <p className="px-4 py-2 text-sm text-[var(--color-neutral-500)]">You have {alertTotal} alert(s) (low stock / expiring).</p>
                     ) : (
-                      <p className="px-4 py-2 text-sm text-[#607D8B]">No new notifications.</p>
+                      <p className="px-4 py-2 text-sm text-[var(--color-neutral-500)]">No new notifications.</p>
                     )}
                   </div>
                 )}
               </div>
               {currentBranchName && (
-                <div className="hidden max-w-[200px] items-center rounded-lg border border-[#CFD8DC] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] sm:flex">
+                <div className="hidden max-w-[200px] items-center rounded-lg border border-[var(--color-neutral-300)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-neutral-700)] sm:flex">
                   <span className="mr-1 text-[#6B7280]">Branch:</span>
                   <span className="truncate">{currentBranchName}</span>
                 </div>
@@ -349,7 +350,7 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-x-hidden">
+        <main className="hms-page flex-1 min-w-0 overflow-x-hidden">
           {children}
         </main>
       </div>

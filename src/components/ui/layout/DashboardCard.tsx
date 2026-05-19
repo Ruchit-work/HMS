@@ -29,8 +29,7 @@ export default function DashboardCard({
   return (
     <div 
       className={`
-        bg-white border border-slate-200 rounded-xl p-4 sm:p-6 
-        card-hover transition-all
+        hms-kpi-card p-4 sm:p-6
         ${onClick ? 'cursor-pointer' : ''}
       `}
       onClick={onClick}

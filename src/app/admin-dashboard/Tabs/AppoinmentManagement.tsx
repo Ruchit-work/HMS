@@ -19,6 +19,9 @@ import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/shared/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import Pagination from '@/components/ui/navigation/Pagination'
+import { Button } from '@/components/ui/Button'
+import { FilterChip } from '@/components/ui/FilterChip'
+import { TableShell } from '@/components/ui/layout/TableShell'
 import { useNewItems } from '@/hooks/useNewItems'
 import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
 import DocumentListCompact from '@/components/documents/DocumentListCompact'
@@ -831,29 +834,25 @@ export default function AppoinmentManagement({
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Status</span>
                                 <div className="flex flex-wrap gap-2">
-                                    {statusTabs.map((tab) => {
-                                        const active = statusFilter === tab.key
-                                        return (
-                                            <button key={tab.key}  type="button"   onClick={() => setStatusFilter(tab.key)}
-                                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                                                    active
-                                                        ? 'border-cyan-500 bg-cyan-50 text-cyan-800 shadow-sm'
-                                                        : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700' 
-                                                           }`} >
-                                                <span>{tab.label}</span>
-                                            </button>
-                                        )
-                                    })}
+                                    {statusTabs.map((tab) => (
+                                        <FilterChip
+                                            key={tab.key}
+                                            active={statusFilter === tab.key}
+                                            onClick={() => setStatusFilter(tab.key)}
+                                        >
+                                            {tab.label}
+                                        </FilterChip>
+                                    ))}
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <span>Need a fresh start?</span>
-                                <button type="button"   onClick={resetFilters}
-                                    className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800">
-                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <Button type="button" variant="outline" size="sm" onClick={resetFilters} className="rounded-full">
+                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>Reset filters   
-                                </button>
+                                    </svg>
+                                    Reset filters
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -864,7 +863,10 @@ export default function AppoinmentManagement({
                             <div className="flex items-center gap-2">
                                 <span className="text-xs text-slate-500">Showing {filteredAppointments.length.toLocaleString()} result{filteredAppointments.length === 1 ? '' : 's'}</span>
                                 <div className="relative">
-                                    <button type="button" onClick={() => setExportOpen(!exportOpen)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Export <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => setExportOpen(!exportOpen)}>
+                                        Export
+                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                    </Button>
                                     {exportOpen && (
                                         <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
                                             <button type="button" onClick={exportCSV} className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50">Export CSV</button>
@@ -878,13 +880,13 @@ export default function AppoinmentManagement({
                         {selectedIds.size > 0 && (
                             <div className="flex flex-wrap items-center gap-3 border-b border-amber-100 bg-amber-50/80 px-4 py-2 text-sm">
                                 <span className="font-medium text-amber-800">{selectedIds.size} selected</span>
-                                <button type="button" onClick={handleBulkComplete} disabled={processingBulk} className="rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">Mark Completed</button>
-                                <button type="button" onClick={handleBulkCancel} disabled={processingBulk} className="rounded-md bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50">Cancel</button>
-                                <button type="button" onClick={() => setSelectedIds(new Set())} className="text-xs font-medium text-slate-600 hover:text-slate-800">Clear selection</button>
+                                <Button type="button" variant="success" size="sm" onClick={handleBulkComplete} disabled={processingBulk}>Mark Completed</Button>
+                                <Button type="button" variant="danger" size="sm" onClick={handleBulkCancel} disabled={processingBulk}>Cancel</Button>
+                                <Button type="button" variant="link" size="sm" onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
                             </div>
                         )}
-                        <div className="overflow-x-auto overflow-y-visible">
-                            <table className="w-full table-fixed">
+                        <TableShell className="rounded-none border-0 shadow-none">
+                            <table className="w-full min-w-[720px] table-fixed">
                                 <thead className="sticky top-0 z-10 bg-white shadow-sm">
                                     <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                         <th className="w-[3%] max-w-[40px] px-2 py-3 text-left">
@@ -1018,7 +1020,7 @@ export default function AppoinmentManagement({
                                     )}
                                 </tbody>
                             </table>
-                        </div>
+                        </TableShell>
 
                         <Pagination
                                 currentPage={currentPage}

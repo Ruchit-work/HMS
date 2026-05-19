@@ -282,8 +282,8 @@ export default function AdmissionHistoryPanel({ onNotification }: AdmissionHisto
       .page { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; }
       .header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
       .hospital { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: #334155; text-transform: uppercase; }
-      .title { margin: 6px 0 0; font-size: 22px; font-weight: 800; color: #0e7490; }
-      .header { border-bottom-color: #0891b2; }
+      .title { margin: 6px 0 0; font-size: 22px; font-weight: 800; color: var(--color-primary-dark); }
+      .header { border-bottom-color: var(--color-primary); }
       .subtitle { margin: 2px 0 0; font-size: 12px; color: #64748b; }
       .meta p { margin: 0 0 4px; font-size: 12px; text-align: right; }
       .meta span { font-weight: 700; color: #334155; }

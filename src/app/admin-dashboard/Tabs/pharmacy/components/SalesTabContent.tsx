@@ -73,7 +73,7 @@ export function SalesTabContent(props: {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-[#E5E7EB] bg-[#F7F9FC] p-4 sm:p-5">
+      <div className="rounded-xl border border-[var(--color-neutral-200)] bg-[var(--color-neutral-50)] p-4 sm:p-5">
         <h3 className="text-lg font-semibold text-slate-800 mb-3">Selling data</h3>
         <div className="flex flex-wrap items-center gap-2 mb-4">
           {(['today', '7d', '30d', '6m', 'year', 'all'] as OverviewDateRange[]).map((range) => (
@@ -81,31 +81,31 @@ export function SalesTabContent(props: {
               key={range}
               type="button"
               onClick={() => setOverviewDateRange(range)}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[#0891b2] text-white border-[#0891b2]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${overviewDateRange === range ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
             >
               {range === 'today' ? 'Today' : range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '6m' ? '6m' : range === 'year' ? 'Year' : 'All'}
             </button>
           ))}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
-          <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Sales</p>
             <p className="text-xl font-bold text-slate-900">₹{periodSalesTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</p>
             <p className="text-[10px] text-emerald-600">Revenue</p>
           </div>
-          <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Sales returns</p>
             <p className="text-xl font-bold text-rose-600">₹{periodRefundTotal.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</p>
             <p className="text-[10px] text-rose-500">Refunded</p>
           </div>
-          <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-slate-500">Bills</p>
             <p className="text-xl font-bold text-slate-900">{periodSalesCount}</p>
             <p className="text-[10px] text-slate-500">In period</p>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
             <h4 className="text-sm font-semibold text-slate-800 mb-2">Payments by mode</h4>
             <table className="w-full text-xs">
               <thead className="bg-slate-50 border-b border-slate-200">
@@ -131,7 +131,7 @@ export function SalesTabContent(props: {
               </tbody>
             </table>
           </div>
-          <div className="rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
             <h4 className="text-sm font-semibold text-slate-800 mb-2">Sales trend</h4>
             <div className="h-32 w-full">
               {salesTrendData.length === 0 ? (
@@ -140,8 +140,8 @@ export function SalesTabContent(props: {
                 <svg viewBox="0 0 400 120" className="h-full w-full overflow-visible" preserveAspectRatio="none">
                   <defs>
                     <linearGradient id="salesTrendGradSalesTab" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#0891b2" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#0891b2" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   {(() => {
@@ -155,7 +155,7 @@ export function SalesTabContent(props: {
                     return (
                       <>
                         <polyline fill="url(#salesTrendGradSalesTab)" points={areaPoints} />
-                        <polyline fill="none" stroke="#0891b2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+                        <polyline fill="none" stroke="var(--color-primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={pts} />
                       </>
                     )
                   })()}
@@ -170,7 +170,7 @@ export function SalesTabContent(props: {
           </div>
         </div>
         {topSellingMedicines.length > 0 && (
-          <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-white p-4 shadow-sm">
+          <div className="mt-4 rounded-lg border border-[var(--color-neutral-200)] bg-white p-4 shadow-sm">
             <h4 className="text-sm font-semibold text-slate-800 mb-2">Top selling medicines</h4>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
               {topSellingMedicines.map((m, i) => (

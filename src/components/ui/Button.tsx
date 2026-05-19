@@ -2,7 +2,7 @@
 
 import { ButtonHTMLAttributes, forwardRef } from "react"
 
-type ButtonVariant = "primary" | "secondary" | "outline" | "danger" | "ghost"
+type ButtonVariant = "primary" | "secondary" | "outline" | "danger" | "ghost" | "success" | "link"
 type ButtonSize = "sm" | "md" | "lg"
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -23,6 +23,10 @@ const variantClasses: Record<ButtonVariant, string> = {
     "bg-[var(--color-error)] text-white border border-transparent hover:bg-red-600 focus-visible:ring-red-500",
   ghost:
     "bg-transparent text-slate-600 border border-transparent hover:bg-slate-100 focus-visible:ring-slate-400",
+  success:
+    "bg-[var(--color-success)] text-white border border-transparent hover:bg-[var(--color-accent-dark)] focus-visible:ring-[var(--color-success)]",
+  link:
+    "bg-transparent text-[var(--color-primary-dark)] border border-transparent hover:text-[var(--color-primary)] hover:underline focus-visible:ring-[var(--color-primary)] font-medium h-auto px-0 py-0",
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
