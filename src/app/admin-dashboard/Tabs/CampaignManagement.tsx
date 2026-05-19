@@ -84,7 +84,7 @@ export default function CampaignManagement({ disableAdminGuard = true }: { disab
     reloadCampaigns()
     checkCronStatus()
     checkReminderStatus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user, authLoading])
 
   const checkCronStatus = async () => {

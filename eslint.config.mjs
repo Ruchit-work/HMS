@@ -17,6 +17,7 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      "public/**", // Generated PWA / workbox bundles — not app source
       "next-env.d.ts",
       "*.config.js",
       "*.config.mjs",
@@ -32,8 +33,10 @@ const eslintConfig = [
     rules: {
       "react/no-unescaped-entities": "off",
       "@next/next/no-img-element": "off",
-      // Stricter rules for production
-      "@typescript-eslint/no-explicit-any": "warn", // Warn on 'any' types
+      // Legacy codebase uses `any` widely; tightening is a separate typing pass (no runtime impact)
+      "@typescript-eslint/no-explicit-any": "off",
+      // Hook deps are validated manually on critical paths; blanket warns are noisy on legacy screens
+      "react-hooks/exhaustive-deps": "off",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {

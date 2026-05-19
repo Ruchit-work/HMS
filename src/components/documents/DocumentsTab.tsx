@@ -181,7 +181,7 @@ export default function DocumentsTab({
       setLoading(false)
       setLoadingMore(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [
     patientUid,
     initialPatientUid,
@@ -209,7 +209,7 @@ export default function DocumentsTab({
 
     // Note: searchQuery and date filters are applied client-side, so we don't include them in dependencies
     fetchDocuments()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [patientUid, initialPatientUid, appointmentId, fileTypeFilter, specialtyFilter, showAllSpecialties, showPatientSelector])
   
   const handleLoadMore = () => {
@@ -257,7 +257,7 @@ export default function DocumentsTab({
     if (allDocuments.length > 0) {
       applyClientSideFilters(allDocuments)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [searchQuery, dateFrom, dateTo, patientNames])
 
   const fetchPatientNames = async (docs: DocumentMetadata[]) => {

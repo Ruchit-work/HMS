@@ -35,7 +35,7 @@ export function DispenseModal({
   const branchStock = stock.filter((s) => s.branchId === branchId)
   const [saving, setSaving] = useState(false)
   const [pendingDispensePayload, setPendingDispensePayload] = useState<Array<{ medicineId: string; quantity: number }> | null>(null)
-  const [pendingBillAmount, setPendingBillAmount] = useState(0)
+  const [, setPendingBillAmount] = useState(0)
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
   const displayMedicines = useMemo(() => {
     const seen = new Set<string>()
@@ -145,7 +145,7 @@ export function DispenseModal({
     setPendingBillAmount(netTotalBill)
   }
 
-  const doDispenseWithCash = async (
+  const _doDispenseWithCash = async (
     amountReceived: number,
     changeGiven: number
   ) => {
@@ -212,7 +212,6 @@ export function DispenseModal({
 
   const [taxPercent, setTaxPercent] = useState(0)
   const [discountAmount, setDiscountAmount] = useState(0)
-  const prescribedCount = queueItem.medicines.length
   const selectedCount = lines.filter((l) => l.medicineId && Number(l.quantity) > 0).length
   const orderLines = lines
     .map((l) => {

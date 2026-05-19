@@ -69,9 +69,6 @@ export function PlaceOrderForm({
   }
   const [lines, setLines] = useState<Line[]>([{ ...emptyLine }])
 
-  const addLine = () => {
-    setLines((prev) => [...prev, { ...emptyLine }])
-  }
   const removeLine = (i: number) => {
     setLines((prev) => prev.filter((_, idx) => idx !== i))
   }
@@ -102,10 +99,6 @@ export function PlaceOrderForm({
       )
     )
   }
-  const updateNewMedicineField = (i: number, field: keyof Line, value: string | number) => {
-    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)))
-  }
-
   const handleUploadParse = async (file: File | null) => {
     if (!file || !effectiveBranchId || !supplierId) return
     setUploadingParse(true)

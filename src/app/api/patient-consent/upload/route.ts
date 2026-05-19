@@ -76,7 +76,6 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await videoFile.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    let downloadUrl = ""
     let uploadSuccess = false
 
     // Try primary bucket first
@@ -96,7 +95,6 @@ export async function POST(request: NextRequest) {
         },
       })
       // No public ACL; playback will go through authenticated API route
-      downloadUrl = "" // will be populated later as internal API URL
       uploadSuccess = true
     } catch (storageErr: unknown) {
       const err = storageErr as { message?: string; code?: number }
@@ -120,7 +118,6 @@ export async function POST(request: NextRequest) {
               },
             })
             // No public ACL; playback will go through authenticated API route
-            downloadUrl = ""
             uploadSuccess = true
           } catch (altErr) {
             console.error("[patient-consent] Alternative bucket also failed:", altErr)

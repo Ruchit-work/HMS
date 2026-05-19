@@ -53,7 +53,7 @@ export function useEnterKeySubmit(
       document.removeEventListener('keydown', handleKeyDown)
     }
     // We intentionally spread dynamic dependencies here; eslint can't analyze it statically
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [enabled, onSubmit, ...dependencies])
 
   return formRef

@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const { appointmentId, patientId, patientPhone, patientName, hospitalId } = body
 
     const getPdfBaseUrl = () => {
-      let u =
+      const u =
         process.env.NEXT_PUBLIC_BASE_URL ||
         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
         "https://hospitalmanagementsystem-hazel.vercel.app"

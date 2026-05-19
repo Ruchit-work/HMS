@@ -43,7 +43,6 @@ import ConsultationModeModal from "@/components/doctor/appointments/modals/Consu
 import CompletionForm from "@/components/doctor/appointments/forms/CompletionForm"
 import LifestyleSection from "@/components/doctor/appointments/sections/LifestyleSection"
 import MedicalInfoSection from "@/components/doctor/appointments/sections/MedicalInfoSection"
-import AIDiagnosisSuggestion from "@/components/doctor/appointments/ai/AIDiagnosisSuggestion"
 import PatientHistorySection from "@/components/doctor/appointments/sections/PatientHistorySection"
 import CombinedCompletionModal from "@/components/doctor/appointments/modals/CombinedCompletionModal"
 import { AdmitDialog } from "@/components/doctor/appointments/modals/AdmitDialog"
@@ -256,7 +255,7 @@ function DoctorAppointmentsContent() {
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [searchParams, appointments])
 
   const handleRefresh = async () => {
@@ -436,7 +435,7 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const ensureNormalConsultationOpen = (appointmentId: string) => {
+  const _ensureNormalConsultationOpen = (appointmentId: string) => {
     setShowCompletionForm((prev) => ({ ...prev, [appointmentId]: true }))
     setConsultationMode((prev) => ({ ...prev, [appointmentId]: prev[appointmentId] ?? "normal" }))
     setTimeout(() => {
@@ -657,7 +656,7 @@ function DoctorAppointmentsContent() {
 
   const formatMedicinesAsText = formatMedicinesAsTextUtil
 
-  const getAIDiagnosisSuggestion = async (appointment: AppointmentType) => {
+  const _getAIDiagnosisSuggestion = async (appointment: AppointmentType) => {
     setLoadingAiDiagnosis({ ...loadingAiDiagnosis, [appointment.id]: true })
 
     try {
@@ -772,7 +771,7 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const handleGenerateAiPrescription = useCallback(async (appointmentId: string, showNotification: boolean = true) => {
+  const handleGenerateAiPrescription = useCallback(async (appointmentId: string, _showNotification: boolean = true) => {
     if (!appointmentId) return
 
     const appointment = appointments.find((apt) => apt.id === appointmentId)
@@ -1130,7 +1129,7 @@ function DoctorAppointmentsContent() {
       // Auto-book recheckup appointment (after N days, skip Sunday)
       const recheckupDays = formData.recheckupDays ?? 7
       const start = new Date()
-      let d = new Date(start)
+      const d = new Date(start)
       d.setDate(d.getDate() + recheckupDays)
       while (d.getDay() === 0) d.setDate(d.getDate() + 1)
       const recheckupDateStr = d.toISOString().slice(0, 10)

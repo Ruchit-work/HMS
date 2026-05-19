@@ -141,7 +141,7 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
   useEffect(() => {
     if (!user || !activeHospitalId) return
     fetchAnalytics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user, activeHospitalId, timeRange, selectedBranchId])
 
   const fetchAnalytics = async () => {

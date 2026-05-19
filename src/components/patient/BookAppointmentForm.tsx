@@ -318,7 +318,7 @@ export default function BookAppointmentForm({
     }
 
     fetchAvailableSlots()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [selectedDoctor, appointmentData.date, selectedBranchId, selectedBranch])
 
   const nextStep = () => {

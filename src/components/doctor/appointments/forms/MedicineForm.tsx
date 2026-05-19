@@ -296,7 +296,7 @@ export default function MedicineForm({
                             {nameQuery ? "No match. Type to search or enter manually." : "Type to search medicines."}
                           </div>
                         ) : (
-                          suggestions.map((suggestion, si) => (
+                          suggestions.map((suggestion, _si) => (
                             <button
                               key={suggestion.id}
                               type="button"

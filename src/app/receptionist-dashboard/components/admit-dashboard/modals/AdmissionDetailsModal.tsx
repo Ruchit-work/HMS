@@ -1,6 +1,5 @@
 "use client"
 
-import type { Dispatch, SetStateAction } from "react"
 import type { Admission, Room } from "@/types/patient"
 import { Button } from "@/components/ui/Button"
 

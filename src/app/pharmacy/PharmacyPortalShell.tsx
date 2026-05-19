@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/firebase/config'
@@ -66,10 +65,10 @@ const ACTIVE_TAB_STORAGE_KEY = 'pharmacy-active-tab'
 export default function PharmacyPortalShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const isPharmacyUser = user?.role === 'pharmacy'
-  const { activeHospitalId, userHospitals, setActiveHospital, isSuperAdmin } = useMultiHospital()
+  const { isSuperAdmin } = useMultiHospital()
   const portal = usePharmacyPortal()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [_userMenuOpen, setUserMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)

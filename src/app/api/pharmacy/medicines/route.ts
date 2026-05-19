@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
 import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
-import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike, PHARMACY_COLLECTIONS } from '@/utils/pharmacy/serverPharmacy'
+import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
 import type { PharmacyMedicine } from '@/types/pharmacy'
 
 /** Normalize to YYYY-MM-DD or null. Accepts YYYY-MM-DD or DD/MM/YYYY. */

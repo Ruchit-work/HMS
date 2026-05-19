@@ -1,11 +1,9 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useState, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
-import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
@@ -377,7 +375,7 @@ export default function AdminDashboard() {
         if (cleanup) cleanup()
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user, activeHospitalId, hospitalLoading])
   // Note: selectedBranchId removed - filtering happens client-side via useMemo below
 

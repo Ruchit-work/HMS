@@ -127,7 +127,7 @@ export default function InteractiveFemaleReproductiveSVG({ onPartSelect, selecte
     return () => {
       svg.removeEventListener("click", handleClickOutside)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [svgContent])
 
   useEffect(() => {

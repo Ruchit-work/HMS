@@ -282,7 +282,7 @@ export function usePublicRoute() {
     })
 
     // Handle browser back button and page visibility
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const handlePageshow = async (_event: PageTransitionEvent) => {
       // Re-check auth when page is shown (back button or forward button)
       // event.persisted means page was loaded from cache (back button)

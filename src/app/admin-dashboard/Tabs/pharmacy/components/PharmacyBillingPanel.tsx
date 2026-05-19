@@ -774,7 +774,6 @@ export function PharmacyBillingPanel({
                 const qty = Math.max(0, Number(line.quantity) || 0)
                 const rate = med ? Number(med.sellingPrice) || 0 : 0
                 const amount = qty * rate
-                const lineTax = amount * (taxPercent / 100)
                 const batches = line.medicineId ? getBatches(line.medicineId) : []
                 const available = line.medicineId ? getAvailable(line.medicineId) : 0
                 const selectedBatch = line.batchId ? batches.find((b) => b.id === line.batchId) : batches[0]

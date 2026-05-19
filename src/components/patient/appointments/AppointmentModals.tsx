@@ -174,7 +174,7 @@ interface AppointmentSuccessModalProps {
 
 function AppointmentSuccessModalContent({
   appointmentData,
-  onClose,
+  onClose: _onClose,
 }: {
   appointmentData: NonNullable<AppointmentSuccessModalProps["appointmentData"]>
   onClose: () => void

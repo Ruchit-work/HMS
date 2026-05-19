@@ -13,7 +13,7 @@ export function AddStockForm({
   onSuccess,
   onError,
   getToken,
-  hospitalId,
+  hospitalId: _hospitalId,
 }: {
   branches: Array<{ id: string; name: string }>
   medicines: PharmacyMedicine[]

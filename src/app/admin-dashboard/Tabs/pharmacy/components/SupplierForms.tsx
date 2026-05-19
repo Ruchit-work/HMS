@@ -8,7 +8,7 @@ export function AddSupplierForm({
   onSuccess,
   onError,
   getToken,
-  hospitalId,
+  hospitalId: _hospitalId,
 }: {
   onSuccess: () => void
   onError: (e: string) => void

@@ -4,7 +4,6 @@ import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import { RefundCashModal } from '@/components/pharmacy/RefundCashModal'
 import type { RefundNotesRecord } from '@/components/pharmacy/RefundCashModal'
 import type {
-  BranchMedicineStock,
   PharmacyCashSession,
   PharmacyCashierProfile,
   PharmacyCounter,

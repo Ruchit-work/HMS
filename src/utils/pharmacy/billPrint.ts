@@ -173,7 +173,6 @@ async function sendToPrintBridge(
 
 export function buildBillHTML(data: BillData): string {
   const dt = normalizeDateTime(data.date)
-  const hasDiscount = (data.discountAmount ?? 0) > 0
   const hasDoctor = Boolean(data.doctorName && String(data.doctorName).trim())
   const paymentMethod = (data.paymentMethod || "cash").toUpperCase()
   const invoiceNo = data.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`

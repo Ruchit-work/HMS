@@ -28,7 +28,7 @@ function PlayIcon({ className }: { className?: string }) {
 
 export default function AppointmentActionsCard({
   appointment,
-  updating,
+  updating: _updating,
   onOpenDocuments,
   onOpenConsentVideo,
 }: AppointmentActionsCardProps) {

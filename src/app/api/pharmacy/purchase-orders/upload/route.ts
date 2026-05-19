@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
   if (kind === 'excel') {
     try {
       rows = await parseExcelBuffer(buffer)
-    } catch (e) {
+    } catch {
       return NextResponse.json({
         success: false,
         error: 'Failed to parse Excel. Ensure .xlsx/.xls with a header row (e.g. name, quantity).',
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     try {
       const text = await extractPdfText(buffer)
       rows = parsePdfText(text)
-    } catch (e) {
+    } catch {
       return NextResponse.json({
         success: false,
         error: 'Failed to parse PDF. Try an Excel file for best results.',

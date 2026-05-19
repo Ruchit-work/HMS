@@ -59,7 +59,7 @@ export default function AdminDashboardOverview({
   setTrendView,
   filteredAppointments,
   branches,
-  selectedBranchId,
+  selectedBranchId: _selectedBranchId,
   filteredRecentAppointments,
   showRecentAppointments,
   setShowRecentAppointments,
@@ -72,7 +72,6 @@ export default function AdminDashboardOverview({
   systemAlerts = {}
 }: AdminDashboardOverviewProps) {
   const trendData = displayStats.appointmentTrends[trendView] || []
-  const trendTotal = displayStats.appointmentTotals[trendView] || 0
   const maxTrendCount = trendData.reduce((max, p) => Math.max(max, p.count), 0)
   const safeTrendCount = Math.max(maxTrendCount, 1)
   const innerWidth = chartSize.width - chartPadding.left - chartPadding.right

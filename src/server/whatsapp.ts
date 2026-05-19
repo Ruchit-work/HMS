@@ -1,7 +1,7 @@
 import { sendTextMessage as metaSendTextMessage } from "@/server/metaWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 export async function getMessageStatus(_messageId: string): Promise<{ status?: string; errorCode?: number; errorMessage?: string; dateSent?: Date; dateUpdated?: Date } | null> {
   return null
 }

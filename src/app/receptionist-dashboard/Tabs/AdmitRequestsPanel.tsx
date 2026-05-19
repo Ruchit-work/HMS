@@ -191,7 +191,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [assignInitialDeposit, setAssignInitialDeposit] = useState("")
   const [assignInitialDepositMode, setAssignInitialDepositMode] = useState("cash")
   const [assignLoading, setAssignLoading] = useState(false)
-  const [cancelLoadingId, setCancelLoadingId] = useState<string | null>(null)
+  const [, setCancelLoadingId] = useState<string | null>(null)
 
   const [rooms, setRooms] = useState<Room[]>([])
   const [roomsLoading, setRoomsLoading] = useState(false)
@@ -410,7 +410,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     }
   }
 
-  const handleCancelAdmitRequest = async (request: AdmissionRequest) => {
+  const _handleCancelAdmitRequest = async (request: AdmissionRequest) => {
     const confirmation = window.confirm("Cancel this admission request? The appointment will be marked as completed.")
     if (!confirmation) return
     const cancelReason = window.prompt("Optional: add a cancellation note for history.") || undefined

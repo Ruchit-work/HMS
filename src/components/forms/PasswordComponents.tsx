@@ -84,7 +84,7 @@ type Accent = "purple" | "teal"
 
 export function ChangePasswordSection({
   userEmail,
-  accent = "teal",
+  accent: _accent = "teal",
   notify,
 }: {
   userEmail: string

@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
@@ -22,7 +21,6 @@ import type { Branch } from '@/types/branch'
 import type {
   PharmacyMedicine,
   BranchMedicineStock,
-  MedicineBatch,
   PharmacySupplier,
   PharmacySale,
   LowStockAlert,
@@ -35,18 +33,13 @@ import type {
   PharmacyExpense,
   PharmacyExpenseCategory,
 } from '@/types/pharmacy'
-import { generateBillPDFAndPrint } from '@/utils/pharmacy/billPrint'
-import { BarcodeCameraScanner } from '@/components/pharmacy/BarcodeCameraScanner'
 import { PharmacyQueueSection } from './pharmacy/PharmacyQueueSection'
 import { createPharmacyApiClient } from './pharmacy/api/pharmacyApiClient'
 import {
   ActionEmptyState,
-  DaysCoverBadge,
   ShiftCloseChecklist,
-  getTransferStatusMeta,
 } from './pharmacy/components/RealWorldUiBlocks'
 import { DispenseModal } from './pharmacy/components/DispenseModal'
-import { AddStockForm } from './pharmacy/components/InventoryForms'
 import { InventoryTabContent } from './pharmacy/components/InventoryTabContent'
 import { AddMedicineForm, EditMinLevelModal } from './pharmacy/components/InventoryModals'
 import { OrdersTabContent } from './pharmacy/components/OrdersTabContent'
@@ -57,19 +50,14 @@ import { SalesTabContent } from './pharmacy/components/SalesTabContent'
 import { CashExpensesDailyContent } from './pharmacy/components/CashExpensesDailyContent'
 import { CashExpensesShiftContent } from './pharmacy/components/CashExpensesShiftContent'
 import { SettingsTabContent } from './pharmacy/components/SettingsTabContent'
-import { BarcodeScanInput, MedicineSearchSelect, POSMedicineSearch } from './pharmacy/components/SearchInputs'
 import { SuppliersTabContent } from './pharmacy/components/SuppliersTabContent'
 import { AddSupplierForm, EditSupplierForm } from './pharmacy/components/SupplierForms'
-import { ReceiveByFileForm } from './pharmacy/components/StockTransferAndImportForms'
 import { TransfersTabContent } from './pharmacy/components/TransfersTabContent'
 import { AddPharmacistModalContent } from './pharmacy/components/UserManagementForms'
-import { MedicineFileUploader, OrderFileUploader } from './pharmacy/components/Uploaders'
 import { UsersTabContent } from './pharmacy/components/UsersTabContent'
-import { WalkInSaleForm } from './pharmacy/components/WalkInSaleForm'
-import { CASH_DENOMS, PHARMACY_UI, RETURN_REASON_OPTIONS, createEmptyCashNotes } from './pharmacy/constants'
+import { CASH_DENOMS, RETURN_REASON_OPTIONS, createEmptyCashNotes } from './pharmacy/constants'
 import {
   computeCloseShiftPreview,
-  computeDailySummary,
   computeDailySummaryDayRows,
   computeDailySummaryRows,
   computePeriodSummaries,
@@ -93,7 +81,6 @@ import {
 } from './pharmacy/inventoryReports'
 import {
   buildInventoryFilterRows,
-  daysUntilExpiryForBatch,
   getNearestExpiry,
   type InventoryExpiryFilter,
   type InventoryStatusFilter,
@@ -116,17 +103,12 @@ import {
   computeCategoryDonutData,
   computeInventoryHealthCounts,
   computeInventoryHealthItems,
-  computeLast7DaysSales,
   computePeriodRefundTotal,
   computePeriodSalesCount,
   computePeriodSalesTotal,
-  computePieChartData,
-  computeRecordTotals,
   computeSalesTrendData,
   type OverviewDateRange,
-  type RecordPeriod,
 } from './pharmacy/overviewDerived'
-import { downloadPurchaseOrderPDF, printPurchaseOrderPDF } from './pharmacy/purchaseOrderPdf'
 import type { QueueItem } from './pharmacy/types'
 
 type PharmacySubTab = 'overview' | 'inventory' | 'queue' | 'sales' | 'returns' | 'suppliers' | 'orders' | 'transfers' | 'analytics' | 'reports' | 'users' | 'cash_and_expenses' | 'settings'
@@ -321,7 +303,7 @@ export default function PharmacyManagement() {
   const [defaultPrinterId, setDefaultPrinterId] = useState('')
   const [printBridgeUrl, setPrintBridgeUrl] = useState('')
   type CashExpensePeriod = 'today' | 'week' | 'month' | 'year'
-  const [cashExpensePeriod, setCashExpensePeriod] = useState<CashExpensePeriod>('today')
+  const [cashExpensePeriod, _setCashExpensePeriod] = useState<CashExpensePeriod>('today')
   type CashExpenseSubTab = 'shift' | 'daily'
   const [cashExpenseSubTab, setCashExpenseSubTab] = useState<CashExpenseSubTab>('shift')
   const [dailySummarySearch, setDailySummarySearch] = useState('')
@@ -334,7 +316,7 @@ export default function PharmacyManagement() {
   const [expandedDailySummaryDates, setExpandedDailySummaryDates] = useState<Set<string>>(new Set())
   const [showExpenseCashModal, setShowExpenseCashModal] = useState(false)
   const [pendingExpensePayload, setPendingExpensePayload] = useState<{ amount: number; date: string; note: string; paymentMethod: string } | null>(null)
-  const [openedByName, setOpenedByName] = useState<string>('')
+  const [openedByName, _setOpenedByName] = useState<string>('')
   const [selectedCashierId, setSelectedCashierId] = useState<string>('')
   const [selectedCounterId, setSelectedCounterId] = useState<string>('')
   const [cashiers, setCashiers] = useState<PharmacyCashierProfile[]>([])
@@ -471,7 +453,7 @@ export default function PharmacyManagement() {
       if (expResult.ok && expResult.data.success && Array.isArray(expResult.data.expenses)) {
         setExpenses(expResult.data.expenses as PharmacyExpense[])
       }
-    } catch (e) {
+    } catch {
       // ignore for now; page will show empty state
     }
   }, [activeHospitalId, branchFilter, expenseFilters, getToken])
@@ -717,24 +699,6 @@ export default function PharmacyManagement() {
     }
   }, [fetchPharmacy, fetchCashSessions, fetchExpensesAndCategories, branchFilter, subTab])
 
-  const [recordPeriod, setRecordPeriod] = useState<RecordPeriod>('monthly')
-  const { salesRecordTotal, purchaseRecordTotal } = useMemo(
-    () => computeRecordTotals({ recordPeriod, branchFilter, sales, purchaseOrders }),
-    [recordPeriod, branchFilter, sales, purchaseOrders]
-  )
-
-  /** Last 7 days sales for bar chart (by day) */
-  const last7DaysSales = useMemo(
-    () => computeLast7DaysSales({ branchFilter, sales }),
-    [branchFilter, sales]
-  )
-
-  /** Pie chart segments: Purchases, Suppliers, Sales, No Sales (reference design) */
-  const pieChartData = useMemo(
-    () => computePieChartData({ salesRecordTotal, purchaseRecordTotal, suppliersCount: suppliers.length }),
-    [salesRecordTotal, purchaseRecordTotal, suppliers.length]
-  )
-
   /** Overview dashboard date range: today, 7d, 30d, 6m, year, all */
   const [overviewDateRange, setOverviewDateRange] = useState<OverviewDateRange>('7d')
 
@@ -828,12 +792,6 @@ export default function PharmacyManagement() {
     goToPage: goToSalesPage,
     setPageSize: setSalesPageSize,
   } = useTablePagination(filteredSales, { initialPageSize: 10 })
-
-  // Daily income & expense for Cash & Expenses tab (today only)
-  const dailySummary = useMemo(
-    () => computeDailySummary(sales, expenses, branchFilter),
-    [sales, expenses, branchFilter]
-  )
 
   // Sales that occurred today (by dispensedAt date) – used for Active Shift Info totals and Recent Sales table
   const recentSalesToday = useMemo(
@@ -1004,14 +962,6 @@ export default function PharmacyManagement() {
     [counters, counterSearchQuery]
   )
 
-  // simple keyframes for row expand animation (fade + slight slide)
-  const expandStyle = `
-    @keyframes fadeExpand {
-      0% { opacity: 0; transform: translateY(-4px); }
-      100% { opacity: 1; transform: translateY(0); }
-    }
-  `
-
   const paymentModeSummary = useMemo(
     () => computePaymentModeSummary({ sales, branchFilter }),
     [sales, branchFilter]
@@ -1023,7 +973,7 @@ export default function PharmacyManagement() {
     [analytics?.mostPrescribed]
   )
 
-  const [overviewRecentSalesSearch, setOverviewRecentSalesSearch] = useState('')
+  const [overviewRecentSalesSearch, _setOverviewRecentSalesSearch] = useState('')
   const recentSalesFiltered = useMemo(
     () => filterOverviewRecentSales({ branchFilter, sales, overviewRecentSalesSearch }),
     [branchFilter, sales, overviewRecentSalesSearch]

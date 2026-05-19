@@ -1,7 +1,6 @@
 "use client"
 
 import { ReactNode } from 'react'
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition'
 
 interface SpeechRecognitionProviderProps {
   children: ReactNode

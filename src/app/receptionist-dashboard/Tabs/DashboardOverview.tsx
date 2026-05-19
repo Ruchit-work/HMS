@@ -132,7 +132,7 @@ export default function DashboardOverview({ onTabChange, receptionistBranchId }:
 
     const unsubAppointments = onSnapshot(appointmentsRef, (snapshot) => {
       const all = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as any))
-      let filtered = receptionistBranchId ? all.filter((a) => a.branchId === receptionistBranchId) : all
+      const filtered = receptionistBranchId ? all.filter((a) => a.branchId === receptionistBranchId) : all
 
       const today = filtered.filter((a) => a.appointmentDate === todayStr && a.status !== 'whatsapp_pending' && !a.whatsappPending)
       const whatsappPending = filtered.filter((a) => a.whatsappPending === true || a.status === 'whatsapp_pending')

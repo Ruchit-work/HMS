@@ -53,7 +53,7 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
   useEffect(() => {
     if (!user || !activeHospitalId) return
     fetchDoctorAnalytics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user, activeHospitalId, timeRange, selectedBranchId])
 
   const formatHour12 = (hour: number): string => {

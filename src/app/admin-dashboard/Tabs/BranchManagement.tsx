@@ -63,7 +63,7 @@ export default function BranchManagement() {
 
   useEffect(() => {
     loadBranches()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [activeHospitalId])
 
   const handleCreateBranch = async (e: React.FormEvent) => {

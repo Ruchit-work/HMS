@@ -76,9 +76,6 @@ export async function POST(req: NextRequest) {
 
     const accessToken = await tokenResponse.text()
 
-    // Convert audio to base64 for Azure API
-    const base64Audio = audioData.toString('base64')
-
     // Azure Speech-to-Text API endpoint
     const apiUrl = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=${language}&format=detailed`
 

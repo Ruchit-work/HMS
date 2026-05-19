@@ -195,7 +195,7 @@ export default function VoiceInput({
         maxDurationTimeoutRef.current = null
         stopListening()
       }, CLOUD_MAX_DURATION_MS)
-    } catch (err) {
+    } catch {
       throw new Error('Microphone access denied or not available')
     }
   }
@@ -269,7 +269,7 @@ export default function VoiceInput({
         maxDurationTimeoutRef.current = null
         stopListening()
       }, CLOUD_MAX_DURATION_MS)
-    } catch (err) {
+    } catch {
       throw new Error('Microphone access denied or not available')
     }
   }

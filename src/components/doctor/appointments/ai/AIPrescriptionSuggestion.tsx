@@ -23,13 +23,13 @@ export default function AIPrescriptionSuggestion({
   aiPrescriptionText,
   removedIndices,
   existingMedicines,
-  onAddAll,
+  onAddAll: _onAddAll,
   onAddSingle,
   onRemove,
   onRemoveAll,
   onRegenerate,
-  showUsePrevious,
-  onCopyPrevious,
+  showUsePrevious: _showUsePrevious,
+  onCopyPrevious: _onCopyPrevious,
 }: AIPrescriptionSuggestionProps) {
   if (isLoading) {
     return (

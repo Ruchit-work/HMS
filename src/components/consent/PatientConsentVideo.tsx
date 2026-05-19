@@ -74,7 +74,7 @@ export default function PatientConsentVideo({
 
   useEffect(() => {
     if (patientUid) fetchConsents()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [patientUid, appointmentId])
 
   // ---------------------------------------------------------------------------

@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
@@ -32,7 +31,6 @@ const initialNewPatient: NewPatientForm = {
 const BRANCH_STORAGE_KEY_PREFIX = "doctor-book-appointment-branch"
 
 export default function DoctorBookAppointmentPage() {
-  const router = useRouter()
   const { user, loading: authLoading } = useAuth("doctor")
   const { activeHospitalId } = useMultiHospital()
   const { branches, loadingBranches } = useDoctorBranches(activeHospitalId)

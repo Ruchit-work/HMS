@@ -323,15 +323,15 @@ if (typeof globalThis !== 'undefined') {
   // Polyfill DOMMatrix - simple stub
   if (!globalThis.DOMMatrix) {
     (globalThis as any).DOMMatrix = class DOMMatrix {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       constructor(..._args: any[]) {
         // Stub implementation
       }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       static fromMatrix(..._args: any[]) { return new DOMMatrix() }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       static fromFloat32Array(..._args: any[]) { return new DOMMatrix() }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       static fromFloat64Array(..._args: any[]) { return new DOMMatrix() }
     }
   }
@@ -353,26 +353,26 @@ if (typeof globalThis !== 'undefined') {
   // Polyfill Path2D - simple stub
   if (!globalThis.Path2D) {
     (globalThis as any).Path2D = class Path2D {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       constructor(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       addPath(..._args: any[]) {}
       closePath() {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       moveTo(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       lineTo(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       bezierCurveTo(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       quadraticCurveTo(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       arc(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       arcTo(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       ellipse(..._args: any[]) {}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       rect(..._args: any[]) {}
     }
   }

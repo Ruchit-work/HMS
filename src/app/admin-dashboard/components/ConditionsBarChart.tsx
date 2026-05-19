@@ -39,7 +39,6 @@ export default function ConditionsBarChart({
   }
 
   const barHeight = 32
-  const gap = 8
 
   return (
     <div className="flex flex-col w-full gap-1">

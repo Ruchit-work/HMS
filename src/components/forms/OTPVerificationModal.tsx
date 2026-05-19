@@ -65,7 +65,7 @@ export default function OTPVerificationModal({
         }
       })()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isOpen, phone])
 
   useEffect(() => {
@@ -166,7 +166,7 @@ function OTPVerificationModalContent({
   countryCode,
   title,
   subtitle,
-  onVerified,
+  onVerified: _onVerified,
   onChangePhone,
   otp,
   setOtp,

@@ -145,7 +145,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
   useEffect(() => {
     if (!user || !activeHospitalId) return
     fetchFinancialAnalytics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user, activeHospitalId, timeRange, selectedBranchId])
 
   const fetchFinancialAnalytics = async () => {

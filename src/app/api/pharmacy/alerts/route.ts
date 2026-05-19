@@ -58,8 +58,6 @@ export async function GET(request: NextRequest) {
 
   const lowStock: LowStockAlert[] = []
   const expiring: ExpiryAlert[] = []
-  const today = new Date().toISOString().slice(0, 10)
-
   for (const doc of stockSnap.docs) {
     const data = doc.data()
     const branchId = data.branchId

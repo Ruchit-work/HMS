@@ -8,7 +8,7 @@ export function AddMedicineForm({
   onSuccess,
   onError,
   getToken,
-  hospitalId,
+  hospitalId: _hospitalId,
   supplierOptions,
   initialBarcode = '',
 }: {
