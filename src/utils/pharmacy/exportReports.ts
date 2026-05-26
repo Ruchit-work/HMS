@@ -4,10 +4,6 @@
 import ExcelJS from 'exceljs'
 import { jsPDF } from 'jspdf'
 
-function safeNum(n: number): number {
-  return typeof n === 'number' && !Number.isNaN(n) ? n : 0
-}
-
 export async function exportToExcel(
   filename: string,
   sheetName: string,

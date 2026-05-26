@@ -63,7 +63,7 @@ export default function PieChart({
   maxSlices = 6,
   emptyMessage = "No data available",
   getLabel = (item) => item.name,
-  getCountLabel = (item, count) => `${count}`
+  getCountLabel = (_item, count) => `${count}`
 }: PieChartProps) {
   if (data.length === 0) {
     return (

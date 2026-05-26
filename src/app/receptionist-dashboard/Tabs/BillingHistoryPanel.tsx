@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/Button"
-import { auth } from "@/firebase/config"
 import PaymentMethodSection, {
   PaymentData as BillingPaymentData,
   PaymentMethodOption as BillingPaymentMethod,
 } from "@/components/payments/PaymentMethodSection"
 import { BillingRecord } from "@/types/patient"
+import { authedFetchJson } from "@/utils/client/authedFetch"
 
 // Show more billing records per page now that cards are more compact
 const BILLING_PAGE_SIZE = 10
@@ -55,27 +55,11 @@ export default function BillingHistoryPanel({
     try {
       setBillingLoading(true)
       setBillingError(null)
-
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to access billing records")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch("/api/receptionist/billing-records", {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to load billing records")
-      }
-      const data = await res.json().catch(() => ({}))
+      const data = await authedFetchJson<{ records?: any[] }>(
+        "/api/receptionist/billing-records",
+        {},
+        "Failed to load billing records"
+      )
       const records = Array.isArray(data?.records) ? data.records : []
       const formatted: BillingRecord[] = records.map((record: any) => ({
         id: String(record.id || ""),
@@ -313,34 +297,26 @@ export default function BillingHistoryPanel({
     if (!selectedBillingRecord) return
     setProcessingBillingPayment(true)
     try {
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to process payments")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch("/api/patient/billing/pay", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const data = await authedFetchJson<{
+        paymentMethod?: BillingPaymentMethod
+        paidAt?: string
+        paymentReference?: string | null
+        transactionId?: string | null
+      }>(
+        "/api/patient/billing/pay",
+        {
+          method: "POST",
+          body: JSON.stringify({
           billingId: selectedBillingRecord.id,
           paymentMethod: billingPaymentMethod,
           actor: "receptionist",
           type: selectedBillingRecord.type, // Pass type to help API identify collection
           // Pass hospitalId so API can find hospital-scoped appointment billing
           hospitalId: selectedBillingRecord.hospitalId,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to record payment")
-      }
-      const data = await res.json().catch(() => ({}))
+          }),
+        },
+        "Failed to record payment"
+      )
       setBillingRecords((prev) =>
         prev.map((record) =>
           record.id === selectedBillingRecord.id

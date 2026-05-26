@@ -7,14 +7,28 @@ import { VisitingHours, DaySchedule, Appointment, Doctor } from "@/types/patient
 import { BranchTimings } from "@/types/branch"
 import { normalizeBlockedDates } from "@/utils/analytics/blockedDates"
 
+const WEEK_DAYS: (keyof VisitingHours)[] = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+]
+
+const WORKING_DAY_SLOTS = [{ start: "09:00", end: "13:00" }, { start: "14:00", end: "17:00" }]
+const SATURDAY_SLOTS = [{ start: "09:00", end: "13:00" }]
+const SLOT_DURATION = 15 // minutes
+
 // Default visiting hours (9 AM - 5 PM with 1-2 PM lunch break)
 export const DEFAULT_VISITING_HOURS: VisitingHours = {
-  monday: { isAvailable: true, slots: [{ start: "09:00", end: "13:00" }, { start: "14:00", end: "17:00" }] },
-  tuesday: { isAvailable: true, slots: [{ start: "09:00", end: "13:00" }, { start: "14:00", end: "17:00" }] },
-  wednesday: { isAvailable: true, slots: [{ start: "09:00", end: "13:00" }, { start: "14:00", end: "17:00" }] },
-  thursday: { isAvailable: true, slots: [{ start: "09:00", end: "13:00" }, { start: "14:00", end: "17:00" }] },
-  friday: { isAvailable: true, slots: [{ start: "09:00", end: "13:00" }, { start: "14:00", end: "17:00" }] },
-  saturday: { isAvailable: true, slots: [{ start: "09:00", end: "13:00" }] },
+  monday: { isAvailable: true, slots: WORKING_DAY_SLOTS },
+  tuesday: { isAvailable: true, slots: WORKING_DAY_SLOTS },
+  wednesday: { isAvailable: true, slots: WORKING_DAY_SLOTS },
+  thursday: { isAvailable: true, slots: WORKING_DAY_SLOTS },
+  friday: { isAvailable: true, slots: WORKING_DAY_SLOTS },
+  saturday: { isAvailable: true, slots: SATURDAY_SLOTS },
   sunday: { isAvailable: false, slots: [] }
 }
 
@@ -75,8 +89,7 @@ export function minutesToTime(minutes: number): string {
 
 // Get day name from date
 export function getDayName(date: Date): keyof VisitingHours {
-  const days: (keyof VisitingHours)[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-  return days[date.getDay()]
+  return WEEK_DAYS[date.getDay()]
 }
 
 // Generate all possible 15-minute time slots for a day's visiting hours
@@ -84,7 +97,6 @@ export function generateTimeSlots(daySchedule: DaySchedule): string[] {
   if (!daySchedule.isAvailable) return []
   
   const slotSet = new Set<string>() // Use Set to avoid duplicates
-  const SLOT_DURATION = 15 // minutes
   
   daySchedule.slots.forEach(timeSlot => {
     const startMinutes = timeToMinutes(timeSlot.start)
@@ -107,7 +119,6 @@ export function isTimeSlotAvailable(
   // Normalize slot time before comparison
   const normalizedSlotTime = normalizeTime(slotTime)
   const slotMinutes = timeToMinutes(normalizedSlotTime)
-  const SLOT_DURATION = 15 // minutes
   
   // Check if any existing appointment conflicts with this slot
   return !existingAppointments.some(apt => {
@@ -163,30 +174,13 @@ export function getBlockedDateInfo(doctor: Doctor, date: Date): { reason: string
  * Convert branch timings to VisitingHours format
  */
 export function convertBranchTimingsToVisitingHours(branchTimings: BranchTimings): VisitingHours {
-  const visitingHours: VisitingHours = {
-    monday: branchTimings.monday 
-      ? { isAvailable: true, slots: [{ start: branchTimings.monday.start, end: branchTimings.monday.end }] }
-      : { isAvailable: false, slots: [] },
-    tuesday: branchTimings.tuesday 
-      ? { isAvailable: true, slots: [{ start: branchTimings.tuesday.start, end: branchTimings.tuesday.end }] }
-      : { isAvailable: false, slots: [] },
-    wednesday: branchTimings.wednesday 
-      ? { isAvailable: true, slots: [{ start: branchTimings.wednesday.start, end: branchTimings.wednesday.end }] }
-      : { isAvailable: false, slots: [] },
-    thursday: branchTimings.thursday 
-      ? { isAvailable: true, slots: [{ start: branchTimings.thursday.start, end: branchTimings.thursday.end }] }
-      : { isAvailable: false, slots: [] },
-    friday: branchTimings.friday 
-      ? { isAvailable: true, slots: [{ start: branchTimings.friday.start, end: branchTimings.friday.end }] }
-      : { isAvailable: false, slots: [] },
-    saturday: branchTimings.saturday 
-      ? { isAvailable: true, slots: [{ start: branchTimings.saturday.start, end: branchTimings.saturday.end }] }
-      : { isAvailable: false, slots: [] },
-    sunday: branchTimings.sunday 
-      ? { isAvailable: true, slots: [{ start: branchTimings.sunday.start, end: branchTimings.sunday.end }] }
-      : { isAvailable: false, slots: [] },
-  }
-  return visitingHours
+  return WEEK_DAYS.reduce((acc, day) => {
+    const schedule = branchTimings[day]
+    acc[day] = schedule
+      ? { isAvailable: true, slots: [{ start: schedule.start, end: schedule.end }] }
+      : { isAvailable: false, slots: [] }
+    return acc
+  }, {} as VisitingHours)
 }
 
 /**
@@ -264,9 +258,7 @@ export function formatTimeDisplay(time: string): string {
 
 // Get summary of doctor availability (which days they're available)
 export function getAvailabilityDays(visitingHours: VisitingHours = DEFAULT_VISITING_HOURS): string[] {
-  const days: (keyof VisitingHours)[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-  
-  return days
+  return WEEK_DAYS.slice(1).concat("sunday")
     .filter(day => visitingHours[day].isAvailable && visitingHours[day].slots.length > 0)
     .map(day => day.charAt(0).toUpperCase() + day.slice(1, 3)) // Mon, Tue, etc.
 }

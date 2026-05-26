@@ -3,8 +3,9 @@
 import { useCallback, useEffect } from "react"
 import type { Dispatch, SetStateAction } from "react"
 import { collection, getDocs } from "firebase/firestore"
-import { auth, db } from "@/firebase/config"
+import { db } from "@/firebase/config"
 import type { Admission, AdmissionRequest, Room } from "@/types/patient"
+import { authedFetchJson } from "@/utils/client/authedFetch"
 
 type DoctorOption = {
   uid: string
@@ -60,17 +61,7 @@ export function useIpdBootstrapData({
       setRoomsLoading(true)
       let roomsSnap = await getDocs(collection(db, "rooms"))
       if (roomsSnap.empty) {
-        const currentUser = auth.currentUser
-        if (currentUser) {
-          const token = await currentUser.getIdToken()
-          await fetch("/api/admin/rooms/seed", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          })
-        }
+        await authedFetchJson("/api/admin/rooms/seed", { method: "POST" }, "Failed to seed rooms")
         roomsSnap = await getDocs(collection(db, "rooms"))
       }
       let roomsList = roomsSnap.docs.map((r) => {
@@ -100,20 +91,11 @@ export function useIpdBootstrapData({
   const fetchDoctors = useCallback(async () => {
     try {
       setDoctorsLoading(true)
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to fetch doctors")
-      const token = await currentUser.getIdToken()
-      const res = await fetch("/api/receptionist/doctors", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to load doctors")
-      }
-      const data = await res.json().catch(() => ({}))
+      const data = await authedFetchJson<{ doctors?: DoctorOption[] }>(
+        "/api/receptionist/doctors",
+        {},
+        "Failed to load doctors"
+      )
       const doctorOptions: DoctorOption[] = Array.isArray(data?.doctors) ? data.doctors : []
       setDoctors(doctorOptions)
     } catch {
@@ -126,20 +108,11 @@ export function useIpdBootstrapData({
   const fetchAdmissionPackages = useCallback(async () => {
     try {
       setPackagesLoading(true)
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to fetch packages")
-      const token = await currentUser.getIdToken()
-      const res = await fetch("/api/receptionist/admission-packages", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to load packages")
-      }
-      const data = await res.json().catch(() => ({}))
+      const data = await authedFetchJson<{ packages?: any[] }>(
+        "/api/receptionist/admission-packages",
+        {},
+        "Failed to load packages"
+      )
       const packages = Array.isArray(data?.packages) ? data.packages : []
       setAdmissionPackages(
         packages.map((pkg: any) => ({
@@ -163,20 +136,11 @@ export function useIpdBootstrapData({
     try {
       setAdmitRequestsLoading(true)
       setAdmitRequestsError(null)
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to access admission requests")
-      const token = await currentUser.getIdToken()
-      const res = await fetch("/api/receptionist/admission-requests", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to load admit requests")
-      }
-      const data = await res.json().catch(() => ({}))
+      const data = await authedFetchJson<{ requests?: any[] }>(
+        "/api/receptionist/admission-requests",
+        {},
+        "Failed to load admit requests"
+      )
       const requests = Array.isArray(data?.requests) ? data.requests : []
       const formatted: AdmissionRequest[] = requests.map((req: any) => ({
         id: String(req.id || ""),
@@ -206,20 +170,11 @@ export function useIpdBootstrapData({
     try {
       setAdmissionsLoading(true)
       setAdmissionsError(null)
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to access admissions")
-      const token = await currentUser.getIdToken()
-      const res = await fetch("/api/receptionist/admissions?includeAppointmentDetails=false", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to load admissions")
-      }
-      const data = await res.json().catch(() => ({}))
+      const data = await authedFetchJson<{ admissions?: any[] }>(
+        "/api/receptionist/admissions?includeAppointmentDetails=false",
+        {},
+        "Failed to load admissions"
+      )
       const items = Array.isArray(data?.admissions) ? data.admissions : []
       const formatted: Admission[] = items.map((item: any) => ({
         id: String(item.id || ""),

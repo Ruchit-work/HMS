@@ -91,6 +91,39 @@ interface DashboardStats {
   topDepartments: Array<{ department: string; count: number }>;
 }
 
+const TAB_IDS = [
+  "overview",
+  "patients",
+  "doctors",
+  "campaigns",
+  "appointments",
+  "billing",
+  "analytics",
+  "hospitals",
+  "admins",
+  "branches",
+  "staff",
+  "account",
+] as const
+type AdminTabId = (typeof TAB_IDS)[number]
+const isAdminTabId = (value: string): value is AdminTabId =>
+  (TAB_IDS as readonly string[]).includes(value)
+
+const TAB_META: Record<AdminTabId, { title: string; description: string }> = {
+  overview: { title: "Dashboard Overview", description: "Hospital management system overview" },
+  patients: { title: "Patient Management", description: "Manage patient records and information" },
+  doctors: { title: "Doctor Management", description: "Manage doctor profiles and schedules" },
+  campaigns: { title: "Campaigns", description: "Create, publish, and manage promotional campaigns" },
+  appointments: { title: "Appointment Management", description: "Monitor and manage all appointments" },
+  billing: { title: "Revenue & Analytics", description: "Comprehensive revenue analytics, billing records, and financial insights" },
+  analytics: { title: "Analytics Hub", description: "Unified analytics dashboard – patient, financial, and doctor performance insights" },
+  hospitals: { title: "Hospital Management", description: "Create and manage hospitals in the system" },
+  admins: { title: "Admin Assignment", description: "Create and assign admins to hospitals" },
+  branches: { title: "Branch Management", description: "Create and manage branches for your hospital" },
+  staff: { title: "Staff Management", description: "Create and manage receptionists & pharmacists for your hospital" },
+  account: { title: "My Account", description: "View your profile and update your login password" },
+}
+
 export default function AdminDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
   // Store raw data (unfiltered) for client-side filtering
@@ -128,7 +161,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get("tab")
-  const [activeTab, setActiveTab] = useState<"overview" | "patients" | "doctors" | "campaigns" | "appointments" | "billing" | "analytics" | "hospitals" | "admins" | "branches" | "staff" | "account">("overview")
+  const [activeTab, setActiveTab] = useState<AdminTabId>("overview")
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [billingSubTab, setBillingSubTab] = useState<"all" | "analytics">("all")
   const [analyticsSubTab, setAnalyticsSubTab] = useState<"overview" | "patients" | "financial" | "doctors" | "receptionists">("overview")
@@ -174,13 +207,14 @@ export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
   const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
+  const branchManagementEnabled = (activeHospital as any)?.multipleBranchesEnabled !== false
   const router = useRouter()
 
   // Sync activeTab with URL (limited set)
   useEffect(() => {
     if (!tabFromUrl) return
-    if (["overview","patients","doctors","campaigns","appointments","billing","analytics","hospitals","admins","branches","staff","account"].includes(tabFromUrl)) {
-      setActiveTab(tabFromUrl as any)
+    if (isAdminTabId(tabFromUrl)) {
+      setActiveTab(tabFromUrl)
     } else if (tabFromUrl === "receptionists" || tabFromUrl === "pharmacists") {
       setActiveTab("staff")
       setStaffSubTab(tabFromUrl)
@@ -813,7 +847,7 @@ export default function AdminDashboard() {
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
             </div>
             {/* Pharmacy tab removed from admin sidebar; pharmacy users use dedicated /pharmacy portal */}
-            {!isSuperAdmin && (activeHospital as any)?.multipleBranchesEnabled !== false && (
+            {!isSuperAdmin && branchManagementEnabled && (
               <TabButton
                 id="branches"
                 activeTab={activeTab}
@@ -877,36 +911,8 @@ export default function AdminDashboard() {
         {/* Standard Admin Page Header */}
         <header className={`px-4 sm:px-6 lg:px-6 pt-4 pb-0 ${!sidebarOpen ? 'pl-16 sm:pl-20 lg:pl-6' : ''}`}>
           <AdminPageHeader
-            title={
-              activeTab === "overview" ? "Dashboard Overview" :
-              activeTab === "patients" ? "Patient Management" :
-              activeTab === "doctors" ? "Doctor Management" :
-              activeTab === "campaigns" ? "Campaigns" :
-              activeTab === "appointments" ? "Appointment Management" :
-              activeTab === "billing" ? "Revenue & Analytics" :
-              activeTab === "analytics" ? "Analytics Hub" :
-              activeTab === "hospitals" ? "Hospital Management" :
-              activeTab === "admins" ? "Admin Assignment" :
-              activeTab === "branches" ? "Branch Management" :
-              activeTab === "staff" ? "Staff Management" :
-              activeTab === "account" ? "My Account" :
-              "Dashboard"
-            }
-            description={
-              activeTab === "overview" ? "Hospital management system overview" :
-              activeTab === "patients" ? "Manage patient records and information" :
-              activeTab === "doctors" ? "Manage doctor profiles and schedules" :
-              activeTab === "campaigns" ? "Create, publish, and manage promotional campaigns" :
-              activeTab === "appointments" ? "Monitor and manage all appointments" :
-              activeTab === "billing" ? "Comprehensive revenue analytics, billing records, and financial insights" :
-              activeTab === "analytics" ? "Unified analytics dashboard – patient, financial, and doctor performance insights" :
-              activeTab === "hospitals" ? "Create and manage hospitals in the system" :
-              activeTab === "admins" ? "Create and assign admins to hospitals" :
-              activeTab === "branches" ? "Create and manage branches for your hospital" :
-              activeTab === "staff" ? "Create and manage receptionists & pharmacists for your hospital" :
-              activeTab === "account" ? "View your profile and update your login password" :
-              "Administrative dashboard"
-            }
+            title={TAB_META[activeTab].title}
+            description={TAB_META[activeTab].description}
             controls={
               <>
                 {isSuperAdmin && hasMultipleHospitals && (
@@ -935,7 +941,7 @@ export default function AdminDashboard() {
                     </select>
                   </div>
                 )}
-                {branches.length > 0 && (activeHospital as any)?.multipleBranchesEnabled !== false && (
+                {branches.length > 0 && branchManagementEnabled && (
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium text-slate-700">Branch</label>
                     <select
@@ -979,7 +985,7 @@ export default function AdminDashboard() {
             />
           )}
           {activeTab === "branches" && !isSuperAdmin && (
-            (activeHospital as any)?.multipleBranchesEnabled !== false ? (
+            branchManagementEnabled ? (
               <BranchManagement />
             ) : (
               <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">

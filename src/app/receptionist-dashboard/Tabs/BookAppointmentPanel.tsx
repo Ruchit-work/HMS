@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore"
-import { db, auth } from "@/firebase/config"
+import { db } from "@/firebase/config"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { authedFetchJson } from "@/utils/client/authedFetch"
 import PaymentMethodSection, {
   PaymentData as BookingPaymentData,
   PaymentMethodOption as BookingPaymentMethod,
@@ -673,21 +674,11 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   }, [onPatientModeChange])
 
   const createPatientForBooking = useCallback(async () => {
-    // Get Firebase Auth token
-    const currentUser = auth.currentUser
-    if (!currentUser) {
-      throw new Error("You must be logged in to create patients")
-    }
-
-    const token = await currentUser.getIdToken()
-
-    const res = await fetch("/api/receptionist/create-patient", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    return authedFetchJson<{ id: string; patientId?: string }>(
+      "/api/receptionist/create-patient",
+      {
+        method: "POST",
+        body: JSON.stringify({
         patientData: {
           ...newPatient,
           status: "active",
@@ -696,12 +687,9 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         },
         password: newPatientPassword,
       }),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data?.error || "Failed to create patient")
-    }
-    return res.json()
+      },
+      "Failed to create patient"
+    )
   }, [newPatient, newPatientPassword])
 
   const createAppointment = useCallback(
@@ -740,14 +728,6 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
       }
       medicalHistory = historyParts.join(". ")
       
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to create appointments")
-      }
-
-      const token = await currentUser.getIdToken()
-
       const appointmentData = {
         patientId,
         patientName: `${patientPayload.firstName || ""} ${patientPayload.lastName || ""}`.trim(),
@@ -776,18 +756,14 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         updatedAt: new Date().toISOString(),
         createdBy: "receptionist",
       }
-      const res = await fetch("/api/receptionist/create-appointment", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        "/api/receptionist/create-appointment",
+        {
+          method: "POST",
+          body: JSON.stringify({ appointmentData }),
         },
-        body: JSON.stringify({ appointmentData }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to create appointment")
-      }
+        "Failed to create appointment"
+      )
       return appointmentData
     },
     [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId, symptomCategory, customSymptom, additionalFees]

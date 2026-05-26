@@ -353,7 +353,7 @@ function getTranslation(key: keyof typeof translations, language: Language = "en
 async function moveToBranchSelection(
   db: FirebaseFirestore.Firestore,
   phone: string,
-  normalizedPhone: string,
+  _normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   language: Language,
   session: BookingSession
@@ -454,9 +454,9 @@ async function moveToBranchSelection(
 }
 
 async function moveToDateSelection(
-  db: FirebaseFirestore.Firestore,
+  _db: FirebaseFirestore.Firestore,
   phone: string,
-  normalizedPhone: string,
+  _normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   language: Language
 ) {
@@ -1375,7 +1375,7 @@ async function handleBranchSelection(
   phone: string,
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
-  text: string,
+  _text: string,
   session: BookingSession
 ): Promise<boolean> {
   const language = session.language || "english"
@@ -2553,9 +2553,9 @@ function generateDateOptions(doctorData?: any): Array<{ id: string; title: strin
 }
 
 async function handleTimeSelection(
-  db: FirebaseFirestore.Firestore,
+  _db: FirebaseFirestore.Firestore,
   phone: string,
-  normalizedPhone: string,
+  _normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
   session: BookingSession

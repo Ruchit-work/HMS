@@ -20,6 +20,7 @@ import IpdSettingsSection from "@/app/receptionist-dashboard/components/admit-da
 import { useIpdAdmissionsDesk, type AdmissionsDeskFocus } from "@/app/receptionist-dashboard/hooks/useIpdAdmissionsDesk"
 import { useIpdDashboardInsights } from "@/app/receptionist-dashboard/hooks/useIpdDashboardInsights"
 import { useIpdBootstrapData } from "@/app/receptionist-dashboard/hooks/useIpdBootstrapData"
+import { authedFetchJson } from "@/utils/client/authedFetch"
 
 const roomTypeLabelMap: Record<Room["roomType"], string> = ROOM_TYPES.reduce((acc, type) => {
   acc[type.id] = type.name
@@ -191,8 +192,6 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [assignInitialDeposit, setAssignInitialDeposit] = useState("")
   const [assignInitialDepositMode, setAssignInitialDepositMode] = useState("cash")
   const [assignLoading, setAssignLoading] = useState(false)
-  const [, setCancelLoadingId] = useState<string | null>(null)
-
   const [rooms, setRooms] = useState<Room[]>([])
   const [roomsLoading, setRoomsLoading] = useState(false)
 
@@ -327,6 +326,12 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     },
     [onNotification]
   )
+  const notifySuccess = useCallback((message: string) => {
+    notify({ type: "success", message })
+  }, [notify])
+  const notifyError = useCallback((message: string) => {
+    notify({ type: "error", message })
+  }, [notify])
   const { fetchRooms, fetchAdmissionPackages, fetchAdmitRequests, fetchAdmissions } = useIpdBootstrapData({
     fallbackRoomNumbersByType,
     roomTypeRateMap,
@@ -372,78 +377,29 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     }
     setAssignLoading(true)
     try {
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to accept admission requests")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch(`/api/receptionist/admission-request/${selectedAdmitRequest.id}/accept`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        `/api/receptionist/admission-request/${selectedAdmitRequest.id}/accept`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            roomId: assignRoomId,
+            initialDeposit: Number(assignInitialDeposit || 0),
+            initialDepositPaymentMode: assignInitialDepositMode,
+            notes: assignNotes.trim() ? assignNotes.trim() : undefined,
+          }),
         },
-        body: JSON.stringify({
-          roomId: assignRoomId,
-          initialDeposit: Number(assignInitialDeposit || 0),
-          initialDepositPaymentMode: assignInitialDepositMode,
-          notes: assignNotes.trim() ? assignNotes.trim() : undefined,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to assign room")
-      }
-      notify({ type: "success", message: "Patient admitted successfully." })
+        "Failed to assign room"
+      )
+      notifySuccess("Patient admitted successfully.")
       setAdmitRequests((prev) => prev.filter((req) => req.id !== selectedAdmitRequest.id))
       setRooms((prev) => prev.map((room) => (room.id === assignRoomId ? { ...room, status: "occupied" } : room)))
       fetchAdmissions()
       setAssignModalOpen(false)
       setSelectedAdmitRequest(null)
     } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to assign room" })
+      notifyError(error?.message || "Failed to assign room")
     } finally {
       setAssignLoading(false)
-    }
-  }
-
-  const _handleCancelAdmitRequest = async (request: AdmissionRequest) => {
-    const confirmation = window.confirm("Cancel this admission request? The appointment will be marked as completed.")
-    if (!confirmation) return
-    const cancelReason = window.prompt("Optional: add a cancellation note for history.") || undefined
-    setCancelLoadingId(request.id)
-    try {
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to cancel admission requests")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch(`/api/receptionist/admission-request/${request.id}/cancel`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          reason: cancelReason && cancelReason.trim() ? cancelReason.trim() : undefined,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to cancel admission request")
-      }
-      setAdmitRequests((prev) => prev.filter((req) => req.id !== request.id))
-      notify({ type: "success", message: "Admission request cancelled." })
-    } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to cancel admission request" })
-    } finally {
-      setCancelLoadingId(null)
     }
   }
 
@@ -478,13 +434,6 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     if (!selectedAdmission) return
     setDischargeLoading(true)
     try {
-      // Get Firebase Auth token
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to discharge patients")
-      }
-
-      const token = await currentUser.getIdToken()
       const selectedOtherChargeItems = DISCHARGE_OTHER_CHARGE_OPTIONS.filter((option) =>
         dischargeOtherChargeSelections.includes(option.id)
       ).map((item) => ({
@@ -499,13 +448,11 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         .map((item) => `${item.label} (₹${Number(item.amount || 0).toLocaleString()})`)
         .join(", ")
 
-      const res = await fetch(`/api/receptionist/admissions/${selectedAdmission.id}/discharge`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      await authedFetchJson(
+        `/api/receptionist/admissions/${selectedAdmission.id}/discharge`,
+        {
+          method: "POST",
+          body: JSON.stringify({
           doctorFee: dischargeDoctorFee ? Number(dischargeDoctorFee) : undefined,
           prescriptionCharges: dischargePrescriptionCharges
             ? Number(dischargePrescriptionCharges)
@@ -514,19 +461,17 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
           otherCharges: selectedOtherChargesTotal > 0 ? selectedOtherChargesTotal : undefined,
           otherDescription: selectedOtherChargesDescription || undefined,
           notes: dischargeNotes?.trim() || undefined,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to discharge patient")
-      }
-      notify({ type: "success", message: "Patient discharged successfully." })
+          }),
+        },
+        "Failed to discharge patient"
+      )
+      notifySuccess("Patient discharged successfully.")
       setAdmissions((prev) => prev.filter((admission) => admission.id !== selectedAdmission.id))
       setRooms((prev) => prev.map((room) => (room.id === selectedAdmission.roomId ? { ...room, status: "available" } : room)))
       setDischargeModalOpen(false)
       setSelectedAdmission(null)
     } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to discharge patient" })
+      notifyError(error?.message || "Failed to discharge patient")
     } finally {
       setDischargeLoading(false)
     }
@@ -568,26 +513,15 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     }
     setDirectPatientLookupLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to search patients")
-      }
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/patients/search?q=${encodeURIComponent(query)}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to search patients")
-      }
-      const data = await res.json().catch(() => ({}))
+      const data = await authedFetchJson<{ patients?: ExistingPatientOption[] }>(
+        `/api/receptionist/patients/search?q=${encodeURIComponent(query)}`,
+        {},
+        "Failed to search patients"
+      )
       const patients = Array.isArray(data?.patients) ? data.patients : []
       setDirectPatientResults(patients)
     } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to search patients" })
+      notifyError(error?.message || "Failed to search patients")
       setDirectPatientResults([])
     } finally {
       setDirectPatientLookupLoading(false)
@@ -660,19 +594,12 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
 
     setDirectAdmitLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to create admissions")
-      }
-      const token = await currentUser.getIdToken()
       const selectedPackage = admissionPackages.find((pkg) => pkg.id === directPackageId)
-      const res = await fetch("/api/receptionist/admissions?includeAppointmentDetails=false", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      await authedFetchJson(
+        "/api/receptionist/admissions?includeAppointmentDetails=false",
+        {
+          method: "POST",
+          body: JSON.stringify({
           roomId: assignRoomId,
           patientUid: directPatientUid || undefined,
           patientName: directPatientName.trim() || undefined,
@@ -701,47 +628,36 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
               }
             : undefined,
           notes: assignNotes.trim() || undefined,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to create admission")
-      }
-      notify({ type: "success", message: "Direct admission created successfully." })
+          }),
+        },
+        "Failed to create admission"
+      )
+      notifySuccess("Direct admission created successfully.")
       setDirectAdmitModalOpen(false)
       fetchAdmissions()
       fetchRooms()
     } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to create admission" })
+      notifyError(error?.message || "Failed to create admission")
     } finally {
       setDirectAdmitLoading(false)
     }
   }
 
   const persistAdmissionDetails = async (admission: Admission) => {
-    const currentUser = auth.currentUser
-    if (!currentUser) {
-      throw new Error("You must be logged in to update admission")
-    }
-    const token = await currentUser.getIdToken()
-    const res = await fetch(`/api/receptionist/admissions/${admission.id}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    await authedFetchJson(
+      `/api/receptionist/admissions/${admission.id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          expectedDischargeAt: admission.expectedDischargeAt || null,
+          notes: admission.notes || null,
+          charges: admission.charges || {},
+          paymentTerms: admission.paymentTerms || "standard",
+          operationPackage: admission.operationPackage || null,
+        }),
       },
-      body: JSON.stringify({
-        expectedDischargeAt: admission.expectedDischargeAt || null,
-        notes: admission.notes || null,
-        charges: admission.charges || {},
-        paymentTerms: admission.paymentTerms || "standard",
-        operationPackage: admission.operationPackage || null,
-      }),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data?.error || "Failed to save admission details")
-    }
+      "Failed to save admission details"
+    )
   }
 
   const handleSaveAdmissionDetails = async (admission: Admission) => {
@@ -749,9 +665,9 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     setAdmissionDetailsSaving(true)
     try {
       await persistAdmissionDetails(admission)
-      notify({ type: "success", message: "Admission details updated." })
+      notifySuccess("Admission details updated.")
     } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to save admission details" })
+      notifyError(error?.message || "Failed to save admission details")
     } finally {
       setAdmissionDetailsSaving(false)
     }
@@ -765,35 +681,28 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     }
     setDepositTopupLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in")
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/admissions/${admission.id}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        `/api/receptionist/admissions/${admission.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            depositAction: {
+              type: "topup",
+              amount,
+              note: depositTopupNote.trim() || undefined,
+              paymentMode: depositTopupPaymentMode,
+            },
+          }),
         },
-        body: JSON.stringify({
-          depositAction: {
-            type: "topup",
-            amount,
-            note: depositTopupNote.trim() || undefined,
-            paymentMode: depositTopupPaymentMode,
-          },
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to add top-up")
-      }
-      notify({ type: "success", message: "Deposit top-up added." })
+        "Failed to add top-up"
+      )
+      notifySuccess("Deposit top-up added.")
       setDepositTopupAmount("")
       setDepositTopupNote("")
       setDepositTopupPaymentMode("cash")
       fetchAdmissions()
     } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to add top-up" })
+      notifyError(error?.message || "Failed to add top-up")
     } finally {
       setDepositTopupLoading(false)
     }
@@ -804,27 +713,17 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     setBillingProcessing(true)
     try {
       await persistAdmissionDetails(admission)
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to process billing")
-      }
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/admissions/${admission.id}/process-billing`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const data = await authedFetchJson<{ billingId?: string }>(
+        `/api/receptionist/admissions/${admission.id}/process-billing`,
+        {
+          method: "POST",
         },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to process billing")
-      }
-      const data = await res.json().catch(() => ({}))
-      notify({ type: "success", message: "Billing data prepared for this admission." })
+        "Failed to process billing"
+      )
+      notifySuccess("Billing data prepared for this admission.")
       onOpenBilling?.(String(data?.billingId || admission.id))
     } catch (error: any) {
-      notify({ type: "error", message: error?.message || "Failed to process billing" })
+      notifyError(error?.message || "Failed to process billing")
     } finally {
       setBillingProcessing(false)
     }
@@ -874,9 +773,6 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
 
     setRoomManageLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to manage rooms")
-      const token = await currentUser.getIdToken()
       const url = roomEditId ? `/api/receptionist/rooms/${roomEditId}` : "/api/receptionist/rooms"
       const method = roomEditId ? "PATCH" : "POST"
       const payload = roomEditId
@@ -893,18 +789,14 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
             ratePerDay: Number(manageRoomRate),
             status: manageRoomStatus,
           }
-      const res = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        url,
+        {
+          method,
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to save room")
-      }
+        "Failed to save room"
+      )
       notify({ type: "success", message: roomEditId ? "Room updated." : "Room created." })
       setRoomManagerOpen(false)
       resetRoomManageForm()
@@ -925,20 +817,11 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     if (!confirmation) return
     setRoomManageLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to manage rooms")
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/rooms/${room.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to archive room")
-      }
+      await authedFetchJson(
+        `/api/receptionist/rooms/${room.id}`,
+        { method: "DELETE" },
+        "Failed to archive room"
+      )
       notify({ type: "success", message: "Room archived." })
       fetchRooms()
     } catch (error: any) {
@@ -990,9 +873,6 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     }
     setPackageManageLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to manage packages")
-      const token = await currentUser.getIdToken()
       const url = packageEditId
         ? `/api/receptionist/admission-packages/${packageEditId}`
         : "/api/receptionist/admission-packages"
@@ -1010,18 +890,14 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         preferredRoomType: managePackageRoomType || null,
         exclusions: managePackageExclusions.trim() || null,
       }
-      const res = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        url,
+        {
+          method,
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to save package")
-      }
+        "Failed to save package"
+      )
       notify({ type: "success", message: packageEditId ? "Package updated." : "Package created." })
       resetPackageForm()
       fetchAdmissionPackages()
@@ -1037,20 +913,11 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     if (!confirmation) return
     setPackageManageLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to manage packages")
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/admission-packages/${pkg.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to archive package")
-      }
+      await authedFetchJson(
+        `/api/receptionist/admission-packages/${pkg.id}`,
+        { method: "DELETE" },
+        "Failed to archive package"
+      )
       notify({ type: "success", message: "Package archived." })
       if (packageEditId === pkg.id) resetPackageForm()
       fetchAdmissionPackages()
@@ -1064,18 +931,15 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const handleSeedRecommendedPackages = async () => {
     setPackageManageLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) throw new Error("You must be logged in to manage packages")
-      const token = await currentUser.getIdToken()
       for (const template of DEFAULT_PACKAGE_TEMPLATES) {
-        await fetch("/api/receptionist/admission-packages", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
+        await authedFetchJson(
+          "/api/receptionist/admission-packages",
+          {
+            method: "POST",
+            body: JSON.stringify(template),
           },
-          body: JSON.stringify(template),
-        })
+          "Failed to add package templates"
+        )
       }
       notify({ type: "success", message: "Recommended package templates added." })
       fetchAdmissionPackages()
@@ -1253,43 +1117,29 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
       notify({ type: "error", message: "Selected doctor not found." })
       return
     }
-    const currentUser = auth.currentUser
-    if (!currentUser) {
-      notify({ type: "error", message: "You must be logged in." })
-      return
-    }
     try {
       setPlannedActionLoadingId(admissionId)
-      const token = await currentUser.getIdToken()
-      const assignRes = await fetch(`/api/receptionist/admissions/${admissionId}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      await authedFetchJson(
+        `/api/receptionist/admissions/${admissionId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
           doctorId: targetDoctor.uid,
           doctorName: targetDoctor.fullName,
-        }),
-      })
-      const assignData = await assignRes.json().catch(() => ({}))
-      if (!assignRes.ok) {
-        throw new Error(assignData?.error || "Failed to assign doctor")
-      }
-      const readyRes = await fetch(`/api/receptionist/admissions/${admissionId}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+          }),
         },
-        body: JSON.stringify({
+        "Failed to assign doctor"
+      )
+      await authedFetchJson(
+        `/api/receptionist/admissions/${admissionId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
           plannedAction: "ready_to_admit",
-        }),
-      })
-      const readyData = await readyRes.json().catch(() => ({}))
-      if (!readyRes.ok) {
-        throw new Error(readyData?.error || "Failed to mark ready to admit")
-      }
+          }),
+        },
+        "Failed to mark ready to admit"
+      )
       notify({ type: "success", message: `Doctor assigned and patient marked admitted: ${targetDoctor.fullName}` })
       setAssignDoctorReadyModalOpen(false)
       setAssignDoctorReadyAdmissionId(null)
@@ -1305,42 +1155,26 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
 
   const handleConfirmPlannedAction = async () => {
     if (!plannedConfirmAdmissionId || !plannedConfirmAction) return
-    const currentUser = auth.currentUser
-    if (!currentUser) {
-      notify({ type: "error", message: "You must be logged in." })
-      return
-    }
     try {
       setPlannedActionLoadingId(plannedConfirmAdmissionId)
-      const token = await currentUser.getIdToken()
       if (plannedConfirmAction === "delete") {
-        const res = await fetch(`/api/receptionist/admissions/${plannedConfirmAdmissionId}`, {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          throw new Error(data?.error || "Failed to delete admission")
-        }
+        await authedFetchJson(
+          `/api/receptionist/admissions/${plannedConfirmAdmissionId}`,
+          { method: "DELETE" },
+          "Failed to delete admission"
+        )
         notify({ type: "success", message: "Scheduled admission deleted." })
       } else {
-        const res = await fetch(`/api/receptionist/admissions/${plannedConfirmAdmissionId}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
+        await authedFetchJson(
+          `/api/receptionist/admissions/${plannedConfirmAdmissionId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              plannedAction: "ready_to_admit",
+            }),
           },
-          body: JSON.stringify({
-            plannedAction: "ready_to_admit",
-          }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          throw new Error(data?.error || "Failed to mark ready to admit")
-        }
+          "Failed to mark ready to admit"
+        )
         notify({ type: "success", message: "Patient marked as admitted." })
       }
       setPlannedConfirmModalOpen(false)
@@ -1361,29 +1195,19 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
       notify({ type: "error", message: "Select new planned date and time." })
       return
     }
-    const currentUser = auth.currentUser
-    if (!currentUser) {
-      notify({ type: "error", message: "You must be logged in." })
-      return
-    }
     try {
       setPlannedActionLoadingId(postponeAdmissionId)
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/admissions/${postponeAdmissionId}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        `/api/receptionist/admissions/${postponeAdmissionId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            plannedAction: "postpone",
+            plannedAdmitAt: postponeDateTime,
+          }),
         },
-        body: JSON.stringify({
-          plannedAction: "postpone",
-          plannedAdmitAt: postponeDateTime,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to postpone admission")
-      }
+        "Failed to postpone admission"
+      )
       notify({ type: "success", message: "Planned admission date postponed." })
       setPostponeModalOpen(false)
       setPostponeAdmissionId(null)
@@ -1414,27 +1238,17 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     }
     setTransferLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to transfer room")
-      }
-      const token = await currentUser.getIdToken()
-      const res = await fetch(`/api/receptionist/admissions/${transferAdmission.id}/transfer-room`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const data = await authedFetchJson<{ updatedRoom?: Partial<Admission> & { roomStays?: unknown[] } }>(
+        `/api/receptionist/admissions/${transferAdmission.id}/transfer-room`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            roomId: transferRoomId,
+            notes: transferNotes || undefined,
+          }),
         },
-        body: JSON.stringify({
-          roomId: transferRoomId,
-          notes: transferNotes || undefined,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || "Failed to transfer room")
-      }
-      const data = await res.json().catch(() => ({}))
+        "Failed to transfer room"
+      )
       const updatedRoom = data?.updatedRoom || {}
 
       setAdmissions((prev) =>

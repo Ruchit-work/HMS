@@ -2,12 +2,11 @@ import { db } from "@/firebase/config"
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   limit,
   orderBy,
   query,
-  setDoc,
+  runTransaction,
 } from "firebase/firestore"
 
 export interface MedicineSuggestionOption {
@@ -30,6 +29,7 @@ export interface MedicineSuggestion {
 
 const COLLECTION = "medicineSuggestions"
 const MAX_OPTIONS_PER_FIELD = 6
+const MAX_FETCH_RESULTS = 200
 
 const cleanValue = (value?: string) => (value || "").trim().replace(/\s+/g, " ")
 
@@ -49,6 +49,7 @@ export const sanitizeMedicineName = (value: string) => {
 const normalizeName = (value: string) => sanitizeMedicineName(value).toLowerCase()
 const createDocId = (value: string) =>
   normalizeName(value).replace(/[^a-z0-9]+/g, "-") || `medicine-${Date.now()}`
+const clampResults = (value: number) => Math.min(MAX_FETCH_RESULTS, Math.max(1, Math.floor(value || 50)))
 
 const updateOptionList = (
   existing: MedicineSuggestionOption[] = [],
@@ -94,43 +95,30 @@ export const recordMedicineSuggestions = async (
     }))
     .filter((medicine) => medicine.name)
     .map(async (medicine) => {
+      const sanitizedName = sanitizeMedicineName(medicine.name)
       const normalizedName = normalizeName(medicine.name)
       const docId = createDocId(medicine.name)
       const docRef = doc(db, COLLECTION, docId)
       const nowIso = new Date().toISOString()
 
-      const snap = await getDoc(docRef)
-      if (snap.exists()) {
-        const data = snap.data() as MedicineSuggestion
-        const sanitizedName = sanitizeMedicineName(medicine.name)
-        const sanitizedNormalized = normalizeName(medicine.name)
-        const updated: MedicineSuggestion = {
-          id: snap.id,
-          name: sanitizedName || data.name || medicine.name,
-          normalizedName: sanitizedNormalized || data.normalizedName || normalizedName,
-          usageCount: (data.usageCount || 0) + 1,
-          dosageOptions: updateOptionList(data.dosageOptions, medicine.dosage),
-          frequencyOptions: updateOptionList(data.frequencyOptions, medicine.frequency),
-          durationOptions: updateOptionList(data.durationOptions, medicine.duration),
-          createdAt: data.createdAt || nowIso,
-          updatedAt: nowIso,
-        }
-        await setDoc(docRef, updated)
-      } else {
-        const sanitizedName = sanitizeMedicineName(medicine.name)
-        const newEntry: MedicineSuggestion = {
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(docRef)
+        const data = snap.exists() ? (snap.data() as MedicineSuggestion) : null
+
+        const payload: MedicineSuggestion = {
           id: docId,
-          name: sanitizedName || medicine.name,
-          normalizedName,
-          usageCount: 1,
-          dosageOptions: updateOptionList([], medicine.dosage),
-          frequencyOptions: updateOptionList([], medicine.frequency),
-          durationOptions: updateOptionList([], medicine.duration),
-          createdAt: nowIso,
+          name: sanitizedName || data?.name || medicine.name,
+          normalizedName: normalizedName || data?.normalizedName || "",
+          usageCount: (data?.usageCount || 0) + 1,
+          dosageOptions: updateOptionList(data?.dosageOptions, medicine.dosage),
+          frequencyOptions: updateOptionList(data?.frequencyOptions, medicine.frequency),
+          durationOptions: updateOptionList(data?.durationOptions, medicine.duration),
+          createdAt: data?.createdAt || nowIso,
           updatedAt: nowIso,
         }
-        await setDoc(docRef, newEntry)
-      }
+
+        transaction.set(docRef, payload)
+      })
     })
 
   await Promise.all(tasks)
@@ -138,10 +126,11 @@ export const recordMedicineSuggestions = async (
 
 export const fetchMedicineSuggestions = async (maxResults = 50) => {
   const suggestionsRef = collection(db, COLLECTION)
+  const safeLimit = clampResults(maxResults)
   const suggestionsQuery = query(
     suggestionsRef,
     orderBy("usageCount", "desc"),
-    limit(maxResults)
+    limit(safeLimit)
   )
   const snapshot = await getDocs(suggestionsQuery)
   return snapshot.docs.map((docSnap) => {

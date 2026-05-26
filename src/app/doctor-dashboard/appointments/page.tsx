@@ -436,14 +436,6 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const _ensureNormalConsultationOpen = (appointmentId: string) => {
-    setShowCompletionForm((prev) => ({ ...prev, [appointmentId]: true }))
-    setConsultationMode((prev) => ({ ...prev, [appointmentId]: prev[appointmentId] ?? "normal" }))
-    setTimeout(() => {
-      completionFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
-    }, 150)
-  }
-
   const handleConsultationModeSelect = (
     mode: "normal" | "anatomy",
     anatomyType?: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive"

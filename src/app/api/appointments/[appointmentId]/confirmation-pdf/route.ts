@@ -14,7 +14,7 @@ export async function OPTIONS() {
 }
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ appointmentId: string }> }
 ) {
   try {

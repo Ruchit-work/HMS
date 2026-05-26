@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { getDocs, query, where, onSnapshot } from "firebase/firestore"
-import { auth } from "@/firebase/config"
 import { Appointment } from "@/types/patient"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/symptoms/SymptomSelector"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { Button } from "@/components/ui/Button"
+import { authedFetchJson } from "@/utils/client/authedFetch"
 
 interface WhatsAppBookingsPanelProps {
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
@@ -383,13 +383,6 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
 
     setUpdateLoading(true)
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in")
-      }
-
-      const token = await currentUser.getIdToken()
-
       const updateData: any = {
         doctorId: formDoctorId,
         patientName: formPatientName.trim(),
@@ -406,20 +399,14 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
         markConfirmed: true,
       }
 
-      const res = await fetch(`/api/receptionist/whatsapp-bookings/${selectedBooking.id}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        `/api/receptionist/whatsapp-bookings/${selectedBooking.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(updateData),
         },
-        body: JSON.stringify(updateData),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        // Log full error payload for debugging
-        throw new Error(data?.error || data?.details || "Failed to update booking")
-      }
+        "Failed to update booking"
+      )
 
       notify({ type: "success", message: "Booking updated successfully!" })
       handleCloseEditModal()
@@ -447,28 +434,16 @@ export default function WhatsAppBookingsPanel({ onNotification, onPendingCountCh
     setDeleteLoading(booking.id)
     
     try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in")
-      }
-
-      const token = await currentUser.getIdToken()
-
-      const res = await fetch(`/api/receptionist/whatsapp-bookings/${deletedBookingId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      await authedFetchJson(
+        `/api/receptionist/whatsapp-bookings/${deletedBookingId}`,
+        {
+          method: "DELETE",
+          body: JSON.stringify({
+            hospitalId: (booking as any).hospitalId,
+          }),
         },
-        body: JSON.stringify({
-          hospitalId: (booking as any).hospitalId,
-        }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || data?.details || "Failed to delete booking")
-      }
+        "Failed to delete booking"
+      )
 
       notify({ type: "success", message: "WhatsApp booking deleted successfully!" })
       // Real-time listener will automatically update the list (may already be removed)

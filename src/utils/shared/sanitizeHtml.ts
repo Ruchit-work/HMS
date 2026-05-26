@@ -21,7 +21,7 @@ function sanitizeHtmlRegex(html: string): string {
 
   // Allow only safe tags and attributes using regex
   const tagPattern = new RegExp(`<(/?)([a-z][a-z0-9]*)\\b([^>]*)>`, 'gi')
-  sanitized = sanitized.replace(tagPattern, (match, closing, tagName, attrs) => {
+  sanitized = sanitized.replace(tagPattern, (_match, closing, tagName, attrs) => {
     const lowerTag = tagName.toLowerCase()
     
     if (!allowedTags.includes(lowerTag)) {
