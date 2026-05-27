@@ -6,6 +6,9 @@ import { useState } from "react"
 import { usePublicRoute } from "@/hooks/useAuth"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 
+const MIVS_ABOUT_PATH = "/demo/mivs"
+const MIVS_WEBSITE_URL = "https://www.mivs.in/"
+
 export default function Home() {
   const { loading } = usePublicRoute()
   const router = useRouter()
@@ -46,18 +49,50 @@ export default function Home() {
               <p className="text-sm font-semibold text-slate-900">Hospital Management Platform</p>
             </div>
           </div>
-          <nav className="hidden items-center gap-6 text-xs font-medium text-slate-600 sm:flex">
-            <span className="hover:text-slate-900">Product</span>
-            <span className="hover:text-slate-900">Security</span>
-            <span className="hover:text-slate-900">Pricing</span>
-            <span className="hover:text-slate-900">Support</span>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 text-xs font-medium sm:hidden">
+              <Link href={MIVS_ABOUT_PATH} className="text-slate-600 hover:text-sky-700">
+                About MIVS
+              </Link>
+              <a
+                href={MIVS_WEBSITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-600 hover:text-sky-700"
+              >
+                mivs.in
+              </a>
+            </div>
+            <nav className="hidden items-center gap-6 text-xs font-medium text-slate-600 sm:flex">
+              <span className="hover:text-slate-900">Product</span>
+              <span className="hover:text-slate-900">Security</span>
+              <span className="hover:text-slate-900">Pricing</span>
+              <span className="hover:text-slate-900">Support</span>
+              <Link href={MIVS_ABOUT_PATH} className="hover:text-sky-700">
+                About MIVS
+              </Link>
+              <a
+                href={MIVS_WEBSITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-sky-700"
+              >
+                MIVS Software
+              </a>
+              <Link
+                href="/auth/login"
+                className="rounded-full border border-sky-500 bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-sky-700"
+              >
+                Access Portal
+              </Link>
+            </nav>
             <Link
               href="/auth/login"
-              className="rounded-full border border-sky-500 bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-sky-700"
+              className="rounded-full border border-sky-500 bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 sm:hidden"
             >
-              Access Portal
+              Login
             </Link>
-          </nav>
+          </div>
         </header>
 
         {/* HERO SECTION */}
@@ -575,6 +610,17 @@ export default function Home() {
                 Company
               </p>
               <div className="mt-2 space-y-1.5">
+                <Link href={MIVS_ABOUT_PATH} className="block hover:text-sky-600">
+                  About MIVS
+                </Link>
+                <a
+                  href={MIVS_WEBSITE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block hover:text-sky-600"
+                >
+                  MIVS Software (mivs.in)
+                </a>
                 <span className="block hover:text-sky-600">Support</span>
                 <span className="block hover:text-sky-600">Contact</span>
                 <span className="block hover:text-sky-600">Status</span>
@@ -583,8 +629,32 @@ export default function Home() {
           </div>
 
           <div className="mt-6 flex flex-col gap-2 border-t border-slate-200 pt-4 text-[11px] text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} HMS Cloud. All rights reserved.</p>
+            <div className="flex flex-col gap-0.5">
+              <p>© {new Date().getFullYear()} HMS Cloud. All rights reserved.</p>
+              <p className="text-slate-400">
+                Powered by{" "}
+                <a
+                  href={MIVS_WEBSITE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-sky-600 hover:underline"
+                >
+                  MIVS Software
+                </a>
+              </p>
+            </div>
             <div className="flex flex-wrap gap-3">
+              <Link href={MIVS_ABOUT_PATH} className="hover:text-sky-600">
+                About MIVS
+              </Link>
+              <a
+                href={MIVS_WEBSITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-sky-600"
+              >
+                MIVS Website
+              </a>
               <Link href="/privacy" className="hover:text-sky-600">
                 Privacy Policy
               </Link>
