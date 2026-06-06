@@ -1,5 +1,5 @@
 import { sendTextMessage as metaSendTextMessage } from "@/server/metaWhatsApp"
-import { useBhashSmsProvider } from "@/server/bhashWhatsApp"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
 
  
@@ -24,7 +24,7 @@ export async function sendWhatsAppNotification(options: {
   contentVariables?: Record<string, string> // Variables for template
 }): Promise<{ success: boolean; sid?: string; status?: string; error?: string; errorCode?: number; rateLimitReached?: boolean }> {
   // Check if WhatsApp credentials are configured
-  const usingBhash = useBhashSmsProvider()
+  const usingBhash = shouldUseBhashSms()
   if (
     !usingBhash &&
     (!process.env.META_WHATSAPP_ACCESS_TOKEN || !process.env.META_WHATSAPP_PHONE_NUMBER_ID)

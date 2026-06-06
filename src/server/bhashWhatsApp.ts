@@ -15,7 +15,7 @@ export function isBhashSmsConfigured(): boolean {
   return !!(BHASH_USER && BHASH_PASS)
 }
 
-export function useBhashSmsProvider(): boolean {
+export function shouldUseBhashSms(): boolean {
   const provider = process.env.WHATSAPP_PROVIDER?.toLowerCase()
   if (provider === "meta") return false
   if (provider === "bhashsms" || provider === "bhash") return isBhashSmsConfigured()

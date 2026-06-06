@@ -1,5 +1,5 @@
 import {
-  useBhashSmsProvider,
+  shouldUseBhashSms,
   bhashSendTextMessage,
   bhashSendButtonMessage,
   bhashSendMultiButtonMessage,
@@ -59,7 +59,7 @@ export async function sendFlowMessage(
   footerText?: string,
   flowData?: Record<string, any>
 ): Promise<SendMessageResponse> {
-  if (useBhashSmsProvider()) {
+  if (shouldUseBhashSms()) {
     return bhashSendFlowMessage(to, flowId, flowToken, headerText, bodyText, footerText)
   }
 
@@ -166,7 +166,7 @@ export async function sendMultiButtonMessage(
   buttons: Array<{ id: string; title: string }>,
   footerText?: string
 ): Promise<SendMessageResponse> {
-  if (useBhashSmsProvider()) {
+  if (shouldUseBhashSms()) {
     return bhashSendMultiButtonMessage(to, bodyText, buttons, footerText)
   }
 
@@ -261,7 +261,7 @@ export async function sendButtonMessage(
   buttonId: string = "book_appointment",
   buttonTitle: string = "Book Appointment"
 ): Promise<SendMessageResponse> {
-  if (useBhashSmsProvider()) {
+  if (shouldUseBhashSms()) {
     return bhashSendButtonMessage(to, bodyText, footerText, buttonId, buttonTitle)
   }
 
@@ -362,7 +362,7 @@ export async function sendListMessage(
   }>,
   footerText?: string
 ): Promise<SendMessageResponse> {
-  if (useBhashSmsProvider()) {
+  if (shouldUseBhashSms()) {
     return bhashSendListMessage(to, bodyText, buttonText, sections, footerText)
   }
 
@@ -449,7 +449,7 @@ export async function sendDocumentMessage(
   filename: string,
   caption?: string
 ): Promise<SendMessageResponse> {
-  if (useBhashSmsProvider()) {
+  if (shouldUseBhashSms()) {
     return bhashSendDocumentMessage(to, documentUrl, filename, caption)
   }
 
@@ -530,7 +530,7 @@ export async function sendTemplateMessage(
   languageCode: string = "en_US",
   parameters?: Array<{ type: string; text?: string; [key: string]: any }>
 ): Promise<SendMessageResponse> {
-  if (useBhashSmsProvider()) {
+  if (shouldUseBhashSms()) {
     const paramValues = parameters?.map((p) => p.text || "").filter(Boolean)
     const otpTemplate =
       process.env.BHASHSMS_OTP_TEMPLATE || process.env.META_WHATSAPP_OTP_TEMPLATE_NAME
@@ -635,7 +635,7 @@ export async function sendTextMessage(
   to: string,
   message: string
 ): Promise<SendMessageResponse> {
-  if (useBhashSmsProvider()) {
+  if (shouldUseBhashSms()) {
     return bhashSendTextMessage(to, message)
   }
 
