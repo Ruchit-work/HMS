@@ -1,3 +1,13 @@
+import {
+  useBhashSmsProvider,
+  bhashSendTextMessage,
+  bhashSendButtonMessage,
+  bhashSendMultiButtonMessage,
+  bhashSendListMessage,
+  bhashSendFlowMessage,
+  bhashSendDocumentMessage,
+  bhashSendTemplateMessage,
+} from "@/server/bhashWhatsApp"
 
 const META_ACCESS_TOKEN = process.env.META_WHATSAPP_ACCESS_TOKEN
 const META_PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID
@@ -49,6 +59,10 @@ export async function sendFlowMessage(
   footerText?: string,
   flowData?: Record<string, any>
 ): Promise<SendMessageResponse> {
+  if (useBhashSmsProvider()) {
+    return bhashSendFlowMessage(to, flowId, flowToken, headerText, bodyText, footerText)
+  }
+
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return {
       success: false,
@@ -152,6 +166,10 @@ export async function sendMultiButtonMessage(
   buttons: Array<{ id: string; title: string }>,
   footerText?: string
 ): Promise<SendMessageResponse> {
+  if (useBhashSmsProvider()) {
+    return bhashSendMultiButtonMessage(to, bodyText, buttons, footerText)
+  }
+
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return {
       success: false,
@@ -243,6 +261,10 @@ export async function sendButtonMessage(
   buttonId: string = "book_appointment",
   buttonTitle: string = "Book Appointment"
 ): Promise<SendMessageResponse> {
+  if (useBhashSmsProvider()) {
+    return bhashSendButtonMessage(to, bodyText, footerText, buttonId, buttonTitle)
+  }
+
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return {
       success: false,
@@ -340,6 +362,10 @@ export async function sendListMessage(
   }>,
   footerText?: string
 ): Promise<SendMessageResponse> {
+  if (useBhashSmsProvider()) {
+    return bhashSendListMessage(to, bodyText, buttonText, sections, footerText)
+  }
+
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return {
       success: false,
@@ -423,6 +449,10 @@ export async function sendDocumentMessage(
   filename: string,
   caption?: string
 ): Promise<SendMessageResponse> {
+  if (useBhashSmsProvider()) {
+    return bhashSendDocumentMessage(to, documentUrl, filename, caption)
+  }
+
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return {
       success: false,
@@ -500,6 +530,14 @@ export async function sendTemplateMessage(
   languageCode: string = "en_US",
   parameters?: Array<{ type: string; text?: string; [key: string]: any }>
 ): Promise<SendMessageResponse> {
+  if (useBhashSmsProvider()) {
+    const paramValues = parameters?.map((p) => p.text || "").filter(Boolean)
+    const otpTemplate =
+      process.env.BHASHSMS_OTP_TEMPLATE || process.env.META_WHATSAPP_OTP_TEMPLATE_NAME
+    const isOtp = !!(otpTemplate && templateName === otpTemplate)
+    return bhashSendTemplateMessage(to, templateName, paramValues, { auth: isOtp })
+  }
+
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return {
       success: false,
@@ -597,6 +635,10 @@ export async function sendTextMessage(
   to: string,
   message: string
 ): Promise<SendMessageResponse> {
+  if (useBhashSmsProvider()) {
+    return bhashSendTextMessage(to, message)
+  }
+
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
     return {
       success: false,

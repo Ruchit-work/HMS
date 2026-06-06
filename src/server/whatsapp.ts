@@ -1,4 +1,5 @@
 import { sendTextMessage as metaSendTextMessage } from "@/server/metaWhatsApp"
+import { useBhashSmsProvider } from "@/server/bhashWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
 
  
@@ -23,8 +24,13 @@ export async function sendWhatsAppNotification(options: {
   contentVariables?: Record<string, string> // Variables for template
 }): Promise<{ success: boolean; sid?: string; status?: string; error?: string; errorCode?: number; rateLimitReached?: boolean }> {
   // Check if WhatsApp credentials are configured
-  if (!process.env.META_WHATSAPP_ACCESS_TOKEN || !process.env.META_WHATSAPP_PHONE_NUMBER_ID) {
-    const error = "WhatsApp credentials not configured. Please set META_WHATSAPP_ACCESS_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID environment variables."
+  const usingBhash = useBhashSmsProvider()
+  if (
+    !usingBhash &&
+    (!process.env.META_WHATSAPP_ACCESS_TOKEN || !process.env.META_WHATSAPP_PHONE_NUMBER_ID)
+  ) {
+    const error =
+      "WhatsApp credentials not configured. Please set META_WHATSAPP_ACCESS_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID environment variables."
     return { success: false, error }
   }
 
