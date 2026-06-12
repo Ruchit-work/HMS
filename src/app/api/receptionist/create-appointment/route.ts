@@ -1,5 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
@@ -76,15 +77,34 @@ See you soon! 🏥`
   if (phoneCandidates.length === 0) {
     return
   }
-  const result = await sendWhatsAppNotification({
+
+  const appointmentDate = getString(appointmentData.appointmentDate) || ""
+  const sentViaBhashTemplate = await sendBhashConfirmationTemplateIfConfigured({
+    to: phoneCandidates[0] || null,
+    fallbackRecipients: phoneCandidates.slice(1),
+    params: {
+      patientName: fullName,
+      confirmedVia: "by our receptionist",
+      doctorName,
+      doctorSpecialization: doctorSpecialization || undefined,
+      appointmentDate,
+      appointmentTime: timeStr,
+      appointmentId,
+      paymentMethod,
+      paymentAmount,
+      paymentStatus,
+    },
+  })
+
+  if (sentViaBhashTemplate) {
+    return
+  }
+
+  await sendWhatsAppNotification({
     to: phoneCandidates[0] || null,
     fallbackRecipients: phoneCandidates.slice(1),
     message,
   })
-
-  if (result.success) {
-  } else {
-  }
 }
 
 export async function POST(request: Request) {

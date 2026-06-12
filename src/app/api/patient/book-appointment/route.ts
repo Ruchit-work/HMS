@@ -3,6 +3,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
@@ -248,13 +249,30 @@ ${appointmentData.chiefComplaint ? `• 📝 Reason: ${appointmentData.chiefComp
 If you need to reschedule or have any questions, reply here or call us at +91-XXXXXXXXXX.
 
 See you soon! 🏥`
-          const result = await sendWhatsAppNotification({
+
+          const sentViaBhashTemplate = await sendBhashConfirmationTemplateIfConfigured({
             to: patientPhone,
-            message,
+            params: {
+              patientName: fullName,
+              confirmedVia: "via patient portal",
+              doctorName: String(doctorName),
+              doctorSpecialization: doctorSpecialization
+                ? String(doctorSpecialization)
+                : undefined,
+              appointmentDate: String(appointmentData.appointmentDate),
+              appointmentTime: timeStr,
+              appointmentId: appointmentIdStr,
+              paymentMethod: String(paymentMethod),
+              paymentAmount: Number(paymentAmount),
+              paymentStatus: String(paymentStatus),
+            },
           })
 
-          if (result.success) {
-          } else {
+          if (!sentViaBhashTemplate) {
+            await sendWhatsAppNotification({
+              to: patientPhone,
+              message,
+            })
           }
         } else {
         }

@@ -1,5 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
@@ -76,6 +77,29 @@ ${footer}`
   ].filter((v): v is string => Boolean(v))
 
   if (phoneCandidates.length === 0) return
+
+  const appointmentDate = getString(appointmentData.appointmentDate) || ""
+  const sentViaBhashTemplate = await sendBhashConfirmationTemplateIfConfigured({
+    to: phoneCandidates[0] || null,
+    fallbackRecipients: phoneCandidates.slice(1),
+    params: {
+      patientName: fullName,
+      confirmedVia: "by your doctor",
+      doctorName,
+      doctorSpecialization: doctorSpecialization || undefined,
+      appointmentDate,
+      appointmentTime: timeStr,
+      appointmentId,
+      paymentMethod: payAtReception ? "Pay at reception" : "Cash",
+      paymentAmount: payAtReception ? amountDue : undefined,
+      paymentStatus: payAtReception ? "pending" : "paid",
+    },
+  })
+
+  if (sentViaBhashTemplate) {
+    return
+  }
+
   await sendWhatsAppNotification({
     to: phoneCandidates[0] || null,
     fallbackRecipients: phoneCandidates.slice(1),

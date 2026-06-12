@@ -5,8 +5,16 @@ export interface SendMessageResponse {
   errorCode?: number
 }
 
-const BHASH_API_URL =
-  process.env.BHASHSMS_API_URL || "http://bhashsms.com/api/sendmsg.php"
+/** Templates & business-initiated messages (sendmsg.php). */
+const BHASH_TEMPLATE_API_URL =
+  process.env.BHASHSMS_TEMPLATE_API_URL ||
+  process.env.BHASHSMS_API_URL ||
+  "http://bhashsms.com/api/sendmsg.php"
+
+/** Session replies after patient messages — uses WA Utility credits (sendmsgutilreply.php). */
+const BHASH_UTIL_REPLY_API_URL =
+  process.env.BHASHSMS_UTIL_REPLY_API_URL ||
+  "http://bhashsms.com/api/sendmsgutilreply.php"
 const BHASH_USER = process.env.BHASHSMS_USER
 const BHASH_PASS = process.env.BHASHSMS_PASSWORD
 const BHASH_SENDER = process.env.BHASHSMS_SENDER || "BUZWAP"
@@ -40,24 +48,30 @@ export function formatPhoneForBhash(phone: string): string | null {
 }
 
 function parseBhashResponse(body: string): SendMessageResponse {
-  const normalized = body.trim().toLowerCase()
+  const trimmed = body.trim()
+  const normalized = trimmed.toLowerCase()
   if (
     normalized.includes("success") ||
     normalized.includes("sent") ||
     normalized.includes("submitted") ||
-    normalized.includes("queued")
+    normalized.includes("queued") ||
+    /^s\.\d+/i.test(trimmed)
   ) {
-    return { success: true, messageId: `bhash-${Date.now()}` }
+    return {
+      success: true,
+      messageId: /^s\.\d+/i.test(trimmed) ? trimmed : `bhash-${Date.now()}`,
+    }
   }
 
   return {
     success: false,
-    error: body.trim() || "BhashSMS API returned an error",
+    error: trimmed || "BhashSMS API returned an error",
   }
 }
 
 async function bhashGet(
-  params: Record<string, string>
+  params: Record<string, string>,
+  apiUrl: string = BHASH_TEMPLATE_API_URL
 ): Promise<SendMessageResponse> {
   if (!BHASH_USER || !BHASH_PASS) {
     return { success: false, error: "BhashSMS credentials not configured" }
@@ -72,7 +86,7 @@ async function bhashGet(
   })
 
   try {
-    const response = await fetch(`${BHASH_API_URL}?${query.toString()}`, {
+    const response = await fetch(`${apiUrl}?${query.toString()}`, {
       method: "GET",
       cache: "no-store",
     })
@@ -99,12 +113,15 @@ export async function bhashSendTextMessage(
   const phone = formatPhoneForBhash(to)
   if (!phone) return { success: false, error: "Invalid phone number for BhashSMS" }
 
-  return bhashGet({
-    phone,
-    text: message,
-    stype: "normal",
-    htype: "normal",
-  })
+  return bhashGet(
+    {
+      phone,
+      text: message,
+      stype: "normal",
+      htype: "normal",
+    },
+    BHASH_UTIL_REPLY_API_URL
+  )
 }
 
 export async function bhashSendTemplateMessage(
