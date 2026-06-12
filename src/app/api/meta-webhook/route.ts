@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, sendFlowMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
+import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blockedDates"
@@ -3335,7 +3336,28 @@ Your ${isRecheckup ? "re-checkup " : ""}appointment has been booked successfully
 
 If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
 
-  await sendTextMessage(phone, confirmationMsg)
+  let sentConfirmation = false
+  if (!isPending && doctorData) {
+    sentConfirmation = await sendBhashConfirmationTemplateIfConfigured({
+      to: phone,
+      params: {
+        patientName,
+        confirmedVia: "via WhatsApp",
+        doctorName,
+        doctorSpecialization: doctorData.specialization || undefined,
+        appointmentDate: session.appointmentDate!,
+        appointmentTime: session.appointmentTime!,
+        appointmentId,
+        paymentMethod: session.paymentMethod || "cash",
+        paymentAmount: amountCollected,
+        paymentStatus: remainingAmount === 0 ? "paid" : "pending",
+      },
+    })
+  }
+
+  if (!sentConfirmation) {
+    await sendTextMessage(phone, confirmationMsg)
+  }
 
   // Generate and send PDF only if doctor is assigned (not pending)
   if (!isPending && doctorData) {

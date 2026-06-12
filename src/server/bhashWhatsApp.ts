@@ -11,7 +11,14 @@ function getBhashConfig() {
     user: process.env.BHASHSMS_USER?.trim() || "",
     pass: process.env.BHASHSMS_PASSWORD?.trim() || "",
     sender: process.env.BHASHSMS_SENDER?.trim() || "BUZWAP",
+    /** OTP and other templates (sendmsg.php). */
     templateApiUrl:
+      process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
+      process.env.BHASHSMS_API_URL?.trim() ||
+      "http://bhashsms.com/api/sendmsg.php",
+    /** Appointment confirmation template only (sendmsg.php). */
+    confirmationApiUrl:
+      process.env.BHASHSMS_CONFIRMATION_API_URL?.trim() ||
       process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
       process.env.BHASHSMS_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsg.php",
@@ -24,6 +31,10 @@ function getBhashConfig() {
 export function isBhashSmsConfigured(): boolean {
   const { user, pass } = getBhashConfig()
   return !!(user && pass)
+}
+
+export function getBhashConfirmationApiUrl(): string {
+  return getBhashConfig().confirmationApiUrl
 }
 
 export function shouldUseBhashSms(): boolean {
@@ -190,27 +201,45 @@ export async function bhashSendTemplateMessage(
   to: string,
   templateName: string,
   parameters?: string[],
-  options?: { auth?: boolean; mediaType?: "image" | "video" | "document"; mediaUrl?: string }
+  options?: {
+    auth?: boolean
+    mediaType?: "image" | "video" | "document"
+    mediaUrl?: string
+    apiUrl?: string
+  }
 ): Promise<SendMessageResponse> {
-  const phone = formatPhoneForBhash(to)
-  if (!phone) return { success: false, error: "Invalid phone number for BhashSMS" }
+  const phones = phoneFormatAlternatives(to)
+  if (phones.length === 0) {
+    return { success: false, error: "Invalid phone number for BhashSMS" }
+  }
 
-  const params: Record<string, string> = {
-    phone,
+  const baseParams: Record<string, string> = {
     text: templateName,
     stype: options?.auth ? "auth" : "normal",
+    htype: "normal",
   }
 
   if (parameters?.length) {
-    params.Params = parameters.join(",")
+    baseParams.Params = parameters.join(",")
   }
 
   if (options?.mediaType && options.mediaUrl) {
-    params.htype = options.mediaType
-    params.url = options.mediaUrl
+    baseParams.htype = options.mediaType
+    baseParams.url = options.mediaUrl
   }
 
-  return bhashGet(params)
+  const apiUrl = options?.apiUrl || getBhashConfig().templateApiUrl
+  let lastResult: SendMessageResponse = {
+    success: false,
+    error: "BhashSMS template send failed",
+  }
+
+  for (const phone of phones) {
+    lastResult = await bhashGet({ phone, ...baseParams }, apiUrl)
+    if (lastResult.success) return lastResult
+  }
+
+  return lastResult
 }
 
 function appendFooter(body: string, footer?: string): string {

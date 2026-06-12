@@ -1,20 +1,23 @@
-import { bhashSendTemplateMessage, shouldUseBhashSms } from "@/server/bhashWhatsApp"
+import {
+  bhashSendTemplateMessage,
+  getBhashConfirmationApiUrl,
+  shouldUseBhashSms,
+} from "@/server/bhashWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
 
 /**
- * Bhash utility template (create in Templates WA):
+ * Bhash utility confirmation template (Templates WA → name: confirmation).
  *
- * Hello {{1}},
- * Your appointment has been confirmed {{2}}.
- * Doctor: {{3}}
- * Date: {{4}}
- * Time: {{5}}
- * Appointment ID: {{6}}
- * Payment: {{7}}
- * Thank you for choosing Harmony Medical Services.
+ * API (sendmsg.php):
+ * ...&text=confirmation&priority=wa&stype=normal&Params=p1,p2,p3,p4,p5,p6,p7
+ *
+ * Body:
+ * Hello {{1}}, Your appointment has been confirmed {{2}}.
+ * Doctor: {{3}} Date: {{4}} Time: {{5}} Appointment ID: {{6}} Payment: {{7}}
  */
-export const BHASH_CONFIRMATION_TEMPLATE_NAME =
-  process.env.BHASHSMS_CONFIRMATION_TEMPLATE || "hms_appointment_confirmation"
+export function getBhashConfirmationTemplateName(): string {
+  return process.env.BHASHSMS_CONFIRMATION_TEMPLATE?.trim() || "confirmation"
+}
 
 export interface BhashConfirmationTemplateParams {
   /** {{1}} Patient name */
@@ -135,12 +138,21 @@ export async function sendBhashConfirmationTemplateIfConfigured(options: {
   const recipientPhone = resolveRecipientPhone(options.to, options.fallbackRecipients)
   if (!recipientPhone) return false
 
+  const templateName = getBhashConfirmationTemplateName()
   const templateParams = buildBhashConfirmationParams(options.params)
-  const result = await bhashSendTemplateMessage(
-    recipientPhone,
-    BHASH_CONFIRMATION_TEMPLATE_NAME,
-    templateParams
-  )
+  const result = await bhashSendTemplateMessage(recipientPhone, templateName, templateParams, {
+    apiUrl: getBhashConfirmationApiUrl(),
+  })
+
+  console.log("[BhashSMS template]", {
+    template: templateName,
+    phone: recipientPhone,
+    paramCount: templateParams.length,
+    params: templateParams,
+    success: result.success,
+    messageId: result.messageId,
+    error: result.error,
+  })
 
   return result.success
 }
