@@ -5,28 +5,31 @@ export interface SendMessageResponse {
   errorCode?: number
 }
 
-/** Templates & business-initiated messages (sendmsg.php). */
-const BHASH_TEMPLATE_API_URL =
-  process.env.BHASHSMS_TEMPLATE_API_URL ||
-  process.env.BHASHSMS_API_URL ||
-  "http://bhashsms.com/api/sendmsg.php"
-
-/** Session replies after patient messages — uses WA Utility credits (sendmsgutilreply.php). */
-const BHASH_UTIL_REPLY_API_URL =
-  process.env.BHASHSMS_UTIL_REPLY_API_URL ||
-  "http://bhashsms.com/api/sendmsgutilreply.php"
-const BHASH_USER = process.env.BHASHSMS_USER
-const BHASH_PASS = process.env.BHASHSMS_PASSWORD
-const BHASH_SENDER = process.env.BHASHSMS_SENDER || "BUZWAP"
+/** Read env at request time — module-level reads can be empty on Vercel builds. */
+function getBhashConfig() {
+  return {
+    user: process.env.BHASHSMS_USER?.trim() || "",
+    pass: process.env.BHASHSMS_PASSWORD?.trim() || "",
+    sender: process.env.BHASHSMS_SENDER?.trim() || "BUZWAP",
+    templateApiUrl:
+      process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
+      process.env.BHASHSMS_API_URL?.trim() ||
+      "http://bhashsms.com/api/sendmsg.php",
+    utilReplyApiUrl:
+      process.env.BHASHSMS_UTIL_REPLY_API_URL?.trim() ||
+      "http://bhashsms.com/api/sendmsgutilreply.php",
+  }
+}
 
 export function isBhashSmsConfigured(): boolean {
-  return !!(BHASH_USER && BHASH_PASS)
+  const { user, pass } = getBhashConfig()
+  return !!(user && pass)
 }
 
 export function shouldUseBhashSms(): boolean {
-  const provider = process.env.WHATSAPP_PROVIDER?.toLowerCase()
+  const provider = process.env.WHATSAPP_PROVIDER?.toLowerCase().trim()
   if (provider === "meta") return false
-  if (provider === "bhashsms" || provider === "bhash") return isBhashSmsConfigured()
+  if (provider === "bhashsms" || provider === "bhash") return true
   return isBhashSmsConfigured()
 }
 
@@ -49,18 +52,18 @@ export function formatPhoneForBhash(phone: string): string | null {
 
 function parseBhashResponse(body: string): SendMessageResponse {
   const trimmed = body.trim()
+  if (/^s\.\d+/i.test(trimmed)) {
+    return { success: true, messageId: trimmed.split(/\s/)[0] }
+  }
+
   const normalized = trimmed.toLowerCase()
   if (
-    normalized.includes("success") ||
-    normalized.includes("sent") ||
-    normalized.includes("submitted") ||
-    normalized.includes("queued") ||
-    /^s\.\d+/i.test(trimmed)
+    normalized === "success" ||
+    normalized === "sent" ||
+    normalized === "submitted" ||
+    normalized === "queued"
   ) {
-    return {
-      success: true,
-      messageId: /^s\.\d+/i.test(trimmed) ? trimmed : `bhash-${Date.now()}`,
-    }
+    return { success: true, messageId: `bhash-${Date.now()}` }
   }
 
   return {
@@ -71,33 +74,51 @@ function parseBhashResponse(body: string): SendMessageResponse {
 
 async function bhashGet(
   params: Record<string, string>,
-  apiUrl: string = BHASH_TEMPLATE_API_URL
+  apiUrl?: string
 ): Promise<SendMessageResponse> {
-  if (!BHASH_USER || !BHASH_PASS) {
+  const config = getBhashConfig()
+  const resolvedApiUrl = apiUrl || config.templateApiUrl
+
+  if (!config.user || !config.pass) {
+    console.error("[BhashSMS] credentials missing on server", {
+      hasUser: !!config.user,
+      hasPass: !!config.pass,
+      provider: process.env.WHATSAPP_PROVIDER,
+    })
     return { success: false, error: "BhashSMS credentials not configured" }
   }
 
   const query = new URLSearchParams({
-    user: BHASH_USER,
-    pass: BHASH_PASS,
-    sender: BHASH_SENDER,
+    user: config.user,
+    pass: config.pass,
+    sender: config.sender,
     priority: "wa",
     ...params,
   })
 
   try {
-    const response = await fetch(`${apiUrl}?${query.toString()}`, {
+    const response = await fetch(`${resolvedApiUrl}?${query.toString()}`, {
       method: "GET",
       cache: "no-store",
     })
     const body = await response.text()
+    const parsed = parseBhashResponse(body)
+    const apiName = resolvedApiUrl.includes("utilreply") ? "utilreply" : "sendmsg"
+    console.log("[BhashSMS]", {
+      api: apiName,
+      phone: params.phone,
+      httpStatus: response.status,
+      response: body.trim().slice(0, 200),
+      success: parsed.success,
+      error: parsed.error,
+    })
     if (!response.ok) {
       return {
         success: false,
         error: body.trim() || `BhashSMS HTTP ${response.status}`,
       }
     }
-    return parseBhashResponse(body)
+    return parsed
   } catch (error: unknown) {
     return {
       success: false,
@@ -120,7 +141,7 @@ export async function bhashSendTextMessage(
       stype: "normal",
       htype: "normal",
     },
-    BHASH_UTIL_REPLY_API_URL
+    getBhashConfig().utilReplyApiUrl
   )
 }
 

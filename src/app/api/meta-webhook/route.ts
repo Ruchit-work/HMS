@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMessage, sendDocumentMessage, sendFlowMessage, formatPhoneNumber } from "@/server/metaWhatsApp"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { normalizeTime, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blockedDates"
@@ -43,12 +44,16 @@ async function clearSession(phone: string): Promise<void> {
 // Message sending with fallback
 async function sendWithFallback(
   phone: string,
-  buttonResponse: { success: boolean },
+  buttonResponse: { success: boolean; error?: string },
   message: string,
   fallback?: string
 ): Promise<void> {
   if (!buttonResponse.success) {
-    await sendTextMessage(phone, fallback || message)
+    console.error("[WhatsApp] button message failed, trying text fallback", buttonResponse.error)
+    const fallbackResponse = await sendTextMessage(phone, fallback || message)
+    if (!fallbackResponse.success) {
+      console.error("[WhatsApp] text fallback also failed", fallbackResponse.error)
+    }
   }
 }
 
@@ -141,6 +146,36 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
       )
       return
     }
+
+    // Bhash has no real buttons — map typed menu replies to button handlers
+    if (
+      trimmedText === "book" ||
+      trimmedText === "book appointment" ||
+      trimmedText === "📅 book appointment" ||
+      trimmedText === "1"
+    ) {
+      await BUTTON_HANDLERS.book_appointment(from)
+      return
+    }
+    if (
+      trimmedText === "help" ||
+      trimmedText === "help center" ||
+      trimmedText === "🆘 help center" ||
+      trimmedText === "2"
+    ) {
+      await handleHelpCenter(from)
+      return
+    }
+    if (
+      trimmedText === "yes" ||
+      trimmedText === "register" ||
+      trimmedText === "yes, register" ||
+      trimmedText === "✅ yes, register"
+    ) {
+      await handleRegistrationPrompt(from)
+      return
+    }
+
     await handleIncomingText(from)
   }
 }
@@ -334,7 +369,12 @@ async function handleGreeting(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const patient = await findPatientByPhone(db, normalizedPhone)
-  
+
+  const registerFallback =
+    "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?\n\nReply 'Yes' to register or 'Help' for assistance."
+  const bookFallback =
+    "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?\n\nType 'Book' to book an appointment or 'Help' for assistance."
+
   if (!patient) {
     const buttonResponse = await sendMultiButtonMessage(
       phone,
@@ -342,8 +382,10 @@ async function handleGreeting(phone: string) {
       [{ id: "register_yes", title: "✅ Yes, Register" }, { id: "help_center", title: "🆘 Help Center" }],
       "Harmony Medical Services"
     )
-    await sendWithFallback(phone, buttonResponse, "", 
-      "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?\n\nReply 'Yes' to register or 'Help' for assistance.")
+    if (!buttonResponse.success) {
+      console.error("[WhatsApp greeting] send failed (register)", buttonResponse.error)
+    }
+    await sendWithFallback(phone, buttonResponse, "", registerFallback)
   } else {
     const buttonResponse = await sendButtonMessage(
       phone,
@@ -352,8 +394,10 @@ async function handleGreeting(phone: string) {
       "book_appointment",
       "📅 Book Appointment"
     )
-    await sendWithFallback(phone, buttonResponse, "",
-      "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?\n\nType 'Book' to book an appointment or 'Help' for assistance.")
+    if (!buttonResponse.success) {
+      console.error("[WhatsApp greeting] send failed (book)", buttonResponse.error)
+    }
+    await sendWithFallback(phone, buttonResponse, "", bookFallback)
   }
 }
 
@@ -942,8 +986,8 @@ async function startBookingWithFlow(phone: string) {
     return
   }
 
-  // If Flow ID is configured, use Flow (better UI)
-  if (flowId) {
+  // Meta Flow UI only — Bhash falls back to text booking
+  if (flowId && !shouldUseBhashSms()) {
     const flowToken = `token_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
     const flowResponse = await sendFlowMessage(
       phone,
@@ -1444,16 +1488,64 @@ async function handleBranchSelection(
   phone: string,
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
-  _text: string,
+  text: string,
   session: BookingSession
 ): Promise<boolean> {
   const language = session.language || "english"
-  
+  const trimmedText = text.trim().toLowerCase()
+
+  if (trimmedText === "next" || trimmedText.includes("default")) {
+    await handleBranchButtonClick(phone, "branch_next")
+    return true
+  }
+
+  let hospitalId: string | null = null
+  if (session.patientUid) {
+    try {
+      const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+      if (patientDoc.exists) {
+        hospitalId = patientDoc.data()?.hospitalId || null
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!hospitalId) {
+    const activeHospitals = await getAllActiveHospitals()
+    if (activeHospitals.length > 0) hospitalId = activeHospitals[0].id
+  }
+
+  if (hospitalId) {
+    const branchesSnapshot = await db
+      .collection("branches")
+      .where("hospitalId", "==", hospitalId)
+      .where("status", "==", "active")
+      .get()
+
+    const branches = branchesSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      name: (doc.data().name as string) || "",
+    }))
+
+    const optionIndex = parseInt(trimmedText, 10)
+    if (!isNaN(optionIndex) && optionIndex >= 1 && optionIndex <= branches.length) {
+      await handleBranchButtonClick(phone, `branch_${branches[optionIndex - 1].id}`)
+      return true
+    }
+
+    const byName = branches.find(
+      (b) => b.name.toLowerCase() === trimmedText || b.name.toLowerCase().includes(trimmedText)
+    )
+    if (byName) {
+      await handleBranchButtonClick(phone, `branch_${byName.id}`)
+      return true
+    }
+  }
+
   await sendTextMessage(phone, lang(language,
-    "❌ કૃપા કરીને ઉપરની બટનોમાંથી બ્રાન્ચ પસંદ કરો.",
-    "❌ Please select a branch from the buttons above."))
-  
-  // Re-send branch selection
+    "❌ કૃપા કરીને ઉપરની યાદીમાંથી બ્રાન્ચ નંબર અથવા નામ લખો (દા.ત. 1).",
+    "❌ Please reply with the branch number or name from the list above (e.g. 1)."))
+
   await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)
   return true
 }
