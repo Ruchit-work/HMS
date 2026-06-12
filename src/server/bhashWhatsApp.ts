@@ -33,21 +33,50 @@ export function shouldUseBhashSms(): boolean {
   return isBhashSmsConfigured()
 }
 
-/** BhashSMS expects 10-digit Indian numbers without country code. */
+/** Normalize phone for Bhash. Session replies work best with the same format as inbound (91xxxxxxxxxx). */
 export function formatPhoneForBhash(phone: string): string | null {
   if (!phone) return null
 
   let digits = phone.replace(/^whatsapp:/i, "").replace(/\D/g, "")
   if (!digits) return null
 
-  if (digits.startsWith("91") && digits.length >= 12) {
-    digits = digits.slice(2)
+  const ten =
+    digits.length === 10
+      ? digits
+      : digits.startsWith("91") && digits.length >= 12
+        ? digits.slice(-10)
+        : digits.length > 10
+          ? digits.slice(-10)
+          : null
+
+  if (!ten || ten.length !== 10) return null
+
+  const phoneFormat = process.env.BHASHSMS_PHONE_FORMAT?.toLowerCase().trim()
+  if (phoneFormat === "10digit" || phoneFormat === "10") {
+    return ten
   }
 
-  if (digits.length === 10) return digits
-  if (digits.length > 10) return digits.slice(-10)
+  // Default: 91 + 10 digits (matches Bhash webhook fromphone=917359057367)
+  return `91${ten}`
+}
 
-  return null
+function phoneFormatAlternatives(phone: string): string[] {
+  const primary = formatPhoneForBhash(phone)
+  if (!primary) return []
+
+  const digits = primary.replace(/\D/g, "")
+  const ten = digits.slice(-10)
+  const with91 = `91${ten}`
+  const formats = [primary, with91, ten]
+  return [...new Set(formats)]
+}
+
+/** Plain text only — markdown/emoji-heavy messages may not deliver on some Bhash routes. */
+export function sanitizeBhashOutboundText(message: string): string {
+  return message
+    .replace(/_([^_\n]+)_/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .trim()
 }
 
 function parseBhashResponse(body: string): SendMessageResponse {
@@ -131,18 +160,30 @@ export async function bhashSendTextMessage(
   to: string,
   message: string
 ): Promise<SendMessageResponse> {
-  const phone = formatPhoneForBhash(to)
-  if (!phone) return { success: false, error: "Invalid phone number for BhashSMS" }
+  const phones = phoneFormatAlternatives(to)
+  if (phones.length === 0) {
+    return { success: false, error: "Invalid phone number for BhashSMS" }
+  }
 
-  return bhashGet(
-    {
-      phone,
-      text: message,
-      stype: "normal",
-      htype: "normal",
-    },
-    getBhashConfig().utilReplyApiUrl
-  )
+  const text = sanitizeBhashOutboundText(message)
+  const params = {
+    text,
+    stype: "normal",
+    htype: "normal",
+  }
+  const apiUrl = getBhashConfig().utilReplyApiUrl
+
+  let lastResult: SendMessageResponse = {
+    success: false,
+    error: "BhashSMS send failed",
+  }
+
+  for (const phone of phones) {
+    lastResult = await bhashGet({ phone, ...params }, apiUrl)
+    if (lastResult.success) return lastResult
+  }
+
+  return lastResult
 }
 
 export async function bhashSendTemplateMessage(

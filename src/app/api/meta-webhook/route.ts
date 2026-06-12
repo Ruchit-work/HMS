@@ -191,6 +191,11 @@ async function handleBhashInboundCallback(req: Request): Promise<Response | null
   }
 
   try {
+    console.log("[Bhash inbound]", {
+      from: inbound.from,
+      message: inbound.text.slice(0, 100),
+      params: Object.fromEntries(searchParams.entries()),
+    })
     await handleInboundTextMessage(inbound.from, inbound.text)
     return NextResponse.json({ success: true })
   } catch (err) {
@@ -369,6 +374,17 @@ async function handleGreeting(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const patient = await findPatientByPhone(db, normalizedPhone)
+
+  if (shouldUseBhashSms()) {
+    const text = !patient
+      ? "Hello! Welcome to Harmony Medical Services.\n\nWe don't have your profile yet.\n\nReply YES to register\nReply HELP for assistance"
+      : "Hello! Welcome to Harmony Medical Services.\n\nHow can we help you today?\n\nReply BOOK to book an appointment\nReply HELP for assistance"
+    const result = await sendTextMessage(phone, text)
+    if (!result.success) {
+      console.error("[WhatsApp greeting] Bhash plain text send failed", result.error)
+    }
+    return
+  }
 
   const registerFallback =
     "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?\n\nReply 'Yes' to register or 'Help' for assistance."
