@@ -77,6 +77,98 @@ function verifyMetaWebhookSignature(rawBody: string, signatureHeader: string, ap
   return crypto.timingSafeEqual(receivedBuffer, expectedBuffer)
 }
 
+function getBhashInboundFromSearchParams(searchParams: URLSearchParams): {
+  from: string
+  text: string
+} | null {
+  const from =
+    searchParams.get("fromphone") ||
+    searchParams.get("from_phone") ||
+    searchParams.get("phone") ||
+    searchParams.get("from")
+  const text =
+    searchParams.get("message") ||
+    searchParams.get("text") ||
+    searchParams.get("body")
+
+  if (!from?.trim() || !text?.trim()) return null
+  return { from: from.trim(), text: text.trim() }
+}
+
+async function handleInboundTextMessage(from: string, text: string): Promise<void> {
+  const trimmedText = text.trim().toLowerCase()
+
+  const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
+  if (greetings.some((g) => trimmedText === g || trimmedText.startsWith(g + " "))) {
+    await clearSession(from)
+    await handleGreeting(from)
+    return
+  }
+
+  const cancelKeywords = [
+    "cancel",
+    "stop",
+    "abort",
+    "quit",
+    "exit",
+    "no",
+    "nevermind",
+    "never mind",
+    "don't",
+    "dont",
+    "skip",
+    "end",
+    "finish",
+  ]
+  if (cancelKeywords.some((k) => trimmedText === k || trimmedText.includes(k))) {
+    const { data } = await getSession(from)
+    await clearSession(from)
+    await sendTextMessage(
+      from,
+      data
+        ? "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
+        : "✅ Understood. No active booking to cancel.\n\nHow can I help you today? Type 'hi' to see options or 'Book' to start booking an appointment."
+    )
+    return
+  }
+
+  const isInBooking = await handleBookingConversation(from, text)
+  if (!isInBooking) {
+    if (trimmedText.includes("thank")) {
+      await sendTextMessage(
+        from,
+        "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥"
+      )
+      return
+    }
+    await handleIncomingText(from)
+  }
+}
+
+async function handleBhashInboundCallback(req: Request): Promise<Response | null> {
+  const { searchParams } = new URL(req.url)
+  const inbound = getBhashInboundFromSearchParams(searchParams)
+  if (!inbound) return null
+
+  const initResult = initFirebaseAdmin("meta-whatsapp-webhook")
+  if (!initResult.ok) {
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+  }
+
+  try {
+    await handleInboundTextMessage(inbound.from, inbound.text)
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Webhook processing failed",
+        details: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 }
+    )
+  }
+}
+
 export async function GET(req: Request) {
   const rateLimitResult = await applyRateLimit(req, "GENERAL")
   if (rateLimitResult instanceof Response) {
@@ -92,6 +184,9 @@ export async function GET(req: Request) {
     return new NextResponse(challenge ?? "", { status: 200 })
   }
 
+  const bhashResponse = await handleBhashInboundCallback(req)
+  if (bhashResponse) return bhashResponse
+
   return new NextResponse("Forbidden", { status: 403 })
 }
 
@@ -101,6 +196,9 @@ export async function POST(req: Request) {
     if (rateLimitResult instanceof Response) {
       return rateLimitResult
     }
+
+    const bhashResponse = await handleBhashInboundCallback(req)
+    if (bhashResponse) return bhashResponse
 
     const rawBody = await req.text()
     if (!rawBody || rawBody.length > 1024 * 1024) {
@@ -177,36 +275,7 @@ export async function POST(req: Request) {
     // Handle text messages - check greetings first, then booking conversation
     if (messageType === "text") {
       const text = message.text?.body ?? ""
-      const trimmedText = text.trim().toLowerCase()
-      
-      // Check for greetings FIRST (before booking conversation check)
-      const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
-      if (greetings.some(g => trimmedText === g || trimmedText.startsWith(g + " "))) {
-        await clearSession(from)
-        await handleGreeting(from)
-        return NextResponse.json({ success: true })
-      }
-      
-      // Check for cancel/stop keywords
-      const cancelKeywords = ["cancel", "stop", "abort", "quit", "exit", "no", "nevermind", "never mind", "don't", "dont", "skip", "end", "finish"]
-      if (cancelKeywords.some(k => trimmedText === k || trimmedText.includes(k))) {
-        const { data } = await getSession(from)
-        await clearSession(from)
-        await sendTextMessage(from, data 
-          ? "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
-          : "✅ Understood. No active booking to cancel.\n\nHow can I help you today? Type 'hi' to see options or 'Book' to start booking an appointment.")
-        return NextResponse.json({ success: true })
-      }
-      
-      // Check if user is in booking conversation
-      const isInBooking = await handleBookingConversation(from, text)
-      if (!isInBooking) {
-        if (trimmedText.includes("thank")) {
-          await sendTextMessage(from, "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥")
-          return NextResponse.json({ success: true })
-        }
-        await handleIncomingText(from)
-      }
+      await handleInboundTextMessage(from, text)
       return NextResponse.json({ success: true })
     }
 
