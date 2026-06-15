@@ -114,7 +114,14 @@ function parseBhashResponse(body: string): SendMessageResponse {
   }
 }
 
-/** Bhash Params= must use literal commas between values (URLSearchParams encodes them and breaks templates). */
+/** Params for sendmsgutil.php — literal commas, spaces as + (matches browser URL that worked). */
+export function encodeBhashTemplateParams(parameters: string[]): string {
+  return parameters
+    .map((part) => part.trim().replace(/ /g, "+"))
+    .join(",")
+}
+
+/** Bhash Params= must use literal commas — do not double-encode. */
 function buildBhashQueryString(
   config: { user: string; pass: string; sender: string },
   params: Record<string, string>
@@ -128,11 +135,7 @@ function buildBhashQueryString(
 
   for (const [key, value] of Object.entries(params)) {
     if (key === "Params") {
-      const encoded = value
-        .split(",")
-        .map((part) => encodeURIComponent(part.trim()))
-        .join(",")
-      segments.push(`Params=${encoded}`)
+      segments.push(`Params=${value}`)
     } else {
       segments.push(`${key}=${encodeURIComponent(value)}`)
     }
@@ -177,6 +180,7 @@ async function bhashGet(
       text: params.text?.slice(0, 40),
       hasParams: !!params.Params,
       paramCount: params.Params ? params.Params.split(",").length : 0,
+      requestUrl: `${resolvedApiUrl}?${query.replace(/pass=[^&]+/, "pass=***")}`,
       httpStatus: response.status,
       response: body.trim().slice(0, 200),
       success: parsed.success,
@@ -217,6 +221,36 @@ export async function bhashSendTextMessage(
   return bhashGet({ phone, ...params }, apiUrl)
 }
 
+/**
+ * UTILITY template via sendmsgutil.php (same as browser test that delivered full message).
+ * phone=10 digits, no htype, Params with literal commas.
+ */
+export async function bhashSendConfirmationUtilityTemplate(
+  to: string,
+  templateName: string,
+  parameters: string[]
+): Promise<SendMessageResponse> {
+  const ten = extractTenDigitPhone(to)
+  if (!ten) {
+    return { success: false, error: "Invalid phone number for BhashSMS" }
+  }
+
+  if (!parameters.length) {
+    return { success: false, error: "Template parameters required" }
+  }
+
+  const apiUrl = getBhashConfirmationApiUrl()
+  return bhashGet(
+    {
+      phone: ten,
+      text: templateName,
+      stype: "normal",
+      Params: encodeBhashTemplateParams(parameters),
+    },
+    apiUrl
+  )
+}
+
 export async function bhashSendTemplateMessage(
   to: string,
   templateName: string,
@@ -237,15 +271,20 @@ export async function bhashSendTemplateMessage(
     return { success: false, error: "Invalid phone number for BhashSMS" }
   }
 
-  // Bhash: sendmsg.php?text=TEMPLATENAME&stype=normal&Params=param1,param2,...
+  const isUtilApi = apiUrl.includes("sendmsgutil.php")
   const baseParams: Record<string, string> = {
     text: templateName,
     stype: options?.auth ? "auth" : "normal",
-    htype: "normal",
+  }
+
+  if (!isUtilApi) {
+    baseParams.htype = "normal"
   }
 
   if (parameters?.length) {
-    baseParams.Params = parameters.join(",")
+    baseParams.Params = isUtilApi
+      ? encodeBhashTemplateParams(parameters)
+      : parameters.join(",")
   }
 
   if (options?.mediaType && options.mediaUrl) {
