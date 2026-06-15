@@ -97,6 +97,12 @@ function phoneFormatsForApi(phone: string, apiUrl: string): string[] {
   return [...new Set([primary, with91, ten])]
 }
 
+/** Template APIs: Bhash docs say phone without 91 — use one format to avoid duplicate sends. */
+function phoneForTemplateApi(phone: string): string[] {
+  const ten = extractTenDigitPhone(phone)
+  return ten ? [ten] : []
+}
+
 /** Plain text only — markdown/emoji-heavy messages may not deliver on some Bhash routes. */
 export function sanitizeBhashOutboundText(message: string): string {
   return message
@@ -127,6 +133,33 @@ function parseBhashResponse(body: string): SendMessageResponse {
   }
 }
 
+/** Bhash Params= must use literal commas between values (URLSearchParams encodes them and breaks templates). */
+function buildBhashQueryString(
+  config: { user: string; pass: string; sender: string },
+  params: Record<string, string>
+): string {
+  const segments: string[] = [
+    `user=${encodeURIComponent(config.user)}`,
+    `pass=${encodeURIComponent(config.pass)}`,
+    `sender=${encodeURIComponent(config.sender)}`,
+    `priority=wa`,
+  ]
+
+  for (const [key, value] of Object.entries(params)) {
+    if (key === "Params") {
+      const encoded = value
+        .split(",")
+        .map((part) => encodeURIComponent(part.trim()))
+        .join(",")
+      segments.push(`Params=${encoded}`)
+    } else {
+      segments.push(`${key}=${encodeURIComponent(value)}`)
+    }
+  }
+
+  return segments.join("&")
+}
+
 async function bhashGet(
   params: Record<string, string>,
   apiUrl?: string
@@ -143,16 +176,10 @@ async function bhashGet(
     return { success: false, error: "BhashSMS credentials not configured" }
   }
 
-  const query = new URLSearchParams({
-    user: config.user,
-    pass: config.pass,
-    sender: config.sender,
-    priority: "wa",
-    ...params,
-  })
+  const query = buildBhashQueryString(config, params)
 
   try {
-    const response = await fetch(`${resolvedApiUrl}?${query.toString()}`, {
+    const response = await fetch(`${resolvedApiUrl}?${query}`, {
       method: "GET",
       cache: "no-store",
     })
@@ -168,6 +195,7 @@ async function bhashGet(
       phone: params.phone,
       text: params.text?.slice(0, 40),
       hasParams: !!params.Params,
+      paramCount: params.Params ? params.Params.split(",").length : 0,
       httpStatus: response.status,
       response: body.trim().slice(0, 200),
       success: parsed.success,
@@ -233,7 +261,7 @@ export async function bhashSendTemplateMessage(
   const apiUrl =
     options?.apiUrl ||
     (options?.auth ? config.utilTemplateApiUrl : config.templateApiUrl)
-  const phones = phoneFormatsForApi(to, apiUrl)
+  const phones = phoneForTemplateApi(to)
   if (phones.length === 0) {
     return { success: false, error: "Invalid phone number for BhashSMS" }
   }
