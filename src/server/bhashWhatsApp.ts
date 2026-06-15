@@ -20,12 +20,11 @@ function getBhashConfig() {
     utilTemplateApiUrl:
       process.env.BHASHSMS_UTIL_TEMPLATE_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsgutil.php",
-    /** Appointment confirmation template (sendmsg.php — template + Params). */
+    /** Appointment confirmation — UTILITY template via sendmsgutil.php (WA Utility credits). */
     confirmationApiUrl:
       process.env.BHASHSMS_CONFIRMATION_API_URL?.trim() ||
-      process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
-      process.env.BHASHSMS_API_URL?.trim() ||
-      "http://bhashsms.com/api/sendmsg.php",
+      process.env.BHASHSMS_UTIL_TEMPLATE_API_URL?.trim() ||
+      "http://bhashsms.com/api/sendmsgutil.php",
     utilReplyApiUrl:
       process.env.BHASHSMS_UTIL_REPLY_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsgutilreply.php",
@@ -48,11 +47,10 @@ export function shouldUseBhashSms(): boolean {
   return isBhashSmsConfigured()
 }
 
-/** Normalize phone for Bhash. Session replies work best with the same format as inbound (91xxxxxxxxxx). */
-export function formatPhoneForBhash(phone: string): string | null {
+/** Extract 10-digit Indian mobile from any phone string. */
+export function extractTenDigitPhone(phone: string): string | null {
   if (!phone) return null
-
-  let digits = phone.replace(/^whatsapp:/i, "").replace(/\D/g, "")
+  const digits = phone.replace(/^whatsapp:/i, "").replace(/\D/g, "")
   if (!digits) return null
 
   const ten =
@@ -64,26 +62,39 @@ export function formatPhoneForBhash(phone: string): string | null {
           ? digits.slice(-10)
           : null
 
-  if (!ten || ten.length !== 10) return null
+  return ten && ten.length === 10 ? ten : null
+}
+
+/** Normalize phone for Bhash session replies (utilreply — often 91xxxxxxxxxx). */
+export function formatPhoneForBhash(phone: string): string | null {
+  const ten = extractTenDigitPhone(phone)
+  if (!ten) return null
 
   const phoneFormat = process.env.BHASHSMS_PHONE_FORMAT?.toLowerCase().trim()
   if (phoneFormat === "10digit" || phoneFormat === "10") {
     return ten
   }
 
-  // Default: 91 + 10 digits (matches Bhash webhook fromphone=917359057367)
   return `91${ten}`
 }
 
-function phoneFormatAlternatives(phone: string): string[] {
+/** Template APIs (sendmsg.php, sendmsgutil.php): phone without 91. utilreply: often 91 prefix. */
+function phoneFormatsForApi(phone: string, apiUrl: string): string[] {
+  const ten = extractTenDigitPhone(phone)
+  if (!ten) return []
+
+  const with91 = `91${ten}`
+  const isTemplateApi =
+    apiUrl.includes("sendmsgutil.php") ||
+    (apiUrl.includes("sendmsg.php") && !apiUrl.includes("util"))
+
+  if (isTemplateApi) {
+    return [...new Set([ten, with91])]
+  }
+
   const primary = formatPhoneForBhash(phone)
   if (!primary) return []
-
-  const digits = primary.replace(/\D/g, "")
-  const ten = digits.slice(-10)
-  const with91 = `91${ten}`
-  const formats = [primary, with91, ten]
-  return [...new Set(formats)]
+  return [...new Set([primary, with91, ten])]
 }
 
 /** Plain text only — markdown/emoji-heavy messages may not deliver on some Bhash routes. */
@@ -147,10 +158,16 @@ async function bhashGet(
     })
     const body = await response.text()
     const parsed = parseBhashResponse(body)
-    const apiName = resolvedApiUrl.includes("utilreply") ? "utilreply" : "sendmsg"
+    const apiName = resolvedApiUrl.includes("utilreply")
+      ? "utilreply"
+      : resolvedApiUrl.includes("sendmsgutil")
+        ? "sendmsgutil"
+        : "sendmsg"
     console.log("[BhashSMS]", {
       api: apiName,
       phone: params.phone,
+      text: params.text?.slice(0, 40),
+      hasParams: !!params.Params,
       httpStatus: response.status,
       response: body.trim().slice(0, 200),
       success: parsed.success,
@@ -175,7 +192,8 @@ export async function bhashSendTextMessage(
   to: string,
   message: string
 ): Promise<SendMessageResponse> {
-  const phones = phoneFormatAlternatives(to)
+  const apiUrl = getBhashConfig().utilReplyApiUrl
+  const phones = phoneFormatsForApi(to, apiUrl)
   if (phones.length === 0) {
     return { success: false, error: "Invalid phone number for BhashSMS" }
   }
@@ -186,7 +204,6 @@ export async function bhashSendTextMessage(
     stype: "normal",
     htype: "normal",
   }
-  const apiUrl = getBhashConfig().utilReplyApiUrl
 
   let lastResult: SendMessageResponse = {
     success: false,
@@ -212,11 +229,16 @@ export async function bhashSendTemplateMessage(
     apiUrl?: string
   }
 ): Promise<SendMessageResponse> {
-  const phones = phoneFormatAlternatives(to)
+  const config = getBhashConfig()
+  const apiUrl =
+    options?.apiUrl ||
+    (options?.auth ? config.utilTemplateApiUrl : config.templateApiUrl)
+  const phones = phoneFormatsForApi(to, apiUrl)
   if (phones.length === 0) {
     return { success: false, error: "Invalid phone number for BhashSMS" }
   }
 
+  // Bhash: sendmsg.php?text=TEMPLATENAME&stype=normal&Params=param1,param2,...
   const baseParams: Record<string, string> = {
     text: templateName,
     stype: options?.auth ? "auth" : "normal",
@@ -232,10 +254,6 @@ export async function bhashSendTemplateMessage(
     baseParams.url = options.mediaUrl
   }
 
-  const config = getBhashConfig()
-  let apiUrl =
-    options?.apiUrl ||
-    (options?.auth ? config.utilTemplateApiUrl : config.templateApiUrl)
   let lastResult: SendMessageResponse = {
     success: false,
     error: "BhashSMS template send failed",

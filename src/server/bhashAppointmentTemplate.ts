@@ -9,8 +9,12 @@ import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
 /**
  * Bhash utility confirmation template (Templates WA → name: confirmation).
  *
- * API (sendmsg.php):
- * ...&text=confirmation&priority=wa&stype=normal&Params=p1,p2,p3,p4,p5,p6,p7
+ * API (sendmsgutil.php — same family as OTP, uses WA Utility credits):
+ * .../sendmsgutil.php?user=...&sender=BUZWAP&phone=7359057367&text=confirmation
+ * &priority=wa&stype=normal&Params=param1,param2,...,param7
+ *
+ * OTP uses the same API with stype=auth:
+ * .../sendmsgutil.php?...&text=otp&stype=auth&Params=1234
  *
  * Body:
  * Hello {{1}}, Your appointment has been confirmed {{2}}.
@@ -147,7 +151,7 @@ function resolveRecipientPhone(
 
 /**
  * Sends Bhash confirmation when WHATSAPP_PROVIDER=bhashsms.
- * 1. Tries approved template via sendmsg.php (text=confirmation + Params).
+ * 1. Tries approved UTILITY template via sendmsgutil.php (stype=normal + Params).
  * 2. Falls back to full plain-text details via sendmsgutilreply.php.
  */
 export async function sendBhashConfirmationTemplateIfConfigured(options: {
