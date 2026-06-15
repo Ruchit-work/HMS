@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { getUserActiveHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/firebase/serverHospitalQueries"
-import { sendBhashMissedAppointmentTemplateIfConfigured } from "@/server/bhashUtilityTemplates"
-import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
-import { sendWhatsAppNotification } from "@/server/whatsapp"
+import { buildMissedAppointmentMessage, sendMissedAppointmentWhatsApp } from "@/server/missedAppointmentNotify"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 
 interface Params {
@@ -147,72 +145,13 @@ export async function POST(
       const doctorName = appointmentData.doctorName || "Doctor"
 
       if (patientPhone && patientPhone.trim() !== "") {
-        // Format date nicely
-        let formattedDate = appointmentDate
-        if (appointmentDate) {
-          try {
-            const dateObj = new Date(appointmentDate)
-            formattedDate = dateObj.toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })
-          } catch {
-            // Keep original date if parsing fails
-          }
-        }
-
-        // Format time nicely
-        let formattedTime = appointmentTime
-        if (appointmentTime) {
-          try {
-            // Handle both 24-hour and 12-hour formats
-            const [hours, minutes] = appointmentTime.split(':')
-            const hour = parseInt(hours)
-            const min = minutes || '00'
-            const ampm = hour >= 12 ? 'PM' : 'AM'
-            const hour12 = hour % 12 || 12
-            formattedTime = `${hour12}:${min} ${ampm}`
-          } catch {
-            // Keep original time if parsing fails
-          }
-        }
-
-        // Build WhatsApp message
-        const messageText = `⚠️ *Appointment Missed*\n\n` +
-          `Hello ${patientName},\n\n` +
-          `We noticed that you missed your appointment today.\n\n` +
-          `📋 *Appointment Details:*\n` +
-          `• 👨‍⚕️ Doctor: ${doctorName}\n` +
-          `• 📅 Date: ${formattedDate}\n` +
-          `• 🕒 Time: ${formattedTime}\n\n` +
-          `This appointment has been cancelled by our receptionist due to non-attendance.\n\n` +
-          `🔄 *Would you like to reschedule?*\n\n` +
-          `Please reply to this message or call us to book a new appointment. We're here to help you reschedule at your convenience.\n\n` +
-          `Thank you for choosing Harmony Medical Services! 🏥`
-
-        // Send WhatsApp message (fire-and-forget, don't fail if it fails)
-        const sentViaBhashTemplate = await sendBhashMissedAppointmentTemplateIfConfigured({
+        const whatsappResult = await sendMissedAppointmentWhatsApp({
           to: patientPhone,
           patientName,
           doctorName,
           appointmentDate,
           appointmentTime,
         })
-
-        let whatsappResult: { success: boolean; sid?: string; error?: string }
-        if (sentViaBhashTemplate || shouldUseBhashSms()) {
-          whatsappResult = {
-            success: sentViaBhashTemplate,
-            sid: sentViaBhashTemplate ? "bhash-template" : undefined,
-          }
-        } else {
-          whatsappResult = await sendWhatsAppNotification({
-            to: patientPhone,
-            message: messageText,
-          })
-        }
 
         if (whatsappResult.success) {
           // Store notification record in Firestore
@@ -225,7 +164,12 @@ export async function POST(
               doctorName,
               appointmentDate,
               appointmentTime,
-              message: messageText,
+              message: buildMissedAppointmentMessage({
+                patientName,
+                doctorName,
+                appointmentDate,
+                appointmentTime,
+              }),
               sentAt: nowIso,
               status: "sent",
               messageId: whatsappResult.sid,

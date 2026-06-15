@@ -8,7 +8,7 @@ import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import Notification from "@/components/ui/feedback/Notification"
 import { generatePrescriptionPDF } from "@/utils/documents/pdfGenerators"
-import { completeAppointment, markAppointmentSkipped } from "@/utils/appointmentHelpers"
+import { completeAppointment } from "@/utils/appointmentHelpers"
 import { calculateAge } from "@/utils/shared/date"
 import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
@@ -524,13 +524,43 @@ function DoctorAppointmentsContent() {
       setSkippingId(appointmentId)
       setNotification(null)
       try {
-        await markAppointmentSkipped(appointmentId, activeHospitalId)
+        const currentUser = auth.currentUser
+        if (!currentUser) {
+          throw new Error("You must be logged in to skip appointments")
+        }
+        const token = await currentUser.getIdToken()
+        const response = await fetch("/api/doctor/skip-appointment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            appointmentId,
+            hospitalId: activeHospitalId,
+          }),
+        })
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to skip appointment")
+        }
+
         setAppointments((prev) =>
           prev.map((apt) =>
             apt.id === appointmentId ? { ...apt, status: "no_show" as const } : apt
           )
         )
-        setNotification({ type: "success", message: "Appointment skipped. You can take the next patient." })
+
+        const whatsappNote = data.whatsappSent
+          ? " Missed-appointment WhatsApp sent."
+          : data.whatsappError
+            ? ` WhatsApp not sent: ${data.whatsappError}`
+            : " No patient phone — WhatsApp not sent."
+
+        setNotification({
+          type: data.whatsappSent ? "success" : "error",
+          message: `Appointment skipped.${whatsappNote}`,
+        })
       } catch (e) {
         setNotification({ type: "error", message: (e as Error).message })
       } finally {
