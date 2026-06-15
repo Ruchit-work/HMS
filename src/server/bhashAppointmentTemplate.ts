@@ -1,7 +1,5 @@
 import {
-  bhashSendTemplateMessage,
   bhashSendTextMessage,
-  getBhashConfirmationApiUrl,
   shouldUseBhashSms,
 } from "@/server/bhashWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
@@ -132,9 +130,7 @@ Time: ${time}
 Appointment ID: ${id}
 Payment: ${payment}
 
-Your appointment is confirmed. Reply here if you need to reschedule.
-
-Harmony Medical Services`
+Thank you for choosing Harmony Medical Services.`
 }
 
 function resolveRecipientPhone(
@@ -150,9 +146,8 @@ function resolveRecipientPhone(
 }
 
 /**
- * Sends Bhash confirmation when WHATSAPP_PROVIDER=bhashsms.
- * 1. Tries approved UTILITY template via sendmsgutil.php (stype=normal + Params).
- * 2. Falls back to full plain-text details via sendmsgutilreply.php.
+ * Sends one WhatsApp confirmation with full appointment details (plain text).
+ * Template API is skipped — it returns success but often sends only "confirmation".
  */
 export async function sendBhashConfirmationTemplateIfConfigured(options: {
   to?: string | null
@@ -166,36 +161,10 @@ export async function sendBhashConfirmationTemplateIfConfigured(options: {
   const recipientPhone = resolveRecipientPhone(options.to, options.fallbackRecipients)
   if (!recipientPhone) return false
 
-  const templateName = getBhashConfirmationTemplateName()
-  const templateParams = buildBhashConfirmationParams(options.params)
-
-  if (process.env.BHASHSMS_CONFIRMATION_TEMPLATE) {
-    const templateResult = await bhashSendTemplateMessage(
-      recipientPhone,
-      templateName,
-      templateParams,
-      { apiUrl: getBhashConfirmationApiUrl() }
-    )
-
-    console.log("[BhashSMS template]", {
-      template: templateName,
-      phone: recipientPhone,
-      paramCount: templateParams.length,
-      params: templateParams,
-      success: templateResult.success,
-      messageId: templateResult.messageId,
-      error: templateResult.error,
-    })
-
-    if (templateResult.success) {
-      return true
-    }
-  }
-
   const plainText = buildBhashConfirmationPlainText(options.params)
   const textResult = await bhashSendTextMessage(recipientPhone, plainText)
 
-  console.log("[BhashSMS confirmation text]", {
+  console.log("[BhashSMS confirmation]", {
     phone: recipientPhone,
     success: textResult.success,
     messageId: textResult.messageId,

@@ -78,25 +78,6 @@ export function formatPhoneForBhash(phone: string): string | null {
   return `91${ten}`
 }
 
-/** Template APIs (sendmsg.php, sendmsgutil.php): phone without 91. utilreply: often 91 prefix. */
-function phoneFormatsForApi(phone: string, apiUrl: string): string[] {
-  const ten = extractTenDigitPhone(phone)
-  if (!ten) return []
-
-  const with91 = `91${ten}`
-  const isTemplateApi =
-    apiUrl.includes("sendmsgutil.php") ||
-    (apiUrl.includes("sendmsg.php") && !apiUrl.includes("util"))
-
-  if (isTemplateApi) {
-    return [...new Set([ten, with91])]
-  }
-
-  const primary = formatPhoneForBhash(phone)
-  if (!primary) return []
-  return [...new Set([primary, with91, ten])]
-}
-
 /** Template APIs: Bhash docs say phone without 91 — use one format to avoid duplicate sends. */
 function phoneForTemplateApi(phone: string): string[] {
   const ten = extractTenDigitPhone(phone)
@@ -221,8 +202,8 @@ export async function bhashSendTextMessage(
   message: string
 ): Promise<SendMessageResponse> {
   const apiUrl = getBhashConfig().utilReplyApiUrl
-  const phones = phoneFormatsForApi(to, apiUrl)
-  if (phones.length === 0) {
+  const phone = formatPhoneForBhash(to)
+  if (!phone) {
     return { success: false, error: "Invalid phone number for BhashSMS" }
   }
 
@@ -233,17 +214,7 @@ export async function bhashSendTextMessage(
     htype: "normal",
   }
 
-  let lastResult: SendMessageResponse = {
-    success: false,
-    error: "BhashSMS send failed",
-  }
-
-  for (const phone of phones) {
-    lastResult = await bhashGet({ phone, ...params }, apiUrl)
-    if (lastResult.success) return lastResult
-  }
-
-  return lastResult
+  return bhashGet({ phone, ...params }, apiUrl)
 }
 
 export async function bhashSendTemplateMessage(
