@@ -1,4 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { sendBhashWelcomeTemplateIfConfigured } from "@/server/bhashUtilityTemplates"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
@@ -241,21 +243,34 @@ export async function POST(request: Request) {
     // Send WhatsApp notification only if we have a phone number (don't block on this)
     if (phoneCandidates.length > 0) {
       try {
-        const result = await sendWhatsAppNotification({
+        const fullName = `${docData.firstName || ""} ${docData.lastName || ""}`.trim() || "Patient"
+        const sentViaBhashTemplate = await sendBhashWelcomeTemplateIfConfigured({
           to: phoneCandidates[0],
           fallbackRecipients: phoneCandidates.slice(1),
-          message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
+          firstName: docData.firstName,
+          patientId,
+          fullName,
         })
-        if (!result.success) {
-          // Try fallback recipients if primary failed
-          if (phoneCandidates.length > 1 && result.errorCode !== 4) { // Don't retry on rate limit
-            for (let i = 1; i < phoneCandidates.length; i++) {
-              const fallbackResult = await sendWhatsAppNotification({
-                to: phoneCandidates[i],
-                message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
-              })
-              if (fallbackResult.success) {
-                break
+
+        if (sentViaBhashTemplate || shouldUseBhashSms()) {
+          // Bhash template sent or provider is bhash — skip plain text fallback
+        } else {
+          const result = await sendWhatsAppNotification({
+            to: phoneCandidates[0],
+            fallbackRecipients: phoneCandidates.slice(1),
+            message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
+          })
+          if (!result.success) {
+            // Try fallback recipients if primary failed
+            if (phoneCandidates.length > 1 && result.errorCode !== 4) { // Don't retry on rate limit
+              for (let i = 1; i < phoneCandidates.length; i++) {
+                const fallbackResult = await sendWhatsAppNotification({
+                  to: phoneCandidates[i],
+                  message: buildWelcomeMessage(docData.firstName, docData.lastName, patientId, docData.email),
+                })
+                if (fallbackResult.success) {
+                  break
+                }
               }
             }
           }

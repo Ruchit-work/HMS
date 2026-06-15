@@ -96,7 +96,9 @@ export async function POST(request) {
     const { sendTemplateMessage, sendTextMessage } = await import("@/server/metaWhatsApp");
     
     // Check if OTP template is configured
-    const otpTemplateName = process.env.META_WHATSAPP_OTP_TEMPLATE_NAME;
+    const otpTemplateName =
+      process.env.BHASHSMS_OTP_TEMPLATE ||
+      process.env.META_WHATSAPP_OTP_TEMPLATE_NAME;
     let result;
     
     if (otpTemplateName) {

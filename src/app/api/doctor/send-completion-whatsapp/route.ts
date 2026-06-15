@@ -5,6 +5,11 @@
 
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import {
+  sendBhashCheckupCompleteTemplateIfConfigured,
+  sendBhashPrescriptionDocumentTemplateIfConfigured,
+} from "@/server/bhashUtilityTemplates"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { sendDocumentMessage } from "@/server/metaWhatsApp"
 import { getPrescriptionPDFBuffer } from "@/utils/documents/pdfGenerators"
@@ -181,10 +186,25 @@ export async function POST(request: Request) {
     }
 
     // Send WhatsApp thank you message
-    const result = await sendWhatsAppNotification({
+    const sentViaBhashTemplate = await sendBhashCheckupCompleteTemplateIfConfigured({
       to: phone,
-      message: messageText,
+      patientName: name,
+      reviewLink: googleReviewLink,
     })
+
+    let result: { success: boolean; sid?: string; error?: string }
+    if (sentViaBhashTemplate || shouldUseBhashSms()) {
+      result = {
+        success: sentViaBhashTemplate,
+        sid: sentViaBhashTemplate ? "bhash-template" : undefined,
+        error: sentViaBhashTemplate ? undefined : "Bhash checkup_complete template failed",
+      }
+    } else {
+      result = await sendWhatsAppNotification({
+        to: phone,
+        message: messageText,
+      })
+    }
     if (!result.success) {
       return NextResponse.json({
         success: false,
@@ -201,14 +221,26 @@ export async function POST(request: Request) {
           ? new Date(String(fullAppointment.appointmentDate)).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0]
         const filename = `Prescription_${String(name).replace(/\s+/g, "_")}_${dateStr}.pdf`
-        const docResult = await sendDocumentMessage(
-          phone,
-          pdfUrl,
-          filename,
-          "Your prescription and invoice from today's visit. Thank you for choosing us! 🏥"
-        )
-        if (!docResult.success) {
-          console.error("[send-completion-whatsapp] Prescription PDF send failed:", docResult.error)
+
+        const sentPrescriptionTemplate = await sendBhashPrescriptionDocumentTemplateIfConfigured({
+          to: phone,
+          documentUrl: pdfUrl,
+          patientName: name,
+          appointmentId,
+        })
+
+        if (!sentPrescriptionTemplate && !shouldUseBhashSms()) {
+          const docResult = await sendDocumentMessage(
+            phone,
+            pdfUrl,
+            filename,
+            "Your prescription and invoice from today's visit. Thank you for choosing us!"
+          )
+          if (!docResult.success) {
+            console.error("[send-completion-whatsapp] Prescription PDF send failed:", docResult.error)
+          }
+        } else if (!sentPrescriptionTemplate) {
+          console.error("[send-completion-whatsapp] Bhash prescription_pdf template failed")
         }
       } catch (docErr) {
         console.error("[send-completion-whatsapp] Prescription PDF send error:", docErr)

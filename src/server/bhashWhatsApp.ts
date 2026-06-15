@@ -11,12 +11,12 @@ function getBhashConfig() {
     user: process.env.BHASHSMS_USER?.trim() || "",
     pass: process.env.BHASHSMS_PASSWORD?.trim() || "",
     sender: process.env.BHASHSMS_SENDER?.trim() || "BUZWAP",
-    /** OTP and legacy templates (sendmsg.php — often needs separate SMS credits). */
+    /** Legacy marketing templates (sendmsg.php — requires SplitCredits + Marketing credits). */
     templateApiUrl:
       process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
       process.env.BHASHSMS_API_URL?.trim() ||
-      "http://bhashsms.com/api/sendmsg.php",
-    /** Utility templates: confirmation, etc. (sendmsgutil.php — WA Utility credits). */
+      "http://bhashsms.com/api/sendmsgutil.php",
+    /** Utility + auth templates (sendmsgutil.php — WA Utility credits). */
     utilTemplateApiUrl:
       process.env.BHASHSMS_UTIL_TEMPLATE_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsgutil.php",
@@ -106,6 +106,18 @@ function parseBhashResponse(body: string): SendMessageResponse {
     normalized === "queued"
   ) {
     return { success: true, messageId: `bhash-${Date.now()}` }
+  }
+
+  if (
+    normalized.includes("only utility or authentication") ||
+    normalized.includes("splitcredits not activated")
+  ) {
+    return {
+      success: false,
+      error:
+        trimmed +
+        " — Use sendmsgutil.php with UTILITY/AUTH templates. Ask Bhash support to activate SplitCredits.",
+    }
   }
 
   return {
@@ -234,10 +246,10 @@ export async function bhashSendTextMessage(
 }
 
 /**
- * UTILITY template via sendmsgutil.php (same as browser test that delivered full message).
+ * UTILITY text template via sendmsgutil.php (confirmation, reminder, welcome, etc.).
  * phone=10 digits, no htype, Params with literal commas.
  */
-export async function bhashSendConfirmationUtilityTemplate(
+export async function bhashSendUtilityTemplate(
   to: string,
   templateName: string,
   parameters: string[]
@@ -263,6 +275,55 @@ export async function bhashSendConfirmationUtilityTemplate(
   )
 }
 
+/** @deprecated Use bhashSendUtilityTemplate */
+export const bhashSendConfirmationUtilityTemplate = bhashSendUtilityTemplate
+
+/**
+ * UTILITY document template via sendmsgutil.php.
+ * sendmsgutil.php?text=TEMPLATENAME&stype=normal&Params=...&htype=document&url=https://...
+ */
+export async function bhashSendDocumentTemplate(
+  to: string,
+  templateName: string,
+  parameters: string[],
+  documentUrl: string
+): Promise<SendMessageResponse> {
+  return bhashSendMediaTemplate(to, templateName, parameters, "document", documentUrl)
+}
+
+/**
+ * UTILITY media template via sendmsgutil.php (image/video/document).
+ */
+export async function bhashSendMediaTemplate(
+  to: string,
+  templateName: string,
+  parameters: string[],
+  mediaType: "image" | "video" | "document",
+  mediaUrl: string
+): Promise<SendMessageResponse> {
+  const ten = extractTenDigitPhone(to)
+  if (!ten) {
+    return { success: false, error: "Invalid phone number for BhashSMS" }
+  }
+
+  if (!parameters.length) {
+    return { success: false, error: "Template parameters required" }
+  }
+
+  const apiUrl = getBhashConfirmationApiUrl()
+  return bhashGet(
+    {
+      phone: ten,
+      text: templateName,
+      stype: "normal",
+      Params: encodeBhashTemplateParams(parameters),
+      htype: mediaType,
+      url: mediaUrl,
+    },
+    apiUrl
+  )
+}
+
 export async function bhashSendTemplateMessage(
   to: string,
   templateName: string,
@@ -275,9 +336,7 @@ export async function bhashSendTemplateMessage(
   }
 ): Promise<SendMessageResponse> {
   const config = getBhashConfig()
-  const apiUrl =
-    options?.apiUrl ||
-    (options?.auth ? config.utilTemplateApiUrl : config.templateApiUrl)
+  const apiUrl = options?.apiUrl || config.utilTemplateApiUrl
   const phones = phoneForTemplateApi(to)
   if (phones.length === 0) {
     return { success: false, error: "Invalid phone number for BhashSMS" }
@@ -390,23 +449,40 @@ export async function bhashSendFlowMessage(
   return bhashSendTextMessage(to, `${message}\n\nType *book* or *hi* to continue.`)
 }
 
+export function getBhashPrescriptionTemplateName(): string | null {
+  return (
+    process.env.BHASHSMS_PRESCRIPTION_TEMPLATE?.trim() ||
+    process.env.BHASHSMS_DOCUMENT_TEMPLATE?.trim() ||
+    null
+  )
+}
+
 export async function bhashSendDocumentMessage(
   to: string,
   documentUrl: string,
   _filename: string,
-  caption?: string
+  caption?: string,
+  templateParams?: { patientName?: string; appointmentId?: string }
 ): Promise<SendMessageResponse> {
-  const templateName = process.env.BHASHSMS_DOCUMENT_TEMPLATE
-  if (templateName) {
-    const params = caption ? [caption] : undefined
-    return bhashSendTemplateMessage(to, templateName, params, {
-      mediaType: "document",
-      mediaUrl: documentUrl,
-    })
+  const templateName = getBhashPrescriptionTemplateName()
+  if (
+    templateName &&
+    templateParams?.patientName?.trim() &&
+    templateParams?.appointmentId?.trim()
+  ) {
+    const params = [
+      sanitizeBhashParam(templateParams.patientName.trim()),
+      sanitizeBhashParam(templateParams.appointmentId.trim()),
+    ]
+    return bhashSendDocumentTemplate(to, templateName, params, documentUrl)
   }
 
   const message = caption
-    ? `${caption}\n\n📄 Document: ${documentUrl}`
-    : `📄 Document: ${documentUrl}`
+    ? `${caption}\n\nDocument: ${documentUrl}`
+    : `Document: ${documentUrl}`
   return bhashSendTextMessage(to, message)
+}
+
+function sanitizeBhashParam(value: string): string {
+  return value.replace(/,/g, " ").replace(/\s+/g, " ").trim()
 }

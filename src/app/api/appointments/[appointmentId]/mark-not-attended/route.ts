@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { getUserActiveHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/firebase/serverHospitalQueries"
+import { sendBhashMissedAppointmentTemplateIfConfigured } from "@/server/bhashUtilityTemplates"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 
@@ -191,10 +193,26 @@ export async function POST(
           `Thank you for choosing Harmony Medical Services! 🏥`
 
         // Send WhatsApp message (fire-and-forget, don't fail if it fails)
-        const whatsappResult = await sendWhatsAppNotification({
+        const sentViaBhashTemplate = await sendBhashMissedAppointmentTemplateIfConfigured({
           to: patientPhone,
-          message: messageText,
+          patientName,
+          doctorName,
+          appointmentDate,
+          appointmentTime,
         })
+
+        let whatsappResult: { success: boolean; sid?: string; error?: string }
+        if (sentViaBhashTemplate || shouldUseBhashSms()) {
+          whatsappResult = {
+            success: sentViaBhashTemplate,
+            sid: sentViaBhashTemplate ? "bhash-template" : undefined,
+          }
+        } else {
+          whatsappResult = await sendWhatsAppNotification({
+            to: patientPhone,
+            message: messageText,
+          })
+        }
 
         if (whatsappResult.success) {
           // Store notification record in Firestore

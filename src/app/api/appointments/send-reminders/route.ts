@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
+import { sendBhashReminderTemplateIfConfigured } from "@/server/bhashUtilityTemplates"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 
@@ -161,10 +163,23 @@ export async function GET(request: Request) {
               `Thank you for choosing Harmony Medical Services! 🏥`
 
             // Send WhatsApp reminder
-            const whatsappResult = await sendWhatsAppNotification({
+            const sentViaBhashTemplate = await sendBhashReminderTemplateIfConfigured({
               to: patientPhone,
-              message: messageText,
+              patientName,
+              doctorName,
+              appointmentDate: appointmentDateStr,
+              appointmentTime: appointmentTimeStr,
             })
+
+            let whatsappResult: { success: boolean; sid?: string; error?: string }
+            if (sentViaBhashTemplate || shouldUseBhashSms()) {
+              whatsappResult = { success: sentViaBhashTemplate, sid: sentViaBhashTemplate ? "bhash-template" : undefined }
+            } else {
+              whatsappResult = await sendWhatsAppNotification({
+                to: patientPhone,
+                message: messageText,
+              })
+            }
 
             if (whatsappResult.success) {
               // Mark reminder as sent

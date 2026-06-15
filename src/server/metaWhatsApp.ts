@@ -447,10 +447,11 @@ export async function sendDocumentMessage(
   to: string,
   documentUrl: string,
   filename: string,
-  caption?: string
+  caption?: string,
+  templateParams?: { patientName?: string; appointmentId?: string }
 ): Promise<SendMessageResponse> {
   if (shouldUseBhashSms()) {
-    return bhashSendDocumentMessage(to, documentUrl, filename, caption)
+    return bhashSendDocumentMessage(to, documentUrl, filename, caption, templateParams)
   }
 
   if (!META_ACCESS_TOKEN || !META_PHONE_NUMBER_ID) {
