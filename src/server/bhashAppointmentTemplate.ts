@@ -1,5 +1,6 @@
 import {
   bhashSendTemplateMessage,
+  bhashSendTextMessage,
   getBhashConfirmationApiUrl,
   shouldUseBhashSms,
 } from "@/server/bhashWhatsApp"
@@ -110,6 +111,28 @@ export function buildBhashConfirmationParams(
   ]
 }
 
+/** Plain-text confirmation when sendmsg.php template is unavailable (utilreply session). */
+export function buildBhashConfirmationPlainText(
+  input: BhashConfirmationTemplateParams
+): string {
+  const [name, via, doctor, date, time, id, payment] =
+    buildBhashConfirmationParams(input)
+
+  return `Hello ${name},
+
+Your appointment has been confirmed ${via}.
+
+Doctor: ${doctor}
+Date: ${date}
+Time: ${time}
+Appointment ID: ${id}
+Payment: ${payment}
+
+Your appointment is confirmed. Reply here if you need to reschedule.
+
+Harmony Medical Services`
+}
+
 function resolveRecipientPhone(
   to?: string | null,
   fallbackRecipients?: Array<string | null | undefined>
@@ -123,15 +146,16 @@ function resolveRecipientPhone(
 }
 
 /**
- * Sends Bhash utility template when WHATSAPP_PROVIDER=bhashsms and
- * BHASHSMS_CONFIRMATION_TEMPLATE is set. Returns true if sent successfully.
+ * Sends Bhash confirmation when WHATSAPP_PROVIDER=bhashsms.
+ * 1. Tries approved template via sendmsg.php (text=confirmation + Params).
+ * 2. Falls back to full plain-text details via sendmsgutilreply.php.
  */
 export async function sendBhashConfirmationTemplateIfConfigured(options: {
   to?: string | null
   fallbackRecipients?: Array<string | null | undefined>
   params: BhashConfirmationTemplateParams
 }): Promise<boolean> {
-  if (!shouldUseBhashSms() || !process.env.BHASHSMS_CONFIRMATION_TEMPLATE) {
+  if (!shouldUseBhashSms()) {
     return false
   }
 
@@ -140,19 +164,39 @@ export async function sendBhashConfirmationTemplateIfConfigured(options: {
 
   const templateName = getBhashConfirmationTemplateName()
   const templateParams = buildBhashConfirmationParams(options.params)
-  const result = await bhashSendTemplateMessage(recipientPhone, templateName, templateParams, {
-    apiUrl: getBhashConfirmationApiUrl(),
-  })
 
-  console.log("[BhashSMS template]", {
-    template: templateName,
+  if (process.env.BHASHSMS_CONFIRMATION_TEMPLATE) {
+    const templateResult = await bhashSendTemplateMessage(
+      recipientPhone,
+      templateName,
+      templateParams,
+      { apiUrl: getBhashConfirmationApiUrl() }
+    )
+
+    console.log("[BhashSMS template]", {
+      template: templateName,
+      phone: recipientPhone,
+      paramCount: templateParams.length,
+      params: templateParams,
+      success: templateResult.success,
+      messageId: templateResult.messageId,
+      error: templateResult.error,
+    })
+
+    if (templateResult.success) {
+      return true
+    }
+  }
+
+  const plainText = buildBhashConfirmationPlainText(options.params)
+  const textResult = await bhashSendTextMessage(recipientPhone, plainText)
+
+  console.log("[BhashSMS confirmation text]", {
     phone: recipientPhone,
-    paramCount: templateParams.length,
-    params: templateParams,
-    success: result.success,
-    messageId: result.messageId,
-    error: result.error,
+    success: textResult.success,
+    messageId: textResult.messageId,
+    error: textResult.error,
   })
 
-  return result.success
+  return textResult.success
 }

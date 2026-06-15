@@ -20,11 +20,12 @@ function getBhashConfig() {
     utilTemplateApiUrl:
       process.env.BHASHSMS_UTIL_TEMPLATE_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsgutil.php",
-    /** Appointment confirmation — prefer sendmsgutil.php (utility credits). */
+    /** Appointment confirmation template (sendmsg.php — template + Params). */
     confirmationApiUrl:
       process.env.BHASHSMS_CONFIRMATION_API_URL?.trim() ||
-      process.env.BHASHSMS_UTIL_TEMPLATE_API_URL?.trim() ||
-      "http://bhashsms.com/api/sendmsgutil.php",
+      process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
+      process.env.BHASHSMS_API_URL?.trim() ||
+      "http://bhashsms.com/api/sendmsg.php",
     utilReplyApiUrl:
       process.env.BHASHSMS_UTIL_REPLY_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsgutilreply.php",
@@ -243,19 +244,6 @@ export async function bhashSendTemplateMessage(
   for (const phone of phones) {
     lastResult = await bhashGet({ phone, ...baseParams }, apiUrl)
     if (lastResult.success) return lastResult
-  }
-
-  // sendmsg.php uses a different credit wallet — retry utility API when empty
-  if (
-    !lastResult.success &&
-    lastResult.error?.toLowerCase().includes("sufficient credits") &&
-    apiUrl.includes("sendmsg.php")
-  ) {
-    console.warn("[BhashSMS] sendmsg.php credits exhausted, retrying sendmsgutil.php")
-    for (const phone of phones) {
-      lastResult = await bhashGet({ phone, ...baseParams }, config.utilTemplateApiUrl)
-      if (lastResult.success) return lastResult
-    }
   }
 
   return lastResult
