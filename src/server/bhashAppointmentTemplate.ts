@@ -1,6 +1,5 @@
 import {
   bhashSendConfirmationUtilityTemplate,
-  bhashSendTextMessage,
   shouldUseBhashSms,
 } from "@/server/bhashWhatsApp"
 import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
@@ -147,9 +146,9 @@ function resolveRecipientPhone(
 }
 
 /**
- * Sends one WhatsApp confirmation.
- * 1. UTILITY template via sendmsgutil.php (browser-tested — works without patient Hi first).
- * 2. Plain text via utilreply only if template API fails.
+ * Sends WhatsApp confirmation via Bhash template + Params API only.
+ *
+ * sendmsgutil.php?text=confirmation&stype=normal&Params=p1,p2,...,p7&phone=7359057367
  */
 export async function sendBhashConfirmationTemplateIfConfigured(options: {
   to?: string | null
@@ -166,7 +165,7 @@ export async function sendBhashConfirmationTemplateIfConfigured(options: {
   const templateName = getBhashConfirmationTemplateName()
   const templateParams = buildBhashConfirmationParams(options.params)
 
-  const templateResult = await bhashSendConfirmationUtilityTemplate(
+  const result = await bhashSendConfirmationUtilityTemplate(
     recipientPhone,
     templateName,
     templateParams
@@ -174,28 +173,15 @@ export async function sendBhashConfirmationTemplateIfConfigured(options: {
 
   console.log("[BhashSMS confirmation]", {
     method: "template",
+    api: "sendmsgutil.php",
     template: templateName,
     phone: recipientPhone,
     paramCount: templateParams.length,
-    success: templateResult.success,
-    messageId: templateResult.messageId,
-    error: templateResult.error,
+    params: templateParams,
+    success: result.success,
+    messageId: result.messageId,
+    error: result.error,
   })
 
-  if (templateResult.success) {
-    return true
-  }
-
-  const plainText = buildBhashConfirmationPlainText(options.params)
-  const textResult = await bhashSendTextMessage(recipientPhone, plainText)
-
-  console.log("[BhashSMS confirmation]", {
-    method: "plain-fallback",
-    phone: recipientPhone,
-    success: textResult.success,
-    messageId: textResult.messageId,
-    error: textResult.error,
-  })
-
-  return textResult.success
+  return result.success
 }

@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { normalizeTime } from "@/utils/timeSlots"
@@ -96,7 +97,7 @@ See you soon! 🏥`
     },
   })
 
-  if (sentViaBhashTemplate) {
+  if (sentViaBhashTemplate || shouldUseBhashSms()) {
     return
   }
 

@@ -4,6 +4,7 @@ import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/a
 import { normalizeTime } from "@/utils/timeSlots"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
+import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
@@ -268,7 +269,7 @@ See you soon! 🏥`
             },
           })
 
-          if (!sentViaBhashTemplate) {
+          if (!sentViaBhashTemplate && !shouldUseBhashSms()) {
             await sendWhatsAppNotification({
               to: patientPhone,
               message,

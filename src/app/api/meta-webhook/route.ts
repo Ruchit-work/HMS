@@ -3355,7 +3355,7 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
     })
   }
 
-  if (!sentConfirmation) {
+  if (!sentConfirmation && !shouldUseBhashSms()) {
     await sendTextMessage(phone, confirmationMsg)
   }
 
