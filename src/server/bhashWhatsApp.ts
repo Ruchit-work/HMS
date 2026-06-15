@@ -11,17 +11,20 @@ function getBhashConfig() {
     user: process.env.BHASHSMS_USER?.trim() || "",
     pass: process.env.BHASHSMS_PASSWORD?.trim() || "",
     sender: process.env.BHASHSMS_SENDER?.trim() || "BUZWAP",
-    /** OTP and other templates (sendmsg.php). */
+    /** OTP and legacy templates (sendmsg.php — often needs separate SMS credits). */
     templateApiUrl:
       process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
       process.env.BHASHSMS_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsg.php",
-    /** Appointment confirmation template only (sendmsg.php). */
+    /** Utility templates: confirmation, etc. (sendmsgutil.php — WA Utility credits). */
+    utilTemplateApiUrl:
+      process.env.BHASHSMS_UTIL_TEMPLATE_API_URL?.trim() ||
+      "http://bhashsms.com/api/sendmsgutil.php",
+    /** Appointment confirmation — prefer sendmsgutil.php (utility credits). */
     confirmationApiUrl:
       process.env.BHASHSMS_CONFIRMATION_API_URL?.trim() ||
-      process.env.BHASHSMS_TEMPLATE_API_URL?.trim() ||
-      process.env.BHASHSMS_API_URL?.trim() ||
-      "http://bhashsms.com/api/sendmsg.php",
+      process.env.BHASHSMS_UTIL_TEMPLATE_API_URL?.trim() ||
+      "http://bhashsms.com/api/sendmsgutil.php",
     utilReplyApiUrl:
       process.env.BHASHSMS_UTIL_REPLY_API_URL?.trim() ||
       "http://bhashsms.com/api/sendmsgutilreply.php",
@@ -228,7 +231,10 @@ export async function bhashSendTemplateMessage(
     baseParams.url = options.mediaUrl
   }
 
-  const apiUrl = options?.apiUrl || getBhashConfig().templateApiUrl
+  const config = getBhashConfig()
+  let apiUrl =
+    options?.apiUrl ||
+    (options?.auth ? config.utilTemplateApiUrl : config.templateApiUrl)
   let lastResult: SendMessageResponse = {
     success: false,
     error: "BhashSMS template send failed",
@@ -237,6 +243,19 @@ export async function bhashSendTemplateMessage(
   for (const phone of phones) {
     lastResult = await bhashGet({ phone, ...baseParams }, apiUrl)
     if (lastResult.success) return lastResult
+  }
+
+  // sendmsg.php uses a different credit wallet — retry utility API when empty
+  if (
+    !lastResult.success &&
+    lastResult.error?.toLowerCase().includes("sufficient credits") &&
+    apiUrl.includes("sendmsg.php")
+  ) {
+    console.warn("[BhashSMS] sendmsg.php credits exhausted, retrying sendmsgutil.php")
+    for (const phone of phones) {
+      lastResult = await bhashGet({ phone, ...baseParams }, config.utilTemplateApiUrl)
+      if (lastResult.success) return lastResult
+    }
   }
 
   return lastResult
