@@ -71,11 +71,12 @@ export function formatPhoneForBhash(phone: string): string | null {
   if (!ten) return null
 
   const phoneFormat = process.env.BHASHSMS_PHONE_FORMAT?.toLowerCase().trim()
-  if (phoneFormat === "10digit" || phoneFormat === "10") {
-    return ten
+  // Default to 10-digit for utilreply; this is the most reliable format for this account.
+  if (!phoneFormat || phoneFormat === "10digit" || phoneFormat === "10") return ten
+  if (phoneFormat === "91" || phoneFormat === "country" || phoneFormat === "e164") {
+    return `91${ten}`
   }
-
-  return `91${ten}`
+  return ten
 }
 
 /** Template APIs: Bhash docs say phone without 91 — use one format to avoid duplicate sends. */
