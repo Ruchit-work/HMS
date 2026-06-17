@@ -218,31 +218,19 @@ export async function bhashSendTextMessage(
   message: string
 ): Promise<SendMessageResponse> {
   const apiUrl = getBhashConfig().utilReplyApiUrl
-  const ten = extractTenDigitPhone(to)
-  if (!ten) {
+  const phone = formatPhoneForBhash(to)
+  if (!phone) {
     return { success: false, error: "Invalid phone number for BhashSMS" }
   }
 
   const text = sanitizeBhashOutboundText(message)
   const params = {
+    phone,
     text,
     stype: "normal",
     htype: "normal",
   }
-
-  // utilreply: try 91xxxxxxxxxx first, then 10-digit (Bhash accounts differ)
-  const phones = [...new Set([`91${ten}`, ten])]
-  let lastResult: SendMessageResponse = {
-    success: false,
-    error: "BhashSMS send failed",
-  }
-
-  for (const phone of phones) {
-    lastResult = await bhashGet({ phone, ...params }, apiUrl)
-    if (lastResult.success) return lastResult
-  }
-
-  return lastResult
+  return bhashGet(params, apiUrl)
 }
 
 /**
