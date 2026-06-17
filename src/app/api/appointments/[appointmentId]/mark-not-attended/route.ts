@@ -126,6 +126,12 @@ export async function POST(
         { status: 400 }
       )
     }
+    if (currentStatus === "not_attended" || currentStatus === "no_show") {
+      return NextResponse.json(
+        { error: "Appointment is already marked as missed" },
+        { status: 400 }
+      )
+    }
 
     // Update appointment status
     const nowIso = new Date().toISOString()
@@ -145,6 +151,21 @@ export async function POST(
       const doctorName = appointmentData.doctorName || "Doctor"
 
       if (patientPhone && patientPhone.trim() !== "") {
+        // Idempotency guard: don't send duplicate missed-message for same appointment.
+        const existingNotify = await firestore
+          .collection("not_attended_messages")
+          .where("appointmentId", "==", appointmentId)
+          .limit(1)
+          .get()
+        if (!existingNotify.empty) {
+          return NextResponse.json({
+            success: true,
+            message: "Appointment already marked and missed message already sent",
+            appointmentId,
+            status: "not_attended",
+          })
+        }
+
         const whatsappResult = await sendMissedAppointmentWhatsApp({
           to: patientPhone,
           patientName,

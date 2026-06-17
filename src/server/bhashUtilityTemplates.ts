@@ -119,7 +119,7 @@ export async function sendBhashCheckupCompleteTemplateIfConfigured(options: {
   return sendUtilityTemplate({
     to: options.to,
     templateEnvKey: "BHASHSMS_CHECKUP_COMPLETE_TEMPLATE",
-    defaultTemplateName: "checkup_complete",
+    defaultTemplateName: "mivs_checkup_comp",
     logLabel: "checkup_complete",
     params: [
       sanitizeBhashParam(options.patientName.trim() || "Patient"),
@@ -167,7 +167,7 @@ export async function sendBhashWelcomeTemplateIfConfigured(options: {
     to: options.to,
     fallbackRecipients: options.fallbackRecipients,
     templateEnvKey: "BHASHSMS_WELCOME_TEMPLATE",
-    defaultTemplateName: "patient_welcome",
+    defaultTemplateName: "mivs_patient_create",
     logLabel: "welcome",
     params: [
       sanitizeBhashParam(options.firstName?.trim() || fullName),
@@ -204,7 +204,7 @@ export async function sendBhashPrescriptionDocumentTemplateIfConfigured(options:
   const templateName =
     process.env.BHASHSMS_PRESCRIPTION_TEMPLATE?.trim() ||
     process.env.BHASHSMS_DOCUMENT_TEMPLATE?.trim() ||
-    "prescription_pdf"
+    "mivs_appointment"
 
   const patientName = sanitizeBhashParam(options.patientName.trim() || "Patient")
   const appointmentId = sanitizeBhashParam(options.appointmentId.trim() || "N/A")
