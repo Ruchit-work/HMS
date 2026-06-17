@@ -111,35 +111,44 @@ export async function POST(request: Request) {
     let whatsappError: string | undefined
 
     if (patientPhone.trim()) {
-      const whatsappResult = await sendMissedAppointmentWhatsApp({
-        to: patientPhone,
-        patientName: (appointment.patientName as string) || "Patient",
-        doctorName: (appointment.doctorName as string) || "Doctor",
-        appointmentDate: appointmentDate || "",
-        appointmentTime: appointmentTime || "",
-      })
-      whatsappSent = whatsappResult.success
-      whatsappError = whatsappResult.error
+      const missedMessageDocId = `${hospitalId}_${appointmentId}`
+      const missedMessageRef = firestore.collection("not_attended_messages").doc(missedMessageDocId)
+      let shouldSend = true
+      try {
+        await missedMessageRef.create({
+          appointmentId,
+          patientId: appointment.patientId || appointment.patientUid || "",
+          patientPhone,
+          patientName: appointment.patientName || "Patient",
+          doctorName: appointment.doctorName || "Doctor",
+          appointmentDate: appointmentDate || "",
+          appointmentTime: appointmentTime || "",
+          sentAt: nowIso,
+          status: "processing",
+          hospitalId,
+          source: "doctor_skip",
+        })
+      } catch {
+        shouldSend = false
+      }
 
-      if (whatsappResult.success) {
-        try {
-          await firestore.collection("not_attended_messages").add({
-            appointmentId,
-            patientId: appointment.patientId || appointment.patientUid || "",
-            patientPhone,
-            patientName: appointment.patientName || "Patient",
-            doctorName: appointment.doctorName || "Doctor",
-            appointmentDate: appointmentDate || "",
-            appointmentTime: appointmentTime || "",
-            sentAt: nowIso,
-            status: "sent",
-            messageId: whatsappResult.sid,
-            hospitalId,
-            source: "doctor_skip",
-          })
-        } catch {
-          // non-blocking
-        }
+      if (shouldSend) {
+        const whatsappResult = await sendMissedAppointmentWhatsApp({
+          to: patientPhone,
+          patientName: (appointment.patientName as string) || "Patient",
+          doctorName: (appointment.doctorName as string) || "Doctor",
+          appointmentDate: appointmentDate || "",
+          appointmentTime: appointmentTime || "",
+        })
+        whatsappSent = whatsappResult.success
+        whatsappError = whatsappResult.error
+
+        await missedMessageRef.set(
+          whatsappResult.success
+            ? { status: "sent", messageId: whatsappResult.sid }
+            : { status: "failed", error: whatsappResult.error || "send failed" },
+          { merge: true }
+        )
       }
     }
 

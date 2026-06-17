@@ -149,15 +149,24 @@ export async function POST(
       const appointmentDate = appointmentData.appointmentDate || ""
       const appointmentTime = appointmentData.appointmentTime || ""
       const doctorName = appointmentData.doctorName || "Doctor"
+      const missedMessageDocId = `${hospitalId || "unknown"}_${appointmentId}`
+      const missedMessageRef = firestore.collection("not_attended_messages").doc(missedMessageDocId)
 
       if (patientPhone && patientPhone.trim() !== "") {
-        // Idempotency guard: don't send duplicate missed-message for same appointment.
-        const existingNotify = await firestore
-          .collection("not_attended_messages")
-          .where("appointmentId", "==", appointmentId)
-          .limit(1)
-          .get()
-        if (!existingNotify.empty) {
+        try {
+          await missedMessageRef.create({
+            appointmentId,
+            patientId: appointmentData.patientId || appointmentData.patientUid || "",
+            patientPhone,
+            patientName,
+            doctorName,
+            appointmentDate,
+            appointmentTime,
+            sentAt: nowIso,
+            status: "processing",
+            hospitalId,
+          })
+        } catch {
           return NextResponse.json({
             success: true,
             message: "Appointment already marked and missed message already sent",
@@ -177,29 +186,24 @@ export async function POST(
         if (whatsappResult.success) {
           // Store notification record in Firestore
           try {
-            await firestore.collection("not_attended_messages").add({
-              appointmentId,
-              patientId: appointmentData.patientId || appointmentData.patientUid || "",
-              patientPhone,
-              patientName,
-              doctorName,
-              appointmentDate,
-              appointmentTime,
+            await missedMessageRef.set({
               message: buildMissedAppointmentMessage({
                 patientName,
                 doctorName,
                 appointmentDate,
                 appointmentTime,
               }),
-              sentAt: nowIso,
               status: "sent",
               messageId: whatsappResult.sid,
-              hospitalId,
-            })
+            }, { merge: true })
           } catch {
             // Don't fail if storing fails
           }
         } else {
+          await missedMessageRef.set(
+            { status: "failed", error: whatsappResult.error || "send failed" },
+            { merge: true }
+          )
           // Don't fail the request if WhatsApp fails
         }
       } else {

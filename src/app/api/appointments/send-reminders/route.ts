@@ -95,15 +95,24 @@ export async function GET(request: Request) {
               continue // Don't remind for past appointments
             }
 
-            // Check if reminder has already been sent
-            const reminderCheck = await db
-              .collection("appointment_reminders")
-              .where("appointmentId", "==", appointmentId)
-              .where("reminderType", "==", "24_hour")
-              .limit(1)
-              .get()
-
-            if (!reminderCheck.empty) {
+            // Atomic dedupe lock: one reminder per hospital+appointment+type.
+            const reminderDocId = `${hospital.id}_24_hour_${appointmentId}`
+            const reminderRef = db.collection("appointment_reminders").doc(reminderDocId)
+            try {
+              await reminderRef.create({
+                appointmentId,
+                patientId: apt.patientId || apt.patientUid || "",
+                patientPhone: apt.patientPhone || apt.patientPhoneNumber || "",
+                patientName: apt.patientName || "Patient",
+                doctorName: apt.doctorName || "Doctor",
+                appointmentDate: appointmentDateStr,
+                appointmentTime: appointmentTimeStr,
+                reminderType: "24_hour",
+                sentAt: now.toISOString(),
+                status: "processing",
+                hospitalId: hospital.id,
+              })
+            } catch {
               totalRemindersSkipped++
               continue
             }
@@ -183,21 +192,11 @@ export async function GET(request: Request) {
 
             if (whatsappResult.success) {
               // Mark reminder as sent
-              await db.collection("appointment_reminders").add({
-                appointmentId,
-                patientId,
-                patientPhone,
-                patientName,
-                doctorName,
-                appointmentDate: appointmentDateStr,
-                appointmentTime: appointmentTimeStr,
-                reminderType: "24_hour",
+              await reminderRef.set({
                 message: messageText,
-                sentAt: now.toISOString(),
                 status: "sent",
                 messageId: whatsappResult.sid,
-                hospitalId: hospital.id,
-              })
+              }, { merge: true })
 
               hospitalRemindersSent++
               totalRemindersSent++
@@ -205,21 +204,11 @@ export async function GET(request: Request) {
               hospitalErrors++
               totalErrors++
               // Still record the attempt (with failed status)
-              await db.collection("appointment_reminders").add({
-                appointmentId,
-                patientId,
-                patientPhone,
-                patientName,
-                doctorName,
-                appointmentDate: appointmentDateStr,
-                appointmentTime: appointmentTimeStr,
-                reminderType: "24_hour",
+              await reminderRef.set({
                 message: messageText,
-                sentAt: now.toISOString(),
                 status: "failed",
                 error: whatsappResult.error,
-                hospitalId: hospital.id,
-              })
+              }, { merge: true })
             }
           } catch {
             hospitalErrors++

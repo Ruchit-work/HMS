@@ -135,13 +135,23 @@ export async function GET(request: Request) {
               continue
             }
 
-            const existingNotify = await db
-              .collection("not_attended_messages")
-              .where("appointmentId", "==", appointmentId)
-              .limit(1)
-              .get()
-
-            if (!existingNotify.empty) {
+            const missedMessageDocId = `${hospital.id}_${appointmentId}`
+            const missedMessageRef = db.collection("not_attended_messages").doc(missedMessageDocId)
+            try {
+              await missedMessageRef.create({
+                appointmentId,
+                patientId: apt.patientId || apt.patientUid || "",
+                patientPhone,
+                patientName,
+                doctorName,
+                appointmentDate,
+                appointmentTime,
+                sentAt: nowIso,
+                status: "processing",
+                hospitalId: hospital.id,
+                source: "auto_cron",
+              })
+            } catch {
               continue
             }
 
@@ -156,24 +166,15 @@ export async function GET(request: Request) {
             if (whatsappResult.success) {
               hospitalWhatsAppSent++
               totalWhatsAppSent++
-              try {
-                await db.collection("not_attended_messages").add({
-                  appointmentId,
-                  patientId: apt.patientId || apt.patientUid || "",
-                  patientPhone,
-                  patientName,
-                  doctorName,
-                  appointmentDate,
-                  appointmentTime,
-                  sentAt: nowIso,
-                  status: "sent",
-                  messageId: whatsappResult.sid,
-                  hospitalId: hospital.id,
-                  source: "auto_cron",
-                })
-              } catch {
-                // non-blocking
-              }
+              await missedMessageRef.set(
+                { status: "sent", messageId: whatsappResult.sid },
+                { merge: true }
+              )
+            } else {
+              await missedMessageRef.set(
+                { status: "failed", error: whatsappResult.error || "send failed" },
+                { merge: true }
+              )
             }
           } catch {
             hospitalErrors++
