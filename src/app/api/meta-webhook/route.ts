@@ -29,6 +29,21 @@ const t = (key: keyof typeof translations, lang: Language = "english"): string =
 const lang = (lang: Language, guj: string, eng: string): string => lang === "gujarati" ? guj : eng
 
 // Session helpers
+const CANCELLED_SESSIONS_COLLECTION = "whatsappBookingCancelled"
+
+function sessionLog(
+  event:
+    | "SESSION CREATED"
+    | "SESSION UPDATED"
+    | "SESSION CANCELLED"
+    | "SESSION CLEARED"
+    | "MESSAGE SENT"
+    | "MESSAGE SKIPPED DUE TO CANCELLED SESSION",
+  payload: Record<string, unknown>
+) {
+  console.log(`[${event}]`, payload)
+}
+
 async function getSession(phone: string): Promise<{ ref: FirebaseFirestore.DocumentReference; data: BookingSession | null }> {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
@@ -37,9 +52,138 @@ async function getSession(phone: string): Promise<{ ref: FirebaseFirestore.Docum
   return { ref, data: snap.exists ? (snap.data() as BookingSession) : null }
 }
 
+async function isBookingCancelled(phone: string): Promise<boolean> {
+  const normalizedPhone = formatPhoneNumber(phone)
+  const snap = await admin.firestore().collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone).get()
+  return snap.exists
+}
+
+async function clearCancelMarker(phone: string): Promise<void> {
+  const normalizedPhone = formatPhoneNumber(phone)
+  const ref = admin.firestore().collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone)
+  const snap = await ref.get()
+  if (snap.exists) {
+    await ref.delete()
+    sessionLog("SESSION CLEARED", { phone: normalizedPhone, reason: "restart" })
+  }
+}
+
 async function clearSession(phone: string): Promise<void> {
-  const { ref } = await getSession(phone)
-  await ref.delete()
+  const { ref, data } = await getSession(phone)
+  if (data && (await ref.get()).exists) {
+    await ref.delete()
+    sessionLog("SESSION CLEARED", { phone: formatPhoneNumber(phone) })
+  }
+}
+
+/** Hard-stop: mark cancelled, delete session, block all pending booking sends. */
+async function cancelBookingSession(phone: string): Promise<{ hadSession: boolean }> {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const { ref, data } = await getSession(phone)
+  const hadSession = !!data
+  const version = data?.version ?? Date.now()
+
+  if (hadSession && ref) {
+    await ref.set(
+      {
+        ...data,
+        status: "cancelled",
+        state: "idle",
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    )
+    await ref.delete()
+    sessionLog("SESSION CLEARED", { phone: normalizedPhone, reason: "cancel" })
+  }
+
+  await db.collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone).set({
+    status: "cancelled",
+    cancelledAt: new Date().toISOString(),
+    cancelledAtMs: Date.now(),
+    version,
+  })
+
+  sessionLog("SESSION CANCELLED", { phone: normalizedPhone, hadSession, version })
+  return { hadSession }
+}
+
+async function canSendBookingMessage(phone: string, context = ""): Promise<boolean> {
+  const normalizedPhone = formatPhoneNumber(phone)
+  if (await isBookingCancelled(phone)) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: context || "unspecified",
+      reason: "cancel marker",
+    })
+    return false
+  }
+  const { data } = await getSession(phone)
+  if (!data) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: context || "unspecified",
+      reason: "no session",
+    })
+    return false
+  }
+  if (data.status === "cancelled") {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: context || "unspecified",
+      reason: "session status cancelled",
+    })
+    return false
+  }
+  return true
+}
+
+async function sendBookingMessage(phone: string, message: string, context: string): Promise<boolean> {
+  if (!(await canSendBookingMessage(phone, context))) {
+    return false
+  }
+  sessionLog("MESSAGE SENT", {
+    phone: formatPhoneNumber(phone),
+    context,
+    preview: message.slice(0, 80),
+  })
+  const result = await sendTextMessage(phone, message)
+  return result.success
+}
+
+async function updateBookingSession(
+  sessionRef: FirebaseFirestore.DocumentReference,
+  phone: string,
+  updates: Partial<BookingSession>,
+  context: string
+): Promise<boolean> {
+  if (!(await canSendBookingMessage(phone, context))) {
+    return false
+  }
+  await sessionRef.update({
+    ...updates,
+    status: "active",
+    updatedAt: new Date().toISOString(),
+  })
+  sessionLog("SESSION UPDATED", {
+    phone: formatPhoneNumber(phone),
+    context,
+    state: updates.state,
+  })
+  return true
+}
+
+function isBhashRestartCommand(text: string): boolean {
+  const t = text.trim().toLowerCase()
+  return (
+    t === "hi" ||
+    t === "hello" ||
+    t === "book" ||
+    t === "book appointment" ||
+    t.startsWith("hi ") ||
+    t.startsWith("hello ")
+  )
 }
 
 /** Exact / phrase match only — avoids "book".includes("no") false cancel. */
@@ -151,6 +295,12 @@ async function shouldProcessBhashInbound(from: string, text: string): Promise<bo
       console.log("[Bhash inbound] ignored post-booking noise")
       return false
     }
+  }
+
+  const cancelledSnap = await db.collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone).get()
+  if (cancelledSnap.exists && !isCancelIntent(text) && !isBhashRestartCommand(text)) {
+    console.log("[Bhash inbound] ignored — booking cancelled")
+    return false
   }
 
   // Idle — only respond to explicit user commands (never auto-reply)
@@ -288,6 +438,7 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
   const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
   if (greetings.some((g) => trimmedText === g || trimmedText.startsWith(g + " "))) {
     try {
+      await clearCancelMarker(from)
       await clearSession(from)
     } catch (err) {
       console.error("[WhatsApp] clearSession failed on greeting", err)
@@ -297,14 +448,22 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
   }
 
   if (isCancelIntent(text)) {
-    const { data } = await getSession(from)
-    await clearSession(from)
+    const { hadSession } = await cancelBookingSession(from)
     await sendTextMessage(
       from,
-      data
-        ? "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
-        : "✅ Understood. No active booking to cancel.\n\nHow can I help you today? Type 'hi' to see options or 'Book' to start booking an appointment."
+      hadSession
+        ? "Booking cancelled. Type Hi or Book to start again."
+        : "No active booking. Type Hi or Book when you are ready."
     )
+    return
+  }
+
+  if (await isBookingCancelled(from)) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: formatPhoneNumber(from),
+      context: "handleInboundTextMessage",
+      inbound: trimmedText.slice(0, 40),
+    })
     return
   }
 
@@ -667,6 +826,10 @@ async function moveToBranchSelection(
   language: Language,
   session: BookingSession
 ) {
+  if (!(await canSendBookingMessage(phone, "moveToBranchSelection"))) {
+    return
+  }
+
   // Get patient's default branch if available
   let defaultBranchId: string | null = null
   if (session.patientUid) {
@@ -704,9 +867,9 @@ async function moveToBranchSelection(
   }
 
   if (!hospitalId) {
-    await sendTextMessage(phone, lang(language,
+    await sendBookingMessage(phone, lang(language,
       "❌ હોસ્પિટલ મળી નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો.",
-      "❌ Hospital not found. Please contact reception."))
+      "❌ Hospital not found. Please contact reception."), "moveToBranchSelection.error")
     return
   }
 
@@ -723,16 +886,15 @@ async function moveToBranchSelection(
   }))
 
   if (branches.length === 0) {
-    await sendTextMessage(phone, lang(language, 
+    await sendBookingMessage(phone, lang(language, 
       "❌ કોઈ બ્રાન્ચ મળ્યું નથી. કૃપા કરીને રિસેપ્શનને સંપર્ક કરો.",
-      "❌ No branches found. Please contact reception."))
+      "❌ No branches found. Please contact reception."), "moveToBranchSelection.noBranches")
     return
   }
 
-  await sessionRef.update({
-    state: "selecting_branch",
-    updatedAt: new Date().toISOString(),
-  })
+  if (!(await updateBookingSession(sessionRef, phone, { state: "selecting_branch" }, "moveToBranchSelection"))) {
+    return
+  }
 
   if (shouldUseBhashSms()) {
     const branchLines = branches.map((branch: { id: string; name?: string }, index: number) => {
@@ -744,20 +906,21 @@ async function moveToBranchSelection(
       defaultBranchId
         ? `\n${branchLines.length + 1}. Next (Use Default)`
         : ""
-    await sendTextMessage(
+    await sendBookingMessage(
       phone,
       lang(
         language,
         `કૃપા કરીને તમારી બ્રાન્ચ પસંદ કરો:\n${branchLines.join("\n")}${nextLine}\n\nનંબર લખી જવાબ આપો (ઉદાહરણ: 1).`,
         `Please select your branch:\n${branchLines.join("\n")}${nextLine}\n\nReply with the branch number (e.g. 1).`
-      )
+      ),
+      "moveToBranchSelection.picker"
     )
     return
   }
 
-  await sendTextMessage(phone, lang(language, 
+  await sendBookingMessage(phone, lang(language, 
     "🏥 કૃપા કરીને તમારી બ્રાન્ચ પસંદ કરો:",
-    "🏥 Please select your branch:"))
+    "🏥 Please select your branch:"), "moveToBranchSelection.intro")
 
   // Create branch selection buttons
   const branchButtons = branches.map((branch: any) => {
@@ -795,20 +958,23 @@ async function moveToDateSelection(
   language: Language,
   headerPrefix?: string
 ) {
+  if (!(await canSendBookingMessage(phone, "moveToDateSelection"))) {
+    return
+  }
+
   const sessionDoc = await sessionRef.get()
   const doctorId = (sessionDoc.data() as BookingSession | undefined)?.doctorId
 
-  await sessionRef.update({
-    state: "selecting_date",
-    updatedAt: new Date().toISOString(),
-  })
+  if (!(await updateBookingSession(sessionRef, phone, { state: "selecting_date" }, "moveToDateSelection"))) {
+    return
+  }
 
   if (!shouldUseBhashSms()) {
     const introMsg =
       language === "gujarati"
         ? "📅 ચાલો તમારી મુલાકાત માટે તારીખ પસંદ કરીએ. ઉપલબ્ધ તારીખો નીચે બતાવવામાં આવશે."
         : "📅 Let's pick your appointment date. Available dates will be shown next."
-    await sendTextMessage(phone, introMsg)
+    await sendBookingMessage(phone, introMsg, "moveToDateSelection.intro")
   }
 
   await sendDatePicker(phone, doctorId, language, headerPrefix)
@@ -866,6 +1032,10 @@ async function moveToDoctorSelection(
   language: Language,
   session: BookingSession
 ) {
+  if (!(await canSendBookingMessage(phone, "moveToDoctorSelection"))) {
+    return
+  }
+
   let hospitalId: string | null = null
   if (session.branchId) {
     try {
@@ -902,10 +1072,9 @@ async function moveToDoctorSelection(
   const doctors = await fetchActiveDoctorsForBranch(db, hospitalId, session.branchId)
 
   if (doctors.length === 0) {
-    await sessionRef.update({
-      pickerDoctorOptions: [],
-      updatedAt: new Date().toISOString(),
-    })
+    if (!(await updateBookingSession(sessionRef, phone, { pickerDoctorOptions: [] }, "moveToDoctorSelection.noDoctors"))) {
+      return
+    }
     await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
     return
   }
@@ -918,20 +1087,32 @@ async function moveToDoctorSelection(
     ]
       .filter(Boolean)
       .join("\n")
-    await sessionRef.update({
-      doctorId: onlyDoctor.id,
-      pickerDoctorOptions: [{ id: onlyDoctor.id, name: onlyDoctor.name }],
-      updatedAt: new Date().toISOString(),
-    })
+    if (!(await updateBookingSession(
+      sessionRef,
+      phone,
+      {
+        doctorId: onlyDoctor.id,
+        pickerDoctorOptions: [{ id: onlyDoctor.id, name: onlyDoctor.name }],
+      },
+      "moveToDoctorSelection.singleDoctor"
+    ))) {
+      return
+    }
     await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language, prefix)
     return
   }
 
-  await sessionRef.update({
-    state: "selecting_doctor",
-    pickerDoctorOptions: doctors.map((d) => ({ id: d.id, name: d.name })),
-    updatedAt: new Date().toISOString(),
-  })
+  if (!(await updateBookingSession(
+    sessionRef,
+    phone,
+    {
+      state: "selecting_doctor",
+      pickerDoctorOptions: doctors.map((d) => ({ id: d.id, name: d.name })),
+    },
+    "moveToDoctorSelection"
+  ))) {
+    return
+  }
 
   const intro = session.branchName
     ? lang(
@@ -949,7 +1130,7 @@ async function moveToDoctorSelection(
     "નંબર લખી જવાબ આપો (ઉદાહરણ: 1).",
     "Reply with the doctor number (e.g. 1)."
   )
-  await sendTextMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`)
+  await sendBookingMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`, "moveToDoctorSelection.picker")
 }
 
 async function sendConfirmationButtons(
@@ -957,6 +1138,10 @@ async function sendConfirmationButtons(
   sessionRef: FirebaseFirestore.DocumentReference,
   session: BookingSession
 ) {
+  if (!(await canSendBookingMessage(phone, "sendConfirmationButtons"))) {
+    return
+  }
+
   const language = session.language || "english"
 
   if (!session.appointmentDate || !session.appointmentTime) {
@@ -964,22 +1149,28 @@ async function sendConfirmationButtons(
       language === "gujarati"
         ? "❌ તારીખ અથવા સમય મળ્યો નથી. કૃપા કરીને ફરીથી તારીખ પસંદ કરો."
         : "❌ Missing date or time. Please select the date again."
-    await sendTextMessage(phone, msg)
-    await sessionRef.update({ state: "selecting_date" })
+    await sendBookingMessage(phone, msg, "sendConfirmationButtons.missing")
+    await updateBookingSession(sessionRef, phone, { state: "selecting_date" }, "sendConfirmationButtons.rewind")
     return
   }
 
   // Set default consultation fee (receptionist will update after doctor assignment)
   const consultationFee = 500
-  await sessionRef.update({
-    state: "confirming",
-    consultationFee,
-    paymentMethod: "cash",
-    paymentType: "full",
-    paymentAmount: 0,
-    remainingAmount: consultationFee,
-    updatedAt: new Date().toISOString(),
-  })
+  if (!(await updateBookingSession(
+    sessionRef,
+    phone,
+    {
+      state: "confirming",
+      consultationFee,
+      paymentMethod: "cash",
+      paymentType: "full",
+      paymentAmount: 0,
+      remainingAmount: consultationFee,
+    },
+    "sendConfirmationButtons"
+  ))) {
+    return
+  }
 
   const dateDisplay = new Date(session.appointmentDate + "T00:00:00").toLocaleDateString("en-IN", {
     weekday: "long",
@@ -1004,7 +1195,7 @@ async function sendConfirmationButtons(
       `${message}\n\n1. Confirm\n2. Cancel\n\nReply 1 to confirm or 2 to cancel.`,
       `${message}\n\n1. Confirm\n2. Cancel\n\nReply 1 to confirm or 2 to cancel.`
     )
-    await sendTextMessage(phone, confirmText)
+    await sendBookingMessage(phone, confirmText, "sendConfirmationButtons.bhash")
     return
   }
 
@@ -1030,13 +1221,10 @@ async function processBookingConfirmation(
   const language = session.language || "english"
 
   if (action === "cancel") {
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(sessionRef)
-      if (snap.exists) tx.delete(sessionRef)
-    })
+    await cancelBookingSession(phone)
     await sendTextMessage(phone, lang(language,
-      "❌ બુકિંગ રદ કરાયું. તમે જ્યારે ઇચ્છો ત્યારે ફરીથી 'Book Appointment' લખીને શરૂ કરી શકો છો.",
-      "❌ Booking cancelled. You can start again anytime by typing 'Book Appointment'."))
+      "Booking cancelled. Type Hi or Book to start again.",
+      "Booking cancelled. Type Hi or Book to start again."))
     return
   }
 
@@ -1067,6 +1255,14 @@ async function processBookingConfirmation(
   }
 
   session = claimedSession
+
+  if (await isBookingCancelled(phone)) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: "processBookingConfirmation",
+    })
+    return
+  }
 
   if (!session.appointmentDate || !session.appointmentTime) {
     await sendTextMessage(phone, lang(language,
@@ -1348,6 +1544,8 @@ type BookingState =
 
 interface BookingSession {
   state: BookingState
+  status?: "active" | "cancelled"
+  version?: number
   language?: "gujarati" | "english" // Selected language for the booking session
   needsRegistration?: boolean
   patientUid?: string
@@ -1811,23 +2009,38 @@ async function startBookingConversation(phone: string) {
     }
   }
 
+  await clearCancelMarker(phone)
+
+  const version = Date.now()
   await sessionRef.set({
     state: "selecting_language",
+    status: "active",
+    version,
     needsRegistration: false,
     patientUid: patient.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   })
 
-  // Send language selection picker
+  sessionLog("SESSION CREATED", {
+    phone: normalizedPhone,
+    version,
+    state: "selecting_language",
+  })
+
   await sendLanguagePicker(phone)
 }
 
 async function sendLanguagePicker(phone: string) {
+  if (!(await canSendBookingMessage(phone, "sendLanguagePicker"))) {
+    return
+  }
+
   if (shouldUseBhashSms()) {
-    await sendTextMessage(
+    await sendBookingMessage(
       phone,
-      "Select Language\n\nPlease choose your preferred language:\n\n1. English\n2. Gujarati (Gujarati)\n\nReply 1 for English or 2 for Gujarati."
+      "Select Language\n\nPlease choose your preferred language:\n\n1. English\n2. Gujarati (Gujarati)\n\nReply 1 for English or 2 for Gujarati.",
+      "sendLanguagePicker"
     )
     return
   }
@@ -1862,6 +2075,16 @@ async function sendLanguagePicker(phone: string) {
 async function handleBookingConversation(phone: string, text: string): Promise<boolean> {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
+
+  if (await isBookingCancelled(phone)) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: "handleBookingConversation",
+      inbound: text.trim().slice(0, 40),
+    })
+    return true
+  }
+
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   const sessionDoc = await sessionRef.get()
 
@@ -1871,23 +2094,19 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
 
   const session = sessionDoc.data() as BookingSession
 
+  if (session.status === "cancelled") {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: "handleBookingConversation.status",
+    })
+    return true
+  }
+
   console.log("[WhatsApp booking]", {
     phone: normalizedPhone,
     state: session.state,
     message: text.trim().slice(0, 40),
   })
-
-  const trimmedText = text.trim().toLowerCase()
-
-  // Handle cancel/stop/abort - check for various cancel keywords
-  if (isCancelIntent(text)) {
-    await sessionRef.delete()
-    await sendTextMessage(
-      phone,
-      "❌ Booking cancelled.\n\nYou can start a new booking anytime by typing 'Book' or clicking the 'Book Appointment' button."
-    )
-    return true
-  }
 
   switch (session.state) {
     case "selecting_language":
@@ -1923,7 +2142,11 @@ async function handleLanguageSelection(
   const freshDoc = await sessionRef.get()
   if (!freshDoc.exists) return false
   const freshSession = freshDoc.data() as BookingSession
-  if (freshSession.state !== "selecting_language") {
+  if (
+    freshSession.state !== "selecting_language" ||
+    freshSession.status === "cancelled" ||
+    (await isBookingCancelled(phone))
+  ) {
     return true
   }
 
@@ -1948,16 +2171,21 @@ async function handleLanguageSelection(
     const snap = await tx.get(sessionRef)
     if (!snap.exists) return false
     const data = snap.data() as BookingSession
-    if (data.state !== "selecting_language") return false
+    if (data.state !== "selecting_language" || data.status === "cancelled") return false
     tx.update(sessionRef, {
       language: selectedLanguage,
       state: "selecting_branch",
+      status: "active",
       updatedAt: new Date().toISOString(),
     })
     return true
   })
 
   if (!transitioned) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: "handleLanguageSelection.transition",
+    })
     return true
   }
 
@@ -2112,10 +2340,11 @@ async function handleDoctorSelection(
     const snap = await tx.get(sessionRef)
     if (!snap.exists) return false
     const data = snap.data() as BookingSession
-    if (data.state !== "selecting_doctor") return false
+    if (data.state !== "selecting_doctor" || data.status === "cancelled") return false
     tx.update(sessionRef, {
       doctorId: selectedDoctor!.id,
       state: "selecting_date",
+      status: "active",
       updatedAt: new Date().toISOString(),
     })
     return true
@@ -2138,6 +2367,15 @@ async function handleDoctorSelection(
 async function handleBranchButtonClick(phone: string, buttonId: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
+
+  if (await isBookingCancelled(phone)) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: "handleBranchButtonClick",
+    })
+    return
+  }
+
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   const sessionDoc = await sessionRef.get()
 
@@ -2146,7 +2384,7 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
   }
 
   const session = sessionDoc.data() as BookingSession
-  if (session.state !== "selecting_branch") {
+  if (session.state !== "selecting_branch" || session.status === "cancelled") {
     return
   }
 
@@ -2221,10 +2459,11 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
       const snap = await tx.get(sessionRef)
       if (!snap.exists) return false
       const data = snap.data() as BookingSession
-      if (data.state !== "selecting_branch") return false
+      if (data.state !== "selecting_branch" || data.status === "cancelled") return false
       tx.update(sessionRef, {
         branchId,
         branchName,
+        status: "active",
         updatedAt: new Date().toISOString(),
       })
       return true
@@ -2266,10 +2505,11 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
     const snap = await tx.get(sessionRef)
     if (!snap.exists) return false
     const data = snap.data() as BookingSession
-    if (data.state !== "selecting_branch") return false
+    if (data.state !== "selecting_branch" || data.status === "cancelled") return false
     tx.update(sessionRef, {
       branchId,
       branchName,
+      status: "active",
       updatedAt: new Date().toISOString(),
     })
     return true
@@ -2697,6 +2937,10 @@ async function sendDatePicker(
   language: Language = "english",
   headerPrefix?: string
 ) {
+  if (!(await canSendBookingMessage(phone, "sendDatePicker"))) {
+    return
+  }
+
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
@@ -2718,7 +2962,7 @@ async function sendDatePicker(
     const noDatesMsg = language === "gujarati"
       ? "❌ *કોઈ તારીખ ઉપલબ્ધ નથી*\n\nબધી તારીખો હાલમાં અવરોધિત અથવા ઉપલબ્ધ નથી.\n\nકૃપા કરીને સહાયતા માટે રિસેપ્શનને +91-XXXXXXXXXX પર કૉલ કરો."
       : "❌ *No Available Dates*\n\nAll dates are currently blocked or unavailable.\n\nPlease contact reception at +91-XXXXXXXXXX for assistance."
-    await sendTextMessage(phone, noDatesMsg)
+    await sendBookingMessage(phone, noDatesMsg, "sendDatePicker.noDates")
     return
   }
   
@@ -2726,14 +2970,24 @@ async function sendDatePicker(
   const datesToShow = dateOptions.slice(0, 10)
   const pickerDateOptions = datesToShow.map((d) => d.id.replace("date_", ""))
 
+  if (!(await canSendBookingMessage(phone, "sendDatePicker.beforeSet"))) {
+    return
+  }
+
   await sessionRef.set(
     {
       state: "selecting_date",
+      status: "active",
       pickerDateOptions,
       updatedAt: new Date().toISOString(),
     },
     { merge: true }
   )
+  sessionLog("SESSION UPDATED", {
+    phone: normalizedPhone,
+    context: "sendDatePicker",
+    state: "selecting_date",
+  })
 
   if (shouldUseBhashSms()) {
     const intro = headerPrefix
@@ -2745,7 +2999,7 @@ async function sendDatePicker(
       "નંબર લખી જવાબ આપો (ઉદાહરણ: 1).",
       "Reply with the date number (e.g. 1)."
     )
-    await sendTextMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`)
+    await sendBookingMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`, "sendDatePicker.bhash")
     return
   }
   
@@ -3258,6 +3512,10 @@ async function sendTimePicker(
   language: Language = "english",
   headerPrefix?: string
 ) {
+  if (!(await canSendBookingMessage(phone, "sendTimePicker"))) {
+    return
+  }
+
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
@@ -3336,20 +3594,30 @@ async function sendTimePicker(
     }
   }
   
+  if (!(await canSendBookingMessage(phone, "sendTimePicker.beforeSet"))) {
+    return
+  }
+
   await sessionRef.set(
     {
       state: "selecting_time",
+      status: "active",
       pickerTimeOptions,
       updatedAt: new Date().toISOString(),
     },
     { merge: true }
   )
+  sessionLog("SESSION UPDATED", {
+    phone: normalizedPhone,
+    context: "sendTimePicker",
+    state: "selecting_time",
+  })
   
   if (availableHourlySlots.length === 0) {
     const noSlotsMsg = language === "gujarati"
       ? "❌ આ તારીખ માટે કોઈ સમય સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજી તારીખ પસંદ કરો."
       : "❌ No time slots available for this date. Please select another date."
-    await sendTextMessage(phone, noSlotsMsg)
+    await sendBookingMessage(phone, noSlotsMsg, "sendTimePicker.noSlots")
     await sendDatePicker(phone, doctorId, language)
     return
   }
@@ -3367,11 +3635,9 @@ async function sendTimePicker(
       "નંબર લખી જવાબ આપો (ઉદાહરણ: 1).",
       "Reply with the time number (e.g. 1)."
     )
-    await sendTextMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`)
+    await sendBookingMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`, "sendTimePicker.bhash")
     return
   }
-
-  // Send hourly slot selection as list message
   const timeMsg = language === "gujarati"
     ? "🕰️ *સમય પસંદ કરો*\n\nતમારો પસંદીદા સમય સ્લોટ પસંદ કરો:"
     : "🕰️ *Choose Time*\n\nSelect your preferred time slot:"
