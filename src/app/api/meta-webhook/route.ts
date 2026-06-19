@@ -80,6 +80,27 @@ const lang = (lang: Language, guj: string, eng: string): string => lang === "guj
 
 // Session helpers
 const CANCELLED_SESSIONS_COLLECTION = "whatsappBookingCancelled"
+const BOOKING_LOCK_COLLECTION = "whatsappBookingLocks"
+const INBOUND_DEDUPE_MS = 300_000 // 5 min — Bhash retries duplicate callbacks
+const BOOKING_LOCK_TTL_MS = 60_000
+
+/** Valid booking state transitions (prevents step skipping / regression). */
+const VALID_BOOKING_TRANSITIONS: Partial<Record<BookingState, BookingState[]>> = {
+  idle: ["selecting_language"],
+  selecting_language: ["selecting_branch", "registering_full_name"],
+  registering_full_name: ["selecting_branch"],
+  selecting_branch: ["selecting_doctor"],
+  selecting_doctor: ["selecting_date"],
+  selecting_date: ["selecting_time"],
+  selecting_time: ["confirming"],
+  confirming: ["selecting_time", "selecting_date"],
+}
+
+function isValidBookingTransition(from: BookingState, to: BookingState): boolean {
+  if (from === to) return true
+  const allowed = VALID_BOOKING_TRANSITIONS[from]
+  return allowed?.includes(to) ?? false
+}
 
 function sessionLog(
   event:
@@ -126,15 +147,64 @@ async function clearSession(phone: string): Promise<void> {
   }
 }
 
+/** Serialize inbound webhook handling per phone — blocks parallel double-processing. */
+async function acquireBookingProcessingLock(
+  phone: string
+): Promise<{ release: () => Promise<void> } | null> {
+  const normalizedPhone = formatPhoneNumber(phone)
+  const ref = admin.firestore().collection(BOOKING_LOCK_COLLECTION).doc(normalizedPhone)
+  const lockId = crypto.randomBytes(8).toString("hex")
+  const now = Date.now()
+
+  try {
+    const acquired = await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (snap.exists) {
+        const expiresAt = (snap.data()?.expiresAt as number) || 0
+        if (expiresAt > now) return false
+      }
+      tx.set(ref, { lockId, acquiredAt: now, expiresAt: now + BOOKING_LOCK_TTL_MS })
+      return true
+    })
+    if (!acquired) return null
+
+    return {
+      release: async () => {
+        try {
+          await admin.firestore().runTransaction(async (tx) => {
+            const snap = await tx.get(ref)
+            if (snap.exists && snap.data()?.lockId === lockId) {
+              tx.delete(ref)
+            }
+          })
+        } catch {
+          // lock may have expired
+        }
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
+async function wasCancelledAfter(phone: string, sinceMs: number): Promise<boolean> {
+  const normalizedPhone = formatPhoneNumber(phone)
+  const snap = await admin.firestore().collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone).get()
+  if (!snap.exists) return false
+  const cancelledAtMs = (snap.data()?.cancelledAtMs as number) || 0
+  return cancelledAtMs >= sinceMs
+}
+
 /** Hard-stop: mark cancelled, delete session, block all pending booking sends. */
 async function cancelBookingSession(phone: string): Promise<{ hadSession: boolean; alreadyCancelled: boolean }> {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const cancelRef = db.collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone)
   const existingCancel = await cancelRef.get()
+  const prevGeneration = (existingCancel.data()?.generation as number) || 0
   if (existingCancel.exists) {
     const at = (existingCancel.data()?.cancelledAtMs as number) || 0
-    if (at && Date.now() - at < 300_000) {
+    if (at && Date.now() - at < INBOUND_DEDUPE_MS) {
       return { hadSession: false, alreadyCancelled: true }
     }
   }
@@ -142,6 +212,7 @@ async function cancelBookingSession(phone: string): Promise<{ hadSession: boolea
   const { ref, data } = await getSession(phone)
   const hadSession = !!data
   const version = data?.version ?? Date.now()
+  const cancelGeneration = prevGeneration + 1
 
   if (hadSession && ref) {
     await ref.set(
@@ -162,9 +233,10 @@ async function cancelBookingSession(phone: string): Promise<{ hadSession: boolea
     cancelledAt: new Date().toISOString(),
     cancelledAtMs: Date.now(),
     version,
+    generation: cancelGeneration,
   })
 
-  sessionLog("SESSION CANCELLED", { phone: normalizedPhone, hadSession, version })
+  sessionLog("SESSION CANCELLED", { phone: normalizedPhone, hadSession, version, generation: cancelGeneration })
   return { hadSession, alreadyCancelled: false }
 }
 
@@ -229,6 +301,15 @@ async function updateBookingSession(
     patch.stateChangedAt = Date.now()
   }
   const { data: before } = await getSession(phone)
+  if (updates.state && before?.state && !isValidBookingTransition(before.state, updates.state)) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: formatPhoneNumber(phone),
+      context: `${context}.invalidTransition`,
+      previousState: before.state,
+      attemptedState: updates.state,
+    })
+    return false
+  }
   await sessionRef.update(patch)
   sessionLog("SESSION UPDATED", {
     phone: formatPhoneNumber(phone),
@@ -237,6 +318,8 @@ async function updateBookingSession(
     newState: updates.state ?? before?.state,
     branchId: updates.branchId ?? before?.branchId,
     doctorId: updates.doctorId ?? before?.doctorId,
+    appointmentDate: updates.appointmentDate ?? before?.appointmentDate,
+    appointmentTime: updates.appointmentTime ?? before?.appointmentTime,
   })
   return true
 }
@@ -297,7 +380,9 @@ function logInboundDebug(
     source,
     phone: formatPhoneNumber(phone),
     message: text.slice(0, 120),
+    messageId: extra?.messageId,
     state: session?.state ?? "idle",
+    bookingStep: session?.state ?? "idle",
     status: session?.status,
     branchId: session?.branchId,
     branchName: session?.branchName,
@@ -308,6 +393,27 @@ function logInboundDebug(
     timestamp: new Date().toISOString(),
     ...extra,
   })
+}
+
+async function shouldSendGreeting(phone: string): Promise<boolean> {
+  const digits = formatPhoneNumber(phone).replace(/\D/g, "").slice(-10)
+  if (!digits) return false
+  const ref = admin.firestore().collection("bhash_greeting_recent").doc(digits)
+  const GREETING_DEDUPE_MS = 30_000
+  try {
+    return await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      const now = Date.now()
+      if (snap.exists) {
+        const at = (snap.data()?.at as number) || 0
+        if (now - at < GREETING_DEDUPE_MS) return false
+      }
+      tx.set(ref, { at: now })
+      return true
+    })
+  } catch {
+    return false
+  }
 }
 
 function isBhashRestartCommand(text: string): boolean {
@@ -365,26 +471,36 @@ async function shouldProcessBhashInbound(
   const digits = from.replace(/\D/g, "").slice(-10)
   if (!digits) return false
 
+  const trimmed = text.trim().toLowerCase().slice(0, 120)
+  const normalizedPhone = formatPhoneNumber(from) || `+91${digits}`
+
   if (messageId) {
     const idRef = db.collection("bhash_inbound_ids").doc(`${digits}_${messageId}`)
     try {
-      await idRef.create({ at: Date.now(), from: digits, messageId })
+      await idRef.create({ at: Date.now(), from: digits, messageId, ttl: INBOUND_DEDUPE_MS })
     } catch {
       console.log("[Bhash inbound] duplicate messageId skipped", { messageId })
       return false
     }
+  } else {
+    const textHash = crypto.createHash("sha256").update(`${digits}:${trimmed}`).digest("hex").slice(0, 24)
+    const hashRef = db.collection("bhash_inbound_ids").doc(`${digits}_h_${textHash}`)
+    try {
+      await hashRef.create({ at: Date.now(), from: digits, text: trimmed, ttl: INBOUND_DEDUPE_MS })
+    } catch {
+      console.log("[Bhash inbound] duplicate text hash skipped", { textHash })
+      return false
+    }
   }
 
-  const trimmed = text.trim().toLowerCase().slice(0, 120)
-  const normalizedPhone = formatPhoneNumber(from) || `+91${digits}`
   const sessionDoc = await db.collection("whatsappBookingSessions").doc(normalizedPhone).get()
   const sessionState = sessionDoc.exists
     ? (sessionDoc.data() as BookingSession)?.state || "idle"
     : "idle"
 
   const ref = db.collection("bhash_inbound_recent").doc(digits)
-  const SAME_STATE_MS = 15_000
-  const CROSS_STATE_MS = 12_000
+  const SAME_STATE_MS = INBOUND_DEDUPE_MS
+  const CROSS_STATE_MS = INBOUND_DEDUPE_MS
 
   // Bot outbound echoes — long or multi-line inbound
   if (trimmed.length > 60 || text.split("\n").length > 2) {
@@ -582,100 +698,124 @@ function getBhashInboundFromSearchParams(searchParams: URLSearchParams): {
   return { from: from.trim(), text: text.trim(), messageId: messageId?.trim() || undefined }
 }
 
-async function handleInboundTextMessage(from: string, text: string, source: "bhash" | "meta" = "meta"): Promise<void> {
-  const trimmedText = text.trim().toLowerCase()
-  const { data: session } = await getSession(from)
-  logInboundDebug(source, from, text, session)
-
-  const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
-  if (greetings.some((g) => trimmedText === g || trimmedText.startsWith(g + " "))) {
-    try {
-      await clearCancelMarker(from)
-      await clearSession(from)
-    } catch (err) {
-      console.error("[WhatsApp] clearSession failed on greeting", err)
-    }
-    await handleGreeting(from)
-    return
-  }
-
-  const hasActiveBooking =
-    !!session &&
-    session.status !== "cancelled" &&
-    session.state !== "idle" &&
-    !(await isBookingCancelled(from))
-
-  if (hasActiveBooking) {
-    if (isHardCancelIntent(text)) {
-      const { alreadyCancelled } = await cancelBookingSession(from)
-      if (!alreadyCancelled) {
-        await sendTextMessage(from, "Booking cancelled. Type Hi or Book to start again.")
-      }
-      return
-    }
-    await handleBookingConversation(from, text)
-    return
-  }
-
-  if (isHardCancelIntent(text) || isCancelIntent(text)) {
-    const { alreadyCancelled } = await cancelBookingSession(from)
-    if (!alreadyCancelled) {
-      await sendTextMessage(from, "No active booking. Type Hi or Book when you are ready.")
-    }
-    return
-  }
-
-  if (await isBookingCancelled(from)) {
-    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+async function handleInboundTextMessage(
+  from: string,
+  text: string,
+  source: "bhash" | "meta" = "meta",
+  messageId?: string
+): Promise<void> {
+  const lock = await acquireBookingProcessingLock(from)
+  if (!lock) {
+    console.log("[INBOUND DEBUG] parallel webhook skipped — lock held", {
       phone: formatPhoneNumber(from),
-      context: "handleInboundTextMessage",
-      inbound: trimmedText.slice(0, 40),
+      message: text.slice(0, 80),
+      messageId,
+      source,
     })
     return
   }
 
-  const isInBooking = await handleBookingConversation(from, text)
-  if (!isInBooking) {
-    if (trimmedText.includes("thank")) {
-      await sendTextMessage(
-        from,
-        "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥"
-      )
+  try {
+    const trimmedText = text.trim().toLowerCase()
+    const { data: session } = await getSession(from)
+    logInboundDebug(source, from, text, session, { messageId })
+
+    const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
+    if (greetings.some((g) => trimmedText === g || trimmedText.startsWith(g + " "))) {
+      try {
+        await clearCancelMarker(from)
+        await clearSession(from)
+      } catch (err) {
+        console.error("[WhatsApp] clearSession failed on greeting", err)
+      }
+      if (!(await shouldSendGreeting(from))) {
+        console.log("[INBOUND DEBUG] duplicate greeting skipped", { phone: formatPhoneNumber(from), messageId })
+        return
+      }
+      await handleGreeting(from)
       return
     }
 
-    // Bhash has no real buttons — map typed menu replies to button handlers
-    if (
-      trimmedText === "book" ||
-      trimmedText === "book appointment" ||
-      trimmedText === "📅 book appointment"
-    ) {
-      await BUTTON_HANDLERS.book_appointment(from)
-      return
-    }
-    if (
-      trimmedText === "help" ||
-      trimmedText === "help center" ||
-      trimmedText === "🆘 help center"
-    ) {
-      await handleHelpCenter(from)
-      return
-    }
-    if (
-      trimmedText === "yes" ||
-      trimmedText === "register" ||
-      trimmedText === "yes, register" ||
-      trimmedText === "✅ yes, register"
-    ) {
-      await handleRegistrationPrompt(from)
+    const hasActiveBooking =
+      !!session &&
+      session.status !== "cancelled" &&
+      session.state !== "idle" &&
+      !(await isBookingCancelled(from))
+
+    if (hasActiveBooking) {
+      if (isHardCancelIntent(text)) {
+        const { alreadyCancelled } = await cancelBookingSession(from)
+        if (!alreadyCancelled) {
+          await sendTextMessage(from, "Booking cancelled. Type Hi or Book to start again.")
+        }
+        return
+      }
+      await handleBookingConversation(from, text)
       return
     }
 
-    if (shouldUseBhashSms()) {
+    if (isHardCancelIntent(text) || isCancelIntent(text)) {
+      const { alreadyCancelled } = await cancelBookingSession(from)
+      if (!alreadyCancelled) {
+        await sendTextMessage(from, "No active booking. Type Hi or Book when you are ready.")
+      }
       return
     }
 
-    await handleIncomingText(from)
+    if (await isBookingCancelled(from)) {
+      sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+        phone: formatPhoneNumber(from),
+        context: "handleInboundTextMessage",
+        inbound: trimmedText.slice(0, 40),
+      })
+      return
+    }
+
+    const isInBooking = await handleBookingConversation(from, text)
+    if (!isInBooking) {
+      if (trimmedText.includes("thank")) {
+        await sendTextMessage(
+          from,
+          "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥"
+        )
+        return
+      }
+
+      // Bhash has no real buttons — map typed menu replies to button handlers
+      if (
+        trimmedText === "book" ||
+        trimmedText === "book appointment" ||
+        trimmedText === "📅 book appointment"
+      ) {
+        await BUTTON_HANDLERS.book_appointment(from)
+        return
+      }
+      if (
+        trimmedText === "help" ||
+        trimmedText === "help center" ||
+        trimmedText === "🆘 help center"
+      ) {
+        await handleHelpCenter(from)
+        return
+      }
+      if (
+        trimmedText === "yes" ||
+        trimmedText === "register" ||
+        trimmedText === "yes, register" ||
+        trimmedText === "✅ yes, register"
+      ) {
+        await handleRegistrationPrompt(from)
+        return
+      }
+
+      if (shouldUseBhashSms()) {
+        return
+      }
+
+      await handleIncomingText(from)
+    }
+  } finally {
+    await lock.release()
   }
 }
 
@@ -706,7 +846,7 @@ async function handleBhashInboundCallback(req: Request): Promise<Response | null
       messageId: inbound.messageId,
       params: Object.fromEntries(searchParams.entries()),
     })
-    await handleInboundTextMessage(inbound.from, inbound.text, "bhash")
+    await handleInboundTextMessage(inbound.from, inbound.text, "bhash", inbound.messageId)
     return NextResponse.json({ success: true })
   } catch (err) {
     return NextResponse.json(
@@ -1380,6 +1520,7 @@ async function processBookingConfirmation(
   initialSession: BookingSession,
   action: "confirm" | "cancel"
 ) {
+  const workflowStartedAt = Date.now()
   let session = initialSession
   const language = session.language || "english"
 
@@ -1419,10 +1560,11 @@ async function processBookingConfirmation(
 
   session = claimedSession
 
-  if (await isBookingCancelled(phone)) {
+  if (await isBookingCancelled(phone) || (await wasCancelledAfter(phone, workflowStartedAt))) {
     sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
       phone: normalizedPhone,
       context: "processBookingConfirmation",
+      workflowStartedAt,
     })
     return
   }
@@ -1573,6 +1715,15 @@ async function processBookingConfirmation(
       }
     }
 
+    if (await wasCancelledAfter(phone, workflowStartedAt)) {
+      sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+        phone: normalizedPhone,
+        context: "processBookingConfirmation.preCreate",
+        workflowStartedAt,
+      })
+      return
+    }
+
     const appointmentId = await createAppointment(
       db,
       patient,
@@ -1599,6 +1750,16 @@ async function processBookingConfirmation(
       normalizedPhone,
       true // Mark as WhatsApp pending
     )
+
+    if (await wasCancelledAfter(phone, workflowStartedAt)) {
+      sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+        phone: normalizedPhone,
+        context: "processBookingConfirmation.preSend",
+        workflowStartedAt,
+        appointmentId,
+      })
+      return
+    }
 
     await sendBookingConfirmation(
       phone,
@@ -4311,6 +4472,15 @@ async function sendBookingConfirmation(
   session: BookingSession,
   appointmentId: string
 ) {
+  if (await isBookingCancelled(phone)) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: formatPhoneNumber(phone),
+      context: "sendBookingConfirmation",
+      appointmentId,
+    })
+    return
+  }
+
   const doctorFromPicker = session.pickerDoctorOptions?.find((d) => d.id === session.doctorId)?.name
   const doctorName = doctorData
     ? `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
