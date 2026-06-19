@@ -135,18 +135,14 @@ export function encodeBhashTemplateParams(parameters: string[]): string {
 }
 
 /**
- * Bhash sendmsgutilreply.php text encoding (per Bhash support):
- * newlines → literal \r\n in URL; spaces stay as spaces (not + or %20).
+ * Bhash utilreply: literal \r\n between lines; spaces as %20 (not +).
  */
 export function encodeBhashUtilReplyText(message: string): string {
   const normalized = message.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-  const withLiteralCrlf = normalized.split("\n").join("\\r\\n")
-
-  return withLiteralCrlf
-    .replace(/%/g, "%25")
-    .replace(/&/g, "%26")
-    .replace(/#/g, "%23")
-    .replace(/\?/g, "%3F")
+  return normalized
+    .split("\n")
+    .map((line) => encodeURIComponent(line))
+    .join("\\r\\n")
 }
 
 function buildBhashUtilReplyQueryString(
@@ -225,7 +221,33 @@ async function bhashGet(
       cache: "no-store",
     })
     const body = await response.text()
-    const parsed = parseBhashResponse(body)
+    let parsed = parseBhashResponse(body)
+
+    // Fallback: if literal \\r\\n format fails, retry with standard encoding
+    if (
+      !parsed.success &&
+      options?.utilReply &&
+      params.text &&
+      query.includes("\\r\\n")
+    ) {
+      const fallbackQuery = buildBhashQueryString(config, {
+        phone: params.phone,
+        text: params.text,
+        stype: params.stype,
+        htype: params.htype,
+      })
+      const fallbackResponse = await fetch(`${resolvedApiUrl}?${fallbackQuery}`, {
+        method: "GET",
+        cache: "no-store",
+      })
+      const fallbackBody = await fallbackResponse.text()
+      parsed = parseBhashResponse(fallbackBody)
+      console.log("[BhashSMS] utilreply fallback", {
+        phone: params.phone,
+        response: fallbackBody.trim().slice(0, 100),
+        success: parsed.success,
+      })
+    }
     const apiName = resolvedApiUrl.includes("utilreply")
       ? "utilreply"
       : resolvedApiUrl.includes("sendmsgutil")

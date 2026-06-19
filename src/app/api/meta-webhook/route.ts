@@ -82,37 +82,25 @@ function getPatientPhoneLookupVariants(phone: string): string[] {
   return [...variants]
 }
 
-/** Prevent duplicate Bhash webhook processing (GET retries / double delivery). */
+/** Block only duplicate webhooks within a few seconds (not repeat "hi" after 1 min). */
 async function acquireBhashInboundLock(from: string, text: string): Promise<boolean> {
   const db = admin.firestore()
   const digits = from.replace(/\D/g, "").slice(-10)
-  const msgKey = text.trim().toLowerCase().slice(0, 120)
-  const lockId = crypto
-    .createHash("sha256")
-    .update(`${digits}:${msgKey}`)
-    .digest("hex")
-    .slice(0, 40)
+  const msgKey = text.trim().toLowerCase().slice(0, 80).replace(/[/\\?#&=]/g, "_")
+  const bucket = Math.floor(Date.now() / 4000)
+  const lockId = `${digits}_${msgKey}_${bucket}`
   const ref = db.collection("bhash_inbound_dedupe").doc(lockId)
-
   try {
-    return await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref)
-      const now = Date.now()
-      if (snap.exists) {
-        const createdAt = snap.data()?.createdAt
-        const createdMs = createdAt ? new Date(createdAt).getTime() : 0
-        if (createdMs && now - createdMs < 60_000) {
-          return false
-        }
-      }
-      tx.set(ref, {
-        from: digits,
-        text: msgKey,
-        createdAt: new Date().toISOString(),
-      })
-      return true
+    await ref.create({
+      from: digits,
+      text: msgKey,
+      createdAt: new Date().toISOString(),
     })
-  } catch {
+    return true
+  } catch (err: unknown) {
+    const code = (err as { code?: number })?.code
+    if (code === 6) return false
+    console.warn("[Bhash inbound] dedupe lock failed, processing anyway", err)
     return true
   }
 }
@@ -181,7 +169,11 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
 
   const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
   if (greetings.some((g) => trimmedText === g || trimmedText.startsWith(g + " "))) {
-    await clearSession(from)
+    try {
+      await clearSession(from)
+    } catch (err) {
+      console.error("[WhatsApp] clearSession failed on greeting", err)
+    }
     await handleGreeting(from)
     return
   }
@@ -305,7 +297,10 @@ export async function POST(req: Request) {
       return rateLimitResult
     }
 
-    // Bhash inbound is processed on GET only (avoids GET+POST double replies).
+    // Bhash may call GET or POST — dedupe lock prevents double replies.
+    const bhashResponse = await handleBhashInboundCallback(req)
+    if (bhashResponse) return bhashResponse
+
     const rawBody = await req.text()
     if (!rawBody || rawBody.length > 1024 * 1024) {
       return NextResponse.json({ error: "Invalid webhook payload size" }, { status: 400 })
