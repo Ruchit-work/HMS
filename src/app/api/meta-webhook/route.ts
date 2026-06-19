@@ -13,6 +13,56 @@ import { getStorage } from "firebase-admin/storage"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 import crypto from "crypto"
 
+type BookingState =
+  | "idle"
+  | "selecting_language"
+  | "selecting_branch"
+  | "selecting_doctor"
+  | "selecting_date"
+  | "selecting_time"
+  | "confirming"
+  | "registering_full_name"
+
+interface BookingSession {
+  state: BookingState
+  status?: "active" | "cancelled"
+  version?: number
+  language?: "gujarati" | "english"
+  needsRegistration?: boolean
+  patientUid?: string
+  branchId?: string
+  branchName?: string
+  doctorId?: string
+  appointmentDate?: string
+  appointmentTime?: string
+  pickerBranchOptions?: Array<{ id: string; name: string }>
+  pickerDateOptions?: string[]
+  pickerTimeOptions?: string[]
+  pickerDoctorOptions?: Array<{ id: string; name: string }>
+  processedInputs?: Array<{ state: BookingState; text: string; at: number }>
+  stateChangedAt?: number
+  symptoms?: string
+  paymentMethod?: "card" | "upi" | "cash"
+  paymentType?: "full" | "partial"
+  consultationFee?: number
+  paymentAmount?: number
+  remainingAmount?: number
+  isRecheckup?: boolean
+  recheckupNote?: string
+  originalAppointmentId?: string
+  originalAppointmentDate?: string
+  registrationData?: {
+    firstName?: string
+    lastName?: string
+    email?: string
+    dateOfBirth?: string
+    gender?: string
+    patientId?: string
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 // Button handler registry
 const BUTTON_HANDLERS: Record<string, (from: string) => Promise<void>> = {
   book_appointment: (from) => startBookingWithFlow(from),
@@ -77,9 +127,18 @@ async function clearSession(phone: string): Promise<void> {
 }
 
 /** Hard-stop: mark cancelled, delete session, block all pending booking sends. */
-async function cancelBookingSession(phone: string): Promise<{ hadSession: boolean }> {
+async function cancelBookingSession(phone: string): Promise<{ hadSession: boolean; alreadyCancelled: boolean }> {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
+  const cancelRef = db.collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone)
+  const existingCancel = await cancelRef.get()
+  if (existingCancel.exists) {
+    const at = (existingCancel.data()?.cancelledAtMs as number) || 0
+    if (at && Date.now() - at < 300_000) {
+      return { hadSession: false, alreadyCancelled: true }
+    }
+  }
+
   const { ref, data } = await getSession(phone)
   const hadSession = !!data
   const version = data?.version ?? Date.now()
@@ -98,7 +157,7 @@ async function cancelBookingSession(phone: string): Promise<{ hadSession: boolea
     sessionLog("SESSION CLEARED", { phone: normalizedPhone, reason: "cancel" })
   }
 
-  await db.collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone).set({
+  await cancelRef.set({
     status: "cancelled",
     cancelledAt: new Date().toISOString(),
     cancelledAtMs: Date.now(),
@@ -106,7 +165,7 @@ async function cancelBookingSession(phone: string): Promise<{ hadSession: boolea
   })
 
   sessionLog("SESSION CANCELLED", { phone: normalizedPhone, hadSession, version })
-  return { hadSession }
+  return { hadSession, alreadyCancelled: false }
 }
 
 async function canSendBookingMessage(phone: string, context = ""): Promise<boolean> {
@@ -161,17 +220,94 @@ async function updateBookingSession(
   if (!(await canSendBookingMessage(phone, context))) {
     return false
   }
-  await sessionRef.update({
+  const patch: Partial<BookingSession> = {
     ...updates,
     status: "active",
     updatedAt: new Date().toISOString(),
-  })
+  }
+  if (updates.state) {
+    patch.stateChangedAt = Date.now()
+  }
+  const { data: before } = await getSession(phone)
+  await sessionRef.update(patch)
   sessionLog("SESSION UPDATED", {
     phone: formatPhoneNumber(phone),
     context,
-    state: updates.state,
+    previousState: before?.state,
+    newState: updates.state ?? before?.state,
+    branchId: updates.branchId ?? before?.branchId,
+    doctorId: updates.doctorId ?? before?.doctorId,
   })
   return true
+}
+
+type ProcessedInput = { state: BookingState; text: string; at: number }
+
+/** Claim user input for current step — blocks webhook retries re-running prior digits at a new step. */
+async function claimBookingInput(
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  expectedState: BookingState
+): Promise<{ claimed: boolean; session: BookingSession | null }> {
+  const normalized = text.trim().toLowerCase()
+  const db = admin.firestore()
+
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(sessionRef)
+      if (!snap.exists) return { claimed: false, session: null }
+      const data = snap.data() as BookingSession
+      if (data.status === "cancelled" || data.state !== expectedState) {
+        return { claimed: false, session: data }
+      }
+
+      const history: ProcessedInput[] = data.processedInputs || []
+      if (history.some((h) => h.state === expectedState && h.text === normalized)) {
+        return { claimed: false, session: data }
+      }
+
+      const stateChangedAt = data.stateChangedAt || 0
+      const crossStep = history.find((h) => h.text === normalized && h.state !== expectedState)
+      if (
+        crossStep &&
+        Date.now() - crossStep.at < 120_000 &&
+        stateChangedAt &&
+        Date.now() - stateChangedAt < 25_000
+      ) {
+        return { claimed: false, session: data }
+      }
+
+      const processedInputs = [...history.slice(-12), { state: expectedState, text: normalized, at: Date.now() }]
+      tx.update(sessionRef, { processedInputs })
+      return { claimed: true, session: data }
+    })
+  } catch {
+    return { claimed: false, session: null }
+  }
+}
+
+function logInboundDebug(
+  source: "bhash" | "meta",
+  phone: string,
+  text: string,
+  session: BookingSession | null,
+  extra?: Record<string, unknown>
+) {
+  console.log("[INBOUND DEBUG]", {
+    source,
+    phone: formatPhoneNumber(phone),
+    message: text.slice(0, 120),
+    state: session?.state ?? "idle",
+    status: session?.status,
+    branchId: session?.branchId,
+    branchName: session?.branchName,
+    doctorId: session?.doctorId,
+    appointmentDate: session?.appointmentDate,
+    appointmentTime: session?.appointmentTime,
+    version: session?.version,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  })
 }
 
 function isBhashRestartCommand(text: string): boolean {
@@ -186,26 +322,18 @@ function isBhashRestartCommand(text: string): boolean {
   )
 }
 
-/** Exact / phrase match only — avoids "book".includes("no") false cancel. */
-function isCancelIntent(text: string): boolean {
+/** STOP / CANCEL / ABORT / QUIT / EXIT — not "no" (used at confirm step). */
+function isHardCancelIntent(text: string): boolean {
   const t = text.trim().toLowerCase()
-  if (
-    [
-      "cancel",
-      "stop",
-      "abort",
-      "quit",
-      "exit",
-      "no",
-      "nevermind",
-      "skip",
-      "end",
-      "finish",
-    ].includes(t)
-  ) {
-    return true
-  }
-  if (t === "never mind" || t.startsWith("never mind ")) return true
+  return ["cancel", "stop", "abort", "quit", "exit", "nevermind", "end", "finish"].includes(t) ||
+    t === "never mind" || t.startsWith("never mind ")
+}
+
+/** Exact / phrase match — includes "no" only when not in an active booking session. */
+function isCancelIntent(text: string): boolean {
+  if (isHardCancelIntent(text)) return true
+  const t = text.trim().toLowerCase()
+  if (t === "no" || t === "skip") return true
   if (t === "don't" || t === "dont" || t.startsWith("don't ") || t.startsWith("dont ")) {
     return true
   }
@@ -228,10 +356,24 @@ function getPatientPhoneLookupVariants(phone: string): string[] {
 
 
 /** Per-phone inbound dedupe — blocks echoes, duplicates, and unsolicited auto-replies. */
-async function shouldProcessBhashInbound(from: string, text: string): Promise<boolean> {
+async function shouldProcessBhashInbound(
+  from: string,
+  text: string,
+  messageId?: string
+): Promise<boolean> {
   const db = admin.firestore()
   const digits = from.replace(/\D/g, "").slice(-10)
   if (!digits) return false
+
+  if (messageId) {
+    const idRef = db.collection("bhash_inbound_ids").doc(`${digits}_${messageId}`)
+    try {
+      await idRef.create({ at: Date.now(), from: digits, messageId })
+    } catch {
+      console.log("[Bhash inbound] duplicate messageId skipped", { messageId })
+      return false
+    }
+  }
 
   const trimmed = text.trim().toLowerCase().slice(0, 120)
   const normalizedPhone = formatPhoneNumber(from) || `+91${digits}`
@@ -242,7 +384,7 @@ async function shouldProcessBhashInbound(from: string, text: string): Promise<bo
 
   const ref = db.collection("bhash_inbound_recent").doc(digits)
   const SAME_STATE_MS = 15_000
-  const CROSS_STATE_MS = 6_000
+  const CROSS_STATE_MS = 12_000
 
   // Bot outbound echoes — long or multi-line inbound
   if (trimmed.length > 60 || text.split("\n").length > 2) {
@@ -417,6 +559,7 @@ function verifyMetaWebhookSignature(rawBody: string, signatureHeader: string, ap
 function getBhashInboundFromSearchParams(searchParams: URLSearchParams): {
   from: string
   text: string
+  messageId?: string
 } | null {
   const from =
     searchParams.get("fromphone") ||
@@ -427,13 +570,22 @@ function getBhashInboundFromSearchParams(searchParams: URLSearchParams): {
     searchParams.get("message") ||
     searchParams.get("text") ||
     searchParams.get("body")
+  const messageId =
+    searchParams.get("messageid") ||
+    searchParams.get("message_id") ||
+    searchParams.get("msgid") ||
+    searchParams.get("msg_id") ||
+    searchParams.get("id") ||
+    undefined
 
   if (!from?.trim() || !text?.trim()) return null
-  return { from: from.trim(), text: text.trim() }
+  return { from: from.trim(), text: text.trim(), messageId: messageId?.trim() || undefined }
 }
 
-async function handleInboundTextMessage(from: string, text: string): Promise<void> {
+async function handleInboundTextMessage(from: string, text: string, source: "bhash" | "meta" = "meta"): Promise<void> {
   const trimmedText = text.trim().toLowerCase()
+  const { data: session } = await getSession(from)
+  logInboundDebug(source, from, text, session)
 
   const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
   if (greetings.some((g) => trimmedText === g || trimmedText.startsWith(g + " "))) {
@@ -447,14 +599,29 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
     return
   }
 
-  if (isCancelIntent(text)) {
-    const { hadSession } = await cancelBookingSession(from)
-    await sendTextMessage(
-      from,
-      hadSession
-        ? "Booking cancelled. Type Hi or Book to start again."
-        : "No active booking. Type Hi or Book when you are ready."
-    )
+  const hasActiveBooking =
+    !!session &&
+    session.status !== "cancelled" &&
+    session.state !== "idle" &&
+    !(await isBookingCancelled(from))
+
+  if (hasActiveBooking) {
+    if (isHardCancelIntent(text)) {
+      const { alreadyCancelled } = await cancelBookingSession(from)
+      if (!alreadyCancelled) {
+        await sendTextMessage(from, "Booking cancelled. Type Hi or Book to start again.")
+      }
+      return
+    }
+    await handleBookingConversation(from, text)
+    return
+  }
+
+  if (isHardCancelIntent(text) || isCancelIntent(text)) {
+    const { alreadyCancelled } = await cancelBookingSession(from)
+    if (!alreadyCancelled) {
+      await sendTextMessage(from, "No active booking. Type Hi or Book when you are ready.")
+    }
     return
   }
 
@@ -523,11 +690,12 @@ async function handleBhashInboundCallback(req: Request): Promise<Response | null
   }
 
   try {
-    const shouldProcess = await shouldProcessBhashInbound(inbound.from, inbound.text)
+    const shouldProcess = await shouldProcessBhashInbound(inbound.from, inbound.text, inbound.messageId)
     if (!shouldProcess) {
       console.log("[Bhash inbound] duplicate skipped", {
         from: inbound.from,
         message: inbound.text.slice(0, 80),
+        messageId: inbound.messageId,
       })
       return NextResponse.json({ success: true, duplicate: true })
     }
@@ -535,9 +703,10 @@ async function handleBhashInboundCallback(req: Request): Promise<Response | null
     console.log("[Bhash inbound]", {
       from: inbound.from,
       message: inbound.text.slice(0, 100),
+      messageId: inbound.messageId,
       params: Object.fromEntries(searchParams.entries()),
     })
-    await handleInboundTextMessage(inbound.from, inbound.text)
+    await handleInboundTextMessage(inbound.from, inbound.text, "bhash")
     return NextResponse.json({ success: true })
   } catch (err) {
     return NextResponse.json(
@@ -654,7 +823,7 @@ export async function POST(req: Request) {
     // Handle text messages - check greetings first, then booking conversation
     if (messageType === "text") {
       const text = message.text?.body ?? ""
-      await handleInboundTextMessage(from, text)
+      await handleInboundTextMessage(from, text, "meta")
       return NextResponse.json({ success: true })
     }
 
@@ -880,10 +1049,14 @@ async function moveToBranchSelection(
     .where("status", "==", "active")
     .get()
 
-  const branches = branchesSnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }))
+  const branches = branchesSnapshot.docs
+    .map((doc) => ({
+      id: doc.id,
+      name: String((doc.data().name as string) || "Branch"),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const pickerBranchOptions = branches.map((b) => ({ id: b.id, name: b.name }))
 
   if (branches.length === 0) {
     await sendBookingMessage(phone, lang(language, 
@@ -892,15 +1065,19 @@ async function moveToBranchSelection(
     return
   }
 
-  if (!(await updateBookingSession(sessionRef, phone, { state: "selecting_branch" }, "moveToBranchSelection"))) {
+  if (!(await updateBookingSession(
+    sessionRef,
+    phone,
+    { state: "selecting_branch", pickerBranchOptions },
+    "moveToBranchSelection"
+  ))) {
     return
   }
 
   if (shouldUseBhashSms()) {
-    const branchLines = branches.map((branch: { id: string; name?: string }, index: number) => {
+    const branchLines = pickerBranchOptions.map((branch, index) => {
       const isDefault = branch.id === defaultBranchId
-      const name = branch.name || "Branch"
-      return `${index + 1}. ${isDefault ? `${name} (Default)` : name}`
+      return `${index + 1}. ${isDefault ? `${branch.name} (Default)` : branch.name}`
     })
     const nextLine =
       defaultBranchId
@@ -1065,40 +1242,26 @@ async function moveToDoctorSelection(
   }
 
   if (!hospitalId || !session.branchId) {
-    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    await sendBookingMessage(
+      phone,
+      lang(language, "❌ બ્રાન્ચ મળ્યું નથી. ફરીથી Book લખો.", "❌ Branch missing. Type Book to start again."),
+      "moveToDoctorSelection.noBranch"
+    )
     return
   }
 
   const doctors = await fetchActiveDoctorsForBranch(db, hospitalId, session.branchId)
 
   if (doctors.length === 0) {
-    if (!(await updateBookingSession(sessionRef, phone, { pickerDoctorOptions: [] }, "moveToDoctorSelection.noDoctors"))) {
-      return
-    }
-    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
-    return
-  }
-
-  if (doctors.length === 1) {
-    const onlyDoctor = doctors[0]
-    const prefix = [
-      session.branchName ? `✅ Branch selected: ${session.branchName}` : "",
-      `✅ Doctor selected: ${onlyDoctor.name}`,
-    ]
-      .filter(Boolean)
-      .join("\n")
-    if (!(await updateBookingSession(
-      sessionRef,
+    await sendBookingMessage(
       phone,
-      {
-        doctorId: onlyDoctor.id,
-        pickerDoctorOptions: [{ id: onlyDoctor.id, name: onlyDoctor.name }],
-      },
-      "moveToDoctorSelection.singleDoctor"
-    ))) {
-      return
-    }
-    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language, prefix)
+      lang(
+        language,
+        "❌ કોઈ ડૉક્ટર મળ્યા નથી. કૃપા કરીને રિસેપ્શનનો સંપર્ક કરો.",
+        "❌ No doctors available at this branch. Please contact reception."
+      ),
+      "moveToDoctorSelection.noDoctors"
+    )
     return
   }
 
@@ -1221,10 +1384,10 @@ async function processBookingConfirmation(
   const language = session.language || "english"
 
   if (action === "cancel") {
-    await cancelBookingSession(phone)
-    await sendTextMessage(phone, lang(language,
-      "Booking cancelled. Type Hi or Book to start again.",
-      "Booking cancelled. Type Hi or Book to start again."))
+    const { alreadyCancelled } = await cancelBookingSession(phone)
+    if (!alreadyCancelled) {
+      await sendTextMessage(phone, "Booking cancelled. Type Hi or Book to start again.")
+    }
     return
   }
 
@@ -1531,53 +1694,7 @@ async function handleConfirmationButtonClick(phone: string, action: "confirm" | 
 }
 
 
-// Booking conversation states
-type BookingState =
-  | "idle"
-  | "selecting_language"
-  | "selecting_branch"
-  | "selecting_doctor"
-  | "selecting_date"
-  | "selecting_time"
-  | "confirming"
-  | "registering_full_name"
-
-interface BookingSession {
-  state: BookingState
-  status?: "active" | "cancelled"
-  version?: number
-  language?: "gujarati" | "english" // Selected language for the booking session
-  needsRegistration?: boolean
-  patientUid?: string
-  branchId?: string // Selected branch ID
-  branchName?: string // Selected branch name for display
-  doctorId?: string
-  appointmentDate?: string
-  appointmentTime?: string
-  pickerDateOptions?: string[]
-  pickerTimeOptions?: string[]
-  pickerDoctorOptions?: Array<{ id: string; name: string }>
-  symptoms?: string
-  paymentMethod?: "card" | "upi" | "cash"
-  paymentType?: "full" | "partial"
-  consultationFee?: number
-  paymentAmount?: number
-  remainingAmount?: number
-  isRecheckup?: boolean // Flag for re-checkup bookings
-  recheckupNote?: string // Note from doctor for re-checkup
-  originalAppointmentId?: string // Original appointment ID for re-checkup
-  originalAppointmentDate?: string // Original appointment date for re-checkup
-  registrationData?: {
-    firstName?: string
-    lastName?: string
-    email?: string
-    dateOfBirth?: string
-    gender?: string
-    patientId?: string
-  }
-  createdAt: string
-  updatedAt: string
-}
+// Booking conversation states — types defined at top of file
 
 /** When creating/linking WhatsApp patients, mirror into hospitals/{id}/patients so reception Patient tab lists them */
 type WhatsAppPatientCreateOptions = {
@@ -2010,16 +2127,19 @@ async function startBookingConversation(phone: string) {
   }
 
   await clearCancelMarker(phone)
+  await clearSession(phone)
 
   const version = Date.now()
   await sessionRef.set({
     state: "selecting_language",
     status: "active",
     version,
+    processedInputs: [],
     needsRegistration: false,
     patientUid: patient.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    stateChangedAt: Date.now(),
   })
 
   sessionLog("SESSION CREATED", {
@@ -2167,6 +2287,15 @@ async function handleLanguageSelection(
     return true
   }
 
+  const { claimed } = await claimBookingInput(sessionRef, text, "selecting_language")
+  if (!claimed) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: "handleLanguageSelection.claim",
+    })
+    return true
+  }
+
   const transitioned = await db.runTransaction(async (tx) => {
     const snap = await tx.get(sessionRef)
     if (!snap.exists) return false
@@ -2213,7 +2342,7 @@ async function handleBranchSelection(
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
-  session: BookingSession
+  _session: BookingSession
 ): Promise<boolean> {
   const sessionDoc = await sessionRef.get()
   if (!sessionDoc.exists) return false
@@ -2226,56 +2355,47 @@ async function handleBranchSelection(
   const trimmedText = text.trim().toLowerCase()
 
   if (trimmedText === "next" || trimmedText.includes("default")) {
+    const { claimed } = await claimBookingInput(sessionRef, text, "selecting_branch")
+    if (!claimed) return true
     await handleBranchButtonClick(phone, "branch_next")
     return true
   }
 
-  let hospitalId: string | null = null
-  if (freshSession.patientUid) {
-    try {
-      const patientDoc = await db.collection("patients").doc(freshSession.patientUid).get()
-      if (patientDoc.exists) {
-        hospitalId = patientDoc.data()?.hospitalId || null
-      }
-    } catch {
-      // ignore
-    }
-  }
-  if (!hospitalId) {
-    const activeHospitals = await getAllActiveHospitals()
-    if (activeHospitals.length > 0) hospitalId = activeHospitals[0].id
-  }
-
-  if (hospitalId) {
-    const branchesSnapshot = await db
-      .collection("branches")
-      .where("hospitalId", "==", hospitalId)
-      .where("status", "==", "active")
-      .get()
-
-    const branches = branchesSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      name: (doc.data().name as string) || "",
-    }))
-
-    const optionIndex = parseInt(trimmedText, 10)
-    if (!isNaN(optionIndex) && optionIndex >= 1 && optionIndex <= branches.length) {
-      await handleBranchButtonClick(phone, `branch_${branches[optionIndex - 1].id}`)
-      return true
-    }
-
-    const byName = branches.find(
-      (b) => b.name.toLowerCase() === trimmedText || b.name.toLowerCase().includes(trimmedText)
+  const branches = freshSession.pickerBranchOptions || []
+  if (branches.length === 0) {
+    await sendBookingMessage(
+      phone,
+      lang(language, "❌ બ્રાન્ચ યાદી મળી નથી. Book લખીને ફરી શરૂ કરો.", "❌ Branch list missing. Type Book to start again."),
+      "handleBranchSelection.noPicker"
     )
-    if (byName) {
-      await handleBranchButtonClick(phone, `branch_${byName.id}`)
-      return true
-    }
+    return true
   }
 
-  await sendTextMessage(phone, lang(language,
-    "❌ કૃપા કરીને ઉપરની યાદીમાંથી બ્રાન્ચ નંબર અથવા નામ લખો (દા.ત. 1).",
-    "❌ Please reply with the branch number or name from the list above (e.g. 1)."))
+  const optionIndex = parseInt(trimmedText, 10)
+  if (!isNaN(optionIndex) && optionIndex >= 1 && optionIndex <= branches.length) {
+    const { claimed } = await claimBookingInput(sessionRef, text, "selecting_branch")
+    if (!claimed) return true
+    await handleBranchButtonClick(phone, `branch_${branches[optionIndex - 1].id}`)
+    return true
+  }
+
+  const byName = branches.find(
+    (b) => b.name.toLowerCase() === trimmedText || b.name.toLowerCase().includes(trimmedText)
+  )
+  if (byName) {
+    const { claimed } = await claimBookingInput(sessionRef, text, "selecting_branch")
+    if (!claimed) return true
+    await handleBranchButtonClick(phone, `branch_${byName.id}`)
+    return true
+  }
+
+  await sendBookingMessage(
+    phone,
+    lang(language,
+      "❌ કૃપા કરીને ઉપરની યાદીમાંથી બ્રાન્ચ નંબર અથવા નામ લખો (દા.ત. 1).",
+      "❌ Please reply with the branch number or name from the list above (e.g. 1)."),
+    "handleBranchSelection.invalid"
+  )
   return true
 }
 
@@ -2325,14 +2445,24 @@ async function handleDoctorSelection(
   }
 
   if (!selectedDoctor) {
-    await sendTextMessage(
+    await sendBookingMessage(
       phone,
       lang(
         language,
         "❌ કૃપા કરીને ઉપરની યાદીમાંથી ડૉક્ટર નંબર અથવા નામ લખો (દા.ત. 1).",
         "❌ Please reply with the doctor number or name from the list above (e.g. 1)."
-      )
+      ),
+      "handleDoctorSelection.invalid"
     )
+    return true
+  }
+
+  const { claimed } = await claimBookingInput(sessionRef, text, "selecting_doctor")
+  if (!claimed) {
+    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+      phone: normalizedPhone,
+      context: "handleDoctorSelection.claim",
+    })
     return true
   }
 
@@ -2868,6 +2998,8 @@ async function handleDateSelection(
     numericIndex >= 1 &&
     numericIndex <= session.pickerDateOptions.length
   ) {
+    const { claimed } = await claimBookingInput(sessionRef, text, "selecting_date")
+    if (!claimed) return true
     const selectedDate = session.pickerDateOptions[numericIndex - 1]
     return await applySelectedAppointmentDate(
       db,
@@ -3782,10 +3914,13 @@ async function handleTimeSelection(
     const errorMsg = language === "gujarati"
       ? "❌ કૃપા કરીને માન્ય સમય પસંદ કરો (ઉદાહરણ: 10:30)."
       : "❌ Please choose a valid time slot (e.g., 10:30)."
-    await sendTextMessage(phone, errorMsg)
+    await sendBookingMessage(phone, errorMsg, "handleTimeSelection.invalid")
     await sendTimePicker(phone, session.doctorId, session.appointmentDate!, language)
     return true
   }
+
+  const { claimed } = await claimBookingInput(sessionRef, text, "selecting_time")
+  if (!claimed) return true
 
   const normalizedTime = normalizeTime(selectedTime)
 
@@ -3823,23 +3958,28 @@ async function handleConfirmation(
   const trimmedText = text.trim().toLowerCase()
   const language = session.language || "english"
 
-  if (trimmedText === "2" || trimmedText === "cancel") {
+  if (trimmedText === "2" || trimmedText === "cancel" || trimmedText === "no") {
+    const { claimed } = await claimBookingInput(sessionRef, text, "confirming")
+    if (!claimed) return true
     await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, "cancel")
     return true
   }
 
   if (trimmedText === "1" || trimmedText === "confirm" || trimmedText === "yes") {
+    const { claimed } = await claimBookingInput(sessionRef, text, "confirming")
+    if (!claimed) return true
     await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, "confirm")
     return true
   }
 
-  await sendTextMessage(
+  await sendBookingMessage(
     phone,
     lang(
       language,
       "કૃપા કરીને 1 (ખાતરી) અથવા 2 (રદ) લખી જવાબ આપો.",
       "Please reply 1 to confirm or 2 to cancel."
-    )
+    ),
+    "handleConfirmation.invalid"
   )
   return true
 }
