@@ -82,25 +82,47 @@ function getPatientPhoneLookupVariants(phone: string): string[] {
   return [...variants]
 }
 
-/** Block only duplicate webhooks within a few seconds (not repeat "hi" after 1 min). */
-async function acquireBhashInboundLock(from: string, text: string): Promise<boolean> {
+
+/** Per-phone inbound dedupe — blocks Bhash GET+POST / retry delivering the same reply twice. */
+async function shouldProcessBhashInbound(from: string, text: string): Promise<boolean> {
   const db = admin.firestore()
   const digits = from.replace(/\D/g, "").slice(-10)
-  const msgKey = text.trim().toLowerCase().slice(0, 80).replace(/[/\\?#&=]/g, "_")
-  const bucket = Math.floor(Date.now() / 4000)
-  const lockId = `${digits}_${msgKey}_${bucket}`
-  const ref = db.collection("bhash_inbound_dedupe").doc(lockId)
+  if (!digits) return true
+
+  const trimmed = text.trim().toLowerCase().slice(0, 120)
+  const normalizedPhone = formatPhoneNumber(from) || `+91${digits}`
+  const sessionDoc = await db.collection("whatsappBookingSessions").doc(normalizedPhone).get()
+  const sessionState = sessionDoc.exists
+    ? (sessionDoc.data() as BookingSession)?.state || "idle"
+    : "idle"
+
+  const ref = db.collection("bhash_inbound_recent").doc(digits)
+  const SAME_STATE_MS = 15_000
+  const CROSS_STATE_MS = 6_000
+
   try {
-    await ref.create({
-      from: digits,
-      text: msgKey,
-      createdAt: new Date().toISOString(),
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      const now = Date.now()
+      const last = snap.data() as
+        | { text?: string; state?: string; at?: number }
+        | undefined
+
+      if (last?.text === trimmed && last.at) {
+        const age = now - last.at
+        if (last.state === sessionState && age < SAME_STATE_MS) {
+          return false
+        }
+        if (last.state !== sessionState && age < CROSS_STATE_MS) {
+          return false
+        }
+      }
+
+      tx.set(ref, { text: trimmed, state: sessionState, at: now })
+      return true
     })
-    return true
-  } catch (err: unknown) {
-    const code = (err as { code?: number })?.code
-    if (code === 6) return false
-    console.warn("[Bhash inbound] dedupe lock failed, processing anyway", err)
+  } catch (err) {
+    console.warn("[Bhash inbound] dedupe transaction failed, processing anyway", err)
     return true
   }
 }
@@ -242,7 +264,7 @@ async function handleBhashInboundCallback(req: Request): Promise<Response | null
   }
 
   try {
-    const shouldProcess = await acquireBhashInboundLock(inbound.from, inbound.text)
+    const shouldProcess = await shouldProcessBhashInbound(inbound.from, inbound.text)
     if (!shouldProcess) {
       console.log("[Bhash inbound] duplicate skipped", {
         from: inbound.from,
@@ -297,10 +319,7 @@ export async function POST(req: Request) {
       return rateLimitResult
     }
 
-    // Bhash may call GET or POST — dedupe lock prevents double replies.
-    const bhashResponse = await handleBhashInboundCallback(req)
-    if (bhashResponse) return bhashResponse
-
+    // Bhash inbound uses GET only — POST here caused duplicate replies (GET + POST).
     const rawBody = await req.text()
     if (!rawBody || rawBody.length > 1024 * 1024) {
       return NextResponse.json({ error: "Invalid webhook payload size" }, { status: 400 })
@@ -610,7 +629,10 @@ async function moveToBranchSelection(
     return
   }
 
-  await sessionRef.update({ state: "selecting_branch", updatedAt: new Date().toISOString() })
+  await sessionRef.update({
+    state: "selecting_branch",
+    updatedAt: new Date().toISOString(),
+  })
 
   if (shouldUseBhashSms()) {
     const branchLines = branches.map((branch: { id: string; name?: string }, index: number) => {
@@ -1737,6 +1759,13 @@ async function handleLanguageSelection(
   text: string,
   session: BookingSession
 ): Promise<boolean> {
+  const freshDoc = await sessionRef.get()
+  if (!freshDoc.exists) return false
+  const freshSession = freshDoc.data() as BookingSession
+  if (freshSession.state !== "selecting_language") {
+    return true
+  }
+
   const trimmedText = text.trim().toLowerCase()
   let selectedLanguage: "english" | "gujarati" = "english"
 
@@ -1750,29 +1779,42 @@ async function handleLanguageSelection(
   } else if (trimmedText === "gujarati" || trimmedText === "guj" || trimmedText === "gu" || trimmedText === "2") {
     selectedLanguage = "gujarati"
   } else {
-    // Invalid input, resend language picker
     await sendLanguagePicker(phone)
     return true
   }
 
-  // Update session with selected language
-  await sessionRef.update({
-    language: selectedLanguage,
-    updatedAt: new Date().toISOString(),
+  const transitioned = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(sessionRef)
+    if (!snap.exists) return false
+    const data = snap.data() as BookingSession
+    if (data.state !== "selecting_language") return false
+    tx.update(sessionRef, {
+      language: selectedLanguage,
+      state: "selecting_branch",
+      updatedAt: new Date().toISOString(),
+    })
+    return true
   })
 
-  const needsRegistration = session.needsRegistration ?? false
+  if (!transitioned) {
+    return true
+  }
+
+  const needsRegistration = freshSession.needsRegistration ?? false
 
   if (needsRegistration) {
     await sessionRef.update({
       state: "registering_full_name",
-      registrationData: session.registrationData || {},
+      registrationData: freshSession.registrationData || {},
     })
     await sendTextMessage(phone, getTranslation("registrationFullName", selectedLanguage))
     return true
   }
 
-  await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage, session)
+  await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage, {
+    ...freshSession,
+    language: selectedLanguage,
+  })
   return true
 }
 
@@ -1784,7 +1826,14 @@ async function handleBranchSelection(
   text: string,
   session: BookingSession
 ): Promise<boolean> {
-  const language = session.language || "english"
+  const sessionDoc = await sessionRef.get()
+  if (!sessionDoc.exists) return false
+  const freshSession = sessionDoc.data() as BookingSession
+  if (freshSession.state !== "selecting_branch") {
+    return true
+  }
+
+  const language = freshSession.language || "english"
   const trimmedText = text.trim().toLowerCase()
 
   if (trimmedText === "next" || trimmedText.includes("default")) {
@@ -1793,9 +1842,9 @@ async function handleBranchSelection(
   }
 
   let hospitalId: string | null = null
-  if (session.patientUid) {
+  if (freshSession.patientUid) {
     try {
-      const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+      const patientDoc = await db.collection("patients").doc(freshSession.patientUid).get()
       if (patientDoc.exists) {
         hospitalId = patientDoc.data()?.hospitalId || null
       }
@@ -1838,8 +1887,6 @@ async function handleBranchSelection(
   await sendTextMessage(phone, lang(language,
     "❌ કૃપા કરીને ઉપરની યાદીમાંથી બ્રાન્ચ નંબર અથવા નામ લખો (દા.ત. 1).",
     "❌ Please reply with the branch number or name from the list above (e.g. 1)."))
-
-  await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)
   return true
 }
 
@@ -1892,11 +1939,22 @@ async function handleDoctorSelection(
     return true
   }
 
-  await sessionRef.update({
-    doctorId: selectedDoctor.id,
-    state: "selecting_date",
-    updatedAt: new Date().toISOString(),
+  const transitioned = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(sessionRef)
+    if (!snap.exists) return false
+    const data = snap.data() as BookingSession
+    if (data.state !== "selecting_doctor") return false
+    tx.update(sessionRef, {
+      doctorId: selectedDoctor!.id,
+      state: "selecting_date",
+      updatedAt: new Date().toISOString(),
+    })
+    return true
   })
+
+  if (!transitioned) {
+    return true
+  }
 
   const headerPrefix = lang(
     language,
@@ -1919,6 +1977,10 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
   }
 
   const session = sessionDoc.data() as BookingSession
+  if (session.state !== "selecting_branch") {
+    return
+  }
+
   const language = session.language || "english"
 
   // If "Next" button clicked, use default branch or first available
@@ -1986,11 +2048,22 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
       return
     }
 
-    await sessionRef.update({
-      branchId,
-      branchName,
-      updatedAt: new Date().toISOString(),
+    const transitioned = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(sessionRef)
+      if (!snap.exists) return false
+      const data = snap.data() as BookingSession
+      if (data.state !== "selecting_branch") return false
+      tx.update(sessionRef, {
+        branchId,
+        branchName,
+        updatedAt: new Date().toISOString(),
+      })
+      return true
     })
+
+    if (!transitioned) {
+      return
+    }
 
     await moveToDoctorSelection(db, phone, normalizedPhone, sessionRef, language, {
       ...session,
@@ -2022,12 +2095,22 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
   const branchData = branchDoc.data()
   const branchName = branchData?.name || "Branch"
 
-  // Update session with selected branch
-  await sessionRef.update({
-    branchId,
-    branchName,
-    updatedAt: new Date().toISOString(),
+  const transitioned = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(sessionRef)
+    if (!snap.exists) return false
+    const data = snap.data() as BookingSession
+    if (data.state !== "selecting_branch") return false
+    tx.update(sessionRef, {
+      branchId,
+      branchName,
+      updatedAt: new Date().toISOString(),
+    })
+    return true
   })
+
+  if (!transitioned) {
+    return
+  }
 
   const updatedSession: BookingSession = {
     ...session,
@@ -2407,8 +2490,14 @@ async function handleDateSelection(
       if (dateMatch) {
         selectedDate = dateMatch[0]
       } else {
-        // Invalid format, send date picker
-        await sendDatePicker(phone, session.doctorId, language)
+        await sendTextMessage(
+          phone,
+          lang(
+            language,
+            "❌ કૃપા કરીને ઉપરની યાદીમાંથી તારીખ નંબર લખો (દા.ત. 1).",
+            "❌ Please reply with the date number from the list above (e.g. 1)."
+          )
+        )
         return true
       }
     }
@@ -2424,8 +2513,14 @@ async function handleDateSelection(
     )
   }
 
-  // No text provided, send date picker
-  await sendDatePicker(phone, session.doctorId, language)
+  await sendTextMessage(
+    phone,
+    lang(
+      language,
+      "❌ કૃપા કરીને ઉપરની યાદીમાંથી તારીખ નંબર લખો (દા.ત. 1).",
+      "❌ Please reply with the date number from the list above (e.g. 1)."
+    )
+  )
   return true
 }
 
