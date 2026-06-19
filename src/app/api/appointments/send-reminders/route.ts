@@ -121,7 +121,6 @@ export async function GET(request: Request) {
             const patientPhone = apt.patientPhone || apt.patientPhoneNumber || ""
             const patientName = apt.patientName || "Patient"
             const doctorName = apt.doctorName || "Doctor"
-            const patientId = apt.patientId || apt.patientUid || ""
 
             if (!patientPhone || patientPhone.trim() === "") {
               continue

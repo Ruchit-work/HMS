@@ -42,6 +42,65 @@ async function clearSession(phone: string): Promise<void> {
   await ref.delete()
 }
 
+/** Exact / phrase match only — avoids "book".includes("no") false cancel. */
+function isCancelIntent(text: string): boolean {
+  const t = text.trim().toLowerCase()
+  if (
+    [
+      "cancel",
+      "stop",
+      "abort",
+      "quit",
+      "exit",
+      "no",
+      "nevermind",
+      "skip",
+      "end",
+      "finish",
+    ].includes(t)
+  ) {
+    return true
+  }
+  if (t === "never mind" || t.startsWith("never mind ")) return true
+  if (t === "don't" || t === "dont" || t.startsWith("don't ") || t.startsWith("dont ")) {
+    return true
+  }
+  return false
+}
+
+function getPatientPhoneLookupVariants(phone: string): string[] {
+  const digits = phone.replace(/^whatsapp:/i, "").replace(/\D/g, "")
+  const ten = digits.length >= 10 ? digits.slice(-10) : digits
+  const variants = new Set<string>()
+  if (phone.trim()) variants.add(phone.trim())
+  if (digits) variants.add(digits)
+  if (ten) {
+    variants.add(ten)
+    variants.add(`91${ten}`)
+    variants.add(`+91${ten}`)
+  }
+  return [...variants]
+}
+
+/** Prevent duplicate Bhash webhook processing (GET + POST or retries). */
+async function acquireBhashInboundLock(from: string, text: string): Promise<boolean> {
+  const db = admin.firestore()
+  const digits = from.replace(/\D/g, "").slice(-10)
+  const bucket = Math.floor(Date.now() / 5000)
+  const lockId = `${digits}_${text.trim().toLowerCase().slice(0, 80).replace(/[/\\?#&=]/g, "_")}_${bucket}`
+  const ref = db.collection("bhash_inbound_dedupe").doc(lockId)
+  try {
+    await ref.create({
+      from: digits,
+      text: text.trim().slice(0, 200),
+      createdAt: new Date().toISOString(),
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Message sending with fallback
 async function sendWithFallback(
   phone: string,
@@ -111,22 +170,7 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
     return
   }
 
-  const cancelKeywords = [
-    "cancel",
-    "stop",
-    "abort",
-    "quit",
-    "exit",
-    "no",
-    "nevermind",
-    "never mind",
-    "don't",
-    "dont",
-    "skip",
-    "end",
-    "finish",
-  ]
-  if (cancelKeywords.some((k) => trimmedText === k || trimmedText.includes(k))) {
+  if (isCancelIntent(text)) {
     const { data } = await getSession(from)
     await clearSession(from)
     await sendTextMessage(
@@ -192,6 +236,15 @@ async function handleBhashInboundCallback(req: Request): Promise<Response | null
   }
 
   try {
+    const shouldProcess = await acquireBhashInboundLock(inbound.from, inbound.text)
+    if (!shouldProcess) {
+      console.log("[Bhash inbound] duplicate skipped", {
+        from: inbound.from,
+        message: inbound.text.slice(0, 80),
+      })
+      return NextResponse.json({ success: true, duplicate: true })
+    }
+
     console.log("[Bhash inbound]", {
       from: inbound.from,
       message: inbound.text.slice(0, 100),
@@ -238,9 +291,7 @@ export async function POST(req: Request) {
       return rateLimitResult
     }
 
-    const bhashResponse = await handleBhashInboundCallback(req)
-    if (bhashResponse) return bhashResponse
-
+    // Bhash inbound is processed on GET only (avoids GET+POST double replies).
     const rawBody = await req.text()
     if (!rawBody || rawBody.length > 1024 * 1024) {
       return NextResponse.json({ error: "Invalid webhook payload size" }, { status: 400 })
@@ -595,14 +646,143 @@ async function moveToDateSelection(
     updatedAt: new Date().toISOString(),
   })
 
-  const introMsg =
-    language === "gujarati"
-      ? "📅 ચાલો તમારી મુલાકાત માટે તારીખ પસંદ કરીએ. ઉપલબ્ધ તારીખો નીચે બતાવવામાં આવશે."
-      : "📅 Let's pick your appointment date. Available dates will be shown next."
-  await sendTextMessage(phone, introMsg)
+  const sessionDoc = await sessionRef.get()
+  const doctorId = (sessionDoc.data() as BookingSession | undefined)?.doctorId
 
-  // No doctor needed for WhatsApp bookings - receptionist will assign later
-  await sendDatePicker(phone, undefined, language)
+  if (!shouldUseBhashSms()) {
+    const introMsg =
+      language === "gujarati"
+        ? "📅 ચાલો તમારી મુલાકાત માટે તારીખ પસંદ કરીએ. ઉપલબ્ધ તારીખો નીચે બતાવવામાં આવશે."
+        : "📅 Let's pick your appointment date. Available dates will be shown next."
+    await sendTextMessage(phone, introMsg)
+  }
+
+  await sendDatePicker(phone, doctorId, language)
+}
+
+async function fetchActiveDoctorsForBranch(
+  db: FirebaseFirestore.Firestore,
+  hospitalId: string,
+  branchId: string
+): Promise<Array<{ id: string; name: string; specialization?: string }>> {
+  const doctors: Array<{ id: string; name: string; specialization?: string }> = []
+  const seen = new Set<string>()
+
+  const addDoctor = (id: string, data: FirebaseFirestore.DocumentData) => {
+    if (seen.has(id)) return
+    const status = String(data.status || "active").toLowerCase()
+    if (status !== "active" && status !== "pending") return
+    const branchIds: string[] = Array.isArray(data.branchIds) ? data.branchIds : []
+    if (branchIds.length > 0 && !branchIds.includes(branchId)) return
+    const firstName = String(data.firstName || "").trim()
+    const lastName = String(data.lastName || "").trim()
+    const name = `${firstName} ${lastName}`.trim() || String(data.name || "Doctor")
+    doctors.push({
+      id,
+      name,
+      specialization: data.specialization ? String(data.specialization) : undefined,
+    })
+    seen.add(id)
+  }
+
+  try {
+    const scoped = await db.collection(getHospitalCollectionPath(hospitalId, "doctors")).get()
+    scoped.docs.forEach((doc) => addDoctor(doc.id, doc.data()))
+  } catch {
+    // ignore
+  }
+
+  if (doctors.length === 0) {
+    try {
+      const legacy = await db.collection("doctors").where("hospitalId", "==", hospitalId).get()
+      legacy.docs.forEach((doc) => addDoctor(doc.id, doc.data()))
+    } catch {
+      // ignore
+    }
+  }
+
+  return doctors.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+async function moveToDoctorSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  language: Language,
+  session: BookingSession
+) {
+  let hospitalId: string | null = null
+  if (session.branchId) {
+    try {
+      const branchDoc = await db.collection("branches").doc(session.branchId).get()
+      if (branchDoc.exists) {
+        hospitalId = branchDoc.data()?.hospitalId || null
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!hospitalId && session.patientUid) {
+    try {
+      const patientDoc = await db.collection("patients").doc(session.patientUid).get()
+      if (patientDoc.exists) {
+        hospitalId = patientDoc.data()?.hospitalId || null
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!hospitalId) {
+    const activeHospitals = await getAllActiveHospitals()
+    if (activeHospitals.length > 0) {
+      hospitalId = activeHospitals[0].id
+    }
+  }
+
+  if (!hospitalId || !session.branchId) {
+    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    return
+  }
+
+  const doctors = await fetchActiveDoctorsForBranch(db, hospitalId, session.branchId)
+
+  if (doctors.length === 0) {
+    await sessionRef.update({
+      pickerDoctorOptions: [],
+      updatedAt: new Date().toISOString(),
+    })
+    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    return
+  }
+
+  if (doctors.length === 1) {
+    await sessionRef.update({
+      doctorId: doctors[0].id,
+      pickerDoctorOptions: [{ id: doctors[0].id, name: doctors[0].name }],
+      updatedAt: new Date().toISOString(),
+    })
+    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    return
+  }
+
+  await sessionRef.update({
+    state: "selecting_doctor",
+    pickerDoctorOptions: doctors.map((d) => ({ id: d.id, name: d.name })),
+    updatedAt: new Date().toISOString(),
+  })
+
+  const intro = lang(language, "કૃપા કરીને ડૉક્ટર પસંદ કરો:", "Please select a doctor:")
+  const lines = doctors.map((d, index) => {
+    const spec = d.specialization ? ` (${d.specialization})` : ""
+    return `${index + 1}. ${d.name}${spec}`
+  })
+  const footer = lang(
+    language,
+    "નંબર લખી જવાબ આપો (ઉદાહરણ: 1).",
+    "Reply with the doctor number (e.g. 1)."
+  )
+  await sendTextMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`)
 }
 
 async function sendConfirmationButtons(
@@ -648,8 +828,18 @@ async function sendConfirmationButtons(
   })
 
   const message = lang(language,
-    `📋 *અપોઇન્ટમેન્ટની વિગતો*\n\n📅 તારીખ: ${dateDisplay}\n🕒 સમય: ${timeDisplay}\n\nકૃપા કરીને ખાતરી કરો. ડૉક્ટર રિસેપ્શન દ્વારા સોંપવામાં આવશે.`,
-    `📋 *Appointment Details*\n\n📅 Date: ${dateDisplay}\n🕒 Time: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception.`)
+    `Appointment Details\n\nDate: ${dateDisplay}\nTime: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception if not selected.`,
+    `Appointment Details\n\nDate: ${dateDisplay}\nTime: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception if not selected.`)
+
+  if (shouldUseBhashSms()) {
+    const confirmText = lang(
+      language,
+      `${message}\n\n1. Confirm\n2. Cancel\n\nReply 1 to confirm or 2 to cancel.`,
+      `${message}\n\n1. Confirm\n2. Cancel\n\nReply 1 to confirm or 2 to cancel.`
+    )
+    await sendTextMessage(phone, confirmText)
+    return
+  }
 
   const buttons = [
     { id: "booking_confirm", title: lang(language, "✅ ખાતરી કરો", "✅ Confirm") },
@@ -922,6 +1112,7 @@ type BookingState =
   | "idle"
   | "selecting_language"
   | "selecting_branch"
+  | "selecting_doctor"
   | "selecting_date"
   | "selecting_time"
   | "confirming"
@@ -937,6 +1128,9 @@ interface BookingSession {
   doctorId?: string
   appointmentDate?: string
   appointmentTime?: string
+  pickerDateOptions?: string[]
+  pickerTimeOptions?: string[]
+  pickerDoctorOptions?: Array<{ id: string; name: string }>
   symptoms?: string
   paymentMethod?: "card" | "upi" | "cash"
   paymentType?: "full" | "partial"
@@ -987,46 +1181,49 @@ async function buildWhatsAppPatientHospitalScope(
 }
 
 async function startBookingWithFlow(phone: string) {
-  const db = admin.firestore()
-  const normalizedPhone = formatPhoneNumber(phone)
-  const flowId = process.env.META_WHATSAPP_FLOW_ID
+  try {
+    const db = admin.firestore()
+    const normalizedPhone = formatPhoneNumber(phone)
+    const flowId = process.env.META_WHATSAPP_FLOW_ID
 
-  // Check if patient exists
-  const patient = await findPatientByPhone(db, normalizedPhone)
-  if (!patient) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
-    
-    await sendTextMessage(
-      phone,
-      `❌ We couldn't find your patient profile.\n\n📝 *Please register first to book appointments:*\n\n${baseUrl}\n\nOr contact reception:\nPhone: +91-XXXXXXXXXX\n\nAfter registration, you can book appointments via WhatsApp! 🏥`
-    )
-    return
-  }
-
-  // Meta Flow UI only — Bhash falls back to text booking
-  if (flowId && !shouldUseBhashSms()) {
-    const flowToken = `token_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
-    const flowResponse = await sendFlowMessage(
-      phone,
-      flowId,
-      flowToken,
-      "Book Your Appointment",
-      "Please fill out the form below to schedule your appointment with our doctors.",
-      "Harmony Medical Services"
-    )
-
-    if (flowResponse.success) {
+    const patient = await findPatientByPhone(db, normalizedPhone)
+    if (!patient) {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
+      
+      await sendTextMessage(
+        phone,
+        `We couldn't find your patient profile.\n\nPlease register first to book appointments:\n${baseUrl}\n\nOr contact reception:\nPhone: +91-XXXXXXXXXX\n\nAfter registration, you can book appointments via WhatsApp!`
+      )
       return
-    } else {
+    }
 
-      // Fallback to text-based booking if Flow fails
+    if (flowId && !shouldUseBhashSms()) {
+      const flowToken = `token_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+      const flowResponse = await sendFlowMessage(
+        phone,
+        flowId,
+        flowToken,
+        "Book Your Appointment",
+        "Please fill out the form below to schedule your appointment with our doctors.",
+        "Harmony Medical Services"
+      )
+
+      if (flowResponse.success) {
+        return
+      }
+
       await startBookingConversation(phone)
       return
     }
-  }
 
-  // No Flow ID configured, use text-based booking
-  await startBookingConversation(phone)
+    await startBookingConversation(phone)
+  } catch (error) {
+    console.error("[WhatsApp booking] startBookingWithFlow failed", error)
+    await sendTextMessage(
+      phone,
+      "Sorry, we could not start booking right now. Please try again in a moment or type Hi."
+    )
+  }
 }
 
 async function handleFlowCompletion(value: any): Promise<Response> {
@@ -1383,6 +1580,14 @@ async function startBookingConversation(phone: string) {
 }
 
 async function sendLanguagePicker(phone: string) {
+  if (shouldUseBhashSms()) {
+    await sendTextMessage(
+      phone,
+      "Select Language\n\nPlease choose your preferred language:\n\n1. English\n2. Gujarati (Gujarati)\n\nReply 1 for English or 2 for Gujarati."
+    )
+    return
+  }
+
   const languageOptions = [
     { id: "lang_english", title: "🇬🇧 English", description: "Continue in English" },
     { id: "lang_gujarati", title: "🇮🇳 ગુજરાતી (Gujarati)", description: "ગુજરાતીમાં ચાલુ રાખો" },
@@ -1424,12 +1629,7 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
   const trimmedText = text.trim().toLowerCase()
 
   // Handle cancel/stop/abort - check for various cancel keywords
-  const cancelKeywords = [
-    "cancel", "stop", "abort", "quit", "exit", "no", "nevermind", 
-    "never mind", "don't", "dont", "skip", "end", "finish"
-  ]
-  
-  if (cancelKeywords.some(keyword => trimmedText === keyword || trimmedText.includes(keyword))) {
+  if (isCancelIntent(text)) {
     await sessionRef.delete()
     await sendTextMessage(
       phone,
@@ -1443,6 +1643,8 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
       return await handleLanguageSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_branch":
       return await handleBranchSelection(db, phone, normalizedPhone, sessionRef, text, session)
+    case "selecting_doctor":
+      return await handleDoctorSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "registering_full_name":
       return await handleRegistrationFullName(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_date":
@@ -1567,6 +1769,66 @@ async function handleBranchSelection(
   return true
 }
 
+async function handleDoctorSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const language = session.language || "english"
+  const trimmedText = text.trim().toLowerCase()
+  const doctors = session.pickerDoctorOptions || []
+
+  if (doctors.length === 0) {
+    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    return true
+  }
+
+  let selectedDoctor: { id: string; name: string } | null = null
+  const optionIndex = parseInt(trimmedText, 10)
+  if (!isNaN(optionIndex) && optionIndex >= 1 && optionIndex <= doctors.length) {
+    selectedDoctor = doctors[optionIndex - 1]
+  } else {
+    const byName = doctors.find(
+      (d) =>
+        d.name.toLowerCase() === trimmedText ||
+        d.name.toLowerCase().includes(trimmedText)
+    )
+    if (byName) selectedDoctor = byName
+  }
+
+  if (!selectedDoctor) {
+    await sendTextMessage(
+      phone,
+      lang(
+        language,
+        "❌ કૃપા કરીને ઉપરની યાદીમાંથી ડૉક્ટર નંબર અથવા નામ લખો (દા.ત. 1).",
+        "❌ Please reply with the doctor number or name from the list above (e.g. 1)."
+      )
+    )
+    return true
+  }
+
+  await sessionRef.update({
+    doctorId: selectedDoctor.id,
+    updatedAt: new Date().toISOString(),
+  })
+
+  await sendTextMessage(
+    phone,
+    lang(
+      language,
+      `✅ ડૉક્ટર પસંદ કર્યા: ${selectedDoctor.name}\n\n📅 હવે તારીખ પસંદ કરો:`,
+      `✅ Doctor selected: ${selectedDoctor.name}\n\n📅 Now select your date:`
+    )
+  )
+
+  await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+  return true
+}
+
 async function handleBranchButtonClick(phone: string, buttonId: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
@@ -1656,7 +1918,11 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
       : `✅ Branch selected: ${branchName || "Default"}\n\n📅 Now select your date:`
     await sendTextMessage(phone, confirmMsg)
 
-    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    await moveToDoctorSelection(db, phone, normalizedPhone, sessionRef, language, {
+      ...session,
+      branchId,
+      branchName: branchName || undefined,
+    })
     return
   }
 
@@ -1694,7 +1960,12 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
     : `✅ Branch selected: ${branchName}\n\n📅 Now select your date:`
   await sendTextMessage(phone, confirmMsg)
 
-  await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+  const updatedSession: BookingSession = {
+    ...session,
+    branchId,
+    branchName,
+  }
+  await moveToDoctorSelection(db, phone, normalizedPhone, sessionRef, language, updatedSession)
 }
 
 async function handleRegistrationPrompt(phone: string) {
@@ -1932,6 +2203,74 @@ async function createPatientFromWhatsApp(
   return { patientUid, patientId }
 }
 
+async function applySelectedAppointmentDate(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  session: BookingSession,
+  selectedDate: string,
+  language: Language
+): Promise<boolean> {
+  const selected = new Date(selectedDate + "T00:00:00")
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (selected < today) {
+    const errorMsg = language === "gujarati"
+      ? "❌ કૃપા કરીને આજની અથવા ભવિષ્યની તારીખ પસંદ કરો."
+      : "❌ Please select a date that is today or in the future."
+    await sendTextMessage(phone, errorMsg)
+    await sendDatePicker(phone, session.doctorId, language)
+    return true
+  }
+
+  if (session.doctorId) {
+    const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
+    if (doctorDoc.exists) {
+      const doctorData = doctorDoc.data()!
+      const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
+      if (availabilityCheck.isBlocked) {
+        const errorMsg = language === "gujarati"
+          ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${availabilityCheck.reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
+          : `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
+        await sendTextMessage(phone, errorMsg)
+        await sendDatePicker(phone, session.doctorId, language)
+        return true
+      }
+    }
+  }
+
+  const patient = await findPatientByPhone(db, normalizedPhone)
+  if (patient) {
+    const existingAppointments = await db
+      .collection("appointments")
+      .where("patientId", "==", patient.id)
+      .where("appointmentDate", "==", selectedDate)
+      .where("status", "in", ["pending", "confirmed"])
+      .get()
+
+    if (!existingAppointments.empty) {
+      const existingAppt = existingAppointments.docs[0].data()
+      const existingTime = existingAppt.appointmentTime || ""
+      const errorMsg = language === "gujarati"
+        ? `❌ *અપોઇન્ટમેન્ટ પહેલેથી બુક થયેલ છે*\n\nતમારે ${selectedDate}${existingTime ? ` at ${existingTime}` : ""} માટે પહેલેથી અપોઇન્ટમેન્ટ બુક કરેલ છે.\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
+        : `❌ *Appointment Already Booked*\n\nYou already have an appointment booked for ${selectedDate}${existingTime ? ` at ${existingTime}` : ""}.\n\nPlease select a different date.`
+      await sendTextMessage(phone, errorMsg)
+      await sendDatePicker(phone, session.doctorId, language)
+      return true
+    }
+  }
+
+  await sessionRef.update({
+    state: "selecting_time",
+    appointmentDate: selectedDate,
+    updatedAt: new Date().toISOString(),
+  })
+
+  await sendTimePicker(phone, session.doctorId, selectedDate, language)
+  return true
+}
+
 async function handleDateSelection(
   db: FirebaseFirestore.Firestore,
   phone: string,
@@ -1941,6 +2280,26 @@ async function handleDateSelection(
   session: BookingSession
 ): Promise<boolean> {
   const language = session.language || "english"
+  const trimmedText = text.trim().toLowerCase()
+
+  const numericIndex = parseInt(trimmedText, 10)
+  if (
+    !isNaN(numericIndex) &&
+    session.pickerDateOptions &&
+    numericIndex >= 1 &&
+    numericIndex <= session.pickerDateOptions.length
+  ) {
+    const selectedDate = session.pickerDateOptions[numericIndex - 1]
+    return await applySelectedAppointmentDate(
+      db,
+      phone,
+      normalizedPhone,
+      sessionRef,
+      session,
+      selectedDate,
+      language
+    )
+  }
   
   // If text is provided, try to parse it as date (fallback for text input)
   if (text && text.trim()) {
@@ -1965,68 +2324,15 @@ async function handleDateSelection(
       }
     }
 
-    // Validate date is not in the past
-    const selected = new Date(selectedDate + "T00:00:00")
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    if (selected < today) {
-      const errorMsg = language === "gujarati"
-        ? "❌ કૃપા કરીને આજની અથવા ભવિષ્યની તારીખ પસંદ કરો."
-        : "❌ Please select a date that is today or in the future."
-      await sendTextMessage(phone, errorMsg)
-      await sendDatePicker(phone, session.doctorId, language)
-      return true
-    }
-
-    // Check if date is blocked (system-wide like Sunday OR doctor-specific)
-    if (session.doctorId) {
-      const doctorDoc = await db.collection("doctors").doc(session.doctorId).get()
-      if (doctorDoc.exists) {
-        const doctorData = doctorDoc.data()!
-        const availabilityCheck = checkDateAvailability(selectedDate, doctorData)
-        if (availabilityCheck.isBlocked) {
-          const errorMsg = language === "gujarati"
-            ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${availabilityCheck.reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
-            : `❌ *Date Not Available*\n\n${availabilityCheck.reason}\n\nPlease select another date.`
-          await sendTextMessage(phone, errorMsg)
-          await sendDatePicker(phone, session.doctorId, language)
-          return true
-        }
-      }
-    }
-
-    // Check if user already has an appointment on this date
-    const patient = await findPatientByPhone(db, normalizedPhone)
-    if (patient) {
-      const existingAppointments = await db
-        .collection("appointments")
-        .where("patientId", "==", patient.id)
-        .where("appointmentDate", "==", selectedDate)
-        .where("status", "in", ["pending", "confirmed"])
-        .get()
-
-      if (!existingAppointments.empty) {
-        const existingAppt = existingAppointments.docs[0].data()
-        const existingTime = existingAppt.appointmentTime || ""
-        const errorMsg = language === "gujarati"
-          ? `❌ *અપોઇન્ટમેન્ટ પહેલેથી બુક થયેલ છે*\n\nતમારે ${selectedDate}${existingTime ? ` at ${existingTime}` : ""} માટે પહેલેથી અપોઇન્ટમેન્ટ બુક કરેલ છે.\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
-          : `❌ *Appointment Already Booked*\n\nYou already have an appointment booked for ${selectedDate}${existingTime ? ` at ${existingTime}` : ""}.\n\nPlease select a different date.`
-        await sendTextMessage(phone, errorMsg)
-        await sendDatePicker(phone, session.doctorId, language)
-        return true
-      }
-    }
-
-    // Date is valid and no existing appointment, proceed to time selection
-    await sessionRef.update({
-      state: "selecting_time",
-      appointmentDate: selectedDate,
-      updatedAt: new Date().toISOString(),
-    })
-
-    // Show Morning/Afternoon buttons for the selected date
-    await sendTimePicker(phone, undefined, selectedDate, language)
-    return true
+    return await applySelectedAppointmentDate(
+      db,
+      phone,
+      normalizedPhone,
+      sessionRef,
+      session,
+      selectedDate,
+      language
+    )
   }
 
   // No text provided, send date picker
@@ -2036,6 +2342,8 @@ async function handleDateSelection(
 
 async function sendDatePicker(phone: string, doctorId?: string, language: Language = "english") {
   const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   let doctorData: any = null
   
   // Fetch doctor data if doctor ID is provided to check blocked dates
@@ -2059,8 +2367,29 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
   }
   
   // WhatsApp list message limit: 10 rows TOTAL (not per section)
-  // Limit dates to first 10 available
   const datesToShow = dateOptions.slice(0, 10)
+  const pickerDateOptions = datesToShow.map((d) => d.id.replace("date_", ""))
+
+  await sessionRef.set(
+    { pickerDateOptions, updatedAt: new Date().toISOString() },
+    { merge: true }
+  )
+
+  if (shouldUseBhashSms()) {
+    const intro = lang(
+      language,
+      "અપોઇન્ટમેન્ટ તારીખ પસંદ કરો:",
+      "Select Appointment Date:"
+    )
+    const lines = datesToShow.map((d, index) => `${index + 1}. ${d.title}`)
+    const footer = lang(
+      language,
+      "નંબર લખી જવાબ આપો (ઉદાહરણ: 1).",
+      "Reply with the date number (e.g. 1)."
+    )
+    await sendTextMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`)
+    return
+  }
   
   // Create single section with max 10 date options
   const sections = [{
@@ -2566,10 +2895,13 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
 
 async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english") {
   const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   
   // Use new hourly slot system
   const hourlySlots = generateHourlyTimeSlots()
   const availableHourlySlots: Array<{ id: string; title: string; description?: string }> = []
+  const pickerTimeOptions: string[] = []
   
   // SINGLE VALIDATION POINT: Check if appointment is today - filter out past hourly slots
   const now = new Date()
@@ -2636,15 +2968,36 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
         title: hourlySlot.title,
         description: language === "gujarati" ? "ઉપલબ્ધ" : "Available"
       })
+      pickerTimeOptions.push(nextAvailableSlot)
     }
   }
+  
+  await sessionRef.set(
+    { pickerTimeOptions, updatedAt: new Date().toISOString() },
+    { merge: true }
+  )
   
   if (availableHourlySlots.length === 0) {
     const noSlotsMsg = language === "gujarati"
       ? "❌ આ તારીખ માટે કોઈ સમય સ્લોટ ઉપલબ્ધ નથી. કૃપા કરીને બીજી તારીખ પસંદ કરો."
       : "❌ No time slots available for this date. Please select another date."
     await sendTextMessage(phone, noSlotsMsg)
-    await sendDatePicker(phone, undefined, language)
+    await sendDatePicker(phone, doctorId, language)
+    return
+  }
+
+  if (shouldUseBhashSms()) {
+    const intro = lang(language, "સમય પસંદ કરો:", "Select Appointment Time:")
+    const lines = availableHourlySlots.slice(0, 10).map((slot, index) => {
+      const timeLabel = pickerTimeOptions[index] || slot.title
+      return `${index + 1}. ${timeLabel}`
+    })
+    const footer = lang(
+      language,
+      "નંબર લખી જવાબ આપો (ઉદાહરણ: 1).",
+      "Reply with the time number (e.g. 1)."
+    )
+    await sendTextMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`)
     return
   }
 
@@ -2745,9 +3098,18 @@ async function handleTimeSelection(
 
   let selectedTime = ""
 
+  const slotNum = parseInt(trimmed, 10)
+  if (
+    !isNaN(slotNum) &&
+    session.pickerTimeOptions &&
+    slotNum >= 1 &&
+    slotNum <= session.pickerTimeOptions.length
+  ) {
+    selectedTime = session.pickerTimeOptions[slotNum - 1]
+  }
+
   // Try numeric selection (legacy fallback)
-  const slotNum = parseInt(trimmed)
-  if (!isNaN(slotNum) && slotNum >= 1 && slotNum <= timeSlots.length) {
+  if (!selectedTime && !isNaN(slotNum) && slotNum >= 1 && slotNum <= timeSlots.length) {
     selectedTime = timeSlots[slotNum - 1]
   }
 
@@ -2777,7 +3139,7 @@ async function handleTimeSelection(
       ? "❌ કૃપા કરીને માન્ય સમય પસંદ કરો (ઉદાહરણ: 10:30)."
       : "❌ Please choose a valid time slot (e.g., 10:30)."
     await sendTextMessage(phone, errorMsg)
-    await sendTimePicker(phone, undefined, session.appointmentDate!, language)
+    await sendTimePicker(phone, session.doctorId, session.appointmentDate!, language)
     return true
   }
 
@@ -2810,150 +3172,25 @@ async function handleConfirmation(
   const trimmedText = text.trim().toLowerCase()
   const language = session.language || "english"
 
-  if (trimmedText !== "confirm" && trimmedText !== "yes") {
-    await sendTextMessage(phone, "Booking cancelled. Type 'Book' to start again.")
-    await sessionRef.delete()
+  if (trimmedText === "2" || trimmedText === "cancel") {
+    await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, "cancel")
     return true
   }
 
-  // Validate payment info is set
-  if (!session.paymentMethod || !session.paymentType) {
-    await sendTextMessage(phone, "❌ Payment information missing. Please start booking again.")
-    await sessionRef.delete()
+  if (trimmedText === "1" || trimmedText === "confirm" || trimmedText === "yes") {
+    await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, "confirm")
     return true
   }
 
-
-  // Create appointment
-  try {
-    let patient: { id: string; data: FirebaseFirestore.DocumentData } | null = null
-
-    if (session.patientUid) {
-      const patientDoc = await db.collection("patients").doc(session.patientUid).get()
-      if (patientDoc.exists) {
-        patient = { id: patientDoc.id, data: patientDoc.data()! }
-      }
-    }
-
-    if (!patient) {
-      patient = await findPatientByPhone(db, normalizedPhone)
-    }
-
-    if (!patient && session.registrationData?.firstName) {
-      try {
-        const waScope = await buildWhatsAppPatientHospitalScope(db, session)
-        const recreated = await createPatientFromWhatsApp(
-          db,
-          normalizedPhone,
-          session.registrationData.firstName,
-          session.registrationData?.lastName || "",
-          waScope
-        )
-        const patientDoc = await db.collection("patients").doc(recreated.patientUid).get()
-        if (patientDoc.exists) {
-          patient = { id: patientDoc.id, data: patientDoc.data()! }
-          await sessionRef.update({
-            patientUid: recreated.patientUid,
-            registrationData: {
-              ...(session.registrationData || {}),
-              patientId: recreated.patientId,
-            },
-            updatedAt: new Date().toISOString(),
-          })
-        }
-      } catch {
-
-      }
-    }
-
-    if (!patient) {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
-      const msg =
-        language === "gujarati"
-          ? `❌ દર્દી રેકોર્ડ મળ્યો નથી.\n\n📝 કૃપા કરીને પહેલા નોંધણી કરો:\n${baseUrl}`
-          : `❌ Patient record not found.\n\n📝 *Please register first:*\n\n${baseUrl}\n\nOr contact reception for assistance.`
-      await sendTextMessage(phone, msg)
-      await sessionRef.delete()
-      return true
-    }
-
-    const doctorDoc = await db.collection("doctors").doc(session.doctorId!).get()
-    if (!doctorDoc.exists) {
-      await sendTextMessage(phone, "❌ Doctor not found. Please try again.")
-      await sessionRef.delete()
-      return true
-    }
-
-    const doctorData = doctorDoc.data()!
-    const consultationFee = session.consultationFee || doctorData.consultationFee || 500
-    const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
-    
-    const paymentMethod = session.paymentMethod || "cash"
-    const paymentType = session.paymentType || "full"
-    const isCash = paymentMethod === "cash"
-    const collectedAmount = isCash ? 0 : (paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee)
-    const remainingAmount = Math.max(consultationFee - collectedAmount, 0)
-
-    // Determine payment status based on method and amount collected
-    let paymentStatus: "pending" | "paid" = "pending"
-    if (!isCash && remainingAmount === 0) {
-      paymentStatus = "paid"
-    }
-
-    const appointmentId = await createAppointment(
-      db,
-      patient,
-      { id: session.doctorId!, data: doctorData },
-      {
-        symptomCategory: "",
-        chiefComplaint: session.symptoms || "General consultation",
-        doctorId: session.doctorId!,
-        appointmentDate: session.appointmentDate!,
-        appointmentTime: session.appointmentTime!,
-        medicalHistory: "",
-        paymentOption: paymentMethod,
-        paymentStatus: paymentStatus,
-        paymentType,
-        consultationFee,
-        paymentAmount: collectedAmount,
-        remainingAmount,
-        branchId: session.branchId || null, // Include branchId from session
-        branchName: session.branchName || null, // Include branchName from session
-      } as any,
-      normalizedPhone
+  await sendTextMessage(
+    phone,
+    lang(
+      language,
+      "કૃપા કરીને 1 (ખાતરી) અથવા 2 (રદ) લખી જવાબ આપો.",
+      "Please reply 1 to confirm or 2 to cancel."
     )
-
-    const sessionForConfirmation: BookingSession = {
-      ...session,
-      paymentMethod,
-      paymentType,
-      consultationFee,
-      paymentAmount: collectedAmount,
-      remainingAmount,
-    }
-
-    await sendBookingConfirmation(normalizedPhone, patient, doctorData, sessionForConfirmation, appointmentId)
-    await sessionRef.delete()
-
-    return true
-  } catch (error: any) {
-
-    if (error.message === "SLOT_ALREADY_BOOKED") {
-      await sendTextMessage(phone, "❌ That slot was just booked. Please try again.")
-    } else if (error.message?.startsWith("DATE_BLOCKED:")) {
-      const reason = error.message.replace("DATE_BLOCKED: ", "")
-      const language = session.language || "english"
-      const errorMsg = language === "gujarati"
-        ? `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
-        : `❌ *Date Not Available*\n\n${reason}\n\nPlease select another date.`
-      await sendTextMessage(phone, errorMsg)
-      await sendDatePicker(phone, session.doctorId, language)
-    } else {
-      await sendTextMessage(phone, "❌ Error creating appointment. Please contact reception.")
-    }
-    await sessionRef.delete()
-    return true
-  }
+  )
+  return true
 }
 
 // Generate hourly time slots for the new system
@@ -3110,13 +3347,18 @@ function checkDateAvailability(dateStr: string, doctorData: any): { isBlocked: b
 }
 
 async function findPatientByPhone(db: FirebaseFirestore.Firestore, phone: string) {
-  let snapshot = await db.collection("patients").where("phone", "==", phone).limit(1).get()
-  if (snapshot.empty) {
-    snapshot = await db.collection("patients").where("phoneNumber", "==", phone).limit(1).get()
+  const variants = getPatientPhoneLookupVariants(phone)
+  for (const variant of variants) {
+    let snapshot = await db.collection("patients").where("phone", "==", variant).limit(1).get()
+    if (snapshot.empty) {
+      snapshot = await db.collection("patients").where("phoneNumber", "==", variant).limit(1).get()
+    }
+    if (!snapshot.empty) {
+      const doc = snapshot.docs[0]
+      return { id: doc.id, data: doc.data() }
+    }
   }
-  if (snapshot.empty) return null
-  const doc = snapshot.docs[0]
-  return { id: doc.id, data: doc.data() }
+  return null
 }
 
 
