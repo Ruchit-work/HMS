@@ -83,11 +83,11 @@ function getPatientPhoneLookupVariants(phone: string): string[] {
 }
 
 
-/** Per-phone inbound dedupe — blocks Bhash GET+POST / retry delivering the same reply twice. */
+/** Per-phone inbound dedupe — blocks echoes, duplicates, and unsolicited auto-replies. */
 async function shouldProcessBhashInbound(from: string, text: string): Promise<boolean> {
   const db = admin.firestore()
   const digits = from.replace(/\D/g, "").slice(-10)
-  if (!digits) return true
+  if (!digits) return false
 
   const trimmed = text.trim().toLowerCase().slice(0, 120)
   const normalizedPhone = formatPhoneNumber(from) || `+91${digits}`
@@ -99,6 +99,65 @@ async function shouldProcessBhashInbound(from: string, text: string): Promise<bo
   const ref = db.collection("bhash_inbound_recent").doc(digits)
   const SAME_STATE_MS = 15_000
   const CROSS_STATE_MS = 6_000
+
+  // Bot outbound echoes — long or multi-line inbound
+  if (trimmed.length > 60 || text.split("\n").length > 2) {
+    console.log("[Bhash inbound] ignored echo/long", { len: trimmed.length })
+    return false
+  }
+
+  // Known bot message phrases echoed back as inbound
+  const botEchoPhrases = [
+    "select appointment",
+    "select language",
+    "please select",
+    "reply with",
+    "reply 1 to",
+    "harmony medical",
+    "appointment details",
+    "confirm or cancel",
+    "doctor selected",
+    "branch selected",
+    "date selected",
+    "welcome to harmony",
+    "type hi",
+    "type book",
+    "available dates",
+    "appointment confirmed",
+    "appointment id",
+  ]
+  if (botEchoPhrases.some((p) => trimmed.includes(p))) {
+    console.log("[Bhash inbound] ignored bot phrase echo")
+    return false
+  }
+
+  // Match against our last outbound message (Bhash echo loop)
+  const outbound = await db.collection("bhash_outbound_recent").doc(digits).get()
+  if (outbound.exists) {
+    const outText = ((outbound.data()?.text as string) || "").toLowerCase()
+    const outAt = (outbound.data()?.at as number) || 0
+    if (outAt && Date.now() - outAt < 90_000 && outText) {
+      if (trimmed.length >= 4 && outText.includes(trimmed) && !isBhashExplicitUserCommand(trimmed)) {
+        console.log("[Bhash inbound] ignored outbound echo")
+        return false
+      }
+    }
+  }
+
+  const recentBooking = await db.collection("bhash_booking_recent").doc(digits).get()
+  if (recentBooking.exists) {
+    const bookedAt = (recentBooking.data()?.at as number) || 0
+    if (Date.now() - bookedAt < 300_000 && !isBhashExplicitUserCommand(trimmed)) {
+      console.log("[Bhash inbound] ignored post-booking noise")
+      return false
+    }
+  }
+
+  // Idle — only respond to explicit user commands (never auto-reply)
+  if (sessionState === "idle" && !isBhashExplicitUserCommand(trimmed)) {
+    console.log("[Bhash inbound] ignored — idle, not a menu command")
+    return false
+  }
 
   try {
     return await db.runTransaction(async (tx) => {
@@ -122,9 +181,46 @@ async function shouldProcessBhashInbound(from: string, text: string): Promise<bo
       return true
     })
   } catch (err) {
-    console.warn("[Bhash inbound] dedupe transaction failed, processing anyway", err)
-    return true
+    console.warn("[Bhash inbound] dedupe transaction failed, skipping", err)
+    return false
   }
+}
+
+const BHASH_EXPLICIT_COMMANDS = new Set([
+  "hello",
+  "hi",
+  "hy",
+  "hey",
+  "hii",
+  "hiii",
+  "hlo",
+  "helo",
+  "hie",
+  "hai",
+  "book",
+  "book appointment",
+  "📅 book appointment",
+  "help",
+  "help center",
+  "🆘 help center",
+  "yes",
+  "register",
+  "yes, register",
+  "✅ yes, register",
+  "cancel",
+  "stop",
+  "abort",
+  "quit",
+  "exit",
+  "no",
+])
+
+function isBhashExplicitUserCommand(text: string): boolean {
+  const t = text.trim().toLowerCase()
+  if (BHASH_EXPLICIT_COMMANDS.has(t)) return true
+  if (t.includes("thank")) return true
+  const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
+  return greetings.some((g) => t.startsWith(g + " "))
 }
 
 // Message sending with fallback
@@ -246,6 +342,10 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
       trimmedText === "✅ yes, register"
     ) {
       await handleRegistrationPrompt(from)
+      return
+    }
+
+    if (shouldUseBhashSms()) {
       return
     }
 
@@ -923,18 +1023,50 @@ async function processBookingConfirmation(
   phone: string,
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
-  session: BookingSession,
+  initialSession: BookingSession,
   action: "confirm" | "cancel"
 ) {
+  let session = initialSession
   const language = session.language || "english"
 
   if (action === "cancel") {
-    await sessionRef.delete()
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(sessionRef)
+      if (snap.exists) tx.delete(sessionRef)
+    })
     await sendTextMessage(phone, lang(language,
       "❌ બુકિંગ રદ કરાયું. તમે જ્યારે ઇચ્છો ત્યારે ફરીથી 'Book Appointment' લખીને શરૂ કરી શકો છો.",
       "❌ Booking cancelled. You can start again anytime by typing 'Book Appointment'."))
     return
   }
+
+  const claimedSession = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(sessionRef)
+    if (!snap.exists) return null
+    const data = snap.data() as BookingSession
+    if (data.state !== "confirming") return null
+    tx.delete(sessionRef)
+    return data
+  })
+
+  if (!claimedSession) {
+    const digits = normalizedPhone.replace(/\D/g, "").slice(-10)
+    if (digits) {
+      const recentBooking = await db.collection("bhash_booking_recent").doc(digits).get()
+      if (recentBooking.exists) {
+        const bookedAt = (recentBooking.data()?.at as number) || 0
+        if (Date.now() - bookedAt < 120_000) {
+          return
+        }
+      }
+    }
+    await sendTextMessage(phone, lang(language,
+      "❌ સત્ર સમાપ્ત થયું. ફરીથી 'Book' લખીને શરૂ કરો.",
+      "❌ Session expired. Type Book to start again."))
+    return
+  }
+
+  session = claimedSession
 
   if (!session.appointmentDate || !session.appointmentTime) {
     await sendTextMessage(phone, lang(language,
@@ -953,7 +1085,6 @@ async function processBookingConfirmation(
         ? `❌ દર્દી રેકોર્ડ મળ્યો નથી.\n\n📝 કૃપા કરીને પહેલા નોંધણી કરો:\n${baseUrl}`
         : `❌ Patient record not found.\n\n📝 Please register first:\n${baseUrl}`
     await sendTextMessage(phone, msg)
-    await sessionRef.delete()
     return
   }
 
@@ -1111,11 +1242,15 @@ async function processBookingConfirmation(
     )
 
     await sendBookingConfirmation(
-      normalizedPhone,
+      phone,
       patient,
-      null, // No doctor data yet
+      doctorDataForAppointment?.data || null,
       {
+        ...session,
         state: "confirming",
+        doctorId: assignedDoctorId || session.doctorId,
+        branchId: branchId || session.branchId,
+        branchName: branchName || session.branchName,
         appointmentDate: session.appointmentDate,
         appointmentTime: session.appointmentTime,
         paymentMethod,
@@ -1123,11 +1258,17 @@ async function processBookingConfirmation(
         consultationFee,
         paymentAmount,
         remainingAmount,
-      } as BookingSession,
+      },
       appointmentId
     )
 
-    await sessionRef.delete()
+    const digits = normalizedPhone.replace(/\D/g, "").slice(-10)
+    if (digits) {
+      await db.collection("bhash_booking_recent").doc(digits).set({
+        at: Date.now(),
+        appointmentId,
+      })
+    }
   } catch (error: any) {
 
     if (error.message === "SLOT_ALREADY_BOOKED") {
@@ -1136,19 +1277,27 @@ async function processBookingConfirmation(
           ? "❌ આ સમય સ્લોટ હમણાં જ બુક થયો છે. કૃપા કરીને બીજો સમય પસંદ કરો."
           : "❌ That slot was just booked. Please choose another time."
       await sendTextMessage(phone, msg)
-      await sessionRef.update({ state: "selecting_time" })
+      await sessionRef.set({
+        ...session,
+        state: "selecting_time",
+        updatedAt: new Date().toISOString(),
+      })
+      await sendTimePicker(phone, assignedDoctorId || session.doctorId, session.appointmentDate!, language)
     } else if (error.message?.startsWith("DATE_BLOCKED:")) {
       const reason = error.message.replace("DATE_BLOCKED: ", "")
       await sendTextMessage(phone, lang(language,
         `❌ *તારીખ ઉપલબ્ધ નથી*\n\n${reason}\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`,
         `❌ *Date Not Available*\n\n${reason}\n\nPlease select another date.`))
-      await sendDatePicker(phone, assignedDoctorId, language)
-      await sessionRef.update({ state: "selecting_date" })
+      await sessionRef.set({
+        ...session,
+        state: "selecting_date",
+        updatedAt: new Date().toISOString(),
+      })
+      await sendDatePicker(phone, assignedDoctorId || session.doctorId, language)
     } else {
       await sendTextMessage(phone, lang(language,
         "❌ બુકિંગ દરમિયાન ભૂલ આવી. કૃપા કરીને થોડા સમય પછી ફરી પ્રયાસ કરો.",
         "❌ We hit an error while booking. Please try again shortly."))
-      await sessionRef.delete()
     }
   }
 }
@@ -1160,6 +1309,18 @@ async function handleConfirmationButtonClick(phone: string, action: "confirm" | 
   const sessionSnap = await sessionRef.get()
 
   if (!sessionSnap.exists) {
+    if (action === "confirm") {
+      const digits = normalizedPhone.replace(/\D/g, "").slice(-10)
+      if (digits) {
+        const recentBooking = await db.collection("bhash_booking_recent").doc(digits).get()
+        if (recentBooking.exists) {
+          const bookedAt = (recentBooking.data()?.at as number) || 0
+          if (Date.now() - bookedAt < 120_000) {
+            return
+          }
+        }
+      }
+    }
     await sendTextMessage(
       phone,
       action === "confirm"
@@ -1910,7 +2071,15 @@ async function handleDoctorSelection(
   const doctors = session.pickerDoctorOptions || []
 
   if (doctors.length === 0) {
-    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    await sendTextMessage(
+      phone,
+      lang(
+        language,
+        "❌ કોઈ ડૉક્ટર મળ્યા નથી. કૃપા કરીને રિસેપ્શનનો સંપર્ક કરો અથવા 'Book' લખીને ફરી શરૂ કરો.",
+        "❌ No doctors available. Please contact reception or type Book to start again."
+      )
+    )
+    await sessionRef.delete()
     return true
   }
 
@@ -2077,7 +2246,6 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
   const branchId = buttonId.replace("branch_", "")
   
   if (!branchId) {
-    await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)
     return
   }
 
@@ -2088,7 +2256,6 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
       ? "❌ બ્રાન્ચ મળ્યું નથી. કૃપા કરીને ફરીથી પ્રયાસ કરો."
       : "❌ Branch not found. Please try again."
     await sendTextMessage(phone, errorMsg)
-    await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, language, session)
     return
   }
 
@@ -3378,8 +3545,15 @@ async function handleConfirmation(
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
-  session: BookingSession
+  _session: BookingSession
 ): Promise<boolean> {
+  const freshDoc = await sessionRef.get()
+  if (!freshDoc.exists) return true
+  const session = freshDoc.data() as BookingSession
+  if (session.state !== "confirming") {
+    return true
+  }
+
   const trimmedText = text.trim().toLowerCase()
   const language = session.language || "english"
 
@@ -3731,7 +3905,10 @@ async function sendBookingConfirmation(
   session: BookingSession,
   appointmentId: string
 ) {
-  const doctorName = doctorData ? `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim() : "To be assigned"
+  const doctorFromPicker = session.pickerDoctorOptions?.find((d) => d.id === session.doctorId)?.name
+  const doctorName = doctorData
+    ? `${doctorData.firstName || ""} ${doctorData.lastName || ""}`.trim()
+    : doctorFromPicker || "To be assigned by reception"
   const patientName = `${patient.data.firstName || ""} ${patient.data.lastName || ""}`.trim()
   const dateDisplay = new Date(session.appointmentDate! + "T00:00:00").toLocaleDateString("en-IN", {
     weekday: "long",
@@ -3755,9 +3932,9 @@ async function sendBookingConfirmation(
   const recheckupNote = session.recheckupNote || ""
   
   // Send confirmation message
-  const isPending = !doctorData
-  const recheckupHeader = isRecheckup ? "🔄 *Re-checkup Appointment Request Received!*\n\n" : "🎉 *Appointment Request Received!*\n\n"
-  const recheckupHeaderConfirmed = isRecheckup ? "🔄 *Re-checkup Appointment Confirmed!*\n\n" : "🎉 *Appointment Confirmed!*\n\n"
+  const isPending = !doctorData && !doctorFromPicker
+  const recheckupHeader = isRecheckup ? "Re-checkup Appointment Request Received!\n\n" : "Appointment Request Received!\n\n"
+  const recheckupHeaderConfirmed = isRecheckup ? "Re-checkup Appointment Confirmed!\n\n" : "Appointment Confirmed!\n\n"
   
   // Get branch name from session
   const branchName = session.branchName || "Main Branch"
@@ -3765,29 +3942,30 @@ async function sendBookingConfirmation(
   const confirmationMsg = isPending
     ? `${recheckupHeader}Hi ${patientName},
 
-Your ${isRecheckup ? "re-checkup " : ""}appointment request has been received:
-• 📅 Date: ${dateDisplay}
-• 🕒 Time: ${timeDisplay}
-• 📋 Appointment ID: ${appointmentId}
-• 🏥 Branch: ${branchName}
-• 👨‍⚕️ Doctor: Will be assigned by reception${recheckupNote ? `\n• 📝 Note: ${recheckupNote}` : ""}
+Your ${isRecheckup ? "re-checkup " : ""}appointment has been booked:
+Date: ${dateDisplay}
+Time: ${timeDisplay}
+Appointment ID: ${appointmentId}
+Branch: ${branchName}
+Doctor: Will be assigned by reception${recheckupNote ? `\nNote: ${recheckupNote}` : ""}
+Payment: ${session.paymentMethod?.toUpperCase() || "CASH"} - Rs ${consultationFee} due at hospital
 
-✅ Our receptionist will confirm your appointment and assign a doctor shortly. You'll receive a confirmation message once processed.
+Your appointment is saved in our system. Reception will confirm shortly.
 
-If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
+To book again, type Book. For help, type Help.`
     : `${recheckupHeaderConfirmed}Hi ${patientName},
 
-Your ${isRecheckup ? "re-checkup " : ""}appointment has been booked successfully:
-• 👨‍⚕️ Doctor: ${doctorName}
-• 📅 Date: ${dateDisplay}
-• 🕒 Time: ${timeDisplay}
-• 📋 Appointment ID: ${appointmentId}
-• 🏥 Branch: ${branchName}${recheckupNote ? `\n• 📝 Note: ${recheckupNote}` : ""}
-• 💳 Payment: ${session.paymentMethod?.toUpperCase() || "CASH"} - ₹${amountCollected}${remainingAmount > 0 ? ` (₹${remainingAmount} due at hospital)` : " (paid)"}
+Your ${isRecheckup ? "re-checkup " : ""}appointment is confirmed:
+Doctor: ${doctorName}
+Date: ${dateDisplay}
+Time: ${timeDisplay}
+Appointment ID: ${appointmentId}
+Branch: ${branchName}${recheckupNote ? `\nNote: ${recheckupNote}` : ""}
+Payment: ${session.paymentMethod?.toUpperCase() || "CASH"} - Rs ${amountCollected}${remainingAmount > 0 ? ` (Rs ${remainingAmount} due at hospital)` : " (paid)"}
 
-✅ Your appointment is now visible in our system. Admin and receptionist can see it.
+Your appointment is saved and visible in our system.
 
-If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
+To book again, type Book. For help, type Help.`
 
   let sentConfirmation = false
   if (!isPending && doctorData) {
@@ -3808,12 +3986,12 @@ If you need to reschedule, just reply here or call us at +91-XXXXXXXXXX.`
     })
   }
 
-  if (!sentConfirmation && !shouldUseBhashSms()) {
+  if (!sentConfirmation) {
     await sendTextMessage(phone, confirmationMsg)
   }
 
-  // Generate and send PDF only if doctor is assigned (not pending)
-  if (!isPending && doctorData) {
+  // Generate and send PDF only if doctor is assigned (not pending) — Meta only
+  if (!isPending && doctorData && !shouldUseBhashSms()) {
     try {
       const nowIso = new Date().toISOString()
       const paidAt = remainingAmount === 0 ? nowIso : ""

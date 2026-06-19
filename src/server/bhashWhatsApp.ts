@@ -1,8 +1,24 @@
+import { admin } from "./firebaseAdmin"
+
 export interface SendMessageResponse {
   success: boolean
   messageId?: string
   error?: string
   errorCode?: number
+}
+
+/** Store last outbound text so inbound echo can be ignored. */
+export async function recordBhashOutbound(to: string, text: string): Promise<void> {
+  try {
+    const ten = extractTenDigitPhone(to)
+    if (!ten || !text.trim() || admin.apps.length === 0) return
+    await admin.firestore().collection("bhash_outbound_recent").doc(ten).set({
+      text: text.slice(0, 400),
+      at: Date.now(),
+    })
+  } catch {
+    // ignore
+  }
 }
 
 /** Read env at request time — module-level reads can be empty on Vercel builds. */
@@ -270,6 +286,9 @@ async function bhashGet(
         success: false,
         error: body.trim() || `BhashSMS HTTP ${response.status}`,
       }
+    }
+    if (parsed.success && params.text) {
+      await recordBhashOutbound(params.phone, params.text)
     }
     return parsed
   } catch (error: unknown) {
