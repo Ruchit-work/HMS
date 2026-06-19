@@ -82,22 +82,38 @@ function getPatientPhoneLookupVariants(phone: string): string[] {
   return [...variants]
 }
 
-/** Prevent duplicate Bhash webhook processing (GET + POST or retries). */
+/** Prevent duplicate Bhash webhook processing (GET retries / double delivery). */
 async function acquireBhashInboundLock(from: string, text: string): Promise<boolean> {
   const db = admin.firestore()
   const digits = from.replace(/\D/g, "").slice(-10)
-  const bucket = Math.floor(Date.now() / 5000)
-  const lockId = `${digits}_${text.trim().toLowerCase().slice(0, 80).replace(/[/\\?#&=]/g, "_")}_${bucket}`
+  const msgKey = text.trim().toLowerCase().slice(0, 120)
+  const lockId = crypto
+    .createHash("sha256")
+    .update(`${digits}:${msgKey}`)
+    .digest("hex")
+    .slice(0, 40)
   const ref = db.collection("bhash_inbound_dedupe").doc(lockId)
+
   try {
-    await ref.create({
-      from: digits,
-      text: text.trim().slice(0, 200),
-      createdAt: new Date().toISOString(),
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      const now = Date.now()
+      if (snap.exists) {
+        const createdAt = snap.data()?.createdAt
+        const createdMs = createdAt ? new Date(createdAt).getTime() : 0
+        if (createdMs && now - createdMs < 60_000) {
+          return false
+        }
+      }
+      tx.set(ref, {
+        from: digits,
+        text: msgKey,
+        createdAt: new Date().toISOString(),
+      })
+      return true
     })
-    return true
   } catch {
-    return false
+    return true
   }
 }
 
@@ -196,8 +212,7 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
     if (
       trimmedText === "book" ||
       trimmedText === "book appointment" ||
-      trimmedText === "📅 book appointment" ||
-      trimmedText === "1"
+      trimmedText === "📅 book appointment"
     ) {
       await BUTTON_HANDLERS.book_appointment(from)
       return
@@ -205,8 +220,7 @@ async function handleInboundTextMessage(from: string, text: string): Promise<voi
     if (
       trimmedText === "help" ||
       trimmedText === "help center" ||
-      trimmedText === "🆘 help center" ||
-      trimmedText === "2"
+      trimmedText === "🆘 help center"
     ) {
       await handleHelpCenter(from)
       return
@@ -602,6 +616,28 @@ async function moveToBranchSelection(
   }
 
   await sessionRef.update({ state: "selecting_branch", updatedAt: new Date().toISOString() })
+
+  if (shouldUseBhashSms()) {
+    const branchLines = branches.map((branch: { id: string; name?: string }, index: number) => {
+      const isDefault = branch.id === defaultBranchId
+      const name = branch.name || "Branch"
+      return `${index + 1}. ${isDefault ? `${name} (Default)` : name}`
+    })
+    const nextLine =
+      defaultBranchId
+        ? `\n${branchLines.length + 1}. Next (Use Default)`
+        : ""
+    await sendTextMessage(
+      phone,
+      lang(
+        language,
+        `કૃપા કરીને તમારી બ્રાન્ચ પસંદ કરો:\n${branchLines.join("\n")}${nextLine}\n\nનંબર લખી જવાબ આપો (ઉદાહરણ: 1).`,
+        `Please select your branch:\n${branchLines.join("\n")}${nextLine}\n\nReply with the branch number (e.g. 1).`
+      )
+    )
+    return
+  }
+
   await sendTextMessage(phone, lang(language, 
     "🏥 કૃપા કરીને તમારી બ્રાન્ચ પસંદ કરો:",
     "🏥 Please select your branch:"))
@@ -639,15 +675,16 @@ async function moveToDateSelection(
   phone: string,
   _normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
-  language: Language
+  language: Language,
+  headerPrefix?: string
 ) {
+  const sessionDoc = await sessionRef.get()
+  const doctorId = (sessionDoc.data() as BookingSession | undefined)?.doctorId
+
   await sessionRef.update({
     state: "selecting_date",
     updatedAt: new Date().toISOString(),
   })
-
-  const sessionDoc = await sessionRef.get()
-  const doctorId = (sessionDoc.data() as BookingSession | undefined)?.doctorId
 
   if (!shouldUseBhashSms()) {
     const introMsg =
@@ -657,7 +694,7 @@ async function moveToDateSelection(
     await sendTextMessage(phone, introMsg)
   }
 
-  await sendDatePicker(phone, doctorId, language)
+  await sendDatePicker(phone, doctorId, language, headerPrefix)
 }
 
 async function fetchActiveDoctorsForBranch(
@@ -757,12 +794,19 @@ async function moveToDoctorSelection(
   }
 
   if (doctors.length === 1) {
+    const onlyDoctor = doctors[0]
+    const prefix = [
+      session.branchName ? `✅ Branch selected: ${session.branchName}` : "",
+      `✅ Doctor selected: ${onlyDoctor.name}`,
+    ]
+      .filter(Boolean)
+      .join("\n")
     await sessionRef.update({
-      doctorId: doctors[0].id,
-      pickerDoctorOptions: [{ id: doctors[0].id, name: doctors[0].name }],
+      doctorId: onlyDoctor.id,
+      pickerDoctorOptions: [{ id: onlyDoctor.id, name: onlyDoctor.name }],
       updatedAt: new Date().toISOString(),
     })
-    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+    await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language, prefix)
     return
   }
 
@@ -772,7 +816,13 @@ async function moveToDoctorSelection(
     updatedAt: new Date().toISOString(),
   })
 
-  const intro = lang(language, "કૃપા કરીને ડૉક્ટર પસંદ કરો:", "Please select a doctor:")
+  const intro = session.branchName
+    ? lang(
+        language,
+        `✅ બ્રાન્ચ પસંદ કર્યું: ${session.branchName}\n\nકૃપા કરીને ડૉક્ટર પસંદ કરો:`,
+        `✅ Branch selected: ${session.branchName}\n\nPlease select a doctor:`
+      )
+    : lang(language, "કૃપા કરીને ડૉક્ટર પસંદ કરો:", "Please select a doctor:")
   const lines = doctors.map((d, index) => {
     const spec = d.specialization ? ` (${d.specialization})` : ""
     return `${index + 1}. ${d.name}${spec}`
@@ -1567,6 +1617,22 @@ async function startBookingConversation(phone: string) {
 
   // Create booking session with language selection state
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const existing = await sessionRef.get()
+  if (existing.exists) {
+    const existingState = (existing.data() as BookingSession)?.state
+    const updatedAt = existing.data()?.updatedAt
+    const recent =
+      updatedAt && Date.now() - new Date(updatedAt).getTime() < 120_000
+    if (
+      recent &&
+      existingState &&
+      existingState !== "idle" &&
+      existingState !== "confirming"
+    ) {
+      return
+    }
+  }
+
   await sessionRef.set({
     state: "selecting_language",
     needsRegistration: false,
@@ -1626,6 +1692,13 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
   }
 
   const session = sessionDoc.data() as BookingSession
+
+  console.log("[WhatsApp booking]", {
+    phone: normalizedPhone,
+    state: session.state,
+    message: text.trim().slice(0, 40),
+  })
+
   const trimmedText = text.trim().toLowerCase()
 
   // Handle cancel/stop/abort - check for various cancel keywords
@@ -1657,6 +1730,8 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
       await sessionRef.delete()
       return false
   }
+
+  return true
 }
 
 async function handleLanguageSelection(
@@ -1671,6 +1746,10 @@ async function handleLanguageSelection(
   let selectedLanguage: "english" | "gujarati" = "english"
 
   // Handle text input for language selection (fallback)
+  if (trimmedText === "book" || trimmedText === "book appointment") {
+    return true
+  }
+
   if (trimmedText === "english" || trimmedText === "en" || trimmedText === "1") {
     selectedLanguage = "english"
   } else if (trimmedText === "gujarati" || trimmedText === "guj" || trimmedText === "gu" || trimmedText === "2") {
@@ -1775,8 +1854,15 @@ async function handleDoctorSelection(
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
-  session: BookingSession
+  _session: BookingSession
 ): Promise<boolean> {
+  const sessionDoc = await sessionRef.get()
+  if (!sessionDoc.exists) return false
+  const session = sessionDoc.data() as BookingSession
+
+  if (session.state !== "selecting_doctor") {
+    return true
+  }
   const language = session.language || "english"
   const trimmedText = text.trim().toLowerCase()
   const doctors = session.pickerDoctorOptions || []
@@ -1813,19 +1899,17 @@ async function handleDoctorSelection(
 
   await sessionRef.update({
     doctorId: selectedDoctor.id,
+    state: "selecting_date",
     updatedAt: new Date().toISOString(),
   })
 
-  await sendTextMessage(
-    phone,
-    lang(
-      language,
-      `✅ ડૉક્ટર પસંદ કર્યા: ${selectedDoctor.name}\n\n📅 હવે તારીખ પસંદ કરો:`,
-      `✅ Doctor selected: ${selectedDoctor.name}\n\n📅 Now select your date:`
-    )
+  const headerPrefix = lang(
+    language,
+    `✅ ડૉક્ટર પસંદ કર્યા: ${selectedDoctor.name}`,
+    `✅ Doctor selected: ${selectedDoctor.name}`
   )
 
-  await moveToDateSelection(db, phone, normalizedPhone, sessionRef, language)
+  await sendDatePicker(phone, selectedDoctor.id, language, headerPrefix)
   return true
 }
 
@@ -1913,11 +1997,6 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
       updatedAt: new Date().toISOString(),
     })
 
-    const confirmMsg = language === "gujarati"
-      ? `✅ બ્રાન્ચ પસંદ કર્યું: ${branchName || "Default"}\n\n📅 હવે તારીખ પસંદ કરો:`
-      : `✅ Branch selected: ${branchName || "Default"}\n\n📅 Now select your date:`
-    await sendTextMessage(phone, confirmMsg)
-
     await moveToDoctorSelection(db, phone, normalizedPhone, sessionRef, language, {
       ...session,
       branchId,
@@ -1954,11 +2033,6 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
     branchName,
     updatedAt: new Date().toISOString(),
   })
-
-  const confirmMsg = language === "gujarati"
-    ? `✅ બ્રાન્ચ પસંદ કર્યું: ${branchName}\n\n📅 હવે તારીખ પસંદ કરો:`
-    : `✅ Branch selected: ${branchName}\n\n📅 Now select your date:`
-  await sendTextMessage(phone, confirmMsg)
 
   const updatedSession: BookingSession = {
     ...session,
@@ -2267,7 +2341,19 @@ async function applySelectedAppointmentDate(
     updatedAt: new Date().toISOString(),
   })
 
-  await sendTimePicker(phone, session.doctorId, selectedDate, language)
+  const dateDisplay = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+  const headerPrefix = lang(
+    language,
+    `✅ તારીખ પસંદ કરી: ${dateDisplay}`,
+    `✅ Date selected: ${dateDisplay}`
+  )
+
+  await sendTimePicker(phone, session.doctorId, selectedDate, language, headerPrefix)
   return true
 }
 
@@ -2277,8 +2363,16 @@ async function handleDateSelection(
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
-  session: BookingSession
+  _session: BookingSession
 ): Promise<boolean> {
+  const sessionDoc = await sessionRef.get()
+  if (!sessionDoc.exists) return false
+  const session = sessionDoc.data() as BookingSession
+
+  if (session.state !== "selecting_date") {
+    return true
+  }
+
   const language = session.language || "english"
   const trimmedText = text.trim().toLowerCase()
 
@@ -2340,7 +2434,12 @@ async function handleDateSelection(
   return true
 }
 
-async function sendDatePicker(phone: string, doctorId?: string, language: Language = "english") {
+async function sendDatePicker(
+  phone: string,
+  doctorId?: string,
+  language: Language = "english",
+  headerPrefix?: string
+) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
@@ -2371,16 +2470,18 @@ async function sendDatePicker(phone: string, doctorId?: string, language: Langua
   const pickerDateOptions = datesToShow.map((d) => d.id.replace("date_", ""))
 
   await sessionRef.set(
-    { pickerDateOptions, updatedAt: new Date().toISOString() },
+    {
+      state: "selecting_date",
+      pickerDateOptions,
+      updatedAt: new Date().toISOString(),
+    },
     { merge: true }
   )
 
   if (shouldUseBhashSms()) {
-    const intro = lang(
-      language,
-      "અપોઇન્ટમેન્ટ તારીખ પસંદ કરો:",
-      "Select Appointment Date:"
-    )
+    const intro = headerPrefix
+      ? `${headerPrefix}\n\n${lang(language, "અપોઇન્ટમેન્ટ તારીખ પસંદ કરો:", "Select Appointment Date:")}`
+      : lang(language, "અપોઇન્ટમેન્ટ તારીખ પસંદ કરો:", "Select Appointment Date:")
     const lines = datesToShow.map((d, index) => `${index + 1}. ${d.title}`)
     const footer = lang(
       language,
@@ -2893,7 +2994,13 @@ async function handleTimeButtonClick(phone: string, buttonId: string) {
   await sendTimeSlotListForPeriod(phone, availableSlotsForPeriod, language, periodLabel)
 }
 
-async function sendTimePicker(phone: string, doctorId: string | undefined, appointmentDate: string, language: Language = "english") {
+async function sendTimePicker(
+  phone: string,
+  doctorId: string | undefined,
+  appointmentDate: string,
+  language: Language = "english",
+  headerPrefix?: string
+) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
@@ -2973,7 +3080,11 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   }
   
   await sessionRef.set(
-    { pickerTimeOptions, updatedAt: new Date().toISOString() },
+    {
+      state: "selecting_time",
+      pickerTimeOptions,
+      updatedAt: new Date().toISOString(),
+    },
     { merge: true }
   )
   
@@ -2987,7 +3098,9 @@ async function sendTimePicker(phone: string, doctorId: string | undefined, appoi
   }
 
   if (shouldUseBhashSms()) {
-    const intro = lang(language, "સમય પસંદ કરો:", "Select Appointment Time:")
+    const intro = headerPrefix
+      ? `${headerPrefix}\n\n${lang(language, "સમય પસંદ કરો:", "Select Appointment Time:")}`
+      : lang(language, "સમય પસંદ કરો:", "Select Appointment Time:")
     const lines = availableHourlySlots.slice(0, 10).map((slot, index) => {
       const timeLabel = pickerTimeOptions[index] || slot.title
       return `${index + 1}. ${timeLabel}`
@@ -3089,8 +3202,16 @@ async function handleTimeSelection(
   _normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
-  session: BookingSession
+  _session: BookingSession
 ): Promise<boolean> {
+  const sessionDoc = await sessionRef.get()
+  if (!sessionDoc.exists) return false
+  const session = sessionDoc.data() as BookingSession
+
+  if (session.state !== "selecting_time") {
+    return true
+  }
+
   const language = session.language || "english"
   
   const timeSlots = generateTimeSlots()
