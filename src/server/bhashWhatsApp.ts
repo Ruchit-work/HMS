@@ -134,6 +134,37 @@ export function encodeBhashTemplateParams(parameters: string[]): string {
     .join(",")
 }
 
+/**
+ * Bhash sendmsgutilreply.php text encoding (per Bhash support):
+ * newlines → literal \r\n in URL; spaces stay as spaces (not + or %20).
+ */
+export function encodeBhashUtilReplyText(message: string): string {
+  const normalized = message.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+  const withLiteralCrlf = normalized.split("\n").join("\\r\\n")
+
+  return withLiteralCrlf
+    .replace(/%/g, "%25")
+    .replace(/&/g, "%26")
+    .replace(/#/g, "%23")
+    .replace(/\?/g, "%3F")
+}
+
+function buildBhashUtilReplyQueryString(
+  config: { user: string; pass: string; sender: string },
+  params: { phone: string; text: string; stype: string; htype: string }
+): string {
+  return [
+    `user=${encodeURIComponent(config.user)}`,
+    `pass=${encodeURIComponent(config.pass)}`,
+    `sender=${encodeURIComponent(config.sender)}`,
+    `priority=wa`,
+    `phone=${params.phone}`,
+    `text=${encodeBhashUtilReplyText(params.text)}`,
+    `stype=${params.stype}`,
+    `htype=${params.htype}`,
+  ].join("&")
+}
+
 /** Bhash Params= must use literal commas — do not double-encode. */
 function buildBhashQueryString(
   config: { user: string; pass: string; sender: string },
@@ -159,7 +190,8 @@ function buildBhashQueryString(
 
 async function bhashGet(
   params: Record<string, string>,
-  apiUrl?: string
+  apiUrl?: string,
+  options?: { utilReply?: boolean }
 ): Promise<SendMessageResponse> {
   const config = getBhashConfig()
   const resolvedApiUrl = apiUrl || config.templateApiUrl
@@ -173,7 +205,19 @@ async function bhashGet(
     return { success: false, error: "BhashSMS credentials not configured" }
   }
 
-  const query = buildBhashQueryString(config, params)
+  const query =
+    options?.utilReply &&
+    params.phone &&
+    params.text !== undefined &&
+    params.stype &&
+    params.htype
+      ? buildBhashUtilReplyQueryString(config, {
+          phone: params.phone,
+          text: params.text,
+          stype: params.stype,
+          htype: params.htype,
+        })
+      : buildBhashQueryString(config, params)
 
   try {
     const response = await fetch(`${resolvedApiUrl}?${query}`, {
@@ -231,7 +275,7 @@ export async function bhashSendTextMessage(
     stype: "normal",
     htype: "normal",
   }
-  return bhashGet(params, apiUrl)
+  return bhashGet(params, apiUrl, { utilReply: true })
 }
 
 /**

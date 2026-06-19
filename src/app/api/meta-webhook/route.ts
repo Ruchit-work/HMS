@@ -378,8 +378,8 @@ async function handleGreeting(phone: string) {
 
   if (shouldUseBhashSms()) {
     const text = !patient
-      ? "Hello! Welcome to Harmony Medical Services.\n\nWe don't have your profile yet.\n\nReply YES to register\nReply HELP for assistance"
-      : "Hello! Welcome to Harmony Medical Services.\n\nHow can we help you today?\n\nReply BOOK to book an appointment\nReply HELP for assistance"
+      ? "Hello!\nWelcome to Harmony Medical Services.\nWe don't have your profile yet.\nReply YES to register\nReply HELP for assistance"
+      : "Hello!\nWelcome to Harmony Medical Services.\nHow can we help you today?\nReply BOOK to book an appointment\nReply HELP for assistance"
     const result = await sendTextMessage(phone, text)
     if (!result.success) {
       console.error("[WhatsApp greeting] Bhash plain text send failed", result.error)
