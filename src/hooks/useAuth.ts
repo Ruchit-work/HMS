@@ -137,7 +137,7 @@ export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
         setLoading(true)
         setStatus("loading")
 
-        let userRoleData = await getUserRole(currentUser.uid, requiredRole)
+        const userRoleData = await getUserRole(currentUser.uid, requiredRole)
 
         if (!userRoleData && requiredRole) {
           const actualUserRoleData = await getUserRole(currentUser.uid)

@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { doc, getDoc, updateDoc, getDocs, collection } from 'firebase/firestore'
 import { db } from '@/firebase/config'
 import { AUTH_RESOLVE_TIMEOUT_MS, logAuthDev } from '@/utils/auth/roleRouting'
+import { Hospital } from '@/types/hospital'
 
 interface MultiHospitalContextType {
   // Current active hospital

@@ -232,7 +232,7 @@ export async function GET(request: Request) {
 
     // Fetch appointments with payments from the SAME hospital-scoped collection
     // that Doctor / Reception / Admin write to: hospitals/{hospitalId}/appointments
-    let appointmentsDocs: any[] = []
+    const appointmentsDocs: any[] = []
     const seenAppointmentIds = new Set<string>()
 
     const hospitalId =
