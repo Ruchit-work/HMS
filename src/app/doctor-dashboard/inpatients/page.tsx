@@ -5,6 +5,14 @@ import { Button } from "@/components/ui/Button"
 import { auth } from "@/firebase/config"
 import { Admission } from "@/types/patient"
 import { onAuthStateChanged, type User } from "firebase/auth"
+import {
+  ClinicalAlertCard,
+  ClinicalFormSection,
+  ClinicalPageFrame,
+  ClinicalPageHeader,
+  ClinicalStatusBadge,
+} from "@/components/doctor/clinical"
+import { Users } from "lucide-react"
 
 const ROUND_CHARGE_OPTIONS = [
   { key: "medicine", label: "Medicine" },
@@ -308,37 +316,38 @@ export default function DoctorInpatientsPage() {
   }, [patientHistory.patientProfile])
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-20">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">Admitted Patients Under My Care</h2>
-              <p className="text-sm text-slate-500">
-                Track admitted and pre-booked patients, mark doctor rounds, and keep billing fee in sync.
-              </p>
-            </div>
-            <div className="text-sm text-slate-600">
-              Active patients: <span className="font-semibold text-slate-900">{inpatients.length}</span> | Total rounds
-              marked: <span className="font-semibold text-slate-900">{totalRounds}</span>
-            </div>
-          </div>
-          <div className="mt-4">
+    <ClinicalPageFrame>
+        <ClinicalPageHeader
+          title="Inpatients"
+          subtitle="Patients admitted under your care. Document rounds and request discharge."
+          icon={<Users className="w-5 h-5" />}
+          badge={
+            <span className="text-xs font-medium text-slate-500">
+              {inpatients.length} active · {totalRounds} rounds
+            </span>
+          }
+        />
+
+        <ClinicalFormSection
+          title="Search patients"
+          description="Find by name, patient ID, room, or admission ID."
+        >
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search patient by name, patient ID, room, or admission ID"
               suppressHydrationWarning
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm hms-input"
             />
-          </div>
-        </section>
+        </ClinicalFormSection>
 
         {error ? (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+          <ClinicalAlertCard variant="error" title="Unable to load inpatients">
+            {error}
+          </ClinicalAlertCard>
         ) : null}
 
-        <section className="rounded-xl border border-slate-200 bg-white p-3">
+        <section className="clinical-surface p-3">
           <div className="mb-3 flex items-center gap-2">
             <button
               type="button"
@@ -592,7 +601,6 @@ export default function DoctorInpatientsPage() {
           </table>
           </div>
         </section>
-      </main>
 
       {confirmDischargeAdmission ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -768,7 +776,7 @@ export default function DoctorInpatientsPage() {
         </div>
       ) : null}
 
-    </div>
+    </ClinicalPageFrame>
   )
 }
 

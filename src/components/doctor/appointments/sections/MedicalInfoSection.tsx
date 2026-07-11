@@ -8,7 +8,7 @@ interface MedicalInfoSectionProps {
   minimal?: boolean
 }
 
-export default function MedicalInfoSection({ appointment, minimal = false }: MedicalInfoSectionProps) {
+export default function MedicalInfoSection({ appointment, minimal = true }: MedicalInfoSectionProps) {
   const sections: { label: string; value: string | undefined; highlight?: boolean }[] = [
     { label: "Additional details", value: appointment.patientAdditionalConcern },
     { label: "Medical history", value: appointment.medicalHistory },

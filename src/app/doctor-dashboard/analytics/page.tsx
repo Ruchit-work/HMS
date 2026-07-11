@@ -5,9 +5,15 @@ import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { query, where, getDocs } from "firebase/firestore"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import { Appointment } from "@/types/patient"
-import Link from "next/link"
+import {
+  ClinicalLoadingState,
+  ClinicalPageFrame,
+  ClinicalPageHeader,
+  ClinicalEmptyState,
+} from "@/components/doctor/clinical"
+import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
+import { BarChart3 } from "lucide-react"
 
 interface DoctorAnalytics {
   totalPatients: number
@@ -364,7 +370,7 @@ export default function DoctorAnalyticsPage() {
   }
 
   if (authLoading || loading) {
-    return <LoadingSpinner message="Loading analytics..." />
+    return <ClinicalLoadingState message="Loading practice insights…" />
   }
 
   if (!user || !analytics) {
@@ -376,46 +382,34 @@ export default function DoctorAnalyticsPage() {
     : 1
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-20">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-       
-        <div className="relative rounded-2xl border border-slate-200 bg-sky-50/80 p-8 overflow-hidden shadow-sm bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)]">
-          <div className="relative z-10">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-              <div>
-                <h1 className="text-3xl font-bold mb-2 text-slate-900">Analytics Dashboard</h1>
-                <p className="text-base text-slate-600">Comprehensive insights into your practice performance</p>
-              </div>
-              <Link
-                href="/doctor-dashboard"
-                className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-              >
-                ← Back to Dashboard
-              </Link>
-            </div>
-
-            {/* Date Range Selector */}
+    <ClinicalPageFrame>
+        <DoctorSettingsBackLink />
+        <ClinicalPageHeader
+          title="Practice Insights"
+          subtitle="Understand your patient volume, diagnoses, and consultation patterns."
+          icon={<BarChart3 className="w-5 h-5" />}
+          actions={
             <div className="flex gap-2 flex-wrap">
               {(["week", "month", "quarter", "year"] as const).map((range) => (
                 <button
                   key={range}
                   onClick={() => setDateRange(range)}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     dateRange === range
-                      ? "bg-[var(--color-primary)] text-white shadow-md scale-105"
-                      : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200/70"
+                      ? "bg-[var(--color-primary)] text-white shadow-sm"
+                      : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
                   }`}
                 >
                   {range.charAt(0).toUpperCase() + range.slice(1)}
                 </button>
               ))}
             </div>
-          </div>
-        </div>
+          }
+        />
 
         {/* Key performance metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div className="clinical-metric-card">
             <div className="flex items-center justify-between mb-3">
               <div className="w-11 h-11 bg-sky-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -444,7 +438,7 @@ export default function DoctorAnalyticsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div className="clinical-metric-card">
             <div className="flex items-center justify-between mb-3">
               <div className="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -476,7 +470,7 @@ export default function DoctorAnalyticsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div className="clinical-metric-card">
             <div className="flex items-center justify-between mb-3">
               <div className="w-11 h-11 bg-cyan-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -498,7 +492,7 @@ export default function DoctorAnalyticsPage() {
             <p className="text-xs text-slate-500">Patient retention</p>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <div className="clinical-metric-card">
             <div className="flex items-center justify-between mb-3">
               <div className="w-11 h-11 bg-rose-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -531,7 +525,7 @@ export default function DoctorAnalyticsPage() {
        
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Most Common Diagnoses */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
+          <div className="clinical-section-card">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -539,7 +533,7 @@ export default function DoctorAnalyticsPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Most Common Diagnoses</h2>
+                <h2 className="text-base font-semibold text-slate-900">Most Common Diagnoses</h2>
                 <p className="text-sm text-slate-500">Top conditions treated</p>
               </div>
             </div>
@@ -548,24 +542,19 @@ export default function DoctorAnalyticsPage() {
                 {analytics.mostCommonDiagnoses.map((item, index) => (
                   <div key={index} className="group">
                     <div className="flex items-center gap-4 mb-2">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-sm ${
-                        index === 0 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white' :
-                        index === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-white' :
-                        index === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white' :
-                        'bg-cyan-100 text-cyan-700'
-                      }`}>
+                      <div className={`clinical-rank-badge ${index < 3 ? "clinical-rank-badge--top" : ""}`}>
                         {index + 1}
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-slate-900 group-hover:text-cyan-700 transition-colors">
+                        <p className="font-semibold text-slate-900">
                           {item.diagnosis}
                         </p>
                         <div className="flex items-center gap-3 mt-1.5">
-                          <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="clinical-progress">
                             <div
-                              className="bg-gradient-to-r from-cyan-600 to-teal-600 h-2.5 rounded-full transition-all duration-500"
+                              className="clinical-progress__bar"
                               style={{ width: `${item.percentage}%` }}
-                            ></div>
+                            />
                           </div>
                           <span className="text-sm font-semibold text-slate-700 min-w-[60px] text-right">
                             {item.count} {item.count === 1 ? 'case' : 'cases'}
@@ -577,18 +566,17 @@ export default function DoctorAnalyticsPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-                <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-slate-500 font-medium">No diagnosis data available</p>
-                <p className="text-slate-400 text-sm mt-1">Data will appear as you complete appointments</p>
-              </div>
+              <ClinicalEmptyState
+                compact
+                illustration="consultation"
+                title="No diagnosis data available"
+                description="Data will appear as you complete appointments."
+              />
             )}
           </div>
 
           {/* Most Prescribed Medicines */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
+          <div className="clinical-section-card">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -596,7 +584,7 @@ export default function DoctorAnalyticsPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Most Prescribed Medicines</h2>
+                <h2 className="text-base font-semibold text-slate-900">Most Prescribed Medicines</h2>
                 <p className="text-sm text-slate-500">Frequently used medications</p>
               </div>
             </div>
@@ -605,24 +593,19 @@ export default function DoctorAnalyticsPage() {
                 {analytics.mostPrescribedMedicines.map((item, index) => (
                   <div key={index} className="group">
                     <div className="flex items-center gap-4 mb-2">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-sm ${
-                        index === 0 ? 'bg-gradient-to-br from-green-400 to-emerald-500 text-white' :
-                        index === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-white' :
-                        index === 2 ? 'bg-gradient-to-br from-teal-600 to-teal-700 text-white' :
-                        'bg-green-100 text-green-600'
-                      }`}>
+                      <div className={`clinical-rank-badge ${index < 3 ? "clinical-rank-badge--top" : ""}`}>
                         {index + 1}
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-slate-900 group-hover:text-green-600 transition-colors">
+                        <p className="font-semibold text-slate-900">
                           {item.medicine}
                         </p>
                         <div className="flex items-center gap-3 mt-1.5">
-                          <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="clinical-progress">
                             <div
-                              className="bg-gradient-to-r from-green-500 to-emerald-600 h-2.5 rounded-full transition-all duration-500"
+                              className="clinical-progress__bar"
                               style={{ width: `${item.percentage}%` }}
-                            ></div>
+                            />
                           </div>
                           <span className="text-sm font-semibold text-slate-700 min-w-[60px] text-right">
                             {item.count}x
@@ -634,18 +617,17 @@ export default function DoctorAnalyticsPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-                <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                </svg>
-                <p className="text-slate-500 font-medium">No prescription data available</p>
-                <p className="text-slate-400 text-sm mt-1">Data will appear as you prescribe medicines</p>
-              </div>
+              <ClinicalEmptyState
+                compact
+                illustration="consultation"
+                title="No prescription data available"
+                description="Data will appear as you prescribe medicines."
+              />
             )}
           </div>
 
           {/* Peak Hours with Visual Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
+          <div className="clinical-section-card">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -668,9 +650,9 @@ export default function DoctorAnalyticsPage() {
                         <div className="w-20 text-sm font-semibold text-slate-700">{item.hour12}</div>
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
-                            <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden shadow-inner">
+                            <div className="clinical-progress h-4">
                               <div
-                                className="bg-gradient-to-r from-cyan-500 to-teal-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                                className="clinical-progress__bar h-full flex items-center justify-end pr-2"
                                 style={{ width: `${percentage}%` }}
                               >
                                 {percentage > 15 && (
@@ -691,17 +673,12 @@ export default function DoctorAnalyticsPage() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-                <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-slate-500 font-medium">No time data available</p>
-              </div>
+              <ClinicalEmptyState compact title="No time data available" />
             )}
           </div>
 
           {/* Peak Days with Visual Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
+          <div className="clinical-section-card">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -724,9 +701,9 @@ export default function DoctorAnalyticsPage() {
                         <div className="w-20 text-sm font-semibold text-slate-700">{item.dayShort}</div>
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
-                            <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden shadow-inner">
+                            <div className="clinical-progress h-4">
                               <div
-                                className="bg-gradient-to-r from-cyan-500 to-teal-600 h-4 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                                className="clinical-progress__bar h-full flex items-center justify-end pr-2"
                                 style={{ width: `${percentage}%` }}
                               >
                                 {percentage > 15 && (
@@ -747,18 +724,13 @@ export default function DoctorAnalyticsPage() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-                <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <p className="text-slate-500 font-medium">No day data available</p>
-              </div>
+              <ClinicalEmptyState compact title="No day data available" />
             )}
           </div>
         </div>
 
         {/* Monthly Trends Chart */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
+        <div className="clinical-section-card">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
               <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -780,7 +752,7 @@ export default function DoctorAnalyticsPage() {
                     <div key={index} className="flex-1 flex flex-col items-center group">
                       <div className="w-full flex flex-col items-center gap-1 mb-2">
                         <div 
-                          className="w-full bg-gradient-to-t from-teal-500 to-cyan-600 rounded-t-lg transition-all duration-500 hover:from-teal-600 hover:to-cyan-700 group-hover:shadow-lg"
+                          className="w-full bg-[var(--color-primary)] rounded-t-md transition-colors"
                           style={{ height: `${height}%`, minHeight: '8px' }}
                         >
                           <div className="h-full w-full bg-white/20 rounded-t-lg"></div>
@@ -843,17 +815,12 @@ export default function DoctorAnalyticsPage() {
               </div>
             </div>
           ) : (
-            <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-              <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <p className="text-slate-500 font-medium">No trend data available</p>
-            </div>
+            <ClinicalEmptyState compact title="No trend data available" />
           )}
         </div>
 
         {/* Top Visiting Patients */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200 hover:shadow-xl transition-shadow">
+        <div className="clinical-section-card">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
               <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -870,18 +837,13 @@ export default function DoctorAnalyticsPage() {
               {analytics.topVisitingPatients.map((patient, index) => (
                 <div 
                   key={patient.patientId} 
-                  className="group p-5 bg-gradient-to-br from-slate-50 to-white rounded-xl border-2 border-slate-200 hover:border-cyan-300 hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+                  className="p-5 bg-slate-50 rounded-xl border border-slate-200"
                 >
                   <div className="flex flex-col items-center text-center">
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl mb-3 shadow-md ${
-                      index === 0 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white' :
-                      index === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-white' :
-                      index === 2 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white' :
-                      'bg-gradient-to-br from-cyan-600 to-teal-600 text-white'
-                    }`}>
-                      {index < 3 ? '🏆' : index + 1}
+                    <div className={`clinical-rank-badge mb-3 ${index < 3 ? "clinical-rank-badge--top" : ""}`} style={{ width: "3rem", height: "3rem", borderRadius: "9999px" }}>
+                      {index + 1}
                     </div>
-                    <p className="font-bold text-slate-900 mb-1 group-hover:text-cyan-700 transition-colors">
+                    <p className="font-semibold text-slate-900 mb-1">
                       {patient.patientName}
                     </p>
                     <div className="flex items-center gap-2 mb-2">
@@ -900,15 +862,9 @@ export default function DoctorAnalyticsPage() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-12 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-              <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              <p className="text-slate-500 font-medium">No patient data available</p>
-            </div>
+            <ClinicalEmptyState compact illustration="patients" title="No patient data available" />
           )}
         </div>
-      </main>
-    </div>
+    </ClinicalPageFrame>
   )
 }

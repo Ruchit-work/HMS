@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata } from "@/types/document"
 import { auth } from "@/firebase/config"
+import { detectCriticalFindings, formatReportDate, getReportDoctor } from "@/utils/clinicalReportUtils"
 
 interface DocumentViewerProps {
   document: DocumentMetadata
@@ -100,14 +101,26 @@ export default function DocumentViewer({
     })
   }
 
+  const criticalInfo = detectCriticalFindings(document)
+
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl shadow-2xl">
       {/* Header */}
-      <div className="bg-[var(--color-primary)] text-white px-6 py-4 flex items-center justify-between">
+      <div className={`text-white px-6 py-4 flex items-center justify-between ${criticalInfo.isCritical ? "bg-rose-700" : "bg-[var(--color-primary)]"}`}>
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold truncate">{document.originalFileName}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-semibold truncate">{document.originalFileName}</h3>
+            {criticalInfo.isCritical && (
+              <span className="inline-flex rounded-md bg-white/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wide">
+                Critical
+              </span>
+            )}
+          </div>
           <p className="text-sm text-blue-100 mt-1">
-            {document.fileType} {document.specialty && `• ${document.specialty}`}
+            {document.fileType}
+            {document.specialty && ` • ${document.specialty}`}
+            {` • ${formatReportDate(document)}`}
+            {getReportDoctor(document) !== "—" && ` • Dr. ${getReportDoctor(document)}`}
           </p>
         </div>
         <div className="flex items-center gap-2 ml-4">

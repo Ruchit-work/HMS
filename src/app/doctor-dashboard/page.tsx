@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { auth, db } from "@/firebase/config"
@@ -10,29 +10,40 @@ import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns/campaigns"
 import CampaignCarousel from "@/components/patient/ui/CampaignCarousel"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import {
+  ClinicalFormSection,
+  ClinicalLoadingState,
+  ClinicalPageFrame,
+} from "@/components/doctor/clinical"
 import { Button } from "@/components/ui/Button"
 import VisitingHoursEditor from "@/components/doctor/schedule/VisitingHoursEditor"
 import BlockedDatesManager from "@/components/doctor/schedule/BlockedDatesManager"
 import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
 import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import { getStatusColor } from "@/utils/appointmentHelpers"
-import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 import Notification from "@/components/ui/feedback/Notification"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import type { Branch } from "@/types/branch"
+import {
+  AppointmentQueueList,
+  ClinicNotifications,
+  MorningGreeting,
+  NextPatientCard,
+  QuickClinicalActions,
+  TodayScheduleTimeline,
+} from "@/components/doctor/dashboard/MorningClinicSections"
+import { buildMorningClinicSnapshot } from "@/components/doctor/dashboard/morningClinicUtils"
+import { Building2 } from "lucide-react"
 
 interface UserData {
-  id: string;
-  firstName: string;
-  lastName: string;
-  specialization: string;
-  email: string;
-  role: string;
-  visitingHours?: VisitingHours;
-  blockedDates?: BlockedDate[];
-  /** Branches this doctor is assigned to */
-  branchIds?: string[];
+  id: string
+  firstName: string
+  lastName: string
+  specialization: string
+  email: string
+  role: string
+  visitingHours?: VisitingHours
+  blockedDates?: BlockedDate[]
+  branchIds?: string[]
 }
 
 export default function DoctorDashboard() {
@@ -40,7 +51,7 @@ export default function DoctorDashboard() {
   const pathname = usePathname()
   const [userData, setUserData] = useState<UserData | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
+  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [visitingHours, setVisitingHours] = useState<VisitingHours>(DEFAULT_VISITING_HOURS)
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
@@ -52,77 +63,53 @@ export default function DoctorDashboard() {
   const [navigatingAppointmentId, setNavigatingAppointmentId] = useState<string | null>(null)
   const navigatingRef = useRef(false)
 
-  // Protect route - only allow doctors (or admins for demo)
   const { user, loading } = useAuth("doctor")
   const { activeHospitalId } = useMultiHospital()
 
-  // Badge clears when user visits the appointments page (same as header)
-  const confirmedCount = appointments.filter(apt => apt.status === "confirmed").length
+  const confirmedCount = appointments.filter((apt) => apt.status === "confirmed").length
   const appointmentsBadge = useNotificationBadge({
-    badgeKey: 'doctor-appointments',
+    badgeKey: "doctor-appointments",
     rawCount: confirmedCount,
   })
 
-  // Function to set up real-time appointments listener
-  const setupAppointmentsListener = useCallback((doctorId: string, branchId: string | null) => {
-    if (!activeHospitalId) return () => {}
-    
-    try {
-      const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-      // Build query with optional branch filter
-      let q
-      if (branchId) {
-        q = query(
-          appointmentsRef, 
-          where("doctorId", "==", doctorId),
-          where("branchId", "==", branchId)
-        )
-      } else {
-        q = query(appointmentsRef, where("doctorId", "==", doctorId))
-      }
-      
-      // Set up real-time listener
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const appointmentsList = snapshot.docs
-          .map((doc) => ({ 
-            id: doc.id, 
-            ...doc.data() 
-          } as Appointment))
-          // Filter out WhatsApp pending appointments - they should only appear in WhatsApp Bookings Panel
-          .filter((appointment) => {
-            return appointment.status !== "whatsapp_pending" && !appointment.whatsappPending
-          })
-        
-        setAppointments(appointmentsList)
-      }, () => {
-      })
-      
-      return unsubscribe
-    } catch {
-      return () => {} // Return empty function if setup fails
-    }
-  }, [activeHospitalId])
+  const setupAppointmentsListener = useCallback(
+    (doctorId: string, branchId: string | null) => {
+      if (!activeHospitalId) return () => {}
 
-  // Fetch branches
+      try {
+        const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
+        const q = branchId
+          ? query(appointmentsRef, where("doctorId", "==", doctorId), where("branchId", "==", branchId))
+          : query(appointmentsRef, where("doctorId", "==", doctorId))
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const appointmentsList = snapshot.docs
+            .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as Appointment))
+            .filter((appointment) => appointment.status !== "whatsapp_pending" && !appointment.whatsappPending)
+
+          setAppointments(appointmentsList)
+        })
+
+        return unsubscribe
+      } catch {
+        return () => {}
+      }
+    },
+    [activeHospitalId]
+  )
+
   useEffect(() => {
     const fetchBranches = async () => {
-      // Wait for authentication to complete
-      if (loading || !user) return
-      if (!activeHospitalId) return
+      if (loading || !user || !activeHospitalId) return
 
       try {
         setLoadingBranches(true)
         const currentUser = auth.currentUser
-        if (!currentUser) {
-          // User not authenticated yet, wait for auth to complete
-          return
-        }
+        if (!currentUser) return
         const token = await currentUser.getIdToken()
 
         const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         })
         const data = await response.json()
 
@@ -130,6 +117,7 @@ export default function DoctorDashboard() {
           setBranches(data.branches)
         }
       } catch {
+        // ignore
       } finally {
         setLoadingBranches(false)
       }
@@ -149,65 +137,50 @@ export default function DoctorDashboard() {
         if (doctorDoc.exists()) {
           const data = doctorDoc.data() as UserData
           setUserData(data)
-          
-          // Load visiting hours and blocked dates
           setVisitingHours(data.visitingHours || DEFAULT_VISITING_HOURS)
           setBlockedDates(data.blockedDates || [])
 
-          // If doctor is linked to a single branch, lock selection to that branch
-          const branchIds = Array.isArray((data as any).branchIds) ? (data as any).branchIds as string[] : []
+          const branchIds = Array.isArray(data.branchIds) ? data.branchIds : []
           if (branchIds.length === 1) {
             setSelectedBranchId(branchIds[0])
           }
-          
-          // Set up real-time appointments listener with branch filter
+
           unsubscribeAppointments = setupAppointmentsListener(user.uid, selectedBranchId)
-          
         }
-      } finally {
+      } catch {
+        // ignore
       }
     }
 
     fetchData()
 
-    // Cleanup function to unsubscribe from listeners
     return () => {
-      if (unsubscribeAppointments) {
-        unsubscribeAppointments()
-      }
+      if (unsubscribeAppointments) unsubscribeAppointments()
     }
   }, [user, activeHospitalId, selectedBranchId, setupAppointmentsListener])
 
-  // Manual refresh function
   const handleRefreshAppointments = async () => {
     if (user?.uid) {
-      // Real-time listeners will automatically update, so just show success message
       setNotification({ type: "success", message: "Appointments are automatically updated in real-time!" })
     }
   }
 
-  // Save visiting hours and blocked dates directly (no admin approval)
   const handleSaveSchedule = async () => {
     if (!user?.uid) return
 
     setSavingSchedule(true)
     try {
       const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error("You must be logged in to save schedule")
-      }
+      if (!currentUser) throw new Error("You must be logged in to save schedule")
       const token = await currentUser.getIdToken()
 
-      const mergedBlockedDates = [
-        ...blockedDates,
-        ...blockedDrafts,
-      ]
+      const mergedBlockedDates = [...blockedDates, ...blockedDrafts]
 
-      const res = await fetch('/api/doctor/schedule', {
-        method: 'PUT',
+      const res = await fetch("/api/doctor/schedule", {
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           visitingHours,
@@ -216,13 +189,13 @@ export default function DoctorDashboard() {
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
-        throw new Error(j?.error || 'Failed to save schedule')
+        throw new Error(j?.error || "Failed to save schedule")
       }
-      setNotification({ type: 'success', message: 'Schedule saved successfully.' })
+      setNotification({ type: "success", message: "Schedule saved successfully." })
       setBlockedDates(mergedBlockedDates)
       setBlockedDrafts([])
     } catch (error: unknown) {
-      setNotification({ type: 'error', message: (error as Error).message || 'Failed to save schedule' })
+      setNotification({ type: "error", message: (error as Error).message || "Failed to save schedule" })
     } finally {
       setSavingSchedule(false)
     }
@@ -231,635 +204,216 @@ export default function DoctorDashboard() {
   useEffect(() => {
     if (!user || !activeHospitalId) return
     const loadCampaigns = async () => {
-      const published = await fetchPublishedCampaignsForAudience('doctors', activeHospitalId)
+      const published = await fetchPublishedCampaignsForAudience("doctors", activeHospitalId)
       setCampaigns(published)
     }
     loadCampaigns()
   }, [user, activeHospitalId])
 
-  // If we land on appointments page, clear the "opening" state so clicks work again.
   useEffect(() => {
-    if (pathname === '/doctor-dashboard/appointments') {
+    if (pathname === "/doctor-dashboard/appointments") {
       navigatingRef.current = false
       setNavigatingAppointmentId(null)
     }
   }, [pathname])
 
-  if (loading) {
-    return <LoadingSpinner message="Loading Doctor Dashboard..." />
-  }
-
-  if (!user) {
-    return null
-  }
-
-  // For demo mode: if admin is viewing, allow access even without doctor data
-  // The fetchData function will create demo data for admins
-  if (!userData) {
-    return <LoadingSpinner message="Loading Doctor Dashboard..." />
-  }
-
   const viewAppointmentDetails = (appointment: Appointment) => {
     if (navigatingRef.current) return
     navigatingRef.current = true
     setNavigatingAppointmentId(appointment.id)
-
-    // Store the appointment ID in sessionStorage to auto-expand it on the appointments page
-    sessionStorage.setItem('expandAppointmentId', appointment.id)
-
-    // Navigate to appointments page using Next.js router.
-    // If navigation fails / doesn't change route, reset after a short delay so user can click again.
-    router.push('/doctor-dashboard/appointments')
+    sessionStorage.setItem("expandAppointmentId", appointment.id)
+    router.push("/doctor-dashboard/appointments")
     window.setTimeout(() => {
-      if (window.location.pathname !== '/doctor-dashboard/appointments') {
+      if (window.location.pathname !== "/doctor-dashboard/appointments") {
         navigatingRef.current = false
         setNavigatingAppointmentId(null)
       }
     }, 1500)
   }
 
-  // Shared comparator to sort appointments by combined date and time (earliest first)
-  const compareAppointmentsByDateTime = (a: Appointment, b: Appointment) => {
-    const dateA = new Date(`${a.appointmentDate} ${a.appointmentTime}`).getTime()
-    const dateB = new Date(`${b.appointmentDate} ${b.appointmentTime}`).getTime()
-    return dateA - dateB
+  const openQueue = () => {
+    router.push("/doctor-dashboard/appointments")
   }
 
-  // Calculate stats
-  const totalPatients = new Set(appointments.map(apt => apt.patientId)).size
-  const todayAppointments = appointments.filter((appointment: Appointment) => 
-    new Date(appointment.appointmentDate).toDateString() === new Date().toDateString()
-  ).length
-  const completedAppointments = appointments.filter((appointment: Appointment) => appointment.status === "completed").length
+  const clinic = useMemo(() => buildMorningClinicSnapshot(appointments), [appointments])
 
-  // Derive branches the doctor is allowed to see
-  const doctorBranchIds = Array.isArray((userData as any)?.branchIds)
-    ? ((userData as any).branchIds as string[])
-    : []
-  const visibleBranches = doctorBranchIds.length > 0
-    ? branches.filter((b) => doctorBranchIds.includes(b.id))
-    : branches
+  const doctorBranchIds = Array.isArray(userData?.branchIds) ? userData.branchIds : []
+  const visibleBranches =
+    doctorBranchIds.length > 0 ? branches.filter((b) => doctorBranchIds.includes(b.id)) : branches
   const hasSingleVisibleBranch = visibleBranches.length === 1
 
+  const dateLabel = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  })
+
+  if (loading) {
+    return <ClinicalLoadingState message="Preparing your clinic…" />
+  }
+
+  if (!user) {
+    return null
+  }
+
+  if (!userData) {
+    return <ClinicalLoadingState message="Preparing your clinic…" />
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 pt-20">
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Welcome Section */}
-        <div className="relative rounded-2xl border border-slate-200 bg-sky-50/70 p-6 sm:p-7 overflow-hidden shadow-sm bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.25),transparent)]">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-1.5">
-                Welcome back, Dr. {userData.firstName}! <span aria-hidden>👋</span>
-              </h2>
-              <p className="text-sm text-slate-600 mb-3">
-                Ready to make a difference in your patients&apos; lives today.
-              </p>
-              <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-slate-600">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                  <span className="font-medium text-emerald-700">System online</span>
-                </div>
-                <div className="text-slate-500">
-                  {new Date().toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </div>
-              </div>
-            </div>
-            <div className="hidden lg:block">
-              <div className="w-20 h-20 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center">
-                <span className="text-3xl" aria-hidden>🩺</span>
-              </div>
-            </div>
-          </div>
-        </div>
+    <ClinicalPageFrame>
+      <MorningGreeting
+        doctorName={userData.firstName}
+        specialization={userData.specialization}
+        waitingCount={clinic.waitingCount}
+        pendingCount={clinic.pendingCount}
+        followUpCount={clinic.followUpCount}
+        reportsCount={clinic.reportsCount}
+        emergencyCount={clinic.emergencyCount}
+        dateLabel={dateLabel}
+        onOpenQueue={openQueue}
+      />
 
-        {/* Branch Selection */}
-        {visibleBranches.length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center">
-                  <span className="text-lg">🏥</span>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Select Branch</label>
-                  <p className="text-xs text-slate-500">View appointments for a specific branch</p>
-                </div>
-              </div>
-              <div className="flex-1 max-w-xs">
-                <select
-                  value={selectedBranchId || ""}
-                  onChange={(e) => setSelectedBranchId(e.target.value || null)}
-                  disabled={loadingBranches}
-                  className="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {!hasSingleVisibleBranch && (
-                    <option value="">All Branches</option>
-                  )}
-                  {visibleBranches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {campaigns.length > 0 && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800">📢 Health Campaigns</h3>
-              <span className="text-sm text-slate-500">{campaigns.length} active</span>
-            </div>
-            <CampaignCarousel campaigns={campaigns} />
-          </div>
-        )}
-
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div 
-            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
+      {visibleBranches.length > 0 && (
+        <ClinicalFormSection
+          title="Branch"
+          description="Filter today's operational view by clinic location."
+          actions={
+            <Building2 className="w-4 h-4 text-slate-400" aria-hidden />
+          }
+        >
+          <select
+            value={selectedBranchId || ""}
+            onChange={(e) => setSelectedBranchId(e.target.value || null)}
+            disabled={loadingBranches}
+            className="w-full max-w-md hms-input"
+            aria-label="Select branch"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600">Total Patients</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{totalPatients}</p>
-                <p className="text-xs text-slate-500 mt-1">Unique patients</p>
-              </div>
-              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl">👥</span>
-              </div>
-            </div>
-          </div>
+            {!hasSingleVisibleBranch && <option value="">All branches</option>}
+            {visibleBranches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+        </ClinicalFormSection>
+      )}
 
-          <div 
-            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
+      {/* Primary clinical row: Next patient + waiting queue */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
+        <NextPatientCard
+          patient={clinic.nextPatient}
+          onStart={viewAppointmentDetails}
+          loadingId={navigatingAppointmentId}
+        />
+        <AppointmentQueueList
+          title="Waiting queue"
+          subtitle="Patients due now or overdue"
+          appointments={clinic.waitingQueue}
+          emptyTitle="No one waiting"
+          emptyDescription="Patients appear here when their slot time arrives."
+          onSelect={viewAppointmentDetails}
+        />
+      </div>
+
+      {/* Today's schedule — full width */}
+      <TodayScheduleTimeline
+        appointments={clinic.confirmedToday}
+        onSelect={viewAppointmentDetails}
+        onRefresh={handleRefreshAppointments}
+      />
+
+      {/* Follow-ups, reports, actions, notifications */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-5 min-w-0 [&>*]:min-w-0">
+        <AppointmentQueueList
+          title="Follow-ups"
+          subtitle="Re-checkups and return visits"
+          appointments={clinic.followUps}
+          emptyTitle="No follow-ups scheduled"
+          emptyDescription="Recheckup appointments will appear here."
+          onSelect={viewAppointmentDetails}
+          maxItems={5}
+        />
+        <AppointmentQueueList
+          title="Pending reports"
+          subtitle="Lab, imaging, or results to review"
+          appointments={clinic.pendingReports}
+          emptyTitle="No reports flagged"
+          emptyDescription={
+            <>
+              Open{" "}
+              <Link href="/doctor-dashboard/settings" className="text-[var(--color-primary)] hover:underline">
+                Settings → Documents
+              </Link>{" "}
+              to browse all files.
+            </>
+          }
+          onSelect={viewAppointmentDetails}
+          maxItems={5}
+          showTime={false}
+        />
+        <QuickClinicalActions pendingBadge={appointmentsBadge.displayCount} />
+        <ClinicNotifications
+          emergencyCases={clinic.emergencyCases}
+          unsavedScheduleCount={blockedDrafts.length}
+          campaignCount={campaigns.length}
+          onSelectPatient={viewAppointmentDetails}
+        />
+      </div>
+
+      {campaigns.length > 0 && (
+        <ClinicalFormSection
+          title="Hospital announcements"
+          description={`${campaigns.length} active campaign${campaigns.length !== 1 ? "s" : ""}`}
+        >
+          <CampaignCarousel campaigns={campaigns} />
+        </ClinicalFormSection>
+      )}
+
+      <ClinicalFormSection
+        title="Availability settings"
+        description="Visiting hours and blocked dates — saved directly to your profile."
+        actions={
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={handleSaveSchedule}
+            loading={savingSchedule}
+            loadingText="Saving…"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600">Today's Schedule</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{todayAppointments}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl">📅</span>
-              </div>
-            </div>
+            Save schedule
+          </Button>
+        }
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2">
+            <VisitingHoursEditor value={visitingHours} onChange={setVisitingHours} />
           </div>
-
-          <div 
-            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600">This Week</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">
-                  {appointments.filter((apt: Appointment) => {
-                    const aptDate = new Date(apt.appointmentDate)
-                    const today = new Date()
-                    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    return aptDate >= today && aptDate <= weekFromNow
-                  }).length}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">Upcoming appointments</p>
-              </div>
-              <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl">📊</span>
-              </div>
-            </div>
-          </div>
-
-          <div 
-            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
-            style={{ boxShadow: 'rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px' }}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600">Completed</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{completedAppointments}</p>
-                <p className="text-xs text-slate-500 mt-1">Total checkups</p>
-              </div>
-              <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl">✅</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Today's Schedule */}
-          <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center">
-                  <span className="text-lg">📅</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-800">Today's Schedule</h3>
-                  <p className="text-sm text-slate-500">
-                    {appointments.filter((apt: Appointment) => 
-                      new Date(apt.appointmentDate).toDateString() === new Date().toDateString() && 
-                      apt.status === "confirmed"
-                    ).length} appointments scheduled
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleRefreshAppointments}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
-
-            {(() => {
-              const todayAppts = appointments
-                .filter((apt: Appointment) => 
-                  new Date(apt.appointmentDate).toDateString() === new Date().toDateString() && 
-                  apt.status === "confirmed"
-                )
-                .sort(compareAppointmentsByDateTime)
-
-              if (todayAppts.length === 0) {
-                return (
-                  <div className="text-center py-12 bg-slate-50 rounded-xl">
-                    <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-2xl">🎉</span>
-                    </div>
-                    <p className="text-slate-600 font-medium">No appointments today</p>
-                    <p className="text-sm text-slate-500 mt-1">Enjoy your free time!</p>
-                  </div>
-                )
-              }
-
-              return (
-                <div className="space-y-3 max-h-80 overflow-y-auto">
-                  {todayAppts.map((apt: Appointment) => {
-                    const [hours, minutes] = apt.appointmentTime.split(':').map(Number)
-                    const time12hr = `${hours > 12 ? hours - 12 : hours}:${minutes.toString().padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`
-                    const isPast = new Date(`${apt.appointmentDate}T${apt.appointmentTime}`).getTime() < Date.now()
-                    
-                    return (
-                      <div
-                        key={apt.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => viewAppointmentDetails(apt)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            viewAppointmentDetails(apt)
-                          }
-                        }}
-                        className={`p-4 rounded-lg border transition-all hover:shadow-md cursor-pointer ${
-                          isPast
-                            ? 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                            : 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-sm font-bold ${
-                              isPast ? 'bg-slate-200 text-slate-600' : 'bg-[var(--color-primary)] text-white'
-                            }`}>
-                              {time12hr.split(' ')[0]}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-800">{apt.patientName}</p>
-                              <p className="text-sm text-slate-600">{apt.chiefComplaint}</p>
-                              {isPast && (
-                                <span className="inline-flex items-center text-xs text-slate-500 mt-1">
-                                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                                  Completed
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          {!isPast && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="primary"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                viewAppointmentDetails(apt)
-                              }}
-                              loading={navigatingAppointmentId === apt.id}
-                              loadingText="Opening..."
-                            >
-                              View Details
-                            </Button>
-                          )}
-                          {isPast && (
-                            <span className="text-sm text-slate-500">Click to open</span>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })()}
-          </div>
-
-          {/* Quick Actions & Info */}
-          <div className="space-y-6">
-            {/* Quick Actions */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h3>
-              <div className="space-y-3">
-                <Link
-                  href="/doctor-dashboard/appointments"
-                  prefetch={true}
-                  className="flex items-center gap-3 p-3 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors group"
-                >
-                  <div className="w-10 h-10 bg-[var(--color-primary)] rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
-                    📋
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-800">All Appointments</p>
-                    <p className="text-sm text-slate-600">Manage patient visits</p>
-                  </div>
-                </Link>
-
-                <Link
-                  href="/doctor-dashboard/inpatients"
-                  prefetch={true}
-                  className="flex items-center gap-3 p-3 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors group"
-                >
-                  <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
-                    🏥
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-800">Inpatient Rounds</p>
-                    <p className="text-sm text-slate-600">Mark rounds for admitted patients</p>
-                  </div>
-                </Link>
-
-                <Link
-                  href="/doctor-dashboard/profile"
-                  prefetch={true}
-                  className="flex items-center gap-3 p-3 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors group"
-                >
-                  <div className="w-10 h-10 bg-cyan-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
-                    👤
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-800">My Profile</p>
-                    <p className="text-sm text-slate-600">Update information</p>
-                  </div>
-                </Link>
-
-                <Link
-                  href="/doctor-dashboard/analytics"
-                  prefetch={true}
-                  className="flex items-center gap-3 p-3 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors group"
-                >
-                  <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
-                    📊
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-800">Analytics</p>
-                    <p className="text-sm text-slate-600">View performance insights</p>
-                  </div>
-                </Link>
-              </div>
-            </div>
-
-            {/* Schedule Management */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">Schedule Management</h3>
-              <div className="space-y-3">
-                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <p className="text-sm font-medium text-amber-800">Blocked Dates</p>
-                  <p className="text-xs text-amber-700 mt-1">
-                    {blockedDates.length} dates blocked
-                  </p>
-                </div>
-                {blockedDrafts.length > 0 && (
-                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                    <p className="text-sm font-medium text-amber-800">Unsaved</p>
-                    <p className="text-xs text-amber-700 mt-1">
-                      {blockedDrafts.length} date(s) to save
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-
-        {/* Schedule Configuration */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Visiting Hours */}
-          <div className="lg:col-span-2 relative bg-white rounded-xl p-6 shadow-sm border border-slate-200 overflow-hidden">
-            {/* Background Pattern */}
-            <div className="absolute inset-0 opacity-5">
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 via-teal-500 to-sky-500"></div>
-              <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <pattern id="schedule-pattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <circle cx="20" cy="20" r="1.5" fill="currentColor" className="text-cyan-600" />
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#schedule-pattern)" />
-              </svg>
-            </div>
-            
-            {/* Content */}
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-lg flex items-center justify-center shadow-md">
-                    <span className="text-lg">🕐</span>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-800">Weekly Schedule</h3>
-                    <p className="text-sm text-slate-500">Configure your availability</p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleSaveSchedule}
-                  loading={savingSchedule}
-                  loadingText="Saving..."
-                >
-                  Save Changes
-                </Button>
-              </div>
-              
-              <VisitingHoursEditor 
-                value={visitingHours}
-                onChange={setVisitingHours}
-              />
-            </div>
-          </div>
-
-          {/* Blocked Dates */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <span className="text-lg">🚫</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800">Blocked Dates</h3>
-                <p className="text-sm text-slate-500">Manage unavailable days</p>
-              </div>
-            </div>
-            
-            <BlockedDatesManager 
+          <div>
+            <BlockedDatesManager
               blockedDates={blockedDates}
               onChange={setBlockedDates}
               autosave={false}
               draftDates={blockedDrafts}
               onDraftChange={setBlockedDrafts}
             />
-
             {blockedDrafts.length > 0 && (
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-amber-800">Unsaved changes</p>
-                    <p className="text-xs text-amber-700">{blockedDrafts.length} date(s) to save</p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleSaveSchedule}
-                    loading={savingSchedule}
-                    loadingText="Saving..."
-                  >
-                    Save Changes
-                  </Button>
-                </div>
-              </div>
+              <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                {blockedDrafts.length} unsaved blocked date{blockedDrafts.length !== 1 ? "s" : ""} — click Save schedule.
+              </p>
             )}
           </div>
         </div>
+      </ClinicalFormSection>
 
-        {/* Recent Appointments */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="text-lg">📋</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800">Recent Appointments</h3>
-                <p className="text-sm text-slate-500">{appointments.length} total appointments</p>
-              </div>
-            </div>
-            <div className="relative">
-              <Link
-                href="/doctor-dashboard/appointments"
-                className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                View All
-              </Link>
-              <NotificationBadge 
-                count={appointmentsBadge.displayCount}
-                position="top-right"
-              />
-            </div>
-          </div>
-
-          {appointments.length === 0 ? (
-            <div className="text-center py-12 bg-slate-50 rounded-xl">
-              <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">📅</span>
-              </div>
-              <p className="text-slate-600 font-medium">No appointments yet</p>
-              <p className="text-sm text-slate-500 mt-1">Patient appointments will appear here</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {appointments
-                .sort(compareAppointmentsByDateTime)
-                .slice(0, 5)
-                .map((appointment) => (
-                <div key={appointment.id} className="p-4 border border-slate-200 rounded-lg hover:border-cyan-300 hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-cyan-100 rounded-lg flex items-center justify-center text-lg font-semibold text-cyan-700">
-                        {appointment.patientName?.[0]?.toUpperCase() || "👤"}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-800">{appointment.patientName || "Unknown patient"}</p>
-                        <div className="flex items-center gap-4 text-sm text-slate-600 mt-1">
-                          <span className="flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {new Date(appointment.appointmentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {appointment.appointmentTime}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-500 mt-1">{appointment.chiefComplaint}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}>
-                        {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                      </span>
-                      <button
-                        onClick={() => viewAppointmentDetails(appointment)}
-                        className="px-3 py-1 text-sm text-cyan-700 hover:text-cyan-800 hover:bg-cyan-50 rounded-lg transition-colors"
-                      >
-                        View
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {appointments.length > 5 && (
-                <div className="text-center pt-4">
-                  <Link 
-                    href="/doctor-dashboard/appointments"
-                    className="text-sm text-cyan-700 hover:text-cyan-800 font-medium"
-                  >
-                    View {appointments.length - 5} more appointments →
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </main>
-      
       {notification && (
-        <Notification 
+        <Notification
           type={notification.type}
           message={notification.message}
           onClose={() => setNotification(null)}
         />
       )}
-      
-    </div>
+    </ClinicalPageFrame>
   )
 }
-
-

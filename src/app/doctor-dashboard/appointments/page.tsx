@@ -14,59 +14,59 @@ import { Appointment as AppointmentType } from "@/types/patient"
 import axios from "axios"
 import Pagination from "@/components/ui/navigation/Pagination"
 import { fetchMedicineSuggestions, MedicineSuggestion, recordMedicineSuggestions } from "@/utils/medicineSuggestions"
-import { CUSTOM_DIAGNOSIS_OPTION } from "@/constants/entDiagnoses"
-import dynamic from "next/dynamic"
 import AppointmentDocuments from "@/components/documents/AppointmentDocuments"
 import PatientConsentVideo from "@/components/consent/PatientConsentVideo"
 import type { AnatomyViewerData } from "@/components/doctor/anatomy/InlineAnatomyViewer"
-import { getAnatomyModelDetails, getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
-import { ClipboardList, Ear, ScanFace, Mic, HeartPulse, Stethoscope, Bone } from "lucide-react"
-import SketchfabAnatomyViewer from "@/components/doctor/anatomy/SketchfabAnatomyViewer"
-
-// Lazy load the heavy 3D anatomy viewer component to reduce initial bundle size
-const InlineAnatomyViewer = dynamic(
-  () => import("@/components/doctor/anatomy/InlineAnatomyViewer"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
-        <div className="text-slate-600">Loading 3D Anatomy Model...</div>
-      </div>
-    ),
-  }
-)
+import { getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
+import { ClipboardList, Ear, ScanFace, Mic, HeartPulse, Stethoscope, Bone, ChevronLeft } from "lucide-react"
 import { DocumentMetadata } from "@/types/document"
 import { parsePrescription as parsePrescriptionUtil } from "@/utils/appointments/prescriptionParsers"
 import { formatMedicinesAsText as formatMedicinesAsTextUtil } from "@/utils/appointments/prescriptionFormatters"
-import { TabKey, CompletionFormEntry, hasValidPrescriptionInput } from "@/types/appointments"
+import { TabKey, CompletionFormEntry, hasValidPrescriptionInput, QueueView } from "@/types/appointments"
 import ConsultationModeModal from "@/components/doctor/appointments/modals/ConsultationModeModal"
 import CompletionForm from "@/components/doctor/appointments/forms/CompletionForm"
-import LifestyleSection from "@/components/doctor/appointments/sections/LifestyleSection"
-import MedicalInfoSection from "@/components/doctor/appointments/sections/MedicalInfoSection"
-import PatientHistorySection from "@/components/doctor/appointments/sections/PatientHistorySection"
-import CombinedCompletionModal from "@/components/doctor/appointments/modals/CombinedCompletionModal"
 import { AdmitDialog } from "@/components/doctor/appointments/modals/AdmitDialog"
 import { ReportModal } from "@/components/doctor/appointments/modals/ReportModal"
 import { HistoryDocumentViewer } from "@/components/doctor/appointments/ui/HistoryDocumentViewer"
 import PageHeader from "@/components/doctor/appointments/ui/PageHeader"
-import StatsBar from "@/components/doctor/appointments/ui/StatsBar"
+import DoctorQueuePulse from "@/components/doctor/appointments/ui/DoctorQueuePulse"
+import NextPatientBanner from "@/components/doctor/appointments/ui/NextPatientBanner"
+import AppointmentScheduleRail from "@/components/doctor/appointments/ui/AppointmentScheduleRail"
 import FilterBar from "@/components/doctor/appointments/ui/FilterBar"
 import EmptyState from "@/components/doctor/appointments/ui/EmptyState"
 import HistorySearch from "@/components/doctor/appointments/ui/HistorySearch"
-import PatientSummaryBar from "@/components/doctor/appointments/ui/PatientSummaryBar"
-import ClinicalSummaryCard from "@/components/doctor/appointments/ui/ClinicalSummaryCard"
-import ClinicalDetailsKeyInfo from "@/components/doctor/appointments/ui/ClinicalDetailsKeyInfo"
 import AppointmentsListPane from "@/components/doctor/appointments/ui/AppointmentsListPane"
-import CollapsibleSection from "@/components/doctor/appointments/ui/CollapsibleSection"
 import { useDoctorAppointments } from "@/hooks/useDoctorAppointments"
 import { useDoctorBranches } from "@/hooks/useDoctorBranches"
 import { usePatientHistory } from "@/hooks/usePatientHistory"
+import { buildMorningClinicSnapshot } from "@/components/doctor/dashboard/morningClinicUtils"
 import { useAppointmentFilters } from "@/hooks/useAppointmentFilters"
+import {
+  ClinicalPageFrame,
+  ConsultationLayout,
+  ReportViewer,
+  PatientClinicalWorkspace,
+} from "@/components/doctor/clinical"
+import ConsultationActionBar from "@/components/doctor/clinical/consultation/ConsultationActionBar"
+import ConsultationStickyPatientBar from "@/components/doctor/clinical/consultation/ConsultationStickyPatientBar"
+import ConsultationAnatomyView from "@/components/doctor/clinical/consultation/ConsultationAnatomyView"
+import { syncAnatomySelectionToCompletion } from "@/components/doctor/clinical/consultation/anatomySyncUtils"
+import {
+  buildSubmissionNotes,
+  hasClinicalDocumentation,
+} from "@/components/doctor/clinical/consultation/consultationNotesUtils"
+import {
+  clearConsultationDraft,
+  loadConsultationDraft,
+  saveConsultationDraft,
+} from "@/components/doctor/clinical/consultation/consultationDraftStorage"
+import type { AnatomyType } from "@/utils/anatomyModelMapping"
 
 function DoctorAppointmentsContent() {
   const searchParams = useSearchParams()
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>("today")
+  const [queueView, setQueueView] = useState<QueueView>("all")
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [updating, setUpdating] = useState<{ [key: string]: boolean }>({})
   const [showCompletionForm, setShowCompletionForm] = useState<{ [key: string]: boolean }>({})
@@ -74,10 +74,10 @@ function DoctorAppointmentsContent() {
   const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive")[] }>({})
   const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive" }>({})
   const [anatomyViewerData, setAnatomyViewerData] = useState<{ [key: string]: { [anatomyType: string]: AnatomyViewerData | null } }>({})
-  const [showCombinedCompletionModal, setShowCombinedCompletionModal] = useState<{ [key: string]: boolean }>({})
   const appointmentCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const appointmentDetailsRef = useRef<HTMLDivElement | null>(null)
   const completionFormRef = useRef<HTMLDivElement | null>(null)
+  const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [completionData, setCompletionData] = useState<Record<string, CompletionFormEntry>>({})
   const [aiPrescription, setAiPrescription] = useState<{ [key: string]: { medicine: string; notes: string } }>({})
   const [loadingAiPrescription, setLoadingAiPrescription] = useState<{ [key: string]: boolean }>({})
@@ -174,36 +174,9 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const getActiveAnatomyTypeForAppointment = (appointmentId: string) => {
-    return (
-      activeAnatomyTab[appointmentId] ??
-      selectedAnatomyTypes[appointmentId]?.[0] ??
-      "ear"
-    )
-  }
-
   useEffect(() => {
     refreshMedicineSuggestions()
   }, [refreshMedicineSuggestions])
-
-  useEffect(() => {
-    const openAppointmentId = Object.keys(showCombinedCompletionModal).find(
-      (id) => showCombinedCompletionModal[id]
-    )
-
-    if (openAppointmentId && appointmentCardRefs.current[openAppointmentId]) {
-      setTimeout(() => {
-        const cardElement = appointmentCardRefs.current[openAppointmentId]
-        if (cardElement) {
-          cardElement.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
-            inline: "nearest",
-          })
-        }
-      }, 150)
-    }
-  }, [showCombinedCompletionModal])
 
   const { user, loading } = useAuth("doctor")
   const { activeHospitalId } = useMultiHospital()
@@ -365,10 +338,14 @@ function DoctorAppointmentsContent() {
     }
   }
 
+  const closePatientWorkspace = () => {
+    setExpandedAppointment(null)
+    setShowHistory({})
+  }
+
   const toggleAccordion = async (appointmentId: string) => {
     if (expandedAppointment === appointmentId) {
-      setExpandedAppointment(null)
-      setShowHistory({})
+      closePatientWorkspace()
     } else {
       setExpandedAppointment(appointmentId)
       
@@ -447,7 +424,7 @@ function DoctorAppointmentsContent() {
 
     setConsultationMode((prev) => ({
       ...prev,
-      [appointmentId]: mode,
+      [appointmentId]: mode === "anatomy" ? "anatomy" : "normal",
     }))
 
     if (mode === "anatomy" && anatomyType) {
@@ -505,13 +482,37 @@ function DoctorAppointmentsContent() {
     })
     setActiveAnatomyTab((prev) => ({ ...prev, [appointmentId]: anatomyType }))
     setShowCompletionForm((prev) => ({ ...prev, [appointmentId]: true }))
-    setTimeout(() => {
-      completionFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
-    }, 200)
   }
 
-  const switchToNormalConsultation = (appointmentId: string) => {
-    setConsultationMode((prev) => ({ ...prev, [appointmentId]: "normal" }))
+  const handleAnatomyDataChange = (
+    appointmentId: string,
+    tab: AnatomyType,
+    data: AnatomyViewerData | null
+  ) => {
+    setAnatomyViewerData((prev) => ({
+      ...prev,
+      [appointmentId]: {
+        ...(prev[appointmentId] || {}),
+        [tab]: data,
+      },
+    }))
+
+    if (!data) return
+
+    setCompletionData((prev) => {
+      const current =
+        prev[appointmentId] || {
+          medicines: [],
+          notes: "",
+          recheckupRequired: false,
+          finalDiagnosis: [],
+          customDiagnosis: "",
+        }
+      return {
+        ...prev,
+        [appointmentId]: syncAnatomySelectionToCompletion(current, data),
+      }
+    })
   }
 
   const handleSkip = useCallback(
@@ -931,146 +932,6 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  const mergeAnatomyData = (appointmentId: string): CompletionFormEntry | null => {
-    const allData = anatomyViewerData[appointmentId]
-    if (!allData) return null
-
-    const dataEntries = Object.values(allData).filter(
-      (d): d is AnatomyViewerData => d !== null
-    )
-    if (dataEntries.length === 0) return null
-
-    const allMedicines: Array<{
-      name: string
-      dosage: string
-      frequency: string
-      duration: string
-    }> = []
-    const medicineNames = new Set<string>()
-
-    dataEntries.forEach((data) => {
-      data.medicines.forEach((med) => {
-        const medName = med.name.trim().toLowerCase()
-        if (medName && !medicineNames.has(medName)) {
-          medicineNames.add(medName)
-          allMedicines.push(med)
-        }
-      })
-    })
-
-    const allNotes: string[] = []
-    dataEntries.forEach((data) => {
-      if (data.notes && data.notes.trim()) {
-        allNotes.push(`[${data.anatomyType.toUpperCase()}]: ${data.notes}`)
-      }
-      if (data.selectedPartInfo) {
-        allNotes.push(
-          `[${data.anatomyType.toUpperCase()}] Selected Part: ${data.selectedPartInfo.name}`
-        )
-      }
-      if (data.selectedDisease) {
-        allNotes.push(
-          `[${data.anatomyType.toUpperCase()}] Diagnosis: ${data.selectedDisease.name}`
-        )
-        if (data.selectedDisease.description) {
-          allNotes.push(
-            `[${data.anatomyType.toUpperCase()}] Description: ${data.selectedDisease.description}`
-          )
-        }
-        if (
-          data.selectedDisease.prescriptions &&
-          data.selectedDisease.prescriptions.length > 0
-        ) {
-          allNotes.push(
-            `[${data.anatomyType.toUpperCase()}] Prescriptions: ${data.selectedDisease.prescriptions.join(
-              "; "
-            )}`
-          )
-        }
-      }
-    })
-
-    const allDiagnoses = new Set<string>()
-    const customDiagnoses: string[] = []
-
-    dataEntries.forEach((data) => {
-      data.diagnoses.forEach((diag) => {
-        if (diag && diag.trim()) {
-          allDiagnoses.add(diag.trim())
-        }
-      })
-      if (data.customDiagnosis && data.customDiagnosis.trim()) {
-        customDiagnoses.push(
-          `[${data.anatomyType.toUpperCase()}]: ${data.customDiagnosis.trim()}`
-        )
-      }
-    })
-
-    const finalDiagnoses = Array.from(allDiagnoses)
-    if (customDiagnoses.length > 0) {
-      finalDiagnoses.push(CUSTOM_DIAGNOSIS_OPTION)
-    }
-
-    return {
-      medicines: allMedicines,
-      notes: allNotes.join("\n\n"),
-      recheckupRequired: false,
-      finalDiagnosis: finalDiagnoses,
-      customDiagnosis:
-        customDiagnoses.length > 0 ? customDiagnoses.join("; ") : undefined,
-    }
-  }
-
-  const handleCombinedAnatomyCompletion = async (appointmentId: string) => {
-    const mergedData = mergeAnatomyData(appointmentId)
-    if (!mergedData) {
-      setNotification({
-        type: "error",
-        message: "No anatomy data found. Please complete at least one anatomy checkup.",
-      })
-      return
-    }
-
-    if (mergedData.medicines.length === 0) {
-      setNotification({
-        type: "error",
-        message: "Please add at least one medicine before completing the checkup.",
-      })
-      return
-    }
-
-    if (!mergedData.finalDiagnosis || mergedData.finalDiagnosis.length === 0) {
-      setNotification({
-        type: "error",
-        message: "Please select at least one diagnosis before completing the consultation.",
-      })
-      return
-    }
-
-    setShowCombinedCompletionModal((prev) => ({
-      ...prev,
-      [appointmentId]: false,
-    }))
-
-    await runCompletionFlow(appointmentId, mergedData, { showToast: true })
-
-    setAnatomyViewerData((prev) => {
-      const updated = { ...prev }
-      delete updated[appointmentId]
-      return updated
-    })
-    setSelectedAnatomyTypes((prev) => {
-      const updated = { ...prev }
-      delete updated[appointmentId]
-      return updated
-    })
-    setConsultationMode((prev) => {
-      const updated = { ...prev }
-      updated[appointmentId] = null
-      return updated
-    })
-  }
-
   const runCompletionFlow = async (
     appointmentId: string,
     formData: CompletionFormEntry,
@@ -1084,21 +945,22 @@ function DoctorAppointmentsContent() {
       return
     }
 
-    if (!formData.notes || !String(formData.notes).trim()) {
+    if (!hasClinicalDocumentation(formData)) {
       setNotification({
         type: "error",
-        message: "Please enter Doctor's notes before completing the consultation.",
+        message: "Please enter clinical notes or diagnosis before completing the consultation.",
       })
       return
     }
 
+    const submissionNotes = buildSubmissionNotes(formData)
     const appointmentSnapshot = appointments.find((apt) => apt.id === appointmentId)
-    const medicineText = formatMedicinesAsText(formData.medicines, formData.notes || "")
+    const medicineText = formatMedicinesAsText(formData.medicines, submissionNotes)
 
     const result = await completeAppointment(
       appointmentId,
       medicineText,
-      formData.notes || "",
+      submissionNotes,
       activeHospitalId,
       [], // diagnosis removed — using doctor's notes only
       "",
@@ -1228,6 +1090,7 @@ function DoctorAppointmentsContent() {
       delete updated[appointmentId]
       return updated
     })
+    clearConsultationDraft(appointmentId)
 
     setAiPrescription((prev) => {
       const updated = { ...prev }
@@ -1269,10 +1132,10 @@ function DoctorAppointmentsContent() {
       return
     }
 
-    if (!currentData.notes || !String(currentData.notes).trim()) {
+    if (!hasClinicalDocumentation(currentData)) {
       setNotification({
         type: "error",
-        message: "Please enter Doctor's notes before completing the consultation.",
+        message: "Please enter clinical notes or diagnosis before completing the consultation.",
       })
       return
     }
@@ -1291,6 +1154,87 @@ function DoctorAppointmentsContent() {
     } finally {
       setUpdating({ ...updating, [appointmentId]: false })
     }
+  }
+
+  const advanceToNextPatient = (completedId: string) => {
+    const currentIdx = paginatedAppointments.findIndex((a) => a.id === completedId)
+    const nextInQueue = paginatedAppointments
+      .slice(currentIdx + 1)
+      .find((a) => a.status === "confirmed")
+    const fallback = paginatedAppointments.find(
+      (a) => a.status === "confirmed" && a.id !== completedId
+    )
+    const next = nextInQueue || fallback
+    if (next) {
+      setExpandedAppointment(next.id)
+    } else {
+      closePatientWorkspace()
+    }
+  }
+
+  const handleSaveAndNext = async (appointmentId: string) => {
+    const currentData: CompletionFormEntry = completionData[appointmentId] || {
+      medicines: [],
+      notes: "",
+      recheckupRequired: false,
+      recheckupDays: 7,
+      finalDiagnosis: [],
+      customDiagnosis: "",
+    }
+
+    if (!hasValidPrescriptionInput(currentData)) {
+      setNotification({ type: "error", message: "Please add at least one medicine with a name" })
+      return
+    }
+    if (!hasClinicalDocumentation(currentData)) {
+      setNotification({ type: "error", message: "Please enter clinical notes or diagnosis before saving." })
+      return
+    }
+
+    setUpdating((prev) => ({ ...prev, [appointmentId]: true }))
+    try {
+      await runCompletionFlow(appointmentId, currentData)
+      advanceToNextPatient(appointmentId)
+    } catch (error: unknown) {
+      setNotification({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to complete appointment",
+      })
+    } finally {
+      setUpdating((prev) => ({ ...prev, [appointmentId]: false }))
+    }
+  }
+
+  const handlePrintPrescriptionDraft = (appointment: AppointmentType) => {
+    const data = completionData[appointment.id]
+    if (!data || !hasValidPrescriptionInput(data)) {
+      setNotification({ type: "error", message: "Add at least one medicine before printing." })
+      return
+    }
+    try {
+      const medicineText = formatMedicinesAsText(data.medicines, data.notes || "")
+      generatePrescriptionPDF({
+        ...appointment,
+        medicine: medicineText,
+        doctorNotes: data.notes,
+      })
+      setNotification({ type: "success", message: "Prescription PDF generated." })
+    } catch {
+      setNotification({ type: "error", message: "Failed to generate prescription PDF." })
+    }
+  }
+
+  const handleSaveDraft = (appointmentId: string) => {
+    const data = completionData[appointmentId]
+    if (!data) {
+      setNotification({ type: "error", message: "Nothing to save yet." })
+      return
+    }
+    saveConsultationDraft(appointmentId, data)
+    setNotification({
+      type: "success",
+      message: "Draft saved — restores automatically if you refresh or switch patients.",
+    })
   }
 
   const handleAdmitPatient = async (appointment: AppointmentType) => {
@@ -1453,7 +1397,8 @@ function DoctorAppointmentsContent() {
     paginatedAppointments,
     allNonHistoryAppointments,
     historyAppointments,
-    stats,
+    todayAppointments,
+    doctorQueueStats,
     tabItems,
     historyPage,
     setHistoryPage,
@@ -1466,7 +1411,9 @@ function DoctorAppointmentsContent() {
     totalHistoryPages,
     totalAppointmentsPages,
     filteredHistoryAppointments,
-  } = useAppointmentFilters(appointments, activeTab, historyTabFilters)
+  } = useAppointmentFilters(appointments, activeTab, historyTabFilters, queueView)
+
+  const clinicSnapshot = buildMorningClinicSnapshot(appointments)
 
   // Default open normal consultation form when a confirmed appointment is selected
   const expandedAptId = expandedAppointment
@@ -1479,7 +1426,74 @@ function DoctorAppointmentsContent() {
     if (!expandedAptId || expandedAptStatus !== "confirmed") return
     setShowCompletionForm((prev) => ({ ...prev, [expandedAptId]: true }))
     setConsultationMode((prev) => ({ ...prev, [expandedAptId]: prev[expandedAptId] ?? "normal" }))
+    const draft = loadConsultationDraft(expandedAptId)
+    if (draft) {
+      setCompletionData((prev) => {
+        const existing = prev[expandedAptId]
+        if (existing?.notes?.trim() || existing?.medicines?.some((m) => m.name?.trim())) {
+          return prev
+        }
+        return { ...prev, [expandedAptId]: draft }
+      })
+    }
   }, [expandedAptId, expandedAptStatus])
+
+  useEffect(() => {
+    if (!expandedAptId || !showCompletionForm[expandedAptId]) return
+    const data = completionData[expandedAptId]
+    if (!data) return
+    if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current)
+    draftSaveTimeoutRef.current = setTimeout(() => {
+      saveConsultationDraft(expandedAptId, data)
+    }, 1500)
+    return () => {
+      if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current)
+    }
+  }, [completionData, expandedAptId, showCompletionForm])
+
+  useEffect(() => {
+    if (!expandedAptId || !showCompletionForm[expandedAptId]) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closePatientWorkspace()
+        return
+      }
+
+      const target = e.target as HTMLElement
+      const isTyping =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+
+      if (isTyping && !(e.ctrlKey || e.metaKey)) return
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault()
+        const data = completionData[expandedAptId]
+        if (data) {
+          saveConsultationDraft(expandedAptId, data)
+          setNotification({ type: "success", message: "Draft saved." })
+        }
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault()
+        if (e.shiftKey) {
+          handleSaveAndNext(expandedAptId)
+        } else {
+          const form = document.getElementById(
+            `completion-form-${expandedAptId}`
+          ) as HTMLFormElement | null
+          form?.requestSubmit()
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [expandedAptId, showCompletionForm, completionData])
 
   useEffect(() => {
     appointments.forEach((apt) => {
@@ -1487,12 +1501,10 @@ function DoctorAppointmentsContent() {
       const hasSuggestion = !!aiPrescription[apt.id]?.medicine
       const isLoading = !!loadingAiPrescription[apt.id]
       const explicitlyHidden = showAiPrescriptionSuggestion[apt.id] === false
-      const isAnatomyMode = consultationMode[apt.id] === "anatomy"
 
       if (isFormOpen && !hasSuggestion && !isLoading && !explicitlyHidden) {
         setShowAiPrescriptionSuggestion((prev) => ({ ...prev, [apt.id]: true }))
-        // Don't show notification when anatomy mode is active
-        handleGenerateAiPrescription(apt.id, !isAnatomyMode)
+        handleGenerateAiPrescription(apt.id, true)
       }
     })
   }, [
@@ -1501,7 +1513,6 @@ function DoctorAppointmentsContent() {
     aiPrescription,
     loadingAiPrescription,
     showAiPrescriptionSuggestion,
-    consultationMode,
     handleGenerateAiPrescription,
   ])
 
@@ -1511,14 +1522,12 @@ function DoctorAppointmentsContent() {
       const hasDiagnosis = !!aiDiagnosis[apt.id]
       const isLoading = !!loadingAiDiagnosis[apt.id]
       const explicitlyHidden = showAiDiagnosisSuggestion[apt.id] === false
-      const isAnatomyMode = consultationMode[apt.id] === "anatomy"
 
       if (
         isFormOpen &&
         !hasDiagnosis &&
         !isLoading &&
         !explicitlyHidden &&
-        !isAnatomyMode &&
         apt.chiefComplaint?.trim()
       ) {
         setShowAiDiagnosisSuggestion((prev) => ({ ...prev, [apt.id]: true }))
@@ -1531,7 +1540,6 @@ function DoctorAppointmentsContent() {
     aiDiagnosis,
     loadingAiDiagnosis,
     showAiDiagnosisSuggestion,
-    consultationMode,
     getAIDiagnosisSuggestion,
   ])
 
@@ -1548,12 +1556,37 @@ function DoctorAppointmentsContent() {
       ? paginatedAppointments.find((apt) => apt.id === expandedAppointment) || null
       : null
 
+  const isConsultationWorkspaceOpen = Boolean(
+    selectedAppointment &&
+      activeTab !== "history" &&
+      selectedAppointment.status === "confirmed" &&
+      showCompletionForm[selectedAppointment.id]
+  )
+
+  const isNormalConsultationActive = Boolean(
+    isConsultationWorkspaceOpen &&
+      consultationMode[selectedAppointment!.id] !== "anatomy"
+  )
+
+  const isAnatomyConsultationActive = Boolean(
+    isConsultationWorkspaceOpen &&
+      consultationMode[selectedAppointment!.id] === "anatomy"
+  )
+
+  const confirmedQueue = paginatedAppointments.filter((a) => a.status === "confirmed")
+  const queuePosition =
+    selectedAppointment && isNormalConsultationActive
+      ? (() => {
+          const idx = confirmedQueue.findIndex((a) => a.id === selectedAppointment.id)
+          return idx >= 0 ? { current: idx + 1, total: confirmedQueue.length } : undefined
+        })()
+      : undefined
+
   return (
-    <div className="min-h-screen bg-slate-50 pt-20 pb-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-7">
-        {/* Page header block */}
-        <header className="rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden bg-white">
-          <div className="px-4 sm:px-6 py-4 bg-sky-50/80 bg-[radial-gradient(ellipse_90%_70%_at_70%_20%,rgba(14,165,233,0.18),transparent)]">
+    <ClinicalPageFrame maxWidth={expandedAppointment ? "full" : "7xl"}>
+        {/* Queue navigation + filters */}
+        <header className="clinical-surface overflow-hidden">
+          <div className="px-4 sm:px-6 py-4 border-b border-slate-100">
             <PageHeader
               variant="light"
               onGenerateReport={() => setShowReportModal(true)}
@@ -1561,26 +1594,36 @@ function DoctorAppointmentsContent() {
               refreshing={refreshing}
             />
           </div>
-          <div className="px-4 sm:px-6 py-5 bg-white border-t border-slate-100">
-            <StatsBar
-              stats={stats}
+          <div className="px-4 sm:px-6 py-3 border-b border-slate-100">
+            <DoctorQueuePulse
+              stats={doctorQueueStats}
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              queueView={queueView}
+              onSelect={(tab, view) => {
+                setActiveTab(tab)
+                setQueueView(view)
+              }}
             />
           </div>
-        </header>
-
-        {/* Main content card */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
           <FilterBar
             activeTab={activeTab}
-            tabs={tabItems}
-            onTabChange={setActiveTab}
+            planningTabs={[
+              { key: "tomorrow", label: "Upcoming", count: tabItems.find((t) => t.key === "tomorrow")?.count ?? 0 },
+              { key: "thisWeek", label: "This week", count: tabItems.find((t) => t.key === "thisWeek")?.count ?? 0 },
+            ]}
+            onPlanningTabChange={(tab) => {
+              setActiveTab(tab)
+              setQueueView("all")
+            }}
             branches={branches}
             selectedBranchId={selectedBranchId}
             onBranchChange={setSelectedBranchId}
             loadingBranches={loadingBranches}
           />
+        </header>
+
+        {/* Main content */}
+        <div className="clinical-surface overflow-hidden">
           {activeTab === "history" && (
             <HistorySearch
               text={historyTabFilters.text}
@@ -1600,15 +1643,31 @@ function DoctorAppointmentsContent() {
         {paginatedAppointments.length === 0 ? (
           <EmptyState activeTab={activeTab} />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,340px),minmax(0,1fr)] gap-5 md:gap-6 lg:gap-7 items-start">
-            {/* Left: list — auto height, no scrollbars */}
-            <div className="flex flex-col w-full">
+          <ConsultationLayout
+            hasSelection={!!selectedAppointment}
+            queue={
+            <div className="flex flex-col w-full gap-3">
+              {!selectedAppointment && activeTab === "today" && queueView !== "completed" && (
+                <>
+                  <NextPatientBanner
+                    patient={clinicSnapshot.nextPatient}
+                    onStart={toggleAccordion}
+                    selectedId={expandedAppointment}
+                  />
+                  <AppointmentScheduleRail
+                    appointments={todayAppointments}
+                    selectedId={expandedAppointment}
+                    onSelect={toggleAccordion}
+                  />
+                </>
+              )}
               <AppointmentsListPane
                 appointments={paginatedAppointments}
                 selectedId={selectedAppointment ? selectedAppointment.id : null}
                 onSelect={(id) => toggleAccordion(id)}
-                onSkip={openSkipConfirm}
+                onSkip={activeTab === "today" ? openSkipConfirm : undefined}
                 skippingId={skippingId}
+                showSkipActions={activeTab === "today" && queueView === "all"}
               />
               {/* Pagination for history tab */}
               {activeTab === "history" && filteredHistoryAppointments.length > 0 && (
@@ -1639,37 +1698,105 @@ function DoctorAppointmentsContent() {
                 </div>
               )}
             </div>
-
+            }
+            workspace={
             <div
               ref={appointmentDetailsRef}
-              className="h-full rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden flex flex-col"
+              className="h-full min-h-0 flex flex-col overflow-hidden"
             >
               {selectedAppointment ? (
                 <>
-                  <PatientSummaryBar
-                    appointment={selectedAppointment}
-                    isReturningPatient={
-                      patientHistory.filter(
-                        (h: AppointmentType) =>
-                          h.patientId === selectedAppointment.patientId &&
-                          h.doctorId === selectedAppointment.doctorId &&
-                          h.id !== selectedAppointment.id
-                      ).length > 0
+                  {isNormalConsultationActive ? (
+                    <ConsultationStickyPatientBar
+                      appointment={selectedAppointment}
+                      queuePosition={queuePosition}
+                      onBackToQueue={closePatientWorkspace}
+                    />
+                  ) : (
+                  <div className="shrink-0 flex items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-slate-100 bg-white">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button
+                        type="button"
+                        onClick={closePatientWorkspace}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shrink-0"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Back to queue
+                      </button>
+                    </div>
+                    <span className="text-xs text-slate-500 hidden sm:inline shrink-0">
+                      {paginatedAppointments.length} appointment{paginatedAppointments.length === 1 ? "" : "s"} in queue
+                    </span>
+                  </div>
+                  )}
+                  <div
+                    className={
+                      isNormalConsultationActive
+                        ? "flex-1 min-h-0 flex flex-col overflow-hidden gap-3 py-3"
+                        : "flex-1 min-h-0 overflow-y-auto bg-slate-50/50 pb-28 p-3 sm:p-4 space-y-3"
                     }
-                    onOpenDocuments={
-                      activeTab !== "history"
-                        ? () => setDocumentsModal({ open: true, appointment: selectedAppointment })
-                        : undefined
-                    }
-                    onOpenConsentVideo={
-                      activeTab !== "history"
-                        ? () => setConsentModal({ open: true, appointment: selectedAppointment })
-                        : undefined
-                    }
-                  />
-                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50 pb-28">
+                  >
+                    {!isNormalConsultationActive && !isAnatomyConsultationActive && (
+                    <PatientClinicalWorkspace
+                      appointment={selectedAppointment}
+                      patientHistory={patientHistory}
+                      historyDocuments={historyDocuments}
+                      historyFilters={
+                        historySearchFilters[selectedAppointment.id] || { text: "", date: "" }
+                      }
+                      showHistory={showHistory[selectedAppointment.id] || false}
+                      onToggleHistory={() =>
+                        setShowHistory((prev) => ({
+                          ...prev,
+                          [selectedAppointment.id]: !prev[selectedAppointment.id],
+                        }))
+                      }
+                      onDocumentClick={(doc) => setSelectedHistoryDocument(doc)}
+                      latestRecommendation={
+                        activeTab !== "history"
+                          ? getLatestCheckupRecommendation(selectedAppointment)
+                          : null
+                      }
+                      onLastVisitClick={() => {
+                        const recommendation = getLatestCheckupRecommendation(selectedAppointment)
+                        if (recommendation) {
+                          setLastVisitModal({
+                            open: true,
+                            appointment: selectedAppointment,
+                            recommendation,
+                          })
+                        }
+                      }}
+                      onOpenDocuments={
+                        activeTab !== "history"
+                          ? () => setDocumentsModal({ open: true, appointment: selectedAppointment })
+                          : undefined
+                      }
+                      onOpenConsentVideo={
+                        activeTab !== "history"
+                          ? () => setConsentModal({ open: true, appointment: selectedAppointment })
+                          : undefined
+                      }
+                      isReturningPatient={
+                        patientHistory.filter(
+                          (h: AppointmentType) =>
+                            h.patientId === selectedAppointment.patientId &&
+                            h.doctorId === selectedAppointment.doctorId &&
+                            h.id !== selectedAppointment.id
+                        ).length > 0
+                      }
+                      isHistoryView={activeTab === "history"}
+                      onDownloadPdf={
+                        activeTab === "history"
+                          ? () => handleDownloadVisitPdf(selectedAppointment)
+                          : undefined
+                      }
+                    />
+                    )}
+
                     {activeTab !== "history" &&
                       selectedAppointment.status === "confirmed" &&
+                      isConsultationWorkspaceOpen &&
                       (() => {
                         const models = getAvailableAnatomyModels(selectedAppointment.doctorSpecialization)
                         const isNormal =
@@ -1700,7 +1827,7 @@ function DoctorAppointmentsContent() {
                         }
 
                         return (
-                          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm mx-3">
                             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-1">
                               Consultation
                             </p>
@@ -1753,544 +1880,83 @@ function DoctorAppointmentsContent() {
                           </section>
                         )
                       })()}
-                    {/* Clinical details / Previous checkup — Clinical open by default, History collapsed */}
-                    <CollapsibleSection
-                      key={activeTab}
-                      title={activeTab === "history" ? "Previous checkup details" : "Clinical details"}
-                      defaultOpen={activeTab !== "history"}
-                      subdued={activeTab === "history"}
-                      headerRight={
-                        activeTab === "history" ? (
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadVisitPdf(selectedAppointment)}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0 0l-4-4m4 4l4-4" />
-                            </svg>
-                            Download PDF
-                          </button>
-                        ) : undefined
-                      }
-                    >
-                      <div className="space-y-4">
-                        {activeTab === "history" ? (
-                          <>
-                            <div className="space-y-3 text-xs text-slate-800">
-                              {selectedAppointment.chiefComplaint && (
-                                <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                    Chief complaint
-                                  </p>
-                                  <p className="mt-1 whitespace-pre-line">
-                                    {selectedAppointment.chiefComplaint}
-                                  </p>
-                                </div>
-                              )}
 
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                  Final diagnosis
-                                </p>
-                                {Array.isArray((selectedAppointment as any).finalDiagnosis) &&
-                                (selectedAppointment as any).finalDiagnosis.length > 0 ? (
-                                  <div className="mt-1 flex flex-wrap gap-1.5">
-                                    {(selectedAppointment as any).finalDiagnosis.map(
-                                      (diag: string, idx: number) => (
-                                        <span
-                                          key={idx}
-                                          className="inline-flex items-center rounded-full bg-cyan-50 px-2 py-0.5 text-[11px] font-medium text-cyan-800 border border-blue-100"
-                                        >
-                                          {diag}
-                                        </span>
-                                      )
-                                    )}
-                                  </div>
-                                ) : (
-                                  <p className="mt-1 text-slate-400 italic">
-                                    No diagnosis recorded.
-                                  </p>
-                                )}
-                              </div>
+                    {isAnatomyConsultationActive && (
+                      <ConsultationAnatomyView
+                        appointmentId={selectedAppointment.id}
+                        patientName={selectedAppointment.patientName || "Patient"}
+                        doctorSpecialization={selectedAppointment.doctorSpecialization}
+                        selectedTypes={selectedAnatomyTypes[selectedAppointment.id] || []}
+                        activeTab={activeAnatomyTab[selectedAppointment.id]}
+                        viewerData={anatomyViewerData[selectedAppointment.id] || {}}
+                        onSelectTab={(tab) =>
+                          setActiveAnatomyTab((prev) => ({
+                            ...prev,
+                            [selectedAppointment.id]: tab,
+                          }))
+                        }
+                        onAddAnatomy={() =>
+                          setShowConsultationModeModal({
+                            open: true,
+                            appointmentId: selectedAppointment.id,
+                          })
+                        }
+                        onRemoveTab={(tab) => {
+                          const newTabs = (
+                            selectedAnatomyTypes[selectedAppointment.id] || []
+                          ).filter((t) => t !== tab)
+                          setSelectedAnatomyTypes((prev) => ({
+                            ...prev,
+                            [selectedAppointment.id]: newTabs,
+                          }))
+                          if (activeAnatomyTab[selectedAppointment.id] === tab) {
+                            setActiveAnatomyTab((prev) => ({
+                              ...prev,
+                              [selectedAppointment.id]: newTabs[0] ?? "ear",
+                            }))
+                          }
+                          if (newTabs.length === 0) {
+                            setConsultationMode((prev) => ({
+                              ...prev,
+                              [selectedAppointment.id]: "normal",
+                            }))
+                          }
+                        }}
+                        onDataChange={(tab, data) =>
+                          handleAnatomyDataChange(selectedAppointment.id, tab, data)
+                        }
+                        onBackToForm={() => openNormalConsultation(selectedAppointment.id)}
+                      />
+                    )}
 
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                  Prescription
-                                </p>
-                                {selectedAppointment.medicine ? (
-                                  (() => {
-                                    const parsed = parsePrescriptionUtil(
-                                      selectedAppointment.medicine!
-                                    )
-                                    if (parsed && parsed.medicines.length > 0) {
-                                      return (
-                                        <ul className="mt-1 space-y-0.5">
-                                          {parsed.medicines.map((med, index) => (
-                                            <li
-                                              key={index}
-                                              className="flex items-center gap-2 text-slate-800"
-                                            >
-                                              <span className="text-base">{med.emoji}</span>
-                                              <span className="truncate">
-                                                {med.name}
-                                                {med.dosage && (
-                                                  <span className="ml-1 text-slate-500 text-[11px]">
-                                                    ({med.dosage})
-                                                  </span>
-                                                )}
-                                              </span>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      )
-                                    }
-                                    return (
-                                      <p className="mt-1 whitespace-pre-line">
-                                        {selectedAppointment.medicine}
-                                      </p>
-                                    )
-                                  })()
-                                ) : (
-                                  <p className="mt-1 text-slate-400 italic">
-                                    No prescription recorded.
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                  Doctor&apos;s notes
-                                </p>
-                                {selectedAppointment.doctorNotes ? (
-                                  <p className="mt-1 whitespace-pre-line">
-                                    {selectedAppointment.doctorNotes}
-                                  </p>
-                                ) : (
-                                  <p className="mt-1 text-slate-400 italic">
-                                    No notes recorded.
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                              <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between text-xs">
-                                <span className="font-semibold text-slate-900">
-                                  Documents &amp; reports
-                                </span>
-                              </div>
-                              <div className="px-3 py-3">
-                                <AppointmentDocuments
-                                  appointmentId={selectedAppointment.id}
-                                  patientId={selectedAppointment.patientId}
-                                  patientUid={
-                                    selectedAppointment.patientUid ||
-                                    selectedAppointment.patientId ||
-                                    ""
-                                  }
-                                  appointmentSpecialty={selectedAppointment.doctorSpecialization}
-                                  appointmentStatus={selectedAppointment.status}
-                                  canUpload={false}
-                                  canEdit={false}
-                                  canDelete={false}
-                                  onlyCurrentAppointment={true}
-                                />
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            {/* Key info: chief complaint + last visit date */}
-                            <ClinicalDetailsKeyInfo
-                              appointment={selectedAppointment}
-                              lastVisitDate={
-                                getLatestCheckupRecommendation(selectedAppointment)?.date ?? null
-                              }
-                            />
-
-                            <CollapsibleSection
-                              title="Last visit details"
-                              defaultOpen={true}
-                              compact
-                              minimal
-                            >
-                              <ClinicalSummaryCard
-                                appointment={selectedAppointment}
-                                latestRecommendation={getLatestCheckupRecommendation(
-                                  selectedAppointment
-                                )}
-                                minimal
-                                onClick={() => {
-                                  const recommendation = getLatestCheckupRecommendation(selectedAppointment)
-                                  if (recommendation) {
-                                    setLastVisitModal({
-                                      open: true,
-                                      appointment: selectedAppointment,
-                                      recommendation,
-                                    })
-                                  }
-                                }}
-                              />
-                            </CollapsibleSection>
-
-                            <CollapsibleSection
-                              title="Medical information"
-                              defaultOpen={true}
-                              compact
-                              minimal
-                            >
-                              <div className="space-y-4">
-                                <MedicalInfoSection appointment={selectedAppointment} minimal />
-                                <LifestyleSection appointment={selectedAppointment} minimal />
-                              </div>
-                            </CollapsibleSection>
-
-                            {patientHistory.length > 0 && (
-                              <CollapsibleSection
-                                title="Previous checkup history"
-                                defaultOpen={false}
-                                subdued
-                                compact
-                              >
-                                <PatientHistorySection
-                                  appointment={selectedAppointment}
-                                  patientHistory={patientHistory}
-                                  historyDocuments={historyDocuments}
-                                  historyFilters={
-                                    historySearchFilters[selectedAppointment.id] || {
-                                      text: "",
-                                      date: "",
-                                    }
-                                  }
-                                  showHistory={showHistory[selectedAppointment.id] || false}
-                                  onToggleHistory={() =>
-                                    setShowHistory((prev) => ({
-                                      ...prev,
-                                      [selectedAppointment.id]:
-                                        !prev[selectedAppointment.id],
-                                    }))
-                                  }
-                                  onDocumentClick={(doc) => setSelectedHistoryDocument(doc)}
-                                />
-                              </CollapsibleSection>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </CollapsibleSection>
-
-                    {/* Consultation form (focused mode) */}
-                    {activeTab !== "history" &&
-                      showCompletionForm[selectedAppointment.id] &&
-                      selectedAppointment.status === "confirmed" && (
-                        <div
-                          ref={completionFormRef}
-                          className="rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200"
-                        >
-                          <div className="border-b border-slate-100 px-4 py-3 flex items-center justify-between">
-                            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2 tracking-tight">
-                          {consultationMode[selectedAppointment.id] === "anatomy" ? (
-                            <>
-                              <svg
-                                className="w-4 h-4 text-sky-600"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                                />
-                              </svg>
-                              3D Anatomy Viewer
-                            </>
-                          ) : (
-                            <>
-                              <svg
-                                className="w-4 h-4 text-sky-600"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                />
-                              </svg>
-                              Consultation form
-                            </>
-                          )}
-                        </h4>
-                        {consultationMode[selectedAppointment.id] === "anatomy" ? (
-                          <button
-                            onClick={() => switchToNormalConsultation(selectedAppointment.id)}
-                            className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200"
-                            title="Back to consultation form"
-                          >
-                            <svg
-                              className="w-3.5 h-3.5 mr-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M6 18L18 6M6 6l12 12"
-                              />
-                            </svg>
-                            Back to form
-                          </button>
-                        ) : null}
-                      </div>
-
-                      {consultationMode[selectedAppointment.id] === "anatomy" ? (
-                        <>
-                        <div className="p-4">
-                          <div className="w-full bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm">
-                            {/* Header: breadcrumb + title */}
-                            <div className="px-4 pt-3 pb-2.5 border-b border-slate-200 bg-slate-50/80">
-                              <nav className="flex items-center gap-1 text-[11px] text-slate-500 mb-1">
-                                <span>Appointments</span>
-                                <span className="text-slate-400">›</span>
-                                <span>Consultation</span>
-                                <span className="text-slate-400">›</span>
-                                <span className="text-slate-700 font-medium">3D Anatomy</span>
-                              </nav>
-                              <div className="flex items-center justify-between gap-2">
-                                <div>
-                                  <h3 className="text-sm sm:text-base font-semibold text-slate-900">
-                                    3D Anatomy Examination
-                                  </h3>
-                                  <p className="hidden sm:block text-xs text-slate-500 mt-0.5">
-                                    Focus on specific anatomy while keeping notes and medicines in sync.
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Anatomy type pills + Add Anatomy */}
-                            <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border-b border-slate-200 overflow-x-auto">
-                              {(selectedAnatomyTypes[selectedAppointment.id] || []).map((tab) => {
-                                const details = getAnatomyModelDetails(tab)
-                                const isActive =
-                                  (activeAnatomyTab[selectedAppointment.id] ?? (selectedAnatomyTypes[selectedAppointment.id]?.[0] ?? "ear")) === tab
-
-                                const renderPillIcon = () => {
-                                  switch (tab) {
-                                    case "ear":
-                                      return <Ear className="w-4 h-4 text-white" />
-                                    case "nose":
-                                      return <ScanFace className="w-4 h-4 text-white" />
-                                    case "throat":
-                                      return <Mic className="w-4 h-4 text-white" />
-                                    case "dental":
-                                      return <Stethoscope className="w-4 h-4 text-white" />
-                                    case "lungs":
-                                      return <HeartPulse className="w-4 h-4 text-white" />
-                                    case "skeleton":
-                                      return <Bone className="w-4 h-4 text-white" />
-                                    case "kidney":
-                                    case "lymph_nodes":
-                                    default:
-                                      return <Stethoscope className="w-4 h-4 text-white" />
-                                  }
-                                }
-
-                                return (
-                                  <button
-                                    key={tab}
-                                    type="button"
-                                    onClick={() =>
-                                      setActiveAnatomyTab((prev) => ({
-                                        ...prev,
-                                        [selectedAppointment.id]: tab,
-                                      }))
-                                    }
-                                    className={`group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full font-medium text-xs transition-all shrink-0 ${
-                                      isActive
-                                        ? "bg-[var(--color-primary)] text-white shadow-sm"
-                                        : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
-                                    }`}
-                                  >
-                                    {renderPillIcon()}
-                                    <span>{details?.label ?? tab}</span>
-                                    <span
-                                      role="button"
-                                      tabIndex={0}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        const newTabs = (
-                                          selectedAnatomyTypes[selectedAppointment.id] || []
-                                        ).filter((t) => t !== tab)
-                                        setSelectedAnatomyTypes((prev) => ({
-                                          ...prev,
-                                          [selectedAppointment.id]: newTabs,
-                                        }))
-                                        const current = activeAnatomyTab[selectedAppointment.id]
-                                        if (current === tab) {
-                                          setActiveAnatomyTab((prev) => ({
-                                            ...prev,
-                                            [selectedAppointment.id]:
-                                              newTabs[0] ?? "ear",
-                                          }))
-                                        }
-                                      }}
-                                      className={`ml-1.5 flex items-center justify-center w-5 h-5 rounded-full cursor-pointer transition-colors opacity-0 group-hover:opacity-100 ${
-                                        isActive
-                                          ? "hover:bg-cyan-500/80 text-white"
-                                          : "hover:bg-slate-200 text-slate-500"
-                                      }`}
-                                      aria-label={`Remove ${details?.label ?? tab}`}
-                                    >
-                                      <svg
-                                        className="w-3.5 h-3.5 shrink-0"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth={2.5}
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path d="M18 6L6 18M6 6l12 12" />
-                                      </svg>
-                                    </span>
-                                  </button>
-                                )
-                              })}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleAddAnotherAnatomy(selectedAppointment.id)
-                                }
-                                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium bg-white border border-dashed border-slate-300 text-slate-600 hover:border-cyan-400 hover:text-cyan-700 hover:bg-cyan-50 transition-all shrink-0"
-                              >
-                                <svg
-                                  className="w-4 h-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M12 4v16m8-8H4"
-                                  />
-                                </svg>
-                                Add Anatomy
-                              </button>
-                            </div>
-                            <div className="p-4" style={{ minHeight: "680px" }}>
-                              {(selectedAnatomyTypes[selectedAppointment.id] || []).length > 0 ? (
-                                <>
-                                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-25 p-0">
-                                    <InlineAnatomyViewer
-                                      key={
-                                        activeAnatomyTab[selectedAppointment.id] ??
-                                        selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
-                                        "ear"
-                                      }
-                                      appointmentId={selectedAppointment.id}
-                                      patientName={selectedAppointment.patientName || "Patient"}
-                                      anatomyType={
-                                        activeAnatomyTab[selectedAppointment.id] ??
-                                        selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
-                                        "ear"
-                                      }
-                                      initialData={
-                                        anatomyViewerData[selectedAppointment.id]?.[
-                                          activeAnatomyTab[selectedAppointment.id] ??
-                                            selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
-                                            "ear"
-                                        ] ?? undefined
-                                      }
-                                      onDataChange={(data) => {
-                                        const t =
-                                          activeAnatomyTab[selectedAppointment.id] ??
-                                          selectedAnatomyTypes[selectedAppointment.id]?.[0] ??
-                                          "ear"
-                                        setAnatomyViewerData((prev) => ({
-                                          ...prev,
-                                          [selectedAppointment.id]: {
-                                            ...(prev[selectedAppointment.id] || {}),
-                                            [t]: data,
-                                          },
-                                        }))
-                                      }}
-                                      onComplete={() => {
-                                        setShowCombinedCompletionModal((prev) => ({
-                                          ...prev,
-                                          [selectedAppointment.id]: true,
-                                        }))
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="mt-2">
-                                    <SketchfabAnatomyViewer
-                                      disease={(() => {
-                                        const activeType = getActiveAnatomyTypeForAppointment(
-                                          selectedAppointment.id,
-                                        )
-                                        const currentData =
-                                          anatomyViewerData[selectedAppointment.id]?.[activeType] ??
-                                          null
-                                        const id = currentData?.selectedDisease?.id
-                                        if (!id) return null
-                                        if (id === "asthma" || id === "heart_attack" || id === "diabetes") {
-                                          return id
-                                        }
-                                        return null
-                                      })()}
-                                    />
-                                  </div>
-                                </>
-                              ) : (
-                                <div
-                                  className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50"
-                                  style={{ height: "600px" }}
-                                >
-                                  <p className="text-slate-500 font-medium">
-                                    No anatomy selected. Click &quot;Add Anatomy&quot; to begin.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <CombinedCompletionModal
-                          appointment={selectedAppointment}
-                            isOpen={
-                              showCombinedCompletionModal[
-                                selectedAppointment.id
-                              ] || false
-                            }
-                            anatomyViewerData={
-                              anatomyViewerData[selectedAppointment.id] || {}
-                            }
-                            mergedData={mergeAnatomyData(selectedAppointment.id)}
-                            onClose={() =>
-                              setShowCombinedCompletionModal((prev) => ({
-                                ...prev,
-                                [selectedAppointment.id]: false,
-                              }))
-                            }
-                            onConfirm={() =>
-                              handleCombinedAnatomyCompletion(
-                                selectedAppointment.id
-                              )
-                            }
-                          />
-                        </>
-                      ) : (
+                    {isNormalConsultationActive && (
+                        <div ref={completionFormRef} className="flex-1 min-h-0 flex flex-col">
                         <CompletionForm
+                          layout="workspace"
                           formId={`completion-form-${selectedAppointment.id}`}
+                          doctorUid={user.uid}
+                          latestRecommendation={getLatestCheckupRecommendation(selectedAppointment)}
+                          onLastVisitClick={() => {
+                            const recommendation = getLatestCheckupRecommendation(selectedAppointment)
+                            if (recommendation) {
+                              setLastVisitModal({
+                                open: true,
+                                appointment: selectedAppointment,
+                                recommendation,
+                              })
+                            }
+                          }}
+                          onOpenDocuments={() =>
+                            setDocumentsModal({ open: true, appointment: selectedAppointment })
+                          }
+                          isReturningPatient={
+                            patientHistory.filter(
+                              (h: AppointmentType) =>
+                                h.patientId === selectedAppointment.patientId &&
+                                h.doctorId === selectedAppointment.doctorId &&
+                                h.id !== selectedAppointment.id
+                            ).length > 0
+                          }
                           appointment={selectedAppointment}
                           completionData={
                             completionData[selectedAppointment.id] || {
@@ -2443,72 +2109,78 @@ function DoctorAppointmentsContent() {
                               appointmentId: selectedAppointment.id,
                             })
                           }
+                          historyDocuments={historyDocuments}
+                          onDocumentClick={(doc) => setSelectedHistoryDocument(doc)}
+                          actionBar={
+                            <ConsultationActionBar
+                              formId={`completion-form-${selectedAppointment.id}`}
+                              updating={!!updating[selectedAppointment.id]}
+                              admitting={!!admitting[selectedAppointment.id]}
+                              canComplete={hasValidPrescriptionInput(
+                                completionData[selectedAppointment.id] || {
+                                  medicines: [],
+                                  notes: "",
+                                  recheckupRequired: false,
+                                  finalDiagnosis: [],
+                                  customDiagnosis: "",
+                                }
+                              )}
+                              hasDocumentation={hasClinicalDocumentation(
+                                completionData[selectedAppointment.id] || {
+                                  medicines: [],
+                                  notes: "",
+                                  recheckupRequired: false,
+                                  finalDiagnosis: [],
+                                  customDiagnosis: "",
+                                }
+                              )}
+                              recheckupRequired={
+                                completionData[selectedAppointment.id]?.recheckupRequired || false
+                              }
+                              recheckupDays={
+                                completionData[selectedAppointment.id]?.recheckupDays ?? 7
+                              }
+                              onRecheckupRequiredChange={(value) =>
+                                setCompletionData((prev) => ({
+                                  ...prev,
+                                  [selectedAppointment.id]: {
+                                    ...prev[selectedAppointment.id],
+                                    recheckupRequired: value,
+                                  },
+                                }))
+                              }
+                              onRecheckupDaysChange={(value) =>
+                                setCompletionData((prev) => ({
+                                  ...prev,
+                                  [selectedAppointment.id]: {
+                                    ...prev[selectedAppointment.id],
+                                    recheckupDays: value,
+                                  },
+                                }))
+                              }
+                              onSaveDraft={() => handleSaveDraft(selectedAppointment.id)}
+                              onPrintPrescription={() =>
+                                handlePrintPrescriptionDraft(selectedAppointment)
+                              }
+                              onSaveAndNext={() =>
+                                handleSaveAndNext(selectedAppointment.id)
+                              }
+                              onAdmit={() => openAdmitDialog(selectedAppointment)}
+                            />
+                          }
                         />
-                      )}
                         </div>
                       )}
 
-                    {/* Sticky bottom action bar — Complete Checkup, Admit Patient */}
-                    {selectedAppointment &&
-                      activeTab !== "history" &&
-                      showCompletionForm[selectedAppointment.id] &&
-                      consultationMode[selectedAppointment.id] !== "anatomy" && (
-                        <div className="sticky bottom-0 left-0 right-0 z-10 flex gap-2 p-3 bg-white/95 backdrop-blur border-t border-slate-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
-                          <button
-                            type="submit"
-                            form={`completion-form-${selectedAppointment.id}`}
-                            disabled={
-                              updating[selectedAppointment.id] ||
-                              !hasValidPrescriptionInput(completionData[selectedAppointment.id] || { medicines: [], notes: "", recheckupRequired: false, finalDiagnosis: [], customDiagnosis: "" })
-                            }
-                            className="flex-1 px-4 py-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {updating[selectedAppointment.id] ? "Completing..." : "Complete Checkup"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openAdmitDialog(selectedAppointment)}
-                            disabled={
-                              updating[selectedAppointment.id] ||
-                              admitting[selectedAppointment.id] ||
-                              !hasValidPrescriptionInput(completionData[selectedAppointment.id] || { medicines: [], notes: "", recheckupRequired: false, finalDiagnosis: [], customDiagnosis: "" })
-                            }
-                            className="flex-1 px-4 py-3 rounded-lg bg-slate-900 hover:bg-black text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                          >
-                            {admitting[selectedAppointment.id] ? (
-                              <>
-                                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                Sending...
-                              </>
-                            ) : (
-                              <>🏥 Admit Patient</>
-                            )}
-                          </button>
-                        </div>
-                      )}
                   </div>
                 </>
-              ) : (
-                <div className="flex h-full items-center justify-center text-xs text-slate-500 animate-fade-in">
-                  <div className="text-center px-4">
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-cyan-100 to-teal-100 flex items-center justify-center shadow-md transform transition-all duration-300 hover:scale-110">
-                      <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                    <p className="font-medium text-slate-600">Select an appointment from the left to view details.</p>
-                  </div>
-                </div>
-              )}
+              ) : null}
             </div>
-          </div>
+            }
+          />
         )}
       </main>
         </div>
-      </div>
       {notification && (
         <Notification
           type={notification.type}
@@ -2584,46 +2256,18 @@ function DoctorAppointmentsContent() {
       )}
       {documentsModal.open && documentsModal.appointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">
-                  Documents &amp; Reports
-                </h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {documentsModal.appointment.patientName} ·{" "}
-                  {new Date(
-                    documentsModal.appointment.appointmentDate
-                  ).toLocaleDateString("en-US", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}{" "}
-                  at {documentsModal.appointment.appointmentTime}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDocumentsModal({ open: false, appointment: null })}
-                className="rounded-full p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                aria-label="Close documents and reports"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 px-6 py-4">
+          <div className="w-full max-w-5xl">
+            <ReportViewer
+              title="Documents & Reports"
+              subtitle={`${documentsModal.appointment.patientName} · ${new Date(
+                documentsModal.appointment.appointmentDate
+              ).toLocaleDateString("en-US", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })} at ${documentsModal.appointment.appointmentTime}`}
+              onClose={() => setDocumentsModal({ open: false, appointment: null })}
+            >
               <AppointmentDocuments
                 appointmentId={documentsModal.appointment.id}
                 patientId={documentsModal.appointment.patientId}
@@ -2638,7 +2282,7 @@ function DoctorAppointmentsContent() {
                 canEdit={true}
                 canDelete={true}
               />
-            </div>
+            </ReportViewer>
           </div>
         </div>
       )}
@@ -2700,6 +2344,7 @@ function DoctorAppointmentsContent() {
         <HistoryDocumentViewer
           document={selectedHistoryDocument}
           onClose={() => setSelectedHistoryDocument(null)}
+          currentAppointmentId={expandedAppointment || undefined}
         />
       )}
       {lastVisitModal.open && lastVisitModal.appointment && lastVisitModal.recommendation && (
@@ -2827,7 +2472,7 @@ function DoctorAppointmentsContent() {
           </div>
         </div>
       )}
-    </div>
+    </ClinicalPageFrame>
   )
 }
 

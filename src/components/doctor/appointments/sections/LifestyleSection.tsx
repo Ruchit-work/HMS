@@ -8,7 +8,7 @@ interface LifestyleSectionProps {
   minimal?: boolean
 }
 
-export default function LifestyleSection({ appointment, minimal = false }: LifestyleSectionProps) {
+export default function LifestyleSection({ appointment, minimal = true }: LifestyleSectionProps) {
   const hasAny =
     appointment.patientDrinkingHabits ||
     appointment.patientSmokingHabits ||

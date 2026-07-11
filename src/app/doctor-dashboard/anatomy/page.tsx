@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { auth } from '@/firebase/config'
 import { ENT_DIAGNOSES, CUSTOM_DIAGNOSIS_OPTION } from '@/constants/entDiagnoses'
 import Notification from '@/components/ui/feedback/Notification'
+import { ClinicalLoadingState } from '@/components/doctor/clinical'
 import { Button } from '@/components/ui/Button'
 import { doc, getDoc } from 'firebase/firestore'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
@@ -1269,7 +1270,7 @@ function ENTAnatomyPageContent() {
   // Full page mode with header and background
   return (
     <div
-      className="min-h-screen pt-20 relative"
+      className="min-h-screen relative"
       style={{
         backgroundImage: 'url(/images/17973908.jpg)',
         backgroundSize: 'cover',
@@ -1777,11 +1778,7 @@ function ENTAnatomyPageContent() {
 
 export default function ENTAnatomyPage() {
   return (
-    <Suspense fallback={
-      <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
-        <div className="text-slate-600">Loading...</div>
-      </div>
-    }>
+    <Suspense fallback={<ClinicalLoadingState message="Loading anatomy viewer…" inline />}>
       <ENTAnatomyPageContent />
     </Suspense>
   )

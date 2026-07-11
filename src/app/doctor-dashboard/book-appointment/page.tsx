@@ -9,10 +9,18 @@ import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { useDoctorBranches } from "@/hooks/useDoctorBranches"
 import { getAvailableTimeSlots, getDayName, generateTimeSlots, isSlotInPast, normalizeTime, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import Notification from "@/components/ui/feedback/Notification"
 import VoiceInput from "@/components/ui/VoiceInput"
 import { ConfirmDialog } from "@/components/ui/overlays/Modals"
+import { Button } from "@/components/ui/Button"
+import {
+  ClinicalFormSection,
+  ClinicalLoadingState,
+  ClinicalPageFrame,
+  ClinicalPageHeader,
+} from "@/components/doctor/clinical"
+import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
+import { CalendarPlus } from "lucide-react"
 
 type PatientMode = "existing" | "new"
 
@@ -353,7 +361,7 @@ export default function DoctorBookAppointmentPage() {
   }
 
   if (authLoading || !user) {
-    return <LoadingSpinner message="Loading..." />
+    return <ClinicalLoadingState message="Loading booking form…" />
   }
 
   const inputBase = "w-full h-11 rounded-lg border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-300 ease-out focus:border-[#0d6efd] focus:ring-2 focus:ring-[#0d6efd]/25 focus:outline-none"
@@ -367,58 +375,29 @@ export default function DoctorBookAppointmentPage() {
   const IconBranch = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-white pt-20 pb-10 px-4 sm:px-6">
-      {/* Subtle background accents */}
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-slate-50 via-white to-blue-50/30" />
-      <div className="fixed inset-0 -z-10 opacity-50">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(13,110,253,0.06),transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_80%,rgba(255,77,79,0.05),transparent_50%)]" />
-      </div>
+    <ClinicalPageFrame maxWidth="6xl">
+      <DoctorSettingsBackLink />
+      <ClinicalPageHeader
+        title="Book a visit"
+        subtitle="Schedule for an existing or new patient. The appointment will appear in your queue."
+        icon={<CalendarPlus className="w-5 h-5" />}
+      />
 
-      <div className="max-w-6xl mx-auto animate-in fade-in duration-500">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:gap-6">
-          {/* Left: Visual panel - hidden on mobile */}
-          <div className="hidden lg:flex lg:w-[280px] lg:flex-shrink-0 lg:sticky lg:top-24">
-            <div className="relative w-full rounded-2xl bg-gradient-to-br from-[#0d6efd] to-[#0a58ca] p-6 shadow-lg overflow-hidden transition-shadow duration-300 hover:shadow-xl">
-              <div className="absolute inset-0 opacity-10">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
-                <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#ff4d4f] rounded-full translate-y-1/2 -translate-x-1/2 opacity-60" />
-              </div>
-              <div className="relative z-10 text-white">
-                <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center mb-4 backdrop-blur-sm">
-                  <IconCalendar />
-                </div>
-                <h2 className="text-xl font-semibold tracking-tight mb-2">Quick & Easy Booking</h2>
-                <p className="text-blue-100 text-sm leading-relaxed">
-                  Book for existing or new patients in seconds. Appointments are confirmed under your name and synced to your schedule.
-                </p>
-              </div>
-              <div className="relative z-10 mt-6 flex justify-center">
-                <div className="h-16 w-16 rounded-full bg-white/15 flex items-center justify-center">
-                  <IconHeart />
-                </div>
-              </div>
-            </div>
-          </div>
+      {notification && (
+        <div className="transition-opacity duration-300">
+          <Notification
+            type={notification.type}
+            message={notification.message}
+            onClose={() => setNotification(null)}
+          />
+        </div>
+      )}
 
-          {/* Right: Form */}
-          <div className="flex-1 min-w-0 w-full">
-            <div className="mb-4">
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Book Appointment</h1>
-              <p className="text-slate-600 mt-1 text-sm">Book for an existing or new patient. Appointment will be under your name.</p>
-            </div>
-
-            {notification && (
-              <div className="mb-4 transition-opacity duration-300">
-                <Notification
-                  type={notification.type}
-                  message={notification.message}
-                  onClose={() => setNotification(null)}
-                />
-              </div>
-            )}
-
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-md shadow-slate-200/40 p-5 sm:p-6 space-y-5 transition-all duration-300">
+      <ClinicalFormSection
+        title="Appointment details"
+        description="Select patient, branch, date, and time slot."
+      >
+            <div className="space-y-5">
           {/* Branch selection - at top so doctor can choose which branch */}
           {branches.length > 0 && (
             <div className="relative">
@@ -668,18 +647,20 @@ export default function DoctorBookAppointmentPage() {
             </div>
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="lg"
             onClick={handleBook}
             disabled={bookLoading}
-            className="w-full py-4 rounded-xl bg-gradient-to-r from-[#0d6efd] to-[#0a58ca] text-white font-semibold hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-300 shadow-md"
+            loading={bookLoading}
+            loadingText="Booking…"
+            className="w-full"
           >
-            {bookLoading ? "Booking..." : "Book Appointment"}
-          </button>
+            Book Appointment
+          </Button>
             </div>
-          </div>
-        </div>
-      </div>
+      </ClinicalFormSection>
 
       <ConfirmDialog
         isOpen={branchChangeModal.open}
@@ -690,6 +671,6 @@ export default function DoctorBookAppointmentPage() {
         onConfirm={confirmBranchChange}
         onCancel={cancelBranchChange}
       />
-    </div>
+    </ClinicalPageFrame>
   )
 }

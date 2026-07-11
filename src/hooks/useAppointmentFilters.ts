@@ -1,12 +1,14 @@
 import { useMemo, useState, useEffect } from "react"
 import { Appointment as AppointmentType } from "@/types/patient"
-import { TabKey } from "@/types/appointments"
+import { TabKey, QueueView } from "@/types/appointments"
 import { isToday, isTomorrow, isThisWeek, isNextWeek, sortByDateTime, sortByDateTimeDesc } from "@/utils/appointments/appointmentFilters"
+import { isFollowUpAppointment } from "@/components/doctor/dashboard/morningClinicUtils"
 
 export function useAppointmentFilters(
   appointments: AppointmentType[],
   activeTab: TabKey,
-  historyTabFilters: { text: string; date: string }
+  historyTabFilters: { text: string; date: string },
+  queueView: QueueView = "all"
 ) {
   const [historyPage, setHistoryPage] = useState(1)
   const [historyPageSize, setHistoryPageSize] = useState(10)
@@ -41,6 +43,41 @@ export function useAppointmentFilters(
   const nextWeekAppointments = useMemo(
     () => confirmedAppointments.filter((apt) => isNextWeek(apt.appointmentDate)),
     [confirmedAppointments]
+  )
+
+  const completedTodayAppointments = useMemo(
+    () =>
+      appointments
+        .filter((apt) => apt.status === "completed" && isToday(apt.appointmentDate))
+        .sort(sortByDateTimeDesc),
+    [appointments]
+  )
+
+  const followUpAppointments = useMemo(
+    () =>
+      appointments
+        .filter(
+          (apt) =>
+            (apt.status === "confirmed" || apt.status === "pending") &&
+            isFollowUpAppointment(apt)
+        )
+        .sort(sortByDateTime),
+    [appointments]
+  )
+
+  const followUpsToday = useMemo(
+    () => followUpAppointments.filter((apt) => isToday(apt.appointmentDate)),
+    [followUpAppointments]
+  )
+
+  const upcomingAppointments = useMemo(
+    () =>
+      [
+        ...tomorrowAppointments,
+        ...thisWeekAppointments.filter((a) => !isToday(a.appointmentDate) && !isTomorrow(a.appointmentDate)),
+        ...nextWeekAppointments,
+      ].sort(sortByDateTime),
+    [tomorrowAppointments, thisWeekAppointments, nextWeekAppointments]
   )
 
   const filteredHistoryAppointments = useMemo(() => {
@@ -78,19 +115,42 @@ export function useAppointmentFilters(
   }, [filteredHistoryAppointments, historyPage, historyPageSize])
 
   const allNonHistoryAppointments = useMemo(() => {
+    let base: AppointmentType[] = []
     switch (activeTab) {
       case "today":
-        return [...todayAppointments].sort(sortByDateTime)
+        if (queueView === "completed") {
+          base = [...completedTodayAppointments]
+        } else if (queueView === "followups") {
+          base = [...followUpsToday]
+        } else {
+          // all + pending → today's confirmed queue
+          base = [...todayAppointments]
+        }
+        break
       case "tomorrow":
-        return [...tomorrowAppointments].sort(sortByDateTime)
+        base = [...upcomingAppointments]
+        break
       case "thisWeek":
-        return [...thisWeekAppointments].sort(sortByDateTime)
+        base = [...thisWeekAppointments]
+        break
       case "nextWeek":
-        return [...nextWeekAppointments].sort(sortByDateTime)
+        base = [...nextWeekAppointments]
+        break
       default:
-        return []
+        base = []
     }
-  }, [activeTab, todayAppointments, tomorrowAppointments, thisWeekAppointments, nextWeekAppointments])
+    return base
+  }, [
+    activeTab,
+    queueView,
+    todayAppointments,
+    tomorrowAppointments,
+    thisWeekAppointments,
+    nextWeekAppointments,
+    completedTodayAppointments,
+    followUpsToday,
+    upcomingAppointments,
+  ])
 
   const totalAppointmentsPages = useMemo(() => {
     if (activeTab === "history") return 1
@@ -112,7 +172,7 @@ export function useAppointmentFilters(
     } else {
       setAppointmentsPage(1)
     }
-  }, [historyTabFilters, historyPageSize, activeTab])
+  }, [historyTabFilters, historyPageSize, activeTab, queueView])
 
   // Reset page if it exceeds total pages
   useEffect(() => {
@@ -127,6 +187,44 @@ export function useAppointmentFilters(
     }
   }, [appointmentsPage, totalAppointmentsPages, activeTab])
 
+  const doctorQueueStats = [
+    {
+      label: "Today",
+      value: todayAppointments.length,
+      tab: "today" as TabKey,
+      queueView: "all" as QueueView,
+      hint: "Scheduled visits",
+    },
+    {
+      label: "Pending",
+      value: todayAppointments.length,
+      tab: "today" as TabKey,
+      queueView: "pending" as QueueView,
+      hint: "Awaiting consult",
+    },
+    {
+      label: "Completed",
+      value: completedTodayAppointments.length,
+      tab: "today" as TabKey,
+      queueView: "completed" as QueueView,
+      hint: "Finished today",
+    },
+    {
+      label: "Follow-ups",
+      value: followUpAppointments.length,
+      tab: "today" as TabKey,
+      queueView: "followups" as QueueView,
+      hint: "Re-checkup requests",
+    },
+    {
+      label: "History",
+      value: historyAppointments.length,
+      tab: "history" as TabKey,
+      queueView: "all" as QueueView,
+      hint: "Past consultations",
+    },
+  ]
+
   const stats = [
     { label: "Today", value: todayAppointments.length },
     { label: "Tomorrow", value: tomorrowAppointments.length },
@@ -136,10 +234,9 @@ export function useAppointmentFilters(
 
   const tabItems: { key: TabKey; label: string; count: number }[] = [
     { key: "today", label: "Today", count: todayAppointments.length },
-    { key: "tomorrow", label: "Tomorrow", count: tomorrowAppointments.length },
-    { key: "thisWeek", label: "This Week", count: thisWeekAppointments.length },
-    { key: "nextWeek", label: "Next Week", count: nextWeekAppointments.length },
-    { key: "history", label: "History", count: historyAppointments.length },
+    { key: "tomorrow", label: "Upcoming", count: upcomingAppointments.length },
+    { key: "thisWeek", label: "This week", count: thisWeekAppointments.length },
+    { key: "history", label: "Completed", count: historyAppointments.length },
   ]
 
   return {
@@ -152,7 +249,12 @@ export function useAppointmentFilters(
     allNonHistoryAppointments,
     paginatedAppointments,
     stats,
+    doctorQueueStats,
     tabItems,
+    upcomingAppointments,
+    completedTodayAppointments,
+    followUpAppointments,
+    followUpsToday,
     historyPage,
     setHistoryPage,
     historyPageSize,

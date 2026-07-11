@@ -7,12 +7,19 @@ import { signOut } from "firebase/auth"
 import { ChangePasswordSection } from "@/components/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
-import Notification from "@/components/ui/feedback/Notification"
-import PageHeader from "@/components/ui/layout/PageHeader"
 import { NotificationData } from "@/types/patient"
+import Notification from "@/components/ui/feedback/Notification"
 import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { Button } from "@/components/ui/Button"
+import {
+  ClinicalFormSection,
+  ClinicalLoadingState,
+  ClinicalPageFrame,
+  ClinicalPageHeader,
+} from "@/components/doctor/clinical"
+import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
+import PatientAvatar from "@/components/doctor/clinical/PatientAvatar"
+import { User } from "lucide-react"
 
 interface DoctorData {
   firstName: string
@@ -65,7 +72,7 @@ export default function DoctorProfilePage() {
   }, [user])
 
   if (authLoading || loading) {
-    return <LoadingSpinner message="Loading Profile..." />
+    return <ClinicalLoadingState message="Loading profile…" />
   }
 
   if (!user || !userData) {
@@ -121,22 +128,22 @@ export default function DoctorProfilePage() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-cyan-50/30 pt-20">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader
-          title="Doctor Profile"
-          subtitle="View and manage your professional information"
-          icon="👨‍⚕️"
-          gradient="from-teal-600 to-cyan-700"
+    <ClinicalPageFrame>
+        <DoctorSettingsBackLink />
+        <ClinicalPageHeader
+          title="Your profile"
+          subtitle="Manage your professional information and account settings."
+          icon={<User className="w-5 h-5" />}
         />
 
         {/* Profile Header - full width to avoid empty side */}
         <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
+            <div className="clinical-surface p-6">
             <div className="flex items-center gap-5 flex-wrap">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-bold shadow-lg">
-                  {userData.firstName?.[0]}{userData.lastName?.[0]}
-                </div>
+              <PatientAvatar
+                name={`${userData.firstName} ${userData.lastName}`}
+                size="xl"
+              />
               <div className="flex-1 min-w-[220px]">
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
                   Dr. {userData.firstName} {userData.lastName}
@@ -162,25 +169,26 @@ export default function DoctorProfilePage() {
             </div>
 
           {/* Government Leaves - optional small card under header */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
-              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <span>🏖️</span>
-                <span>Government Leaves</span>
+          <div className="clinical-surface p-6">
+              <h3 className="text-base font-semibold text-slate-800 mb-4">
+                Government Leaves
               </h3>
               <div className="flex items-center justify-between">
                 <div>
                 <p className="text-3xl font-bold text-slate-800">12</p>
                   <p className="text-sm text-slate-500 mt-1">Days per year</p>
               </div>
-              <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center text-2xl">
-                📅
+              <div className="w-14 h-14 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-500">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
               </div>
             </div>
           </div>
 
           {/* Profile Details */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-md">
-              <h3 className="text-xl font-bold text-slate-800 mb-6">Professional Information</h3>
+            <div className="clinical-surface p-6">
+              <h3 className="text-base font-semibold text-slate-800 mb-6">Professional Information</h3>
               
               {isEditing ? (
                 <ProfileEditForm 
@@ -254,7 +262,6 @@ export default function DoctorProfilePage() {
               notify={(type, message) => setNotification({ type, message })}
             />
         </div>
-      </main>
 
       {notification && (
         <Notification 
@@ -273,7 +280,7 @@ export default function DoctorProfilePage() {
         onCancel={() => setLogoutConfirmOpen(false)}
         confirmLoading={logoutLoading}
       />
-    </div>
+    </ClinicalPageFrame>
   )
 }
 

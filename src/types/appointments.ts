@@ -1,5 +1,8 @@
 export type TabKey = "today" | "tomorrow" | "thisWeek" | "nextWeek" | "history"
 
+/** Doctor review filter within a schedule tab (UI only). */
+export type QueueView = "all" | "pending" | "completed" | "followups"
+
 export type CompletionFormEntry = {
   medicines: Array<{ name: string; dosage: string; frequency: string; duration: string }>
   notes: string
@@ -22,4 +25,3 @@ export interface UserData {
 
 export const hasValidPrescriptionInput = (entry?: CompletionFormEntry) =>
   Boolean(entry?.medicines?.some((med) => med.name && med.name.trim()))
-

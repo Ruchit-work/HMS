@@ -1,6 +1,10 @@
 "use client"
 
+import React from "react"
 import { Appointment as AppointmentType } from "@/types/patient"
+import ClinicalStatusBadge from "@/components/doctor/clinical/ClinicalStatusBadge"
+import { isFollowUpAppointment } from "@/components/doctor/dashboard/morningClinicUtils"
+import { AlertTriangle, ChevronRight, RotateCcw } from "lucide-react"
 
 interface AppointmentsListPaneProps {
   appointments: AppointmentType[]
@@ -8,45 +12,7 @@ interface AppointmentsListPaneProps {
   onSelect: (id: string) => void
   onSkip?: (id: string) => void
   skippingId?: string | null
-}
-
-function formatStatus(status: string): string {
-  if (status === "confirmed") return "Confirmed"
-  if (status === "completed") return "Completed"
-  if (status === "no_show") return "Skipped"
-  if (status === "pending") return "Pending"
-  if (status === "cancelled") return "Cancelled"
-  return status
-}
-
-const STATUS_BADGE_STYLES: Record<string, { container: string; text: string }> = {
-  confirmed: {
-    container: "bg-emerald-50 border-emerald-200",
-    text: "text-emerald-700",
-  },
-  pending: {
-    container: "bg-amber-50 border-amber-200",
-    text: "text-amber-700",
-  },
-  completed: {
-    container: "bg-sky-50 border-sky-200",
-    text: "text-sky-700",
-  },
-  no_show: {
-    container: "bg-slate-50 border-slate-200",
-    text: "text-slate-600",
-  },
-  cancelled: {
-    container: "bg-rose-50 border-rose-200",
-    text: "text-rose-700",
-  },
-}
-
-function getStatusBadgeClasses(status: string) {
-  const base =
-    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
-  const cfg = STATUS_BADGE_STYLES[status] || STATUS_BADGE_STYLES.no_show
-  return `${base} ${cfg.container} ${cfg.text}`
+  showSkipActions?: boolean
 }
 
 function getInitials(name?: string) {
@@ -56,73 +22,86 @@ function getInitials(name?: string) {
   return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase()
 }
 
+function formatVisitDate(date: string) {
+  return new Date(date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+}
+
 export default function AppointmentsListPane({
   appointments,
   selectedId,
   onSelect,
   onSkip,
   skippingId,
+  showSkipActions = false,
 }: AppointmentsListPaneProps) {
+  const now = Date.now()
+
   return (
-    <div className="m-2 rounded-2xl border border-slate-200 bg-white shadow-sm flex flex-col w-full">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/70 rounded-t-2xl">
+    <div className="doctor-appointment-queue flex flex-col w-full">
+      <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50/70 rounded-t-xl">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-800">Appointments</h3>
-          <span className="text-xs text-slate-500">
-            {appointments.length} {appointments.length === 1 ? "item" : "items"}
-          </span>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Appointment list</h3>
+          <span className="text-[11px] text-slate-400 tabular-nums">{appointments.length}</span>
         </div>
       </div>
 
-      {/* List as clean cards */}
-      <div className="flex flex-col gap-2.5 p-3">
+      <div className="flex flex-col gap-2 p-2.5">
         {appointments.map((apt) => {
           const isSelected = selectedId === apt.id
           const isSkipping = skippingId === apt.id
-          const badgeClasses = getStatusBadgeClasses(apt.status)
+          const ts = new Date(`${apt.appointmentDate}T${apt.appointmentTime}`).getTime()
+          const isPast = apt.status === "confirmed" && ts < now
+          const isFollowUp = isFollowUpAppointment(apt)
+          const isUrgent = (apt.symptomSeverity ?? 0) >= 8
 
           return (
-            <div
+            <article
               key={apt.id}
-              className={`group rounded-xl border bg-white px-3.5 py-2.5 flex items-center justify-between gap-3 transition-all duration-150 ${
-                isSelected
-                  ? "border-cyan-300 bg-cyan-50/60 shadow-sm"
-                  : "border-slate-200 hover:border-cyan-200 hover:bg-slate-50/80"
+              className={`group doctor-appointment-card ${isSelected ? "doctor-appointment-card--selected" : ""} ${
+                isPast ? "doctor-appointment-card--past" : ""
               }`}
             >
-              {/* Left: avatar + patient + time + specialization */}
               <button
                 type="button"
                 onClick={() => onSelect(apt.id)}
-                className="flex-1 min-w-0 flex items-center gap-3 text-left"
+                className="w-full text-left p-3 flex gap-3 min-w-0"
               >
-                <div className="flex-shrink-0 w-9 h-9 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-xs font-semibold">
+                <div className="shrink-0 flex flex-col items-center w-12">
+                  <span className="text-sm font-bold text-slate-800 tabular-nums">{apt.appointmentTime}</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">{formatVisitDate(apt.appointmentDate)}</span>
+                </div>
+
+                <div className="w-9 h-9 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-xs font-bold shrink-0">
                   {getInitials(apt.patientName)}
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-slate-900 truncate max-w-[9rem] sm:max-w-[11rem]">
-                      {apt.patientName || "Patient"}
-                    </p>
-                    <span className="text-xs font-semibold text-slate-700 tabular-nums">
-                      {apt.appointmentTime}
-                    </span>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{apt.patientName || "Patient"}</p>
+                    <ClinicalStatusBadge status={apt.status} size="sm" showDot={false} />
+                    {isFollowUp && (
+                      <span className="inline-flex items-center gap-0.5 rounded-md bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        Follow-up
+                      </span>
+                    )}
+                    {isUrgent && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-rose-700">
+                        <AlertTriangle className="w-3 h-3" />
+                        Urgent
+                      </span>
+                    )}
                   </div>
-                  <p
-                    className="mt-0.5 text-xs text-slate-500 truncate max-w-[14rem]"
-                    title={apt.doctorSpecialization || undefined}
-                  >
-                    {apt.doctorSpecialization || "—"}
+                  <p className="mt-0.5 text-xs text-slate-600 line-clamp-1">
+                    {apt.chiefComplaint?.trim() || apt.doctorSpecialization || "General consultation"}
                   </p>
                 </div>
+
+                <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 self-center" />
               </button>
 
-              {/* Right: status badge + actions */}
-              <div className="flex items-center gap-2">
-                <span className={badgeClasses}>{formatStatus(apt.status)}</span>
-
-                {apt.status === "confirmed" && onSkip && (
+              {showSkipActions && apt.status === "confirmed" && onSkip && (
+                <div className="px-3 pb-2 flex justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -130,30 +109,13 @@ export default function AppointmentsListPane({
                       onSkip(apt.id)
                     }}
                     disabled={isSkipping}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                    aria-label="Skip appointment"
-                    title="Skip appointment"
+                    className="text-[10px] font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50"
                   >
-                    {isSkipping ? (
-                      <span className="inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <svg
-                        className="w-4 h-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M10 8l4 4-4 4" />
-                        <path d="M4 4v16" />
-                      </svg>
-                    )}
+                    {isSkipping ? "Skipping…" : "Skip"}
                   </button>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
+            </article>
           )
         })}
       </div>

@@ -58,9 +58,13 @@ interface InlineAnatomyViewerProps {
   initialData?: AnatomyViewerData | null
   onComplete?: () => void
   onDataChange?: (data: AnatomyViewerData | null) => void
+  /** Compact embed inside consultation workspace — hides Rx/complete UI */
+  embedMode?: boolean
+  /** Consultation reference drawer — original full viewer, syncs selection, hides standalone Rx/complete */
+  referenceMode?: boolean
 }
 
-export default function InlineAnatomyViewer({ appointmentId, patientName, anatomyType = 'ear', initialData, onComplete, onDataChange }: InlineAnatomyViewerProps) {
+export default function InlineAnatomyViewer({ appointmentId, patientName, anatomyType = 'ear', initialData, onComplete, onDataChange, embedMode = false, referenceMode = false }: InlineAnatomyViewerProps) {
   const FEMALE_REPRODUCTIVE_GLB_PATH = '/3dmodels/reproduction/bony_pelvis_and_pelvic_organs_from_mri.glb'
   const { activeHospitalId } = useMultiHospital()
   const { user } = useAuth("doctor")
@@ -656,19 +660,27 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
     const filteredDiagnoses = diagnoses.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION)
     const finalCustomDiagnosis = diagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? customDiagnosis : undefined
 
-    // Create data object
-    const dataToSend = finalMedicines.length > 0 && finalMedicines.some(med => med.name && med.name.trim())
-      ? {
-          anatomyType,
-          selectedPart: finalPart || undefined,
-          selectedPartInfo: finalPartInfo,
-          selectedDisease: finalDisease,
-          medicines: finalMedicines.filter(m => m.name && m.name.trim()),
-          notes: finalNotes || '',
-          diagnoses: filteredDiagnoses,
-          customDiagnosis: finalCustomDiagnosis
-        }
-      : null
+    const hasSelection = Boolean(finalPart || finalPartInfo || finalDisease || filteredDiagnoses.length > 0)
+    const hasMedicines = finalMedicines.length > 0 && finalMedicines.some(med => med.name && med.name.trim())
+
+    const dataPayload = {
+      anatomyType,
+      selectedPart: finalPart || undefined,
+      selectedPartInfo: finalPartInfo,
+      selectedDisease: finalDisease,
+      medicines: finalMedicines.filter(m => m.name && m.name.trim()),
+      notes: finalNotes || '',
+      diagnoses: filteredDiagnoses,
+      customDiagnosis: finalCustomDiagnosis
+    }
+
+    const dataToSend = embedMode || referenceMode
+      ? hasSelection || hasMedicines
+        ? dataPayload
+        : null
+      : hasMedicines
+        ? dataPayload
+        : null
 
     // Serialize to compare with previous
     const dataString = JSON.stringify(dataToSend)
@@ -694,6 +706,10 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
     customDiagnosis,
     onDataChange
   ])
+
+  const hideStandaloneWorkflow = embedMode || referenceMode
+  const useFullAnatomyLayout = referenceMode || !embedMode
+  const modelHeight = referenceMode ? 680 : embedMode ? 280 : 680
 
   const handleCompleteCheckup = () => {
     if (!appointmentId) {
@@ -1022,7 +1038,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
   const effectiveView = show2DView ? activeView : '3d'
 
   return (
-    <div className="w-full bg-white">
+    <div className={`w-full bg-white ${embedMode && !referenceMode ? "consultation-anatomy-embed" : ""}`}>
       {notification && (
         <div className={`mb-4 p-3 rounded-lg ${
           notification.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -1030,10 +1046,10 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
           {notification.message}
         </div>
       )}
-      <div className="p-4">
+      <div className={useFullAnatomyLayout ? "p-4" : "p-2"}>
         {/* View Toggle - hidden for kidney and nose (3D only) */}
         {show2DView && (
-          <div className="mb-4">
+          <div className={useFullAnatomyLayout ? "mb-4" : "mb-2"}>
             <div className="inline-flex rounded-full bg-slate-100 p-1 shadow-inner">
               <button
                 type="button"
@@ -1078,12 +1094,12 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
         )}
 
         {/* Main Content - Model and Info Panel */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6">
+        <div className={`grid grid-cols-1 ${useFullAnatomyLayout ? "lg:grid-cols-12 gap-5 md:gap-6" : "gap-3"}`}>
           {/* Left: Model Viewer */}
-          <div className="lg:col-span-7 space-y-2">
+          <div className={useFullAnatomyLayout ? "lg:col-span-7 space-y-2" : "space-y-1"}>
             {effectiveView === '3d' ? (
               <>
-                <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: '680px', minHeight: '680px', position: 'relative' }}>
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: `${modelHeight}px`, minHeight: `${modelHeight}px`, position: 'relative' }}>
                   <DynamicENTAnatomyViewer
                     onPartSelect={handlePartSelect}
                     selectedPart={selectedPart}
@@ -1098,7 +1114,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 </p>
               </>
             ) : (
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: '680px', minHeight: '680px' }}>
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: `${modelHeight}px`, minHeight: `${modelHeight}px` }}>
                 {anatomyType === 'skeleton' ? (
                   <InteractiveSkeletonSVG
                     onPartSelect={handlePartSelect2D}
@@ -1135,7 +1151,7 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
           </div>
 
           {/* Right: Information Panel */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className={useFullAnatomyLayout ? "lg:col-span-5 space-y-4" : "space-y-2 max-h-[220px] overflow-y-auto"}>
             {/* Selected Part Info Section */}
             {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D) ? (
               <div className="relative rounded-xl border border-slate-200 bg-white shadow-sm pl-3.5 pr-4 py-4">
@@ -1409,6 +1425,8 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 </div>
               )}
 
+            {!hideStandaloneWorkflow && (
+              <>
             {/* Medicines - Editable */}
             {(
               <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3.5 space-y-2.5">
@@ -1713,12 +1731,14 @@ export default function InlineAnatomyViewer({ appointmentId, patientName, anatom
                 )}
               </button>
             )}
+              </>
+            )}
           </div>
         </div>
       </div>
 
             {/* Completion Confirmation Modal */}
-      {showCompletionModal && (
+      {!hideStandaloneWorkflow && showCompletionModal && (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">

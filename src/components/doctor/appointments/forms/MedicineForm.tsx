@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { MedicineSuggestion, sanitizeMedicineName } from "@/utils/medicineSuggestions"
 import VoiceInput from "@/components/ui/VoiceInput"
 import { CompletionFormEntry } from "@/types/appointments"
+import { FavoriteMedicineToggle } from "@/components/doctor/clinical/consultation/PrescriptionQuickAccess"
 
 interface MedicineFormProps {
   appointmentId: string
@@ -11,6 +12,8 @@ interface MedicineFormProps {
   medicineSuggestions: MedicineSuggestion[]
   medicineSuggestionsLoading: boolean
   onMedicinesChange: (medicines: CompletionFormEntry["medicines"]) => void
+  doctorUid?: string
+  compact?: boolean
 }
 
 const TIMES = ["Morning", "Afternoon", "Evening"] as const
@@ -45,11 +48,15 @@ export default function MedicineForm({
   medicineSuggestions,
   medicineSuggestionsLoading,
   onMedicinesChange,
+  doctorUid,
+  compact = false,
 }: MedicineFormProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [searchHighlight, setSearchHighlight] = useState(0)
   const [nameDropdownOpenForIndex, setNameDropdownOpenForIndex] = useState<number | null>(null)
   const [frequencyOpenForIndex, setFrequencyOpenForIndex] = useState<number | null>(null)
   const frequencyRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (frequencyOpenForIndex === null) return
@@ -98,6 +105,24 @@ export default function MedicineForm({
     [medicineSuggestions]
   )
 
+  const addMedicineFromSuggestion = useCallback(
+    (suggestion: MedicineSuggestion) => {
+      const name = sanitizeMedicineName(suggestion.name) || suggestion.name
+      onMedicinesChange([
+        ...medicines,
+        {
+          name,
+          dosage: suggestion.dosageOptions?.[0]?.value ?? "",
+          frequency: suggestion.frequencyOptions?.[0]?.value ?? "",
+          duration: suggestion.durationOptions?.[0]?.value ?? "7 days",
+        },
+      ])
+      setSearchQuery("")
+      setSearchHighlight(0)
+    },
+    [medicines, onMedicinesChange]
+  )
+
   const applySuggestion = useCallback(
     (index: number, suggestion: MedicineSuggestion) => {
       const name = sanitizeMedicineName(suggestion.name) || suggestion.name
@@ -119,48 +144,76 @@ export default function MedicineForm({
     [medicines, onMedicinesChange, appointmentId]
   )
 
+  useEffect(() => {
+    setSearchHighlight(0)
+  }, [searchQuery])
+
+  useEffect(() => {
+    const handleShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "m") {
+        const target = e.target as HTMLElement | null
+        if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    window.addEventListener("keydown", handleShortcut)
+    return () => window.removeEventListener("keydown", handleShortcut)
+  }, [])
+
+  const searchMatches = searchQuery.trim() ? getSuggestions(searchQuery, 8) : []
+
   return (
     <div className="space-y-3">
       {/* Global medicine search with autocomplete */}
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-xs font-medium text-slate-600">Search medicines</label>
+          <label htmlFor={`medicine-search-${appointmentId}`} className="text-xs font-medium text-slate-600">
+            Search medicines
+          </label>
+          {!compact && (
+            <span className="text-[10px] text-slate-400 hidden sm:inline">Ctrl+M to focus</span>
+          )}
         </div>
         <div className="relative">
           <input
+            ref={searchInputRef}
+            id={`medicine-search-${appointmentId}`}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
+              if (e.key === "ArrowDown" && searchMatches.length > 0) {
+                e.preventDefault()
+                setSearchHighlight((h) => Math.min(h + 1, searchMatches.length - 1))
+                return
+              }
+              if (e.key === "ArrowUp" && searchMatches.length > 0) {
+                e.preventDefault()
+                setSearchHighlight((h) => Math.max(h - 1, 0))
+                return
+              }
               if (e.key === "Enter") {
                 e.preventDefault()
                 const q = searchQuery.trim()
                 if (!q) return
-                const matches = getSuggestions(q, 1)
-                let newMed
-                if (matches.length > 0) {
-                  const sugg = matches[0]
-                  const name = sanitizeMedicineName(sugg.name) || sugg.name
-                  newMed = {
-                    name,
-                    dosage: sugg.dosageOptions?.[0]?.value ?? "",
-                    frequency: sugg.frequencyOptions?.[0]?.value ?? "",
-                    duration: sugg.durationOptions?.[0]?.value ?? "7 days",
-                  }
-                } else {
-                  const name = sanitizeMedicineName(q) || q
-                  newMed = {
-                    name,
-                    dosage: "",
-                    frequency: "",
-                    duration: "7 days",
-                  }
+                if (searchMatches.length > 0) {
+                  addMedicineFromSuggestion(searchMatches[searchHighlight] ?? searchMatches[0])
+                  return
                 }
-                onMedicinesChange([...medicines, newMed])
+                const name = sanitizeMedicineName(q) || q
+                onMedicinesChange([
+                  ...medicines,
+                  { name, dosage: "", frequency: "", duration: "7 days" },
+                ])
                 setSearchQuery("")
               }
+              if (e.key === "Escape") {
+                setSearchQuery("")
+                setSearchHighlight(0)
+              }
             }}
-            placeholder="Search by medicine name and press Enter to add..."
+            placeholder="Type medicine name · Enter to add · ↑↓ to navigate"
             className="w-full rounded-lg border border-slate-300 bg-white pl-3 pr-8 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           />
           <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-auto">
@@ -178,43 +231,30 @@ export default function MedicineForm({
             <div className="absolute left-0 right-0 top-full z-[90] mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
               {medicineSuggestionsLoading ? (
                 <div className="px-3 py-2 text-xs text-slate-500">Searching…</div>
+              ) : searchMatches.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-500">
+                  No matches. Press Enter to add manually.
+                </div>
               ) : (
-                (() => {
-                  const matches = getSuggestions(searchQuery, 8)
-                  if (!matches.length) {
-                    return (
-                      <div className="px-3 py-2 text-xs text-slate-500">
-                        No matches. Press Enter to add manually.
-                      </div>
-                    )
-                  }
-                  return matches.map((sugg) => (
-                    <button
-                      key={sugg.id}
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-xs text-slate-800 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        const name = sanitizeMedicineName(sugg.name) || sugg.name
-                        const newMed = {
-                          name,
-                          dosage: sugg.dosageOptions?.[0]?.value ?? "",
-                          frequency: sugg.frequencyOptions?.[0]?.value ?? "",
-                          duration: sugg.durationOptions?.[0]?.value ?? "7 days",
-                        }
-                        onMedicinesChange([...medicines, newMed])
-                        setSearchQuery("")
-                      }}
-                    >
-                      <span className="font-medium">{sugg.name}</span>
-                      {sugg.dosageOptions?.[0] && (
-                        <span className="text-slate-500 ml-1">
-                          — {sugg.dosageOptions[0].value}
-                        </span>
-                      )}
-                    </button>
-                  ))
-                })()
+                searchMatches.map((sugg, idx) => (
+                  <button
+                    key={sugg.id}
+                    type="button"
+                    className={`w-full px-3 py-2 text-left text-xs text-slate-800 focus:outline-none ${
+                      idx === searchHighlight ? "bg-teal-50 text-teal-900" : "hover:bg-slate-50"
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      addMedicineFromSuggestion(sugg)
+                    }}
+                    onMouseEnter={() => setSearchHighlight(idx)}
+                  >
+                    <span className="font-medium">{sugg.name}</span>
+                    {sugg.dosageOptions?.[0] && (
+                      <span className="text-slate-500 ml-1">— {sugg.dosageOptions[0].value}</span>
+                    )}
+                  </button>
+                ))
               )}
             </div>
           )}
@@ -433,7 +473,11 @@ export default function MedicineForm({
                     <span className="text-xs text-slate-600 font-medium whitespace-nowrap">days</span>
                   </div>
 
-                  {/* Remove */}
+                  {/* Remove + favourite */}
+                  <div className="shrink-0 flex items-center gap-0.5">
+                    {doctorUid && (
+                      <FavoriteMedicineToggle doctorUid={doctorUid} medicine={medicine} />
+                    )}
                   <button
                     type="button"
                     onClick={() => removeMedicine(index)}
@@ -445,6 +489,7 @@ export default function MedicineForm({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
+                  </div>
                 </div>
               </div>
             )

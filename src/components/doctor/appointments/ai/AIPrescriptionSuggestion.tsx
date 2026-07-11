@@ -23,13 +23,13 @@ export default function AIPrescriptionSuggestion({
   aiPrescriptionText,
   removedIndices,
   existingMedicines,
-  onAddAll: _onAddAll,
+  onAddAll: onAddAll,
   onAddSingle,
   onRemove,
   onRemoveAll,
   onRegenerate,
-  showUsePrevious: _showUsePrevious,
-  onCopyPrevious: _onCopyPrevious,
+  showUsePrevious,
+  onCopyPrevious,
 }: AIPrescriptionSuggestionProps) {
   if (isLoading) {
     return (
@@ -66,6 +66,19 @@ export default function AIPrescriptionSuggestion({
     if (allIndices.length > 0) onRemoveAll(allIndices)
   }
 
+  const addableMedicines = visibleMedicines.filter(
+    ({ med }) =>
+      !existingMedicines.some(
+        (m) => (m.name || "").toLowerCase().trim() === (med.name || "").toLowerCase().trim()
+      )
+  )
+
+  const handleAddAllClick = () => {
+    if (addableMedicines.length > 0) {
+      onAddAll(addableMedicines.map(({ med }) => med))
+    }
+  }
+
   return (
     <div className="space-y-3">
       {/* Section header: Suggested Medicines | actions */}
@@ -79,6 +92,25 @@ export default function AIPrescriptionSuggestion({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {showUsePrevious && onCopyPrevious && (
+            <button
+              type="button"
+              onClick={onCopyPrevious}
+              className="h-8 px-3.5 rounded-full border border-teal-200 bg-teal-50 text-xs font-medium text-teal-800 hover:bg-teal-100 transition-colors"
+            >
+              Use previous Rx
+            </button>
+          )}
+          {addableMedicines.length > 1 && (
+            <button
+              type="button"
+              onClick={handleAddAllClick}
+              className="h-8 px-3.5 rounded-full border border-sky-200 bg-sky-50 text-xs font-semibold text-sky-800 hover:bg-sky-100 transition-colors"
+              title="Add all suggested medicines at once"
+            >
+              Add all ({addableMedicines.length})
+            </button>
+          )}
           {visibleMedicines.length > 0 && (
             <button
               type="button"
