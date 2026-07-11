@@ -795,9 +795,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
 
   const preventDuplicateAppointment = useCallback(
     async (patientId: string) => {
+      if (!activeHospitalId) return
       try {
         const dupQuery = query(
-          collection(db, "appointments"),
+          getHospitalCollection(activeHospitalId, "appointments"),
           where("patientId", "==", patientId),
           where("appointmentDate", "==", appointmentDate),
           where("status", "==", "confirmed")
@@ -810,7 +811,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
         if (error instanceof Error) throw error
       }
     },
-    [appointmentDate]
+    [appointmentDate, activeHospitalId]
   )
 
   const handleBookAppointment = async () => {

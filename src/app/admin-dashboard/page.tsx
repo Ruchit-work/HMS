@@ -203,8 +203,8 @@ export default function AdminDashboard() {
 
   // Trend data will be calculated after displayStats is defined
 
-  // Protect route - allow admins only (pharmacy users are redirected to /pharmacy)
-  const { user, loading: authLoading } = useAuth()
+  // Protect route — admins only; wrong roles redirect via useAuth('admin')
+  const { user, loading: authLoading } = useAuth("admin")
   const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
   const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
   const branchManagementEnabled = (activeHospital as any)?.multipleBranchesEnabled !== false
@@ -282,7 +282,7 @@ export default function AdminDashboard() {
     try {
       setLoading(true)
 
-      // Get admin or pharmacy user data
+      // Get admin user data (graceful fallback if document is missing)
       const adminDoc = await getDoc(doc(db, "admins", user.uid))
       if (adminDoc.exists()) {
         const data = adminDoc.data() as UserData
@@ -295,6 +295,13 @@ export default function AdminDashboard() {
           firstName: d.firstName as string | undefined,
           email: (user.email ?? d.email as string) || "",
           role: "pharmacy",
+        })
+      } else {
+        setUserData({
+          id: user.uid,
+          name: (user.data?.firstName as string) || user.email || "Admin",
+          email: user.email || "",
+          role: user.role || "admin",
         })
       }
 
@@ -402,15 +409,19 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    if (user && activeHospitalId && !hospitalLoading) {
-      fetchDashboardData()
-      const cleanup = setupRealtimeBadgeListeners()
-      return () => {
-        if (cleanup) cleanup()
-      }
+    if (!user || authLoading || hospitalLoading) return
+
+    if (!activeHospitalId) {
+      setLoading(false)
+      return
     }
-     
-  }, [user, activeHospitalId, hospitalLoading])
+
+    fetchDashboardData()
+    const cleanup = setupRealtimeBadgeListeners()
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [user, activeHospitalId, hospitalLoading, authLoading])
   // Note: selectedBranchId removed - filtering happens client-side via useMemo below
 
   // Filter data and recalculate stats based on selectedBranchId
@@ -657,14 +668,21 @@ export default function AdminDashboard() {
     }
   }
 
-  // While redirecting away for unauthenticated users, render nothing.
-  if (!user) {
-    return null
+  // Unauthenticated or redirecting users are handled by useAuth('admin')
+  if (authLoading || !user) {
+    return <LoadingSpinner message="Verifying access..." inline />
   }
 
-  // When authenticated but data is still loading, show a neutral loading state.
-  if (authLoading || hospitalLoading || loading || !userData) {
-    return <LoadingSpinner message="Loading..." />
+  // Authenticated admin — load dashboard data; never block forever on missing profile doc
+  if (hospitalLoading || loading) {
+    return <LoadingSpinner message="Loading dashboard..." inline />
+  }
+
+  const resolvedUserData: UserData = userData ?? {
+    id: user.uid,
+    name: user.email || "Admin",
+    email: user.email || "",
+    role: user.role || "admin",
   }
 
   return (
@@ -882,9 +900,9 @@ export default function AdminDashboard() {
               <SidebarAccountButton
                 active={activeTab === "account"}
                 onClick={() => { setActiveTab("account"); setSidebarOpen(false) }}
-                displayName={userData.firstName || userData.name || "Admin"}
+                displayName={resolvedUserData.firstName || resolvedUserData.name || "Admin"}
                 roleLabel={isSuperAdmin ? "Super Administrator" : "Administrator"}
-                initial={userData.firstName?.charAt(0) || userData.email.charAt(0).toUpperCase()}
+                initial={resolvedUserData.firstName?.charAt(0) || resolvedUserData.email.charAt(0).toUpperCase()}
               />
 
               {/* Logout Button */}
@@ -1229,7 +1247,7 @@ export default function AdminDashboard() {
           {activeTab === "account" && user?.email && (
             <AdminAccountPanel
               userEmail={user.email}
-              displayName={userData.firstName || userData.name || "Admin"}
+              displayName={resolvedUserData.firstName || resolvedUserData.name || "Admin"}
               isSuperAdmin={isSuperAdmin}
               onNotify={(type, message) => setNotification({ type, message })}
             />

@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut } from "firebase/auth"
-import { auth, db } from "@/firebase/config"
-import { collection, onSnapshot, query, where } from "firebase/firestore"
+import { auth } from "@/firebase/config"
+import { onSnapshot, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import NotificationBadge from "@/components/ui/feedback/NotificationBadge"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
@@ -38,6 +40,7 @@ const navIcons: Record<DoctorNavId, React.ReactNode> = {
 export default function ClinicalWorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { user } = useAuth("doctor")
+  const { activeHospitalId } = useMultiHospital()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
@@ -52,12 +55,12 @@ export default function ClinicalWorkspaceShell({ children }: { children: React.R
   })
 
   useEffect(() => {
-    if (!user?.uid) {
+    if (!user?.uid || !activeHospitalId) {
       setAppointmentCount(0)
       return
     }
 
-    const appointmentsRef = collection(db, "appointments")
+    const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
     const q = query(
       appointmentsRef,
       where("doctorId", "==", user.uid),
@@ -69,7 +72,7 @@ export default function ClinicalWorkspaceShell({ children }: { children: React.R
     })
 
     return () => unsubscribe()
-  }, [user?.uid])
+  }, [user?.uid, activeHospitalId])
 
   const displayName =
     user?.data?.firstName && user?.data?.lastName

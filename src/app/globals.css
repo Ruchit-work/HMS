@@ -1145,6 +1145,57 @@ body {
 .rx-page {
   padding: 1.25rem 1rem;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--color-neutral-50);
+}
+
+/* Tab panel transitions — keep cached panels mounted, fade active panel in */
+.rx-tab-panels {
+  position: relative;
+  width: 100%;
+}
+
+.rx-tab-panel {
+  display: none;
+}
+
+.rx-tab-panel--active {
+  display: block;
+  animation: rx-tab-fade-in 200ms ease-out;
+}
+
+@keyframes rx-tab-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Skeleton pulse for page-specific loaders */
+.rx-skeleton {
+  background: linear-gradient(
+    90deg,
+    theme('colors.slate.100') 0%,
+    theme('colors.slate.50') 50%,
+    theme('colors.slate.100') 100%
+  );
+  background-size: 200% 100%;
+  animation: rx-skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.375rem;
+}
+
+@keyframes rx-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.rx-tab-skeleton {
+  width: 100%;
 }
 
 @media (min-width: 640px) {

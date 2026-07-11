@@ -4,6 +4,12 @@ import { useEffect, useState, useMemo } from 'react'
 import { query, where, getDocs, onSnapshot } from 'firebase/firestore'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
+import {
+  getAppointmentsCollectionPath,
+  isAppointmentVisibleToReceptionist,
+  logAppointmentQuery,
+} from "@/utils/appointments/appointmentSource"
 import {
   CalendarDays, Users, MessageCircle, ReceiptText, CheckCircle2, Stethoscope,
   BedDouble, Clock, AlertTriangle, CalendarPlus, UserPlus, ChevronRight,
@@ -296,9 +302,20 @@ export default function DashboardOverview({
     // Appointments real-time
     const unsubAppointments = onSnapshot(appointmentsRef, (snapshot) => {
       const all = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string }))
-      const filtered = receptionistBranchId
-        ? all.filter((a) => a.branchId === receptionistBranchId)
-        : all
+      const filtered = all.filter((a) =>
+        isAppointmentVisibleToReceptionist(
+          { branchId: a.branchId as string | null, createdBy: a.createdBy as string | null },
+          receptionistBranchId
+        )
+      )
+
+      logAppointmentQuery({
+        module: "receptionist/dashboard",
+        collection: getAppointmentsCollectionPath(activeHospitalId),
+        filters: { receptionistBranchId: receptionistBranchId || null, date: todayStr },
+        count: filtered.length,
+        empty: filtered.length === 0,
+      })
 
       const today = filtered.filter(
         (a) => a.appointmentDate === todayStr && a.status !== 'whatsapp_pending' && !a.whatsappPending
@@ -457,11 +474,7 @@ export default function DashboardOverview({
   }, [activeHospitalId, receptionistBranchId, todayStr])
 
   if (loading && todayAppointments.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-[320px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent" />
-      </div>
-    )
+    return <TabSkeleton variant="dashboard" />
   }
 
   const waitingCount = queuePatients.length

@@ -13,6 +13,7 @@ import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blocked
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { Button } from "@/components/ui/Button"
 
 interface BookAppointmentFormProps {
@@ -159,17 +160,25 @@ export default function BookAppointmentForm({
 
       setLoadingSlots(true)
       try {
-        // Fetch all confirmed appointments for this doctor on this date (and branch if selected)
+        if (!activeHospitalId) {
+          setAvailableTimeSlots([])
+          setBookedTimeSlots([])
+          setLoadingSlots(false)
+          return
+        }
+
+        // Single source of truth: hospitals/{hospitalId}/appointments
+        const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
         const appointmentsQuery = selectedBranchId
           ? query(
-              collection(db, "appointments"),
+              appointmentsRef,
               where("doctorId", "==", selectedDoctor),
               where("appointmentDate", "==", appointmentData.date),
               where("branchId", "==", selectedBranchId),
               where("status", "==", "confirmed")
             )
           : query(
-              collection(db, "appointments"),
+              appointmentsRef,
               where("doctorId", "==", selectedDoctor),
               where("appointmentDate", "==", appointmentData.date),
               where("status", "==", "confirmed")
@@ -182,7 +191,7 @@ export default function BookAppointmentForm({
         } as Appointment))
 
         // Fetch all confirmed appointments for this patient on this date   
-        const baseCollection = collection(db, "appointments")
+        const baseCollection = appointmentsRef
         const patientAppointmentsByUidQuery = query(
           baseCollection,
           where("patientUid", "==", user.uid),
@@ -319,7 +328,7 @@ export default function BookAppointmentForm({
 
     fetchAvailableSlots()
      
-  }, [selectedDoctor, appointmentData.date, selectedBranchId, selectedBranch])
+  }, [selectedDoctor, appointmentData.date, selectedBranchId, selectedBranch, activeHospitalId, user.uid])
 
   const nextStep = () => {
     if (currentStep < totalSteps && canProceedToNextStep()) {

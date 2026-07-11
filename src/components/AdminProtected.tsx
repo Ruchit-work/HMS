@@ -1,81 +1,26 @@
 'use client'
 
-import { useAuth } from '@/hooks/useAuth'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
-import { auth } from '@/firebase/config'
-
-type UserRole = 'patient' | 'doctor' | 'admin' | 'receptionist' | 'pharmacy' | null
+import RouteGuard from '@/components/auth/RouteGuard'
+import type { UserRole } from '@/utils/auth/roleRouting'
 
 interface AdminProtectedProps {
   children: React.ReactNode
-  fallback?: React.ReactNode
-  /** When set, allows these roles (e.g. ["admin", "pharmacy"]). When omitted, only "admin" is allowed. */
-  allowedRoles?: UserRole[]
+  /** When set, allows these roles. Defaults to admin only. */
+  allowedRoles?: Exclude<UserRole, null>[]
 }
 
-export default function AdminProtected({ children, fallback, allowedRoles }: AdminProtectedProps) {
-  const { user, loading } = useAuth(allowedRoles ? undefined : 'admin')
-  const router = useRouter()
-
-  const allowed = !user
-    ? false
-    : allowedRoles
-      ? allowedRoles.includes(user.role)
-      : user.role === 'admin'
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/auth/login?role=admin')
-      return
-    }
-    if (!loading && user && !allowed) {
-      const dashboardPath = user.role === 'pharmacy' ? '/pharmacy' : user.role ? `/${user.role}-dashboard` : '/auth/login'
-      router.replace(dashboardPath)
-    }
-  }, [user, loading, allowed, router])
-
-  // Handle browser back/forward cache: if user has logged out and navigates back,
-  // ensure admin pages immediately redirect to login instead of showing stale content.
-  useEffect(() => {
-    const handlePageShow = () => {
-      if (!auth.currentUser) {
-        router.replace('/auth/login?role=admin')
-      }
-    }
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('pageshow', handlePageShow)
-      return () => window.removeEventListener('pageshow', handlePageShow)
-    }
-  }, [router])
-
-  if (loading) {
-    return <LoadingSpinner message="Verifying access..." />
-  }
-
-  if (!user || !allowed) {
-    return fallback || (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
-          <p className="text-gray-600 mb-4">You need admin or pharmacy privileges to access this page.</p>
-          <button
-            onClick={() => router.push('/auth/login?role=admin')}
-            className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-colors"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  return <>{children}</>
+export default function AdminProtected({
+  children,
+  allowedRoles = ['admin'],
+}: AdminProtectedProps) {
+  return (
+    <RouteGuard
+      allowedRoles={allowedRoles}
+      loginRole="admin"
+      skeletonVariant="dashboard"
+      unauthorizedMessage="You need administrator privileges to access this page."
+    >
+      {children}
+    </RouteGuard>
+  )
 }

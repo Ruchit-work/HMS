@@ -19,8 +19,8 @@ export function ClientLayoutContent({ children }: ClientLayoutContentProps) {
   return (
     <ErrorBoundary>
       <SpeechRecognitionProvider>
-        <GlobalHeader />
         <MultiHospitalProvider>
+          <GlobalHeader />
           {children}
         </MultiHospitalProvider>
       </SpeechRecognitionProvider>

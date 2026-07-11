@@ -228,6 +228,7 @@ export async function POST(request: Request) {
       appointmentDate: String(appointmentData.appointmentDate),
       appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
       status: safeValue(appointmentData.status, "confirmed"),
+      appointmentType: safeValue(appointmentData.appointmentType, "consultation"),
       
       // Payment fields - properly set for completed payment
       paymentAmount: totalPaymentAmount,
@@ -245,6 +246,7 @@ export async function POST(request: Request) {
       paymentMethod: safeValue(appointmentData.paymentMethod, "cash"),
       paymentType: safeValue(appointmentData.paymentType, "full"),
       paymentStatus: "paid", // Mark as paid since receptionist completed payment
+      billingStatus: "paid",
       remainingAmount: 0, // No remaining amount since payment is complete
       paidAt: nowIso, // Set payment timestamp
       transactionId: `RCPT${Date.now()}`, // Generate transaction ID

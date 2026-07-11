@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation"
 import { auth, db } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
-
-type UserRole = "patient" | "doctor" | "admin" | "receptionist" | "pharmacy" | null
-// const STAFF_ROLES: Exclude<UserRole, "patient" | null>[] = ["admin", "doctor", "receptionist"] // Not currently used
+import {
+  AUTH_RESOLVE_TIMEOUT_MS,
+  getDashboardPathForRole,
+  getLoginPathForRole,
+  getRoleCollection,
+  logAuthDev,
+  normalizeUserRole,
+  type UserRole,
+} from "@/utils/auth/roleRouting"
 
 interface AuthUser {
   uid: string
@@ -17,300 +23,285 @@ interface AuthUser {
   data?: Record<string, unknown>
 }
 
-// Cache user data to avoid repeated queries
-const userDataCache = new Map<string, { role: UserRole; data: any; timestamp: number }>()
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "redirecting" | "error"
 
-async function getUserRole(uid: string, requiredRole?: UserRole): Promise<{ role: UserRole; data: any } | null> {
-  // Check cache first
+const userDataCache = new Map<string, { role: UserRole; data: Record<string, unknown>; timestamp: number }>()
+const CACHE_DURATION = 5 * 60 * 1000
+
+async function fetchRoleDocument(
+  uid: string,
+  role: Exclude<UserRole, null | "super_admin">
+): Promise<{ role: UserRole; data: Record<string, unknown> } | null> {
+  const collectionName = getRoleCollection(role)
+  const roleDoc = await getDoc(doc(db, collectionName, uid))
+  if (!roleDoc.exists()) return null
+
+  const data = roleDoc.data() as Record<string, unknown>
+  const resolvedRole = normalizeUserRole(data.role) ?? role
+  return { role: resolvedRole, data }
+}
+
+async function getUserRole(
+  uid: string,
+  requiredRole?: UserRole
+): Promise<{ role: UserRole; data: Record<string, unknown> } | null> {
   const cached = userDataCache.get(uid)
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached
+    if (!requiredRole || cached.role === requiredRole || cached.role === "super_admin") {
+      return { role: cached.role, data: cached.data }
+    }
   }
 
   try {
-    // If required role is specified, check only that collection
-    if (requiredRole === "admin") {
-      const adminDoc = await getDoc(doc(db, "admins", uid))
-      if (adminDoc.exists()) {
-        const data = { role: "admin" as UserRole, data: adminDoc.data() }
-        userDataCache.set(uid, { ...data, timestamp: Date.now() })
-        return data
+    if (requiredRole && requiredRole !== "super_admin") {
+      const match = await fetchRoleDocument(uid, requiredRole)
+      if (match) {
+        userDataCache.set(uid, { ...match, timestamp: Date.now() })
+        return match
       }
       return null
     }
 
-    if (requiredRole === "doctor") {
-      const doctorDoc = await getDoc(doc(db, "doctors", uid))
-      if (doctorDoc.exists()) {
-        const data = { role: "doctor" as UserRole, data: doctorDoc.data() }
-        userDataCache.set(uid, { ...data, timestamp: Date.now() })
-        return data
+    const roleOrder: Exclude<UserRole, null | "super_admin">[] = [
+      "admin",
+      "doctor",
+      "patient",
+      "receptionist",
+      "pharmacy",
+    ]
+
+    for (const role of roleOrder) {
+      const match = await fetchRoleDocument(uid, role)
+      if (match) {
+        userDataCache.set(uid, { ...match, timestamp: Date.now() })
+        return match
       }
-      return null
-    }
-
-    if (requiredRole === "patient") {
-      const patientDoc = await getDoc(doc(db, "patients", uid))
-      if (patientDoc.exists()) {
-        const data = { role: "patient" as UserRole, data: patientDoc.data() }
-        userDataCache.set(uid, { ...data, timestamp: Date.now() })
-        return data
-      }
-      return null
-    }
-
-    if (requiredRole === "receptionist") {
-      const receptionistDoc = await getDoc(doc(db, "receptionists", uid))
-      if (receptionistDoc.exists()) {
-        const data = { role: "receptionist" as UserRole, data: receptionistDoc.data() }
-        userDataCache.set(uid, { ...data, timestamp: Date.now() })
-        return data
-      }
-      return null
-    }
-
-    if (requiredRole === "pharmacy") {
-      const pharmacistDoc = await getDoc(doc(db, "pharmacists", uid))
-      if (pharmacistDoc.exists()) {
-        const data = { role: "pharmacy" as UserRole, data: pharmacistDoc.data() }
-        userDataCache.set(uid, { ...data, timestamp: Date.now() })
-        return data
-      }
-      return null
-    }
-
-    // No specific role required, check all collections sequentially
-    const adminDoc = await getDoc(doc(db, "admins", uid))
-    if (adminDoc.exists()) {
-      const data = { role: "admin" as UserRole, data: adminDoc.data() }
-      userDataCache.set(uid, { ...data, timestamp: Date.now() })
-      return data
-    }
-
-    const doctorDoc = await getDoc(doc(db, "doctors", uid))
-    if (doctorDoc.exists()) {
-      const data = { role: "doctor" as UserRole, data: doctorDoc.data() }
-      userDataCache.set(uid, { ...data, timestamp: Date.now() })
-      return data
-    }
-
-    const patientDoc = await getDoc(doc(db, "patients", uid))
-    if (patientDoc.exists()) {
-      const data = { role: "patient" as UserRole, data: patientDoc.data() }
-      userDataCache.set(uid, { ...data, timestamp: Date.now() })
-      return data
-    }
-
-    const receptionistDoc = await getDoc(doc(db, "receptionists", uid))
-    if (receptionistDoc.exists()) {
-      const data = { role: "receptionist" as UserRole, data: receptionistDoc.data() }
-      userDataCache.set(uid, { ...data, timestamp: Date.now() })
-      return data
-    }
-
-    const pharmacistDoc = await getDoc(doc(db, "pharmacists", uid))
-    if (pharmacistDoc.exists()) {
-      const data = { role: "pharmacy" as UserRole, data: pharmacistDoc.data() }
-      userDataCache.set(uid, { ...data, timestamp: Date.now() })
-      return data
     }
 
     return null
-  } catch {
-    return null
+  } catch (error) {
+    logAuthDev("getUserRole failed", {
+      uid,
+      requiredRole,
+      error: error instanceof Error ? error.message : "unknown",
+    })
+    throw error
   }
+}
+
+function finishAuth(
+  setLoading: (value: boolean) => void,
+  setStatus: (value: AuthStatus) => void
+) {
+  setLoading(false)
+  setStatus("authenticated")
 }
 
 export function useAuth(requiredRole?: UserRole, redirectPath?: string) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [timedOut, setTimedOut] = useState(false)
+  const [status, setStatus] = useState<AuthStatus>("loading")
   const router = useRouter()
 
   useEffect(() => {
+    setTimedOut(false)
+    setError(null)
+    setStatus("loading")
+
+    const timeoutId = window.setTimeout(() => {
+      setTimedOut(true)
+      setLoading(false)
+      setStatus("error")
+      setError("Authentication timed out. Please refresh or sign in again.")
+      logAuthDev("useAuth timeout reached", { requiredRole })
+    }, AUTH_RESOLVE_TIMEOUT_MS)
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      window.clearTimeout(timeoutId)
+
       if (!currentUser) {
-        // No user logged in
+        setUser(null)
+        setLoading(false)
+        setStatus("unauthenticated")
         if (requiredRole) {
-          // Protected route - redirect to login
-          const loginPath = redirectPath || `/auth/login?role=${requiredRole}`
+          const loginPath = redirectPath || getLoginPathForRole(requiredRole)
+          logAuthDev("No Firebase user, redirecting to login", { loginPath })
           router.replace(loginPath)
         }
-        setLoading(false)
         return
       }
 
       try {
-        const userRoleData = await getUserRole(currentUser.uid, requiredRole)
-        
-        if (!userRoleData) {
-          // If requiredRole was specified and userRoleData is null,
-          // it might mean the user doesn't have that specific role.
-          // Check their actual role instead.
-          if (requiredRole) {
-            const actualUserRoleData = await getUserRole(currentUser.uid)
-            if (actualUserRoleData) {
-              // User has a different role - redirect to their dashboard
-              const dashboardPath = actualUserRoleData.role === 'pharmacy' ? '/pharmacy' : `/${actualUserRoleData.role}-dashboard`
-              router.replace(dashboardPath)
-              setLoading(false)
-              return
-            }
+        setLoading(true)
+        setStatus("loading")
+
+        let userRoleData = await getUserRole(currentUser.uid, requiredRole)
+
+        if (!userRoleData && requiredRole) {
+          const actualUserRoleData = await getUserRole(currentUser.uid)
+          if (actualUserRoleData) {
+            const dashboardPath = getDashboardPathForRole(actualUserRoleData.role)
+            setUser(null)
+            setLoading(false)
+            setStatus("redirecting")
+            logAuthDev("Wrong role for route, redirecting", {
+              requiredRole,
+              actualRole: actualUserRoleData.role,
+              dashboardPath,
+            })
+            router.replace(dashboardPath)
+            return
           }
-          
-          // User exists in auth but not in any collection - sign them out
+
+          logAuthDev("Auth user missing Firestore profile, signing out", { uid: currentUser.uid })
           await signOut(auth)
-          router.replace("/")
+          setUser(null)
           setLoading(false)
+          setStatus("unauthenticated")
+          router.replace("/auth/login")
           return
         }
 
-        // MFA verification disabled - commented out to allow login without 2FA
-        // Verify MFA for staff roles (admin, doctor, receptionist)
-        // if (
-        //   userRoleData.role === "admin" ||
-        //   userRoleData.role === "doctor" ||
-        //   userRoleData.role === "receptionist"
-        // ) {
-        //   const tokenResult = await currentUser.getIdTokenResult(true)
-        //   const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-        //   const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-        //   const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
+        if (!userRoleData) {
+          logAuthDev("Auth user missing any role document, signing out", { uid: currentUser.uid })
+          await signOut(auth)
+          setUser(null)
+          setLoading(false)
+          setStatus("unauthenticated")
+          router.replace("/auth/login")
+          return
+        }
 
-        //   // If no MFA session exists or authTime doesn't match, redirect to login for MFA
-        //   if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-        //     // Check if we're already on login page - if so, don't sign out (let login page handle MFA)
-        //     const currentPath = window.location.pathname
-        //     if (!currentPath.includes('/auth/login')) {
-        //       await signOut(auth)
-        //     }
-        //     const loginPath = redirectPath || `/auth/login?role=${userRoleData.role}`
-        //     router.replace(loginPath)
-        //     setLoading(false)
-        //     return
-        //   }
-        // }
-
-        // If route requires specific role and user has different role, redirect
-        if (requiredRole && requiredRole !== userRoleData.role) {
-const dashboardPath = userRoleData.role === 'pharmacy' ? '/pharmacy' : `/${userRoleData.role}-dashboard`
-              router.replace(dashboardPath)
-              return
+        if (requiredRole && !isRoleMatch(requiredRole, userRoleData.role)) {
+          const dashboardPath = getDashboardPathForRole(userRoleData.role)
+          setUser(null)
+          setLoading(false)
+          setStatus("redirecting")
+          logAuthDev("Role mismatch after resolve, redirecting", {
+            requiredRole,
+            actualRole: userRoleData.role,
+            dashboardPath,
+          })
+          router.replace(dashboardPath)
+          return
         }
 
         setUser({
           uid: currentUser.uid,
           email: currentUser.email,
           role: userRoleData.role,
-          status: userRoleData.data?.status,
-          data: userRoleData.data
+          status: typeof userRoleData.data?.status === "string" ? userRoleData.data.status : undefined,
+          data: userRoleData.data,
         })
+        setError(null)
+        setTimedOut(false)
+        finishAuth(setLoading, setStatus)
+      } catch (authError) {
+        const message =
+          authError instanceof Error ? authError.message : "Failed to verify authentication"
+        logAuthDev("useAuth error", { requiredRole, message })
+        setUser(null)
+        setError(message)
         setLoading(false)
-      } catch {
-        setLoading(false)
+        setStatus("error")
       }
     })
 
-    return () => unsubscribe()
+    return () => {
+      window.clearTimeout(timeoutId)
+      unsubscribe()
+    }
   }, [router, requiredRole, redirectPath])
 
-  return { user, loading }
+  return { user, loading, error, timedOut, status }
 }
 
-// Hook for public routes (login, signup) - redirects if already authenticated
+function isRoleMatch(required: UserRole, actual: UserRole): boolean {
+  if (!required || !actual) return false
+  if (required === "admin" && actual === "super_admin") return true
+  return required === actual
+}
+
 export function usePublicRoute() {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   const checkAndRedirect = useCallback(async () => {
     const currentUser = auth.currentUser
-    if (currentUser) {
-      // User is logged in - check their role and redirect to dashboard using cached data
+    if (!currentUser) return false
+
+    try {
       const userRoleData = await getUserRole(currentUser.uid)
       if (userRoleData) {
-        // MFA verification disabled - commented out to allow login without 2FA
-        // Enforce MFA for staff roles before auto-redirecting from public routes
-        // if (
-        //   userRoleData.role === "admin" ||
-        //   userRoleData.role === "doctor" ||
-        //   userRoleData.role === "receptionist"
-        // ) {
-        //   const tokenResult = await currentUser.getIdTokenResult(true)
-        //   const authTime = tokenResult?.claims?.auth_time ? String(tokenResult.claims.auth_time) : null
-        //   const mfaDoc = await getDoc(doc(db, "mfaSessions", currentUser.uid))
-        //   const storedAuthTime = mfaDoc.exists() ? String(mfaDoc.data()?.authTime || "") : ""
-
-        //   // If MFA not complete, don't redirect - let login page handle MFA flow
-        //   if (!authTime || !storedAuthTime || storedAuthTime !== authTime) {
-        //     setLoading(false)
-        //     return false
-        //   }
-        // }
-
-        const dashboardPath = userRoleData.role === 'pharmacy' ? '/pharmacy' : `/${userRoleData.role}-dashboard`
+        const dashboardPath = getDashboardPathForRole(userRoleData.role)
+        logAuthDev("Public route: authenticated user redirecting", {
+          role: userRoleData.role,
+          dashboardPath,
+        })
         router.replace(dashboardPath)
-        return true // Indicates redirect happened
-      } else {
-        // User exists but no data - sign them out
-        await signOut(auth)
+        return true
       }
+
+      await signOut(auth)
+      return false
+    } catch (error) {
+      logAuthDev("Public route auth check failed", {
+        error: error instanceof Error ? error.message : "unknown",
+      })
+      return false
     }
-    return false // No redirect needed
   }, [router])
 
   useEffect(() => {
-    // Immediate synchronous check
-    const immediateCheck = async () => {
+    let cancelled = false
+
+    const resolve = async () => {
       const redirected = await checkAndRedirect()
-      if (!redirected) {
-        setLoading(false)
+      if (!cancelled) setLoading(false)
+      if (redirected) {
+        logAuthDev("Public route redirect complete")
       }
     }
-    
-    immediateCheck()
 
-    // Listen for auth state changes
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        const redirected = await checkAndRedirect()
-        if (!redirected) {
-          setLoading(false)
-        }
-      } else {
-        setLoading(false)
-      }
+    resolve()
+
+    const unsubscribe = onAuthStateChanged(auth, async () => {
+      const redirected = await checkAndRedirect()
+      if (!cancelled) setLoading(false)
+      if (redirected) return
     })
 
-    // Handle browser back button and page visibility
-     
-    const handlePageshow = async (_event: PageTransitionEvent) => {
-      // Re-check auth when page is shown (back button or forward button)
-      // event.persisted means page was loaded from cache (back button)
-      setLoading(true)
-      const redirected = await checkAndRedirect()
-      if (!redirected) {
-        setLoading(false)
-      }
+    const handlePageshow = async () => {
+      if (!cancelled) setLoading(true)
+      await checkAndRedirect()
+      if (!cancelled) setLoading(false)
     }
 
     const handleFocus = async () => {
-      // When tab/window regains focus, re-check auth
-      const redirected = await checkAndRedirect()
-      if (!redirected) {
-        setLoading(false)
-      }
+      await checkAndRedirect()
+      if (!cancelled) setLoading(false)
     }
 
-    window.addEventListener('pageshow', handlePageshow)
-    window.addEventListener('focus', handleFocus)
+    window.addEventListener("pageshow", handlePageshow)
+    window.addEventListener("focus", handleFocus)
+
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false)
+        logAuthDev("usePublicRoute timeout reached")
+      }
+    }, AUTH_RESOLVE_TIMEOUT_MS)
 
     return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
       unsubscribe()
-      window.removeEventListener('pageshow', handlePageshow)
-      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener("pageshow", handlePageshow)
+      window.removeEventListener("focus", handleFocus)
     }
-  }, [router, checkAndRedirect])
+  }, [checkAndRedirect])
 
   return { loading }
 }
-

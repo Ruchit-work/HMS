@@ -7,20 +7,14 @@ import { signOut } from "firebase/auth"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { isAppointmentVisibleToReceptionist } from "@/utils/appointments/appointmentSource"
 import { useRouter } from "next/navigation"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import Notification from "@/components/ui/feedback/Notification"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
-import PatientManagement from "@/app/admin-dashboard/Tabs/PatientManagement"
-import PatientAnalytics from "@/app/admin-dashboard/Tabs/PatientAnalytics"
-import DoctorManagement from "@/app/admin-dashboard/Tabs/DoctorManagement"
-import AppoinmentManagement from "@/app/admin-dashboard/Tabs/AppoinmentManagement"
-import AdmitRequestsPanel from "@/app/receptionist-dashboard/Tabs/AdmitRequestsPanel"
-import BillingHistoryPanel from "@/app/receptionist-dashboard/Tabs/BillingHistoryPanel"
-import BookAppointmentPanel from "@/app/receptionist-dashboard/Tabs/BookAppointmentPanel"
-import WhatsAppBookingsPanel from "@/app/receptionist-dashboard/Tabs/WhatsAppBookingsPanel"
-import DashboardOverview from "@/app/receptionist-dashboard/Tabs/DashboardOverview"
-import DocumentsTab from "@/components/documents/DocumentsTab"
+import ReceptionistTabPanels, {
+  prefetchReceptionistTab,
+  type ReceptionistTab,
+} from "@/app/receptionist-dashboard/components/ReceptionistTabPanels"
 import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import {
   LayoutDashboard, Users, Stethoscope, CalendarDays, BedDouble,
@@ -28,16 +22,7 @@ import {
   LogOut, Menu, X, Building2, ChevronDown
 } from "lucide-react"
 
-type ActiveTab =
-  | "dashboard"
-  | "patients"
-  | "doctors"
-  | "appointments"
-  | "book-appointment"
-  | "admit-requests"
-  | "billing"
-  | "whatsapp-bookings"
-  | "documents"
+type ActiveTab = ReceptionistTab
 
 const TAB_TITLES: Record<ActiveTab, string> = {
   dashboard: "Dashboard",
@@ -63,6 +48,7 @@ export default function ReceptionistDashboard() {
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard")
+  const [visitedTabs, setVisitedTabs] = useState<Set<ActiveTab>>(new Set(["dashboard"]))
   const [patientSubTab, setPatientSubTab] = useState<"all" | "analytics">("all")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userName, setUserName] = useState<string>("")
@@ -79,7 +65,7 @@ export default function ReceptionistDashboard() {
   const [currentTime, setCurrentTime] = useState("")
 
   const router = useRouter()
-  const { user, loading: authLoading } = useAuth("receptionist")
+  const { user, loading: authLoading, error: authError, timedOut: authTimedOut } = useAuth("receptionist")
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const [receptionistBranchId, setReceptionistBranchId] = useState<string | null>(null)
 
@@ -177,7 +163,9 @@ export default function ReceptionistDashboard() {
         return data.status === "confirmed" || data.status === "whatsapp_pending"
       })
       if (receptionistBranchId) {
-        docs = docs.filter((d) => d.data().branchId === receptionistBranchId)
+        docs = docs.filter((d) =>
+          isAppointmentVisibleToReceptionist(d.data(), receptionistBranchId)
+        )
       }
       setNewAppointmentsCount(docs.length)
     })
@@ -192,23 +180,18 @@ export default function ReceptionistDashboard() {
       setNewPatientsCount(snapshot.size)
     })
 
-    let billingQuery
-    if (receptionistBranchId) {
-      billingQuery = query(
-        getHospitalCollection(activeHospitalId, "appointments"),
-        where("status", "in", ["completed", "confirmed"]),
-        where("paymentStatus", "in", ["pending", "unpaid"]),
-        where("branchId", "==", receptionistBranchId)
-      )
-    } else {
-      billingQuery = query(
-        getHospitalCollection(activeHospitalId, "appointments"),
-        where("status", "in", ["completed", "confirmed"]),
-        where("paymentStatus", "in", ["pending", "unpaid"])
-      )
-    }
+    // Pending billing: hospital-scoped appointments, then client-side branch visibility
+    // (Firestore where branchId == X would hide doctor-created appointments on other branches)
+    const billingQuery = query(
+      getHospitalCollection(activeHospitalId, "appointments"),
+      where("status", "in", ["completed", "confirmed"]),
+      where("paymentStatus", "in", ["pending", "unpaid"])
+    )
     const unsubscribeBilling = onSnapshot(billingQuery, (snapshot) => {
-      setPendingBillingCount(snapshot.size)
+      const count = snapshot.docs.filter((d) =>
+        isAppointmentVisibleToReceptionist(d.data(), receptionistBranchId)
+      ).length
+      setPendingBillingCount(count)
     })
 
     const admitRequestsQuery = query(
@@ -275,13 +258,29 @@ export default function ReceptionistDashboard() {
 
   const navigate = (tab: ActiveTab) => {
     setActiveTab(tab)
+    setVisitedTabs((prev) => {
+      if (prev.has(tab)) return prev
+      const next = new Set(prev)
+      next.add(tab)
+      return next
+    })
     setSidebarOpen(false)
   }
 
-  if (authLoading || loading || hospitalLoading || !activeHospitalId) {
-    return <LoadingSpinner message="Loading receptionist dashboard..." />
-  }
-  if (!user) return null
+  const isShellReady = Boolean(
+    user &&
+    !authLoading &&
+    !authError &&
+    !authTimedOut &&
+    !hospitalLoading &&
+    activeHospitalId &&
+    !loading
+  )
+
+  // Prefetch default tab on mount
+  useEffect(() => {
+    prefetchReceptionistTab("dashboard")
+  }, [])
 
   const dateStr = new Date().toLocaleDateString("en-IN", {
     weekday: "short",
@@ -289,7 +288,10 @@ export default function ReceptionistDashboard() {
     month: "short",
   })
 
-  const initials = userName.charAt(0).toUpperCase()
+  if (!authLoading && !user) return null
+
+  const displayName = userName || "Receptionist"
+  const initials = displayName.charAt(0).toUpperCase()
 
   return (
     <div className="rx-shell">
@@ -332,6 +334,7 @@ export default function ReceptionistDashboard() {
           <div className="px-3 mb-1">
             <button
               onClick={() => navigate("dashboard")}
+              onMouseEnter={() => prefetchReceptionistTab("dashboard")}
               className={`rx-nav-item ${activeTab === "dashboard" ? "rx-nav-item--active" : ""}`}
             >
               <LayoutDashboard className="w-4 h-4 shrink-0" />
@@ -345,6 +348,7 @@ export default function ReceptionistDashboard() {
             <div className="space-y-0.5 mt-1.5">
               <button
                 onClick={() => navigate("patients")}
+                onMouseEnter={() => prefetchReceptionistTab("patients")}
                 className={`rx-nav-item ${activeTab === "patients" ? "rx-nav-item--active" : ""}`}
               >
                 <Users className="w-4 h-4 shrink-0" />
@@ -353,6 +357,7 @@ export default function ReceptionistDashboard() {
 
               <button
                 onClick={() => navigate("appointments")}
+                onMouseEnter={() => prefetchReceptionistTab("appointments")}
                 className={`rx-nav-item ${activeTab === "appointments" ? "rx-nav-item--active" : ""}`}
               >
                 <CalendarDays className="w-4 h-4 shrink-0" />
@@ -366,6 +371,7 @@ export default function ReceptionistDashboard() {
 
               <button
                 onClick={() => navigate("admit-requests")}
+                onMouseEnter={() => prefetchReceptionistTab("admit-requests")}
                 className={`rx-nav-item ${activeTab === "admit-requests" ? "rx-nav-item--active" : ""}`}
               >
                 <BedDouble className="w-4 h-4 shrink-0" />
@@ -379,6 +385,7 @@ export default function ReceptionistDashboard() {
 
               <button
                 onClick={() => navigate("billing")}
+                onMouseEnter={() => prefetchReceptionistTab("billing")}
                 className={`rx-nav-item ${activeTab === "billing" ? "rx-nav-item--active" : ""}`}
               >
                 <ReceiptText className="w-4 h-4 shrink-0" />
@@ -392,6 +399,7 @@ export default function ReceptionistDashboard() {
 
               <button
                 onClick={() => navigate("doctors")}
+                onMouseEnter={() => prefetchReceptionistTab("doctors")}
                 className={`rx-nav-item ${activeTab === "doctors" ? "rx-nav-item--active" : ""}`}
               >
                 <Stethoscope className="w-4 h-4 shrink-0" />
@@ -406,6 +414,7 @@ export default function ReceptionistDashboard() {
             <div className="space-y-0.5 mt-1.5">
               <button
                 onClick={() => navigate("whatsapp-bookings")}
+                onMouseEnter={() => prefetchReceptionistTab("whatsapp-bookings")}
                 className={`rx-nav-item ${activeTab === "whatsapp-bookings" ? "rx-nav-item--active" : ""}`}
               >
                 <MessageCircle className="w-4 h-4 shrink-0" />
@@ -419,6 +428,7 @@ export default function ReceptionistDashboard() {
 
               <button
                 onClick={() => navigate("documents")}
+                onMouseEnter={() => prefetchReceptionistTab("documents")}
                 className={`rx-nav-item ${activeTab === "documents" ? "rx-nav-item--active" : ""}`}
               >
                 <FolderOpen className="w-4 h-4 shrink-0" />
@@ -433,9 +443,10 @@ export default function ReceptionistDashboard() {
             <div className="mt-1.5">
               <button
                 onClick={() => {
-                  if (!bookSubOpen) setActiveTab("book-appointment")
+                  if (!bookSubOpen) navigate("book-appointment")
                   setBookSubOpen(!bookSubOpen)
                 }}
+                onMouseEnter={() => prefetchReceptionistTab("book-appointment")}
                 className={`rx-nav-item rx-nav-item--cta ${
                   activeTab === "book-appointment" ? "rx-nav-item--active rx-nav-item--cta" : ""
                 }`}
@@ -453,9 +464,8 @@ export default function ReceptionistDashboard() {
                 <div className="ml-5 pl-3 mt-1 space-y-0.5 border-l border-slate-200">
                   <button
                     onClick={() => {
-                      setActiveTab("book-appointment")
+                      navigate("book-appointment")
                       setPatientMode("existing")
-                      setSidebarOpen(false)
                     }}
                     className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       activeTab === "book-appointment" && patientMode === "existing"
@@ -467,9 +477,8 @@ export default function ReceptionistDashboard() {
                   </button>
                   <button
                     onClick={() => {
-                      setActiveTab("book-appointment")
+                      navigate("book-appointment")
                       setPatientMode("new")
-                      setSidebarOpen(false)
                     }}
                     className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       activeTab === "book-appointment" && patientMode === "new"
@@ -492,7 +501,7 @@ export default function ReceptionistDashboard() {
               <span className="text-white text-xs font-bold">{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-900 truncate">{userName}</p>
+              <p className="text-xs font-semibold text-slate-900 truncate">{displayName}</p>
               <p className="text-xs text-slate-400">Receptionist</p>
             </div>
           </div>
@@ -507,7 +516,7 @@ export default function ReceptionistDashboard() {
       </aside>
 
       {/* ── Main content ── */}
-      <div className="lg:ml-64 flex-1 flex flex-col min-w-0 overflow-x-hidden">
+      <div className="lg:ml-64 flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {/* Compact sticky header */}
         <header className="rx-header">
           <button
@@ -526,7 +535,7 @@ export default function ReceptionistDashboard() {
           {/* Greeting + Date/Time (desktop) */}
           <div className="hidden sm:flex items-center gap-3">
             <span className="text-xs text-slate-400">
-              {getGreetingTime()}, {userName}
+              {getGreetingTime()}, {displayName}
             </span>
             <span className="w-px h-3 bg-slate-200" />
             <span className="text-xs text-slate-400 tabular-nums">
@@ -535,112 +544,45 @@ export default function ReceptionistDashboard() {
           </div>
         </header>
 
-        {/* Tab content */}
+        {/* Tab content — sidebar/header stay mounted; panels cached after first visit */}
         <main className="rx-page space-y-5">
-          {activeTab === "dashboard" && (
-            <DashboardOverview
-              onTabChange={(tab) => setActiveTab(tab)}
-              receptionistBranchId={receptionistBranchId}
-              userName={userName}
-            />
-          )}
-
-          {activeTab === "patients" && (
-            <div className="rx-section-card">
-              <div className="rx-subtab-bar">
-                <button
-                  onClick={() => setPatientSubTab("all")}
-                  className={`rx-subtab ${patientSubTab === "all" ? "rx-subtab--active" : ""}`}
-                >
-                  All Patients
-                </button>
-                <button
-                  onClick={() => setPatientSubTab("analytics")}
-                  className={`rx-subtab ${patientSubTab === "analytics" ? "rx-subtab--active" : ""}`}
-                >
-                  Analytics
-                </button>
-              </div>
-              <div className="p-6">
-                {patientSubTab === "all" && (
-                  <PatientManagement
-                    canDelete={true}
-                    canAdd={true}
-                    disableAdminGuard={true}
-                    receptionistBranchId={receptionistBranchId}
-                  />
-                )}
-                {patientSubTab === "analytics" && <PatientAnalytics />}
-              </div>
+          {(authError || authTimedOut) ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+              <p className="text-sm font-semibold text-amber-800">
+                {authTimedOut ? "Authentication timed out." : "Authentication error."}
+              </p>
+              <p className="mt-2 text-xs text-amber-700">
+                {authError || "Please refresh the page or sign in again."}
+              </p>
+              <button
+                type="button"
+                onClick={() => router.replace("/auth/login?role=receptionist")}
+                className="mt-4 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors"
+              >
+                Return to Login
+              </button>
             </div>
-          )}
-
-          {activeTab === "doctors" && (
-            <div className="rx-section-card p-6">
-              <DoctorManagement canDelete={false} canAdd={false} disableAdminGuard={true} />
-            </div>
-          )}
-
-          {activeTab === "appointments" && (
-            <div className="rx-section-card p-6">
-              <AppoinmentManagement
-                disableAdminGuard={true}
-                receptionistBranchId={receptionistBranchId}
-              />
-            </div>
-          )}
-
-          {activeTab === "admit-requests" && (
-            <div className="rx-section-card">
-              <AdmitRequestsPanel
-                onNotification={(payload) => setNotification(payload)}
-                onOpenBilling={(admissionId) => {
-                  setBillingFocusQuery(admissionId)
-                  setActiveTab("billing")
-                }}
-              />
-            </div>
-          )}
-
-          {activeTab === "billing" && (
-            <div className="rx-section-card p-6">
-              <BillingHistoryPanel
-                onNotification={(payload) => setNotification(payload)}
-                focusBillingQuery={billingFocusQuery}
-                onFocusHandled={() => setBillingFocusQuery(null)}
-              />
-            </div>
-          )}
-
-          {activeTab === "book-appointment" && (
-            <div className="rx-section-card p-6">
-              <BookAppointmentPanel
-                patientMode={patientMode}
-                onPatientModeChange={setPatientMode}
-                onNotification={(payload) => setNotification(payload)}
-              />
-            </div>
-          )}
-
-          {activeTab === "whatsapp-bookings" && (
-            <div className="rx-section-card p-6">
-              <WhatsAppBookingsPanel
-                receptionistBranchId={receptionistBranchId}
-                onNotification={(payload) => setNotification(payload)}
-                onPendingCountChange={setWhatsappPendingCount}
-              />
-            </div>
-          )}
-
-          {activeTab === "documents" && (
-            <div className="rx-section-card p-6">
-              <DocumentsTab
-                canUpload={true}
-                canEdit={true}
-                canDelete={true}
-                showPatientSelector={true}
-              />
-            </div>
+          ) : (
+          <ReceptionistTabPanels
+            activeTab={activeTab}
+            visitedTabs={visitedTabs}
+            isShellReady={isShellReady}
+            receptionistBranchId={receptionistBranchId}
+            userName={displayName}
+            patientSubTab={patientSubTab}
+            onPatientSubTabChange={setPatientSubTab}
+            patientMode={patientMode}
+            onPatientModeChange={setPatientMode}
+            billingFocusQuery={billingFocusQuery}
+            onBillingFocusHandled={() => setBillingFocusQuery(null)}
+            onNotification={(payload) => setNotification(payload)}
+            onTabChange={(tab) => navigate(tab)}
+            onOpenBilling={(admissionId) => {
+              setBillingFocusQuery(admissionId)
+              navigate("billing")
+            }}
+            onWhatsappPendingCountChange={setWhatsappPendingCount}
+          />
           )}
         </main>
       </div>

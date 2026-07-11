@@ -8,6 +8,11 @@ import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import {
+  getAppointmentsCollectionPath,
+  isAppointmentVisibleToReceptionist,
+  logAppointmentQuery,
+} from '@/utils/appointments/appointmentSource'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import { InlineSpinner } from '@/components/ui/feedback/StatusComponents'
 import EmptyState from '@/components/ui/feedback/EmptyState'
@@ -595,21 +600,20 @@ export default function AppoinmentManagement({
                         id: doc.id,
                         ...doc.data()
                     })) as Appointment[]
-                
-                // When used from receptionist dashboard, restrict to their branch
-                // Also show appointments with null branchId (e.g., WhatsApp bookings without branch assignment)
+
+                // When used from receptionist dashboard, apply unified branch visibility
+                // (same hospital source; doctor-created appointments always visible)
                 if (receptionistBranchId) {
-                    appointmentsList = appointmentsList.filter(apt => {
-                        const aptBranchId = (apt as any).branchId
-                        return aptBranchId === receptionistBranchId || aptBranchId === null || aptBranchId === undefined
-                    })
+                    appointmentsList = appointmentsList.filter((apt) =>
+                        isAppointmentVisibleToReceptionist(apt as any, receptionistBranchId)
+                    )
                 }
 
                 // Additional branch filter from admin UI
                 if (!receptionistBranchId && effectiveSelectedBranchId !== 'all') {
                     appointmentsList = appointmentsList.filter(apt => apt.branchId === effectiveSelectedBranchId)
                 }
-                
+
                 // Sort by newest first (createdAt descending, fallback to updatedAt)
                 appointmentsList = appointmentsList.sort((a, b) => {
                     const aDate = a.createdAt || a.updatedAt || ''
@@ -618,7 +622,18 @@ export default function AppoinmentManagement({
                     if (aDate > bDate) return -1
                     return 0
                 })
-                
+
+                logAppointmentQuery({
+                    module: receptionistBranchId ? 'receptionist/appointments' : 'admin/appointments',
+                    collection: getAppointmentsCollectionPath(activeHospitalId!),
+                    filters: {
+                        receptionistBranchId: receptionistBranchId || null,
+                        selectedBranchId: effectiveSelectedBranchId,
+                    },
+                    count: appointmentsList.length,
+                    empty: appointmentsList.length === 0,
+                })
+
                 setAppointments(appointmentsList)
                 setLastUpdated(new Date())
                 setLoading(false)

@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
-import { auth, db } from "@/firebase/config"
+import { auth } from "@/firebase/config"
 import { onAuthStateChanged, signOut } from "firebase/auth"
-import { collection, query, where, onSnapshot } from "firebase/firestore"
+import { query, where, onSnapshot } from "firebase/firestore"
 import { useRouter, usePathname } from "next/navigation"
 import { getUserData } from "@/utils/firebase/userHelpers"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { ConfirmDialog } from "../overlays/Modals"
 import NotificationBadge from "../feedback/NotificationBadge"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
@@ -20,6 +22,7 @@ export default function GlobalHeader() {
   const [logoutLoading, setLogoutLoading] = useState(false)
   const [appointmentCount, setAppointmentCount] = useState(0)
   const [isScrolled, setIsScrolled] = useState(false)
+  const { activeHospitalId } = useMultiHospital()
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -69,14 +72,14 @@ export default function GlobalHeader() {
     return () => unsubscribe()
   }, [userData])
 
-  // Set up real-time appointment listener for doctors
+  // Set up real-time appointment listener for doctors (hospital-scoped)
   useEffect(() => {
-    if (!user?.uid || !userData?.role || userData.role !== 'doctor') {
+    if (!user?.uid || !userData?.role || userData.role !== 'doctor' || !activeHospitalId) {
       setAppointmentCount(0)
       return
     }
 
-    const appointmentsRef = collection(db, "appointments")
+    const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
     const q = query(
       appointmentsRef, 
       where("doctorId", "==", user.uid),
@@ -86,7 +89,6 @@ export default function GlobalHeader() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const confirmedAppointments = snapshot.docs.filter(doc => {
         const data = doc.data()
-        // Filter out WhatsApp pending appointments
         return data.status === "confirmed" && !data.whatsappPending
       })
       setAppointmentCount(confirmedAppointments.length)
@@ -95,7 +97,7 @@ export default function GlobalHeader() {
     })
 
     return () => unsubscribe()
-  }, [user?.uid, userData?.role])
+  }, [user?.uid, userData?.role, activeHospitalId])
 
   // Close mobile menu when clicking outside
   useEffect(() => {

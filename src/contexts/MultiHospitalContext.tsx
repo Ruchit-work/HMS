@@ -9,7 +9,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { useAuth } from '@/hooks/useAuth'
 import { doc, getDoc, updateDoc, getDocs, collection } from 'firebase/firestore'
 import { db } from '@/firebase/config'
-import { Hospital } from '@/types/hospital'
+import { AUTH_RESOLVE_TIMEOUT_MS, logAuthDev } from '@/utils/auth/roleRouting'
 
 interface MultiHospitalContextType {
   // Current active hospital
@@ -212,6 +212,17 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadUserHospitals()
   }, [loadUserHospitals])
+
+  // Safety timeout — never leave hospital context loading forever
+  useEffect(() => {
+    if (!loading) return
+    const timeoutId = window.setTimeout(() => {
+      setLoading(false)
+      setError((prev) => prev || 'Hospital data is taking longer than expected. Please refresh.')
+      logAuthDev('MultiHospitalContext loading timeout')
+    }, AUTH_RESOLVE_TIMEOUT_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [loading])
 
   // Try to restore from sessionStorage on mount
   useEffect(() => {

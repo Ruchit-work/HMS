@@ -233,6 +233,7 @@ export async function POST(request: Request) {
       appointmentDate: String(appointmentData.appointmentDate),
       appointmentTime: normalizedAppointmentTime,
       status: safeValue(appointmentData.status, "confirmed"),
+      appointmentType: safeValue(appointmentData.appointmentType, isRecheck ? "recheckup" : isEmergency ? "emergency" : "consultation"),
       paymentAmount: totalPaymentAmount,
       totalConsultationFee: consultationFee,
       additionalFees:
@@ -249,6 +250,7 @@ export async function POST(request: Request) {
       paymentType: safeValue(appointmentData.paymentType, "full"),
       durationMinutes: typeof appointmentData.durationMinutes === "number" ? appointmentData.durationMinutes : 15,
       paymentStatus,
+      billingStatus: paymentStatus,
       remainingAmount,
       paidAt,
       transactionId: `DOC${Date.now()}`,
