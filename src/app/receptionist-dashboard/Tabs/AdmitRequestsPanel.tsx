@@ -1406,7 +1406,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     <div className="space-y-6 bg-slate-50 px-6 py-6 lg:px-8">
       <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">IPD Control Center</h3>
+          <h3 className="rx-section-title">IPD Control Center</h3>
           <p className="mt-0.5 text-sm text-slate-600">
             Manage admissions, monitor admitted patients, and control IPD settings from one place.
           </p>
@@ -1437,8 +1437,8 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         </div>
       </section>
 
-      <section className="border-b border-slate-200">
-        <div className="flex flex-wrap items-end gap-1.5" role="tablist" aria-label="Admission sections">
+      <section>
+        <div className="rx-subtab-bar" role="tablist" aria-label="Admission sections">
           <button
             role="tab"
             aria-selected={activeSubTab === "admitted"}
@@ -1684,7 +1684,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
       />
 
       {plannedConfirmModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div
             ref={plannedPopupRef}
             tabIndex={-1}
@@ -1726,7 +1726,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
       )}
 
       {postponeModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div
             ref={plannedPopupRef}
             tabIndex={-1}
@@ -1772,7 +1772,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
       )}
 
       {assignDoctorReadyModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div
             ref={plannedPopupRef}
             tabIndex={-1}

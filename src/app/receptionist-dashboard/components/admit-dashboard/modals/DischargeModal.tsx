@@ -95,22 +95,26 @@ export default function DischargeModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between hms-panel-header text-white rounded-t-2xl">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* ── Modal header ── */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">
           <div>
-            <h3 className="text-lg font-semibold">Discharge Patient</h3>
-            <p className="text-sm text-white/85">Finalize discharge summary and billing adjustments</p>
+            <h3 className="text-base font-bold text-slate-900">Discharge Patient</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Finalize discharge summary and billing adjustments</p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-white/20 flex items-center justify-center">
-            <span className="text-xl">×</span>
+          <button onClick={onClose} type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
-        <div className="px-6 py-5 space-y-5 bg-gray-50 rounded-b-2xl">
-          <div className="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+        <div className="overflow-y-auto px-6 py-5 space-y-5">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-900">{selectedAdmission.patientName || "Unknown patient"}</p>
-                <p className="text-xs text-gray-500 mt-0.5">Doctor: {selectedAdmission.doctorName || "—"}</p>
+                <p className="text-sm font-semibold text-slate-900">{selectedAdmission.patientName || "Unknown patient"}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Doctor: {selectedAdmission.doctorName || "—"}</p>
               </div>
               {selectedAdmission.patientId && (
                 <span className="rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-2 py-1 text-xs font-mono text-[var(--color-primary-dark)]">
@@ -118,9 +122,9 @@ export default function DischargeModal({
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-700 mt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700 mt-3">
               <div>
-                <span className="text-xs uppercase text-gray-500 block">Room</span>
+                <span className="text-xs uppercase text-slate-500 block">Room</span>
                 <span>
                   {selectedAdmission.roomNumber} —{" "}
                   {getRoomTypeDisplayName({
@@ -130,15 +134,15 @@ export default function DischargeModal({
                 </span>
               </div>
               <div>
-                <span className="text-xs uppercase text-gray-500 block">Rate / Day</span>
+                <span className="text-xs uppercase text-slate-500 block">Rate / Day</span>
                 <span>₹{selectedAdmission.roomRatePerDay}</span>
               </div>
               <div>
-                <span className="text-xs uppercase text-gray-500 block">Check-in</span>
+                <span className="text-xs uppercase text-slate-500 block">Check-in</span>
                 <span>{selectedAdmission.checkInAt ? new Date(selectedAdmission.checkInAt).toLocaleString() : "—"}</span>
               </div>
               <div>
-                <span className="text-xs uppercase text-gray-500 block">Stay Duration</span>
+                <span className="text-xs uppercase text-slate-500 block">Stay Duration</span>
                 <span>
                   {selectedAdmission.checkInAt
                     ? Math.max(1, Math.ceil((Date.now() - new Date(selectedAdmission.checkInAt).getTime()) / (1000 * 60 * 60 * 24)))
@@ -254,38 +258,29 @@ export default function DischargeModal({
 
           {!selectedAdmission.operationPackage ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Doctor Fee (₹)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={dischargeDoctorFee}
-                  onChange={(e) => setDischargeDoctorFee(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
-                  placeholder="e.g. 500"
-                />
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Prescription Charges (custom) (₹)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={dischargePrescriptionCharges}
+              <div className="space-y-3">
+                <div className="rx-form-field">
+                  <label className="rx-form-label">Doctor Fee (₹)</label>
+                  <input type="number" min="0" value={dischargeDoctorFee}
+                    onChange={(e) => setDischargeDoctorFee(e.target.value)}
+                    className="rx-form-input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    placeholder="e.g. 500" />
+                </div>
+                <div className="rx-form-field">
+                  <label className="rx-form-label">Prescription Charges (₹)</label>
+                  <input type="number" min="0" value={dischargePrescriptionCharges}
                     onChange={(e) => setDischargePrescriptionCharges(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
-                    placeholder="e.g. 1200"
-                  />
-                  <input
-                    type="text"
-                    value={dischargePrescriptionNames}
+                    className="rx-form-input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    placeholder="e.g. 1200" />
+                  <input type="text" value={dischargePrescriptionNames}
                     onChange={(e) => setDischargePrescriptionNames(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
-                    placeholder="Prescription names (e.g. Cefixime, Dolo, IV NS)"
-                  />
+                    className="rx-form-input mt-2"
+                    placeholder="e.g. Cefixime, Dolo, IV NS" />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Other Charges (select)</label>
-                <div className="rounded-lg border border-gray-200 bg-white p-2">
+              <div className="rx-form-field">
+                <label className="rx-form-label">Other Charges</label>
+                <div className="rounded-lg border border-slate-200 bg-white p-2">
                   <div className="space-y-1">
                     {dischargeOtherChargeOptions.map((option) => {
                       const checked = dischargeOtherChargeSelections.includes(option.id)
@@ -382,33 +377,24 @@ export default function DischargeModal({
             )}
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Discharge Notes <span className="text-xs text-gray-400">(optional)</span>
+          <div className="rx-form-field">
+            <label className="rx-form-label">
+              Discharge Notes <span className="text-[11px] font-normal text-slate-400">(optional)</span>
             </label>
-            <textarea
-              rows={3}
-              value={dischargeNotes}
+            <textarea rows={3} value={dischargeNotes}
               onChange={(e) => setDischargeNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
-              placeholder="Add any discharge notes for medical records."
-            />
+              className="rx-form-textarea"
+              placeholder="Add discharge notes for medical records…" />
           </div>
+        </div>
 
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={onClose} disabled={dischargeLoading}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={onConfirm}
-              loading={dischargeLoading}
-              loadingText="Processing..."
-            >
-              Confirm Discharge
-            </Button>
-          </div>
+        {/* ── Modal footer ── */}
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 shrink-0">
+          <Button type="button" variant="outline" onClick={onClose} disabled={dischargeLoading}>Cancel</Button>
+          <Button type="button" variant="primary" onClick={onConfirm}
+            loading={dischargeLoading} loadingText="Processing…">
+            Confirm Discharge
+          </Button>
         </div>
       </div>
     </div>

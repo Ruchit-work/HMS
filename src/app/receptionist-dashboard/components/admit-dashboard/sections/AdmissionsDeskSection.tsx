@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button"
 import SectionCard from "@/app/receptionist-dashboard/components/admit-dashboard/SectionCard"
 import RequestTable, { RequestRow } from "@/app/receptionist-dashboard/components/admit-dashboard/RequestTable"
 import InpatientTable, { InpatientRow } from "@/app/receptionist-dashboard/components/admit-dashboard/InpatientTable"
+import { StatusPill, AvatarCell } from "@/components/ui/data/DataTable"
 import type { Admission } from "@/types/patient"
 
 const formatIpdDisplayNo = (ipdNo: string | undefined, admissionId: string) => {
@@ -177,7 +178,7 @@ export default function AdmissionsDeskSection({
           subtitle="Patients scheduled for planned admission"
           footer={<span className="text-xs text-slate-500">Total planned: {filteredPlannedAdmissions.length}</span>}
         >
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-3 flex flex-wrap gap-1.5">
             {[
               { key: "all" as const, label: "All" },
               { key: "within24h" as const, label: "Within 24h" },
@@ -188,10 +189,10 @@ export default function AdmissionsDeskSection({
                 key={filter.key}
                 type="button"
                 onClick={() => setPlannedFilter(filter.key)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   plannedFilter === filter.key
-                    ? "bg-[var(--color-primary)] text-white"
-                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    ? "bg-cyan-600 text-white shadow-sm"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
                 {filter.label}
@@ -204,24 +205,30 @@ export default function AdmissionsDeskSection({
             </div>
           ) : null}
           {filteredPlannedAdmissions.length === 0 ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
-              No planned admissions are currently scheduled.
+            <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 py-10 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+                <svg className="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-slate-700">No planned admissions scheduled</p>
+              <p className="mt-1 text-xs text-slate-400">Pre-booked admissions will appear here.</p>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full min-w-[680px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-white text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   <tr>
-                    <th className="px-3 py-2">Patient</th>
-                    <th className="px-3 py-2">IPD No</th>
-                    <th className="px-3 py-2">Doctor</th>
-                    <th className="px-3 py-2">Planned Date/Time</th>
-                    <th className="px-3 py-2">Room</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2 text-right">Edit</th>
+                    <th className="px-4 py-3.5">Patient</th>
+                    <th className="px-4 py-3.5">IPD No</th>
+                    <th className="px-4 py-3.5">Doctor</th>
+                    <th className="px-4 py-3.5">Planned Date / Time</th>
+                    <th className="px-4 py-3.5">Room</th>
+                    <th className="px-4 py-3.5">Status</th>
+                    <th className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {filteredPlannedAdmissions.map((admission) => {
                     const plannedIso = String(admission.plannedAdmitAt || admission.checkInAt || "")
                     const plannedDate = new Date(plannedIso)
@@ -231,47 +238,71 @@ export default function AdmissionsDeskSection({
                       plannedDate.getTime() >= Date.now() &&
                       plannedDate.getTime() <= Date.now() + 24 * 60 * 60 * 1000
                     const canReadyToAdmit = in24h && isScheduled
+                    const isLoading = plannedActionLoadingId === admission.id
                     return (
-                      <tr key={admission.id}>
-                        <td className="px-3 py-2 font-medium">{admission.patientName || "Unknown patient"}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{formatIpdDisplayNo(admission.ipdNo, admission.id)}</td>
-                        <td className="px-3 py-2">
-                          <span className="text-xs text-slate-700">{admission.doctorName || "To be assigned"}</span>
+                      <tr
+                        key={admission.id}
+                        className="transition-colors hover:bg-slate-50/70"
+                      >
+                        <td className="px-4 py-3.5">
+                          <AvatarCell
+                            name={admission.patientName || "Unknown"}
+                            color="cyan"
+                            size="sm"
+                          />
                         </td>
-                        <td className="px-3 py-2">
-                          {Number.isFinite(plannedDate.getTime()) ? plannedDate.toLocaleString() : "Invalid date"}
-                        </td>
-                        <td className="px-3 py-2">{admission.roomNumber || "-"}</td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              in24h ? "bg-amber-100 text-amber-800" : "bg-cyan-100 text-cyan-800"
-                            }`}
-                          >
-                            {in24h ? "Due in 24h" : "Scheduled"}
+                        <td className="px-4 py-3.5">
+                          <span className="font-mono text-xs text-slate-500">
+                            {formatIpdDisplayNo(admission.ipdNo, admission.id)}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="inline-flex items-center gap-2">
-                            <select
-                              defaultValue=""
-                              disabled={plannedActionLoadingId === admission.id}
-                              onChange={(e) => {
-                                const action = e.target.value as "" | "ready_to_admit" | "postpone" | "delete"
-                                if (!action) return
-                                onPlannedAction(admission.id, action)
-                                e.currentTarget.value = ""
-                              }}
-                              className="w-44 min-w-[11rem] rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
-                            >
-                              <option value="">Select action</option>
-                              <option value="ready_to_admit" disabled={!canReadyToAdmit}>
-                                {canReadyToAdmit ? "Ready to Admit" : "Ready to Admit (24h only)"}
-                              </option>
-                              <option value="postpone">Postpone Date</option>
-                              <option value="delete">Delete Admission</option>
-                            </select>
-                          </div>
+                        <td className="px-4 py-3.5">
+                          <span className="text-xs text-slate-700">
+                            {admission.doctorName || (
+                              <span className="text-amber-600">To be assigned</span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {Number.isFinite(plannedDate.getTime())
+                              ? plannedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                              : "Invalid date"}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {Number.isFinite(plannedDate.getTime())
+                              ? plannedDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+                              : ""}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="text-sm text-slate-700">{admission.roomNumber || "—"}</span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <StatusPill
+                            label={in24h ? "Due in 24h" : "Scheduled"}
+                            variant={in24h ? "warning" : "cyan"}
+                          />
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          <select
+                            defaultValue=""
+                            disabled={isLoading}
+                            onChange={(e) => {
+                              const action = e.target.value as "" | "ready_to_admit" | "postpone" | "delete"
+                              if (!action) return
+                              onPlannedAction(admission.id, action)
+                              e.currentTarget.value = ""
+                            }}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:opacity-50"
+                          >
+                            <option value="">Select action…</option>
+                            <option value="ready_to_admit" disabled={!canReadyToAdmit}>
+                              {canReadyToAdmit ? "Ready to Admit" : "Ready to Admit (24h only)"}
+                            </option>
+                            <option value="postpone">Postpone Date</option>
+                            <option value="delete">Delete Admission</option>
+                          </select>
                         </td>
                       </tr>
                     )

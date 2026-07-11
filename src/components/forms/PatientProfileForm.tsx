@@ -224,424 +224,409 @@ export default function PatientProfileForm({
   }
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
+    <form className="space-y-0" onSubmit={handleSubmit}>
+
+      {/* ── Global error banner ── */}
       {(formError || externalError) && (
-        <div className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-300 p-4 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-lg font-bold">!</span>
-              </div>
-              <p className="text-sm text-red-800 font-semibold leading-relaxed">{formError ?? externalError}</p>
-            </div>
-            <button
-              type="button"
-              onClick={clearErrors}
-              className="flex-shrink-0 text-red-400 hover:text-red-600 transition-colors"
-              aria-label="Dismiss error"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        <div className="rx-form-error-banner mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-500">
+              <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-            </button>
+            </div>
+            <p className="text-sm font-semibold text-red-800">{formError ?? externalError}</p>
           </div>
+          <button type="button" onClick={clearErrors} aria-label="Dismiss error"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            First Name <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">👤</span>
+      {/* ══════════════════════════════════════
+          Section 1 — Personal Information
+          ══════════════════════════════════════ */}
+      <div className="rx-form-section">
+        <div className="rx-form-section-header">
+          <div className="rx-form-section-icon">
+            <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <div>
+            <p className="rx-form-section-title">Personal Information</p>
+            <p className="rx-form-section-desc">Basic identification details for the patient record</p>
+          </div>
+        </div>
+
+        {/* Name row */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rx-form-field">
+            <label className="rx-form-label">
+              First Name <span className="rx-required">*</span>
+            </label>
             <input
               type="text"
               value={firstName}
               onChange={(e) => {
                 setFirstName(e.target.value)
                 if (fieldErrors.firstName) {
-                  setFieldErrors(prev => {
-                    const newErrors = { ...prev }
-                    delete newErrors.firstName
-                    return newErrors
-                  })
+                  setFieldErrors(prev => { const n = { ...prev }; delete n.firstName; return n })
                 }
                 clearErrors()
               }}
               onBlur={(e) => handleFieldBlur('firstName', e.target.value)}
-              className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
-                fieldErrors.firstName 
-                  ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
-                  : 'border-slate-300 focus:border-slate-500'
-              }`}
-              placeholder="John"
+              className={`rx-form-input ${fieldErrors.firstName ? 'rx-form-input--error' : ''}`}
+              placeholder="e.g. Rahul"
               required
             />
             {fieldErrors.firstName && (
-              <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-                <span>⚠</span> {fieldErrors.firstName}
+              <p className="rx-form-error-text">
+                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {fieldErrors.firstName}
               </p>
             )}
           </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Last Name <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">👤</span>
+          <div className="rx-form-field">
+            <label className="rx-form-label">
+              Last Name <span className="rx-required">*</span>
+            </label>
             <input
               type="text"
               value={lastName}
               onChange={(e) => {
                 setLastName(e.target.value)
                 if (fieldErrors.lastName) {
-                  setFieldErrors(prev => {
-                    const newErrors = { ...prev }
-                    delete newErrors.lastName
-                    return newErrors
-                  })
+                  setFieldErrors(prev => { const n = { ...prev }; delete n.lastName; return n })
                 }
                 clearErrors()
               }}
               onBlur={(e) => handleFieldBlur('lastName', e.target.value)}
-              className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
-                fieldErrors.lastName 
-                  ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
-                  : 'border-slate-300 focus:border-slate-500'
-              }`}
-              placeholder="Smith"
+              className={`rx-form-input ${fieldErrors.lastName ? 'rx-form-input--error' : ''}`}
+              placeholder="e.g. Sharma"
               required
             />
             {fieldErrors.lastName && (
-              <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-                <span>⚠</span> {fieldErrors.lastName}
+              <p className="rx-form-error-text">
+                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {fieldErrors.lastName}
               </p>
             )}
           </div>
         </div>
+
+        {/* Gender */}
+        <div className="rx-form-field mt-4">
+          <label className="rx-form-label">Gender</label>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Male', icon: (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              )},
+              { label: 'Female', icon: (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              )},
+              { label: 'Other', icon: (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              )},
+            ].map((option) => (
+              <label key={option.label}
+                className={`rx-form-tile ${gender === option.label ? 'rx-form-tile--active' : ''}`}>
+                <input type="radio" name="gender" value={option.label}
+                  checked={gender === option.label}
+                  onChange={(e) => { setGender(e.target.value); clearErrors() }}
+                  className="sr-only"
+                />
+                {option.icon}
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="rx-form-helper">Select the patient's biological sex for medical records</p>
+        </div>
+
+        {/* DOB + Blood Group */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+          <div className="rx-form-field">
+            <label className="rx-form-label">
+              Date of Birth
+              {mode === 'public' && <span className="rx-required">*</span>}
+            </label>
+            <input
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => { setDateOfBirth(e.target.value); clearErrors() }}
+              max={today}
+              className="rx-form-input"
+              required={mode === 'public'}
+            />
+            <p className="rx-form-helper">Used to calculate age and apply age-specific protocols</p>
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Blood Group</label>
+            <div className="relative">
+              <button
+                data-dropdown-toggle="blood-group"
+                onClick={() => { clearErrors(); setShowBloodGroupDropdown((prev) => !prev) }}
+                className="rx-form-input flex items-center justify-between text-left"
+                type="button"
+              >
+                <span className={bloodGroup ? 'text-slate-900' : 'text-slate-400'}>
+                  {bloodGroup || 'Select blood group'}
+                </span>
+                <svg className={`h-4 w-4 text-slate-400 transition-transform ${showBloodGroupDropdown ? 'rotate-180' : ''}`}
+                  fill="none" viewBox="0 0 10 6">
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m1 1 4 4 4-4" />
+                </svg>
+              </button>
+              <div data-dropdown-menu="blood-group"
+                className={`absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg ${showBloodGroupDropdown ? 'block' : 'hidden'}`}>
+                <ul className="max-h-48 overflow-y-auto py-1 text-sm">
+                  <li>
+                    <button type="button" onClick={() => { setBloodGroup(''); setShowBloodGroupDropdown(false) }}
+                      className="block w-full px-3 py-2 text-left text-slate-400 hover:bg-slate-50">
+                      Select blood group
+                    </button>
+                  </li>
+                  {bloodGroups.map((group) => (
+                    <li key={group}>
+                      <button type="button"
+                        onClick={() => { setBloodGroup(group); setShowBloodGroupDropdown(false) }}
+                        className="block w-full px-3 py-2 text-left text-slate-700 hover:bg-cyan-50 hover:text-cyan-800">
+                        {group}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <p className="rx-form-helper">Critical for emergency transfusions and surgical preparation</p>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Email Address <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
+      {/* ══════════════════════════════════════
+          Section 2 — Contact Details
+          ══════════════════════════════════════ */}
+      <div className="rx-form-section">
+        <div className="rx-form-section-header">
+          <div className="rx-form-section-icon">
+            <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <p className="rx-form-section-title">Contact Details</p>
+            <p className="rx-form-section-desc">How the hospital and patient portal reach this patient</p>
+          </div>
+        </div>
+
+        {/* Email */}
+        <div className="rx-form-field">
+          <label className="rx-form-label">
+            Email Address <span className="rx-required">*</span>
+          </label>
           <input
             type="email"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value)
               if (fieldErrors.email) {
-                setFieldErrors(prev => {
-                  const newErrors = { ...prev }
-                  delete newErrors.email
-                  return newErrors
-                })
+                setFieldErrors(prev => { const n = { ...prev }; delete n.email; return n })
               }
               clearErrors()
             }}
             onBlur={(e) => handleFieldBlur('email', e.target.value)}
-            className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
-              fieldErrors.email 
-                ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
-                : 'border-slate-300 focus:border-slate-500'
-            }`}
-            placeholder="patient@email.com"
+            className={`rx-form-input ${fieldErrors.email ? 'rx-form-input--error' : ''}`}
+            placeholder="patient@example.com"
             required
           />
-          {fieldErrors.email && (
-            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-              <span>⚠</span> {fieldErrors.email}
+          {fieldErrors.email ? (
+            <p className="rx-form-error-text">
+              <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              {fieldErrors.email}
             </p>
+          ) : (
+            <p className="rx-form-helper">Used for appointment reminders, reports, and portal login</p>
           )}
         </div>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Gender</label>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Male', icon: '👨' },
-            { label: 'Female', icon: '👩' },
-            { label: 'Other', icon: '⚧️' },
-          ].map((option) => (
-            <label
-              key={option.label}
-              className={`flex items-center justify-center gap-2 px-3 py-2.5 border-2 rounded-lg cursor-pointer transition-all ${
-                gender === option.label
-                  ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                  : 'border-slate-300 hover:border-cyan-400 hover:bg-slate-50 text-slate-700'
-              }`}
-            >
-              <input
-                type="radio"
-                name="gender"
-                value={option.label}
-                checked={gender === option.label}
-                onChange={(e) => {
-                  setGender(e.target.value)
-                  clearErrors()
-                }}
-                className="sr-only"
-              />
-              <span className="text-lg">{option.icon}</span>
-              <span className="text-sm font-semibold">{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Phone {mode === 'public' ? <span className="text-red-500">*</span> : null}
+        {/* Phone */}
+        <div className="rx-form-field mt-4">
+          <label className="rx-form-label">
+            Phone Number
+            {mode === 'public' && <span className="rx-required">*</span>}
           </label>
           <div className="flex gap-2">
             {enableCountryCode && (
-              <input
-                type="text"
-                value={countryCode}
-                onChange={(e) => {
-                  setCountryCode(e.target.value)
-                  clearErrors()
-                }}
-                className="w-24 px-3 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+              <input type="text" value={countryCode}
+                onChange={(e) => { setCountryCode(e.target.value); clearErrors() }}
+                className="rx-form-input w-20 shrink-0"
                 placeholder="+91"
               />
             )}
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value)
-                clearErrors()
-              }}
-              className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-              placeholder={enableCountryCode ? '9876543210' : 'Phone number'}
+            <input type="tel" value={phone}
+              onChange={(e) => { setPhone(e.target.value); clearErrors() }}
+              className="rx-form-input flex-1"
+              placeholder={enableCountryCode ? '98765 43210' : 'Mobile number'}
             />
           </div>
+          <p className="rx-form-helper">For SMS alerts and WhatsApp appointment confirmations</p>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Date of Birth {mode === 'public' ? <span className="text-red-500">*</span> : null}
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📅</span>
-            <input
-              type="date"
-              value={dateOfBirth}
-              onChange={(e) => {
-                setDateOfBirth(e.target.value)
-                clearErrors()
-              }}
-              max={today}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 transition-all duration-200"
-              required={mode === 'public'}
-            />
-          </div>
+
+        {/* Address */}
+        <div className="rx-form-field mt-4">
+          <label className="rx-form-label">Home Address</label>
+          <textarea
+            value={address}
+            onChange={(e) => { setAddress(e.target.value); clearErrors() }}
+            className="rx-form-textarea"
+            placeholder="Street, area, city, state, PIN code"
+            rows={2}
+          />
+          <p className="rx-form-helper">Used for home-care coordination and delivery of reports</p>
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Blood Group</label>
-        <div className="relative">
-          <button
-            data-dropdown-toggle="blood-group"
-            onClick={() => {
-              clearErrors()
-              setShowBloodGroupDropdown((prev) => !prev)
-            }}
-            className="w-full px-4 pr-10 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 text-left flex items-center justify-between hover:border-slate-400 transition-all duration-200"
-            type="button"
-          >
-            <span className="text-slate-700">{bloodGroup || 'Select Blood Group'}</span>
-            <svg
-              className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                showBloodGroupDropdown ? 'rotate-180' : ''
-              }`}
-              aria-hidden="true"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 10 6"
-            >
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m1 1 4 4 4-4" />
-            </svg>
-          </button>
-
-          <div
-            data-dropdown-menu="blood-group"
-            className={`z-10 absolute top-full left-0 right-0 mt-1 bg-white divide-y divide-gray-100 rounded-lg shadow-lg border border-gray-200 ${
-              showBloodGroupDropdown ? 'block' : 'hidden'
-            }`}
-          >
-            <ul className="py-2 text-sm text-gray-700 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBloodGroup('')
-                    setShowBloodGroupDropdown(false)
-                  }}
-                  className="w-full text-left block px-4 py-2 hover:bg-gray-100 text-gray-500"
-                >
-                  Select Blood Group
-                </button>
-              </li>
-              {bloodGroups.map((group) => (
-                <li key={group}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBloodGroup(group)
-                      setShowBloodGroupDropdown(false)
-                    }}
-                    className="w-full text-left block px-4 py-2 hover:bg-gray-100"
-                  >
-                    {group}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Address</label>
-        <textarea
-          value={address}
-          onChange={(e) => {
-            setAddress(e.target.value)
-            clearErrors()
-          }}
-          className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 resize-none"
-          placeholder="123 Main St, City, State, ZIP"
-          rows={2}
-        />
-      </div>
-
+      {/* ══════════════════════════════════════
+          Section 3 — Account Settings (admin)
+          ══════════════════════════════════════ */}
       {showStatusField && (
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as PatientProfileFormValues['status'])
-              clearErrors()
-            }}
-            className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 transition-all duration-200"
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+        <div className="rx-form-section">
+          <div className="rx-form-section-header">
+            <div className="rx-form-section-icon">
+              <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="rx-form-section-title">Account Settings</p>
+              <p className="rx-form-section-desc">Control the patient's access to the portal</p>
+            </div>
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Account Status</label>
+            <select value={status}
+              onChange={(e) => { setStatus(e.target.value as PatientProfileFormValues['status']); clearErrors() }}
+              className="rx-form-select">
+              <option value="active">Active — Patient can log in and book appointments</option>
+              <option value="inactive">Inactive — Portal access disabled</option>
+            </select>
+          </div>
         </div>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Password <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value)
-              if (fieldErrors.password) {
-                setFieldErrors(prev => {
-                  const newErrors = { ...prev }
-                  delete newErrors.password
-                  return newErrors
-                })
-              }
-              clearErrors()
-            }}
-            onBlur={(e) => handleFieldBlur('password', e.target.value)}
-            className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200 ${
-              fieldErrors.password 
-                ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200' 
-                : 'border-slate-300 focus:border-slate-500'
-            }`}
-            placeholder="Enter password"
-            minLength={6}
-            required
-          />
-          {fieldErrors.password && (
-            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-              <span>⚠</span> {fieldErrors.password}
-            </p>
-          )}
+      {/* ══════════════════════════════════════
+          Section 4 — Account Security
+          ══════════════════════════════════════ */}
+      <div className="rx-form-section">
+        <div className="rx-form-section-header">
+          <div className="rx-form-section-icon">
+            <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div>
+            <p className="rx-form-section-title">Account Security</p>
+            <p className="rx-form-section-desc">Login credentials for the patient portal</p>
+          </div>
         </div>
-        {receptionistMode ? (
-          <p className="text-xs text-slate-500 mt-1">Default: 123456 (min 6 characters). Patient can change later from dashboard.</p>
-        ) : (
-          <PasswordRequirements password={password} />
+
+        {receptionistMode && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3">
+            <svg className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="text-xs font-semibold text-cyan-800">Default password is pre-filled</p>
+              <p className="mt-0.5 text-[11px] text-cyan-700">The patient can change this password after their first login from the patient dashboard.</p>
+            </div>
+          </div>
         )}
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* Password */}
+          <div className="rx-form-field">
+            <label className="rx-form-label">
+              Password <span className="rx-required">*</span>
+            </label>
+            <input type="password" value={password}
+              onChange={(e) => {
+                setPassword(e.target.value)
+                if (fieldErrors.password) {
+                  setFieldErrors(prev => { const n = { ...prev }; delete n.password; return n })
+                }
+                clearErrors()
+              }}
+              onBlur={(e) => handleFieldBlur('password', e.target.value)}
+              className={`rx-form-input ${fieldErrors.password ? 'rx-form-input--error' : ''}`}
+              placeholder="Enter password"
+              minLength={6}
+              required
+            />
+            {fieldErrors.password ? (
+              <p className="rx-form-error-text">
+                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {fieldErrors.password}
+              </p>
+            ) : receptionistMode ? (
+              <p className="rx-form-helper">Minimum 6 characters</p>
+            ) : null}
+            {!receptionistMode && <PasswordRequirements password={password} />}
+          </div>
+
+          {/* Confirm Password */}
+          <div className="rx-form-field">
+            <label className="rx-form-label">
+              Confirm Password <span className="rx-required">*</span>
+            </label>
+            <input type="password" value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value)
+                if (fieldErrors.confirmPassword) {
+                  setFieldErrors(prev => { const n = { ...prev }; delete n.confirmPassword; return n })
+                }
+                clearErrors()
+              }}
+              onBlur={(e) => handleFieldBlur('confirmPassword', e.target.value)}
+              className={`rx-form-input ${
+                fieldErrors.confirmPassword || (confirmPassword && password !== confirmPassword)
+                  ? 'rx-form-input--error'
+                  : confirmPassword && password === confirmPassword
+                  ? 'rx-form-input--success'
+                  : ''
+              }`}
+              placeholder="Re-enter password"
+              minLength={6}
+              required
+            />
+            {fieldErrors.confirmPassword ? (
+              <p className="rx-form-error-text">
+                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {fieldErrors.confirmPassword}
+              </p>
+            ) : confirmPassword ? (
+              <p className={`text-xs font-semibold ${password === confirmPassword ? 'text-emerald-600' : 'text-red-600'}`}>
+                {password === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
+              </p>
+            ) : (
+              <p className="rx-form-helper">Must exactly match the password above</p>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Confirm Password <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value)
-              if (fieldErrors.confirmPassword) {
-                setFieldErrors(prev => {
-                  const newErrors = { ...prev }
-                  delete newErrors.confirmPassword
-                  return newErrors
-                })
-              }
-              clearErrors()
-            }}
-            onBlur={(e) => handleFieldBlur('confirmPassword', e.target.value)}
-            className={`w-full pl-12 pr-4 py-3 border-2 rounded-lg focus:outline-none transition-all duration-200 ${
-              fieldErrors.confirmPassword
-                ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200'
-                : confirmPassword && password !== confirmPassword
-                ? 'border-red-400 focus:border-red-500'
-                : confirmPassword && password === confirmPassword
-                ? 'border-emerald-400 focus:border-emerald-500'
-                : 'border-slate-300 focus:border-slate-500'
-            }`}
-            placeholder="Re-enter password"
-            minLength={6}
-            required
-          />
-          {fieldErrors.confirmPassword && (
-            <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
-              <span>⚠</span> {fieldErrors.confirmPassword}
-            </p>
-          )}
-        </div>
-        {confirmPassword && (
-          <p className={`mt-2 text-xs font-semibold ${password === confirmPassword ? 'text-emerald-600' : 'text-red-600'}`}>
-            {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:items-center gap-3 pt-2">
+      {/* ── Submit ── */}
+      <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             Cancel
           </Button>
         )}
-        <Button
-          type="submit"
-          size="lg"
-          loading={loading}
-          loadingText={submitLabel ?? 'Saving...'}
-        >
+        <Button type="submit" size="lg" loading={loading} loadingText={submitLabel ?? 'Saving…'}>
           {submitLabel ?? (mode === 'public' ? 'Create Patient Account' : 'Save Patient')}
         </Button>
       </div>

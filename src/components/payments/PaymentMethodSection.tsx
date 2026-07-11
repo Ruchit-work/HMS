@@ -51,154 +51,162 @@ export default function PaymentMethodSection({
     }
   }, [paymentMethod, availableMethods, setPaymentMethod])
 
-  return (
-    <div className="mt-4 space-y-4">
-      <div className="border-t border-gray-200 pt-4">
-        <label className="block text-sm font-medium text-gray-700 mb-3">{title}</label>
+  /* ── SVG icons for method tiles ── */
+  const methodConfig: Record<PaymentMethodOption, { label: string; sub: string; icon: React.ReactNode }> = {
+    card: {
+      label: "Card",
+      sub: "Debit / Credit",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        </svg>
+      ),
+    },
+    upi: {
+      label: "UPI",
+      sub: "QR / VPA",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+    cash: {
+      label: "Cash",
+      sub: "Collect at desk",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+      ),
+    },
+  }
 
-        {/* Payment Method */}
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-5 space-y-4">
+      {/* ── Section header ── */}
+      <div className="rx-form-section-header">
+        <div className="rx-form-section-icon">
+          <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+        </div>
         <div>
-          <label className="block text-sm text-gray-700 mb-2">Payment Method</label>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            {availableMethods.includes("card") && (
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("card")}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  paymentMethod === "card"
-                    ? "border-green-600 bg-green-50 shadow-md"
-                    : "border-gray-300 hover:border-gray-400"
-                }`}
-              >
-                <div className="text-center">
-                  <span className="text-2xl mb-1 block">💳</span>
-                  <span className="text-sm font-semibold">Card</span>
-                </div>
+          <p className="rx-form-section-title">{title}</p>
+          <p className="rx-form-section-desc">Select how the patient will pay for this appointment</p>
+        </div>
+      </div>
+
+      {/* ── Method tiles ── */}
+      <div className="rx-form-field">
+        <label className="rx-form-label">Payment Method</label>
+        <div className={`grid gap-2 ${availableMethods.length === 1 ? 'grid-cols-1' : availableMethods.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          {availableMethods.map((method) => {
+            const cfg = methodConfig[method]
+            const active = paymentMethod === method
+            return (
+              <button key={method} type="button" onClick={() => setPaymentMethod(method)}
+                className={`flex flex-col items-center gap-1.5 rounded-lg border px-3 py-3.5 text-center transition-all ${
+                  active
+                    ? "border-cyan-500 bg-cyan-50 text-cyan-700 shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:bg-slate-50"
+                }`}>
+                <span className={active ? "text-cyan-600" : "text-slate-400"}>{cfg.icon}</span>
+                <span className="text-xs font-semibold">{cfg.label}</span>
+                <span className="text-[10px] text-slate-400">{cfg.sub}</span>
               </button>
-            )}
-            {availableMethods.includes("upi") && (
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("upi")}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  paymentMethod === "upi"
-                    ? "border-green-600 bg-green-50 shadow-md"
-                    : "border-gray-300 hover:border-gray-400"
-                }`}
-              >
-                <div className="text-center">
-                  <span className="text-2xl mb-1 block">📱</span>
-                  <span className="text-sm font-semibold">UPI</span>
-                </div>
-              </button>
-            )}
-            {availableMethods.includes("cash") && (
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("cash")}
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  paymentMethod === "cash"
-                    ? "border-green-600 bg-green-50 shadow-md"
-                    : "border-gray-300 hover:border-gray-400"
-                }`}
-              >
-                <div className="text-center">
-                  <span className="text-2xl mb-1 block">💵</span>
-                  <span className="text-sm font-semibold">Cash</span>
-                </div>
-              </button>
-            )}
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Card details ── */}
+      {paymentMethod === "card" && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <svg className="h-3.5 w-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            <p className="text-xs font-semibold text-slate-700">Card Details</p>
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Card Number</label>
+            <input type="text" value={paymentData.cardNumber}
+              onChange={(e) => setPaymentData({ ...paymentData, cardNumber: e.target.value })}
+              onKeyDown={preventEnter}
+              placeholder="1234 5678 9012 3456"
+              maxLength={19}
+              className="rx-form-input"
+            />
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Cardholder Name</label>
+            <input type="text" value={paymentData.cardName}
+              onChange={(e) => setPaymentData({ ...paymentData, cardName: e.target.value })}
+              onKeyDown={preventEnter}
+              placeholder="Name as on card"
+              className="rx-form-input"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rx-form-field">
+              <label className="rx-form-label">Expiry</label>
+              <input type="text" value={paymentData.expiryDate}
+                onChange={(e) => setPaymentData({ ...paymentData, expiryDate: e.target.value })}
+                onKeyDown={preventEnter}
+                placeholder="MM / YY"
+                maxLength={5}
+                className="rx-form-input"
+              />
+            </div>
+            <div className="rx-form-field">
+              <label className="rx-form-label">CVV</label>
+              <input type="password" value={paymentData.cvv}
+                onChange={(e) => setPaymentData({ ...paymentData, cvv: e.target.value })}
+                onKeyDown={preventEnter}
+                placeholder="•••"
+                maxLength={3}
+                className="rx-form-input"
+              />
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Payment Details */}
-        {paymentMethod === "card" && (
-          <div className="mt-4 bg-cyan-50 rounded-lg p-4 space-y-3 border border-cyan-200">
-            <p className="text-sm font-semibold text-cyan-900">💳 Card Details</p>
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">Card Number</label>
-              <input
-                type="text"
-                value={paymentData.cardNumber}
-                onChange={(e) => setPaymentData({ ...paymentData, cardNumber: e.target.value })}
-                onKeyDown={preventEnter}
-                placeholder="1234 5678 9012 3456"
-                maxLength={19}
-                className="w-full px-3 py-2 border rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">Cardholder Name</label>
-              <input
-                type="text"
-                value={paymentData.cardName}
-                onChange={(e) => setPaymentData({ ...paymentData, cardName: e.target.value })}
-                onKeyDown={preventEnter}
-                placeholder="JOHN DOE"
-                className="w-full px-3 py-2 border rounded"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">Expiry (MM/YY)</label>
-                <input
-                  type="text"
-                  value={paymentData.expiryDate}
-                  onChange={(e) => setPaymentData({ ...paymentData, expiryDate: e.target.value })}
-                  onKeyDown={preventEnter}
-                  placeholder="12/25"
-                  maxLength={5}
-                  className="w-full px-3 py-2 border rounded"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">CVV</label>
-                <input
-                  type="password"
-                  value={paymentData.cvv}
-                  onChange={(e) => setPaymentData({ ...paymentData, cvv: e.target.value })}
-                  onKeyDown={preventEnter}
-                  placeholder="123"
-                  maxLength={3}
-                  className="w-full px-3 py-2 border rounded"
-                />
-              </div>
-            </div>
+      {/* ── UPI details ── */}
+      {paymentMethod === "upi" && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <svg className="h-3.5 w-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            <p className="text-xs font-semibold text-slate-700">UPI Details</p>
           </div>
-        )}
-
-        {paymentMethod === "upi" && (
-          <div className="mt-4 bg-cyan-50 rounded-lg p-4 space-y-3 border border-cyan-200">
-            <p className="text-sm font-semibold text-cyan-900">📱 UPI Details</p>
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">UPI ID</label>
-              <input
-                type="text"
-                value={paymentData.upiId}
-                onChange={(e) => setPaymentData({ ...paymentData, upiId: e.target.value })}
-                onKeyDown={preventEnter}
-                placeholder="yourname@bank"
-                className="w-full px-3 py-2 border rounded"
-              />
-            </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">UPI ID / VPA</label>
+            <input type="text" value={paymentData.upiId}
+              onChange={(e) => setPaymentData({ ...paymentData, upiId: e.target.value })}
+              onKeyDown={preventEnter}
+              placeholder="yourname@upi"
+              className="rx-form-input"
+            />
+            <p className="rx-form-helper">e.g. 9876543210@paytm or name@okaxis</p>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Amount Summary */}
-        {paymentMethod && (
-          <div className="mt-4 p-4 bg-cyan-50 border border-cyan-200 rounded-lg">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Amount to Pay:</span>
-              <span className="text-xl font-bold text-cyan-800">₹{amountToPay}</span>
-            </div>
+      {/* ── Amount summary ── */}
+      {paymentMethod && (
+        <div className="flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3">
+          <div>
+            <p className="text-xs font-semibold text-cyan-800">Total Amount Due</p>
             {showPartialNote && (
-              <p className="text-xs text-gray-500 mt-1">
-                Online amount and remaining will be shown on the confirmation.
-              </p>
+              <p className="mt-0.5 text-[11px] text-cyan-600">Remaining balance shown on confirmation slip</p>
             )}
           </div>
-        )}
-      </div>
+          <span className="text-xl font-bold tracking-tight text-cyan-800">₹{amountToPay}</span>
+        </div>
+      )}
     </div>
   )
 }

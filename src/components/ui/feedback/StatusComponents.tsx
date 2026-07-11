@@ -26,7 +26,7 @@ export function LoadingSpinner({ message = "Loading...", size = "lg", className 
       className={
         inline
           ? `flex items-center justify-center py-12 ${className}`
-          : `min-h-screen flex items-center justify-center bg-gray-50 ${className}`
+          : `min-h-screen flex items-center justify-center bg-slate-50 ${className}`
       }
     >
       <div className="text-center">
@@ -36,7 +36,7 @@ export function LoadingSpinner({ message = "Loading...", size = "lg", className 
             <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
           </svg>
         </div>
-        {message && <p className="mt-4 text-gray-600">{message}</p>}
+        {message && <p className="mt-4 text-slate-500">{message}</p>}
       </div>
     </div>
   )

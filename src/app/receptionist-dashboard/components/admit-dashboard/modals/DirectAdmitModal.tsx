@@ -171,20 +171,25 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-3xl max-h-[92vh] flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between hms-panel-header text-white rounded-t-2xl">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[92vh] flex flex-col">
+        {/* ── Modal header ── */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">
           <div>
-            <h3 className="text-lg font-semibold">Direct Patient Admit</h3>
-            <p className="text-sm text-white/80">Emergency admit now or pre-plan admission date and time</p>
+            <h3 className="text-base font-bold text-slate-900">Direct Patient Admit</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Emergency admit now or pre-plan admission date and time</p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-lg hover:bg-white/20">
-            ×
+          <button onClick={onClose} type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
-        <div className="px-6 py-5 space-y-4 bg-gray-50 rounded-b-2xl overflow-y-auto">
-          <div className="space-y-2 rounded-xl border border-cyan-100 bg-cyan-50/40 p-3">
-            <label className="block text-sm font-medium text-gray-700">Patient Name (auto-suggest existing patients)</label>
+        <div className="px-6 py-5 space-y-4 overflow-y-auto">
+          {/* ── Patient Search ── */}
+          <div className="space-y-2 rounded-xl border border-cyan-100 bg-cyan-50/50 p-4">
+            <label className="rx-form-label">Patient Name <span className="rx-form-helper font-normal">(auto-suggests existing patients)</span></label>
             <input
               value={directPatientName}
               onChange={(e) => {
@@ -193,8 +198,8 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
                 setDirectPatientId("")
                 onClearDirectPatientSelection?.()
               }}
-              placeholder="Type patient name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Type patient name to search…"
+              className="rx-form-input"
             />
             {directPatientLookupLoading && <p className="text-xs text-slate-500">Searching existing patients...</p>}
             {directPatientResults.length > 0 && (
@@ -225,283 +230,214 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
             {directPatientUid && <p className="text-xs font-medium text-emerald-700">Existing patient selected. UID auto-fetched.</p>}
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Patient & Doctor Details</p>
+          {/* ── Patient & Doctor Details ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Patient &amp; Doctor Details</p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Patient ID</p>
-                <input
-                  value={directPatientId}
-                  readOnly
-                  placeholder="Auto-generated for new patient"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-slate-100 text-slate-600 cursor-not-allowed"
-                />
-                <p className="text-[11px] text-slate-500">
-                  {directPatientUid ? "Fetched from existing patient record." : "Will be auto-generated after admission is created."}
+              <div className="rx-form-field">
+                <label className="rx-form-label">Patient ID</label>
+                <input value={directPatientId} readOnly placeholder="Auto-generated for new patient"
+                  className="rx-form-input rx-form-input--readonly" />
+                <p className="rx-form-helper">
+                  {directPatientUid ? "Fetched from existing patient record." : "Auto-generated after admission is created."}
                 </p>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Assign Doctor</p>
-                <select
-                  value={directDoctorId}
+              <div className="rx-form-field">
+                <label className="rx-form-label">Assign Doctor</label>
+                <select value={directDoctorId}
                   onChange={(e) => {
                     const value = e.target.value
                     setDirectDoctorId(value)
-                    if (!value) {
-                      setDirectDoctorName("")
-                      return
-                    }
+                    if (!value) { setDirectDoctorName(""); return }
                     const selectedDoctor = doctors.find((doctor) => doctor.uid === value)
                     setDirectDoctorName(selectedDoctor?.fullName || "")
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                >
-                  <option value="">{doctorsLoading ? "Loading doctors..." : "Assign doctor later"}</option>
+                  className="rx-form-select">
+                  <option value="">{doctorsLoading ? "Loading doctors…" : "Assign doctor later"}</option>
                   {doctors.map((doctor) => (
-                    <option key={doctor.uid} value={doctor.uid}>
-                      {doctor.fullName} ({doctor.specialization})
-                    </option>
+                    <option key={doctor.uid} value={doctor.uid}>{doctor.fullName} ({doctor.specialization})</option>
                   ))}
                 </select>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Doctor Name</p>
-                <input
-                  value={directDoctorName}
-                  readOnly
-                  placeholder="Auto-fetched from selection"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-slate-100 text-slate-700"
-                />
+              <div className="rx-form-field">
+                <label className="rx-form-label">Doctor Name</label>
+                <input value={directDoctorName} readOnly placeholder="Auto-fetched from selection"
+                  className="rx-form-input rx-form-input--readonly" />
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Patient Address</p>
-                <input
-                  value={directPatientAddress}
-                  onChange={(e) => setDirectPatientAddress(e.target.value)}
-                  placeholder="Optional"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
+              <div className="rx-form-field">
+                <label className="rx-form-label">Patient Address</label>
+                <input value={directPatientAddress} onChange={(e) => setDirectPatientAddress(e.target.value)}
+                  placeholder="Optional" className="rx-form-input" />
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Mobile</p>
-                <input
-                  value={directPatientPhone}
-                  onChange={(e) => setDirectPatientPhone(e.target.value)}
-                  placeholder="Patient / attendant mobile"
-                  inputMode="tel"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
+              <div className="rx-form-field">
+                <label className="rx-form-label">Mobile Number</label>
+                <input value={directPatientPhone} onChange={(e) => setDirectPatientPhone(e.target.value)}
+                  placeholder="Patient or attendant mobile" inputMode="tel" className="rx-form-input" />
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Age (years)</p>
-                <input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={directPatientAge}
+              <div className="rx-form-field">
+                <label className="rx-form-label">Age (years)</label>
+                <input type="number" min={0} max={120} value={directPatientAge}
                   onChange={(e) => setDirectPatientAge(e.target.value)}
-                  placeholder="e.g. 45"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-                <p className="text-[11px] text-slate-500">Used for new patient record when not selecting an existing patient.</p>
+                  placeholder="e.g. 45" className="rx-form-input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                <p className="rx-form-helper">Used when creating a new patient record</p>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Gender</p>
-                <select
-                  value={directPatientGender}
-                  onChange={(e) => setDirectPatientGender(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
-                >
+              <div className="rx-form-field">
+                <label className="rx-form-label">Gender</label>
+                <select value={directPatientGender} onChange={(e) => setDirectPatientGender(e.target.value)} className="rx-form-select">
                   <option value="">Select</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
                 </select>
               </div>
-              <div className="space-y-1 md:col-span-2">
-                <p className="text-xs font-medium text-slate-600">Relative / emergency contact name</p>
-                <input
-                  value={directEmergencyRelativeName}
-                  onChange={(e) => setDirectEmergencyRelativeName(e.target.value)}
-                  placeholder="Optional"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
+              <div className="rx-form-field">
+                <label className="rx-form-label">Relative / Emergency Contact</label>
+                <input value={directEmergencyRelativeName} onChange={(e) => setDirectEmergencyRelativeName(e.target.value)}
+                  placeholder="Name (optional)" className="rx-form-input" />
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Package Selection</p>
-            <select
-              value={directPackageId}
-              onChange={(e) => {
-                const nextPackageId = e.target.value
-                setDirectPackageId(nextPackageId)
-                const selected = admissionPackages.find((pkg) => pkg.id === nextPackageId)
-                if (selected?.preferredRoomType) {
-                  setAssignRoomType(selected.preferredRoomType)
-                  const firstMatching = rooms.find(
-                    (room) => room.status === "available" && getRoomTypeFilterKey(room) === selected.preferredRoomType
-                  )
-                  setAssignRoomId(firstMatching?.id || "")
-                }
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-            >
-              <option value="">Select package (optional)</option>
-              {admissionPackages.map((pkg) => (
-                <option key={pkg.id} value={pkg.id}>
-                  {pkg.packageName} (Rs {pkg.fixedRate})
-                </option>
-              ))}
-            </select>
+          {/* ── Package Selection ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Package Selection</p>
+            <div className="rx-form-field">
+              <label className="rx-form-label">Operation Package</label>
+              <select value={directPackageId}
+                onChange={(e) => {
+                  const nextPackageId = e.target.value
+                  setDirectPackageId(nextPackageId)
+                  const selected = admissionPackages.find((pkg) => pkg.id === nextPackageId)
+                  if (selected?.preferredRoomType) {
+                    setAssignRoomType(selected.preferredRoomType)
+                    const firstMatching = rooms.find(
+                      (room) => room.status === "available" && getRoomTypeFilterKey(room) === selected.preferredRoomType
+                    )
+                    setAssignRoomId(firstMatching?.id || "")
+                  }
+                }}
+                className="rx-form-select">
+                <option value="">No package — fee per item</option>
+                {admissionPackages.map((pkg) => (
+                  <option key={pkg.id} value={pkg.id}>{pkg.packageName} (₹{pkg.fixedRate})</option>
+                ))}
+              </select>
+              <p className="rx-form-helper">Package covers total billing; individual charges will be disabled</p>
+            </div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
+          {/* ── Admission Schedule ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Admission Schedule</p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Admit Type</p>
-                <select
-                  value={directAdmitType}
-                  onChange={(e) => setDirectAdmitType(e.target.value as "emergency" | "planned")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
-                >
+              <div className="rx-form-field">
+                <label className="rx-form-label">Admit Type</label>
+                <select value={directAdmitType} onChange={(e) => setDirectAdmitType(e.target.value as "emergency" | "planned")} className="rx-form-select">
                   <option value="emergency">Emergency Direct Admit</option>
                   <option value="planned">Pre-Registered Planned Admit</option>
                 </select>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Planned Admit Date & Time</p>
-                <input
-                  type="datetime-local"
-                  value={directPlannedAdmitAt}
+              <div className="rx-form-field">
+                <label className="rx-form-label">Planned Admit Date &amp; Time</label>
+                <input type="datetime-local" value={directPlannedAdmitAt}
                   onChange={(e) => setDirectPlannedAdmitAt(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:bg-slate-100 disabled:text-slate-500"
-                  disabled={directAdmitType !== "planned"}
-                />
+                  className={`rx-form-input ${directAdmitType !== "planned" ? "rx-form-input--readonly" : ""}`}
+                  disabled={directAdmitType !== "planned"} />
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Expected Discharge Date</p>
-                <input
-                  type="datetime-local"
-                  value={directExpectedDischargeAt}
+              <div className="rx-form-field">
+                <label className="rx-form-label">Expected Discharge Date</label>
+                <input type="datetime-local" value={directExpectedDischargeAt}
                   onChange={(e) => setDirectExpectedDischargeAt(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
+                  className="rx-form-input" />
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Room & Charges</p>
+          {/* ── Room & Charges ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Room &amp; Charges</p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Room Type</p>
-                <select
-                  value={assignRoomType}
-                  onChange={(e) => {
-                    setAssignRoomType(e.target.value)
-                    setAssignRoomId("")
-                  }}
+              <div className="rx-form-field">
+                <label className="rx-form-label">Room Type</label>
+                <select value={assignRoomType}
+                  onChange={(e) => { setAssignRoomType(e.target.value); setAssignRoomId("") }}
                   disabled={Boolean(directPackageId)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:bg-slate-100 disabled:text-slate-500"
-                >
+                  className={`rx-form-select ${Boolean(directPackageId) ? "rx-form-input--readonly" : ""}`}>
                   <option value="">Select room type</option>
                   {availableRoomTypes.map((type) => (
-                    <option key={type.key} value={type.key}>
-                      {type.label}
-                    </option>
+                    <option key={type.key} value={type.key}>{type.label}</option>
                   ))}
                 </select>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-slate-600">Room Number</p>
-                <select value={assignRoomId} onChange={(e) => setAssignRoomId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <div className="rx-form-field">
+                <label className="rx-form-label">Room Number</label>
+                <select value={assignRoomId} onChange={(e) => setAssignRoomId(e.target.value)} className="rx-form-select">
                   <option value="">Select room</option>
                   {availableRoomsForType.map((room) => (
-                    <option key={room.id} value={room.id}>
-                      {room.roomNumber} — {getRoomTypeDisplayName(room)}
-                    </option>
+                    <option key={room.id} value={room.id}>{room.roomNumber} — {getRoomTypeDisplayName(room)}</option>
                   ))}
                 </select>
               </div>
               {!directPackageId && (
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-slate-600">Doctor Round Fee (Optional)</p>
-                  <input
-                    type="number"
-                    min="0"
-                    value={directDoctorRoundFee}
+                <div className="rx-form-field">
+                  <label className="rx-form-label">Doctor Round Fee</label>
+                  <input type="number" min="0" value={directDoctorRoundFee}
                     onChange={(e) => setDirectDoctorRoundFee(e.target.value)}
-                    placeholder="e.g. 500"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
+                    placeholder="e.g. 500" className="rx-form-input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                  <p className="rx-form-helper">Optional — charged per doctor visit during stay</p>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="rounded-lg border border-gray-200 bg-white p-3 sm:col-span-2">
-              <p className="mb-2 text-sm font-medium text-gray-700">Initial Deposit</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Amount (₹)</p>
-                  <input
-                    type="number"
-                    min="0"
-                    value={directInitialDeposit}
-                    onChange={(e) => setDirectInitialDeposit(e.target.value)}
-                    placeholder="e.g. 5000"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Payment Mode</p>
-                  <select
-                    value={directInitialDepositMode}
-                    onChange={(e) => setDirectInitialDepositMode(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    {depositPaymentModes.map((mode) => (
-                      <option key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          {/* ── Initial Deposit ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Initial Deposit</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rx-form-field">
+                <label className="rx-form-label">Amount (₹)</label>
+                <input type="number" min="0" value={directInitialDeposit}
+                  onChange={(e) => setDirectInitialDeposit(e.target.value)}
+                  placeholder="e.g. 5000" className="rx-form-input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+              </div>
+              <div className="rx-form-field">
+                <label className="rx-form-label">Payment Mode</label>
+                <select value={directInitialDepositMode} onChange={(e) => setDirectInitialDepositMode(e.target.value)} className="rx-form-select">
+                  {depositPaymentModes.map((mode) => (
+                    <option key={mode.value} value={mode.value}>{mode.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
 
           {directPackageId && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-              Package selected: extra fees are covered by package. Only package amount will be billed.
+            <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <svg className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-xs text-emerald-800">Package selected — extra fees are covered. Only the package amount will be billed.</p>
             </div>
           )}
-          <textarea
-            value={assignNotes}
-            onChange={(e) => setAssignNotes(e.target.value)}
-            rows={2}
-            placeholder="Admission notes (optional)"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-          />
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={onClose} disabled={directAdmitLoading}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={onCreateAdmission}
-              loading={directAdmitLoading}
-              loadingText="Creating..."
-              disabled={!assignRoomId}
-            >
-              Create Admission
-            </Button>
+
+          {/* ── Admission Notes ── */}
+          <div className="rx-form-field">
+            <label className="rx-form-label">Admission Notes <span className="text-[11px] font-normal text-slate-400">(optional)</span></label>
+            <textarea value={assignNotes} onChange={(e) => setAssignNotes(e.target.value)}
+              rows={2} placeholder="Add notes for the nursing team or ward staff…"
+              className="rx-form-textarea" />
           </div>
+        </div>
+
+        {/* ── Modal footer ── */}
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 shrink-0">
+          <Button type="button" variant="outline" onClick={onClose} disabled={directAdmitLoading}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" onClick={onCreateAdmission}
+            loading={directAdmitLoading} loadingText="Creating…" disabled={!assignRoomId}>
+            Create Admission
+          </Button>
         </div>
       </div>
     </div>

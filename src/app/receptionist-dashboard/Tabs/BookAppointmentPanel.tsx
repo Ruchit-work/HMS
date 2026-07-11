@@ -95,6 +95,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
 
   const [selectedDoctorId, setSelectedDoctorId] = useState("")
   const [selectedDoctorFee, setSelectedDoctorFee] = useState<number | null>(null)
+  const [searchDoctor, setSearchDoctor] = useState("")
   const [appointmentDate, setAppointmentDate] = useState("")
   const [appointmentTime, setAppointmentTime] = useState("")
 
@@ -395,6 +396,28 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     ? doctors.filter((doc: any) => !recommendedDoctors.some((filtered: any) => filtered.id === doc.id))
     : []
 
+  // Doctor search: applied on top of symptom-filtered list for the card grid
+  const visibleDoctors = useMemo(() => {
+    const base = symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0
+      ? recommendedDoctors
+      : doctors
+    if (!searchDoctor.trim()) return base
+    const q = searchDoctor.toLowerCase()
+    return base.filter((d: any) =>
+      `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
+      (d.specialization || "").toLowerCase().includes(q)
+    )
+  }, [searchDoctor, recommendedDoctors, doctors, symptomCategory])
+
+  const visibleOtherDoctors = useMemo(() => {
+    if (!searchDoctor.trim()) return otherDoctors
+    const q = searchDoctor.toLowerCase()
+    return otherDoctors.filter((d: any) =>
+      `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
+      (d.specialization || "").toLowerCase().includes(q)
+    )
+  }, [searchDoctor, otherDoctors])
+
   // Reset additional fees when doctor changes
   useEffect(() => {
     if (selectedDoctorId) {
@@ -661,6 +684,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
     setNewPatientPasswordConfirm(RECEPTIONIST_DEFAULT_PASSWORD)
     setSelectedDoctorId("")
     setSelectedDoctorFee(null)
+    setSearchDoctor("")
     setAppointmentDate("")
     setAppointmentTime("")
     setSymptomCategory("")
@@ -862,110 +886,105 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
   }
 
   return (
-    <div className="space-y-8 min-w-0 overflow-x-hidden [overflow-anchor:none]">
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 px-6 py-8 shadow-sm">
-        <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-cyan-100 opacity-30" />
-        <div className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-sky-200 opacity-20" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-xl space-y-3">
-            <span className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Appointment Desk</span>
-            <h2 className="text-3xl font-semibold text-slate-900">Book Appointment</h2>
-            <p className="text-sm text-slate-600">
-              Coordinate patient visits with guided steps, live doctor availability, and payment clarity in one view.
+    <div className="space-y-4 min-w-0 overflow-x-hidden [overflow-anchor:none]">
+
+      {/* ── Compact page header ── */}
+      <div className="rx-section-card">
+        <div className="rx-section-header flex-wrap gap-y-3">
+          <div className="min-w-0">
+            <p className="rx-section-title">Book Appointment</p>
+            <p className="rx-section-subtitle">
+              {doctors.length} doctors · {patients.length} patients on file
+              {appointmentDate && selectedDoctorId && availableSlots.length > 0 && ` · ${availableSlots.length} slots open`}
+              {paymentAmount > 0 && ` · ₹${new Intl.NumberFormat("en-IN").format(paymentAmount)} due`}
             </p>
           </div>
-          <div className="grid w-full gap-4 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
-            {summaryStats.map((stat, index) => (
-              <div
-                key={`booking-stat-${index}`}
-                className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur min-h-[7.5rem]"
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              <button
+                type="button"
+                onClick={() => handlePatientModeChange("existing")}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  patientMode === "existing"
+                    ? "bg-white text-cyan-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
               >
-                <div className="flex items-start gap-3">
-                  <span className={`mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${stat.iconBg}`}>
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={stat.iconPath} />
-                    </svg>
-                  </span>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{stat.title}</p>
-                    <p className="mt-2 text-xl font-bold tabular-nums text-slate-900">{stat.value}</p>
-                    <p className="mt-1 min-h-[2rem] text-xs leading-snug text-slate-500">{stat.caption}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+                Existing Patient
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePatientModeChange("new")}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  patientMode === "new"
+                    ? "bg-white text-cyan-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                New Patient
+              </button>
+            </div>
           </div>
         </div>
-        <div className="relative mt-6 flex flex-wrap items-center gap-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Booking for</span>
-          <div className="flex rounded-2xl bg-white/90 p-1 shadow-inner backdrop-blur">
-            <button
-              type="button"
-              onClick={() => handlePatientModeChange("existing")}
-              className={`min-w-[9.5rem] rounded-xl px-4 py-2 text-center text-sm font-medium ring-1 transition-colors ${
-                patientMode === "existing"
-                  ? "bg-white text-cyan-700 shadow-sm ring-cyan-200"
-                  : "bg-transparent text-slate-500 ring-transparent hover:bg-white/60 hover:text-cyan-700"
-              }`}
-            >
-              Existing patient
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePatientModeChange("new")}
-              className={`min-w-[9.5rem] rounded-xl px-4 py-2 text-center text-sm font-medium ring-1 transition-colors ${
-                patientMode === "new"
-                  ? "bg-white text-cyan-700 shadow-sm ring-cyan-200"
-                  : "bg-transparent text-slate-500 ring-transparent hover:bg-white/60 hover:text-cyan-700"
-              }`}
-            >
-              New patient
-            </button>
-          </div>
-        </div>
-      </section>
+      </div>
 
       {bookError && (
         <div
-          className={`rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm font-medium text-red-700 shadow-sm transition-opacity duration-700 ${
+          className={`flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition-opacity duration-700 ${
             bookErrorFade ? "opacity-0" : "opacity-100"
           }`}
         >
+          <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
           {bookError}
         </div>
       )}
 
-      <section className="grid gap-8 xl:grid-cols-[1.35fr_1fr] min-w-0">
-        <div className="space-y-6 min-w-0">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Patient Details</h3>
-                <p className="text-sm text-slate-600">
-                  Switch between searching existing records or onboarding a brand-new patient profile.
-                </p>
-              </div>
+      {/* ── Main workspace: guided steps (left) + live summary (right) ── */}
+      <div className="grid gap-4 xl:grid-cols-[1fr_300px] min-w-0 items-start">
+
+        {/* ── LEFT: Step-by-step booking ── */}
+        <div className="space-y-4 min-w-0">
+
+          {/* ── STEP 1: Patient ── */}
+          <div className="rx-section-card">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
+                selectedPatientSnapshot ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
+              }`}>
+                {selectedPatientSnapshot ? (
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                ) : "1"}
+              </span>
+              <p className="text-sm font-semibold text-slate-900">Patient</p>
+              {selectedPatientSnapshot && (
+                <span className="ml-auto text-xs text-emerald-600 font-medium truncate max-w-[200px]">
+                  {patientSummaryLabel}
+                </span>
+              )}
             </div>
 
-            <div ref={patientPanelRef} className="mt-6 space-y-5">
-              <div className="relative min-h-[34rem]">
+            <div ref={patientPanelRef} className="p-4">
+              <div className="relative min-h-[20rem]">
+                {/* Existing patient panel */}
                 <div
-                  className={`absolute inset-0 space-y-4 overflow-y-auto pr-1 transition-opacity duration-150 ${
-                    patientMode === "existing"
-                      ? "z-10 opacity-100"
-                      : "pointer-events-none z-0 opacity-0"
+                  className={`absolute inset-0 space-y-3 overflow-y-auto pr-1 transition-opacity duration-150 ${
+                    patientMode === "existing" ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
                   }`}
                   aria-hidden={patientMode !== "existing"}
                 >
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Search patient</label>
                   <div className="relative flex items-center">
+                    <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
                     <input
                       value={searchPatient}
                       onChange={(e) => handleExistingPatientSearch(e.target.value)}
-                      placeholder="Search by name, email, phone, or patient ID — or use voice"
-                      className="w-full rounded-xl border border-slate-200 bg-white pl-4 pr-12 py-2.5 text-sm shadow-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                      placeholder="Name, email, phone, or patient ID…"
+                      className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-12 py-2.5 text-sm shadow-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                     />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
                       <div className="pointer-events-auto">
                         <VoiceInput
                           onTranscript={(text) => {
@@ -980,114 +999,99 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                       </div>
                     </div>
                   </div>
+
                   <div className="relative w-full">
                     {showPatientSuggestions && searchPatient.trim().length > 0 && (
                       <div
-                        className="absolute z-10 mt-2 max-h-64 w-full overflow-auto rounded-2xl border border-slate-200 bg-white/90 shadow-lg backdrop-blur-sm"
+                        className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg"
                         onMouseDown={(e) => e.preventDefault()}
                         onBlur={() => setShowPatientSuggestions(false)}
                       >
                         {filteredPatients.length === 0 ? (
                           <div className="px-4 py-3 text-sm text-slate-500">No results found</div>
                         ) : (
-                          filteredPatients.slice(0, 10).map((p: any) => {
-                            const label = `${p.firstName} ${p.lastName} — ${p.email}`
-                            return (
-                              <button
-                                key={p.id}
-                                type="button"
-                                className="w-full px-4 py-3 text-left text-sm transition hover:bg-slate-50"
-                                onClick={() => {
-                                  setSelectedPatientId(p.id)
-                                  setSearchPatient(label)
-                                  setShowPatientSuggestions(false)
-                                }}
-                              >
-                                <div className="font-medium text-slate-900">
-                                  {p.firstName} {p.lastName}
+                          filteredPatients.slice(0, 10).map((p: any) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full px-4 py-3 text-left text-sm transition hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                              onClick={() => {
+                                setSelectedPatientId(p.id)
+                                setSearchPatient(`${p.firstName} ${p.lastName} — ${p.email}`)
+                                setShowPatientSuggestions(false)
+                              }}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
+                                  {p.firstName?.charAt(0)}{p.lastName?.charAt(0)}
                                 </div>
-                                <div className="text-xs text-slate-600">
-                                  {p.email}
-                                  {p.phone ? ` • ${p.phone}` : ""}
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-slate-900 truncate">{p.firstName} {p.lastName}</p>
+                                  <p className="text-xs text-slate-500 truncate">{p.email}{p.phone ? ` · ${p.phone}` : ""}</p>
+                                  {p.patientId && <p className="text-[10px] font-mono text-slate-400">#{p.patientId}</p>}
                                 </div>
-                                {p.patientId && (
-                                  <div className="text-[11px] font-mono text-slate-500">ID: {p.patientId}</div>
-                                )}
-                              </button>
-                            )
-                          })
+                              </div>
+                            </button>
+                          ))
                         )}
                       </div>
                     )}
                   </div>
 
                   {selectedPatientId && (
-                    <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur">
-                      {patientInfoLoading && <div className="text-xs text-slate-500">Loading patient details…</div>}
-                      {patientInfoError && <div className="text-xs text-red-600">{patientInfoError}</div>}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      {patientInfoLoading && <p className="text-xs text-slate-500">Loading patient details…</p>}
+                      {patientInfoError && <p className="text-xs text-red-600">{patientInfoError}</p>}
                       {selectedPatientInfo && !patientInfoLoading && !patientInfoError && (
-                        <div className="space-y-4 text-sm text-slate-700">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linked patient</p>
-                              <p className="mt-1 text-lg font-semibold text-slate-900">
-                                {selectedPatientInfo.firstName} {selectedPatientInfo.lastName}
-                              </p>
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center text-sm font-bold text-cyan-700 flex-shrink-0">
+                              {selectedPatientInfo.firstName?.charAt(0)}{selectedPatientInfo.lastName?.charAt(0)}
                             </div>
-                            {selectedPatientInfo.bloodGroup && (
-                              <span className="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800">
-                                {selectedPatientInfo.bloodGroup}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <div>
-                              <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Email</span>
-                              {selectedPatientInfo.email || "—"}
-                            </div>
-                            <div>
-                              <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</span>
-                              {selectedPatientInfo.phone || "—"}
-                            </div>
-                            <div>
-                              <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Patient ID</span>
-                              {selectedPatientInfo.patientId || "—"}
-                            </div>
-                            <div>
-                              <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Gender</span>
-                              {selectedPatientInfo.gender || "—"}
-                            </div>
-                            <div>
-                              <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">DOB</span>
-                              {selectedPatientInfo.dateOfBirth || "—"}
-                            </div>
-                            {selectedPatientInfo.address && (
-                              <div className="sm:col-span-2">
-                                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Address</span>
-                                {selectedPatientInfo.address}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-900">{selectedPatientInfo.firstName} {selectedPatientInfo.lastName}</p>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {selectedPatientInfo.bloodGroup && (
+                                  <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-1.5 py-0.5">{selectedPatientInfo.bloodGroup}</span>
+                                )}
+                                {selectedPatientInfo.gender && (
+                                  <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-md px-1.5 py-0.5 capitalize">{selectedPatientInfo.gender}</span>
+                                )}
+                                {selectedPatientInfo.phone && (
+                                  <span className="text-xs text-slate-600 bg-white border border-slate-200 rounded-md px-1.5 py-0.5">{selectedPatientInfo.phone}</span>
+                                )}
+                                {selectedPatientInfo.patientId && (
+                                  <span className="text-[10px] font-mono text-slate-400 bg-white border border-slate-200 rounded-md px-1.5 py-0.5">#{selectedPatientInfo.patientId}</span>
+                                )}
                               </div>
-                            )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedPatientId(""); setSearchPatient(""); setSelectedPatientInfo(null) }}
+                              className="flex-shrink-0 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"
+                              title="Clear patient"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           </div>
-
                           {(selectedPatientInfo.allergies || selectedPatientInfo.currentMedications) && (
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div className="flex flex-wrap gap-2">
                               {selectedPatientInfo.allergies && (
-                                <div>
-                                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Allergies</span>
-                                  {selectedPatientInfo.allergies}
-                                </div>
+                                <span className="inline-flex items-center gap-1 text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-md px-2 py-0.5">
+                                  <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  Allergies: {selectedPatientInfo.allergies}
+                                </span>
                               )}
                               {selectedPatientInfo.currentMedications && (
-                                <div>
-                                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Medications</span>
-                                  {selectedPatientInfo.currentMedications}
-                                </div>
+                                <span className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-md px-2 py-0.5">
+                                  Meds: {selectedPatientInfo.currentMedications}
+                                </span>
                               )}
                             </div>
                           )}
-
-                          <div className="pt-4 border-t border-slate-200">
+                          <div className="pt-3 border-t border-slate-200">
                             <PatientConsentVideo
                               patientId={selectedPatientInfo.patientId || selectedPatientId}
                               patientUid={selectedPatientId}
@@ -1101,15 +1105,15 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     </div>
                   )}
                 </div>
+
+                {/* New patient panel */}
                 <div
-                  className={`absolute inset-0 space-y-4 overflow-y-auto pr-1 transition-opacity duration-150 ${
-                    patientMode === "new"
-                      ? "z-10 opacity-100"
-                      : "pointer-events-none z-0 opacity-0"
+                  className={`absolute inset-0 space-y-3 overflow-y-auto pr-1 transition-opacity duration-150 ${
+                    patientMode === "new" ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
                   }`}
                   aria-hidden={patientMode !== "new"}
                 >
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <input
                       placeholder="First name"
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
@@ -1135,15 +1139,15 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                       value={newPatient.phone}
                       onChange={(e) => setNewPatient((v) => ({ ...v, phone: e.target.value }))}
                     />
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <input
-                        placeholder="Password"
+                        placeholder="Password (default: 123456)"
                         type="password"
                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                         value={newPatientPassword}
                         onChange={(e) => setNewPatientPassword(e.target.value)}
                       />
-                      <p className="text-xs text-slate-500">Default: 123456 (min 6 characters). Patient can change later from dashboard.</p>
+                      <p className="text-[10px] text-slate-400">Min 6 chars. Patient can change later.</p>
                     </div>
                     <input
                       placeholder="Confirm password"
@@ -1169,16 +1173,14 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     >
                       <option value="">Blood group</option>
                       {bloodGroups.map((bg) => (
-                        <option key={bg} value={bg}>
-                          {bg}
-                        </option>
+                        <option key={bg} value={bg}>{bg}</option>
                       ))}
                     </select>
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Birthday</label>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-500">Date of Birth</label>
                       <input
                         type="date"
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                         max={todayStr}
                         value={newPatient.dateOfBirth}
                         onChange={(e) => setNewPatient((v) => ({ ...v, dateOfBirth: e.target.value }))}
@@ -1193,59 +1195,28 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                   </div>
                 </div>
               </div>
-
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 shadow-inner">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-900">Booking summary</h4>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-700">
-                    {patientMode === "existing" ? "Existing" : "New"}
-                  </span>
-                </div>
-                <dl className="mt-4 space-y-3 text-xs text-slate-600">
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
-                    <dt className="font-semibold text-slate-500">Patient</dt>
-                    <dd className="text-right font-medium text-slate-900">{patientSummaryLabel}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
-                    <dt className="font-semibold text-slate-500">Contact</dt>
-                    <dd className="text-right">{contactSummaryLabel}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
-                    <dt className="font-semibold text-slate-500">Doctor</dt>
-                    <dd className="text-right">{doctorSummaryLabel}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
-                    <dt className="font-semibold text-slate-500">Schedule</dt>
-                    <dd className="text-right">{appointmentSummaryLabel}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
-                    <dt className="font-semibold text-slate-500">Symptoms</dt>
-                    <dd className="text-right">{symptomSummary}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <dt className="font-semibold text-slate-500">Payment</dt>
-                    <dd className="text-right">{paymentMethodLabel}</dd>
-                  </div>
-                </dl>
-              </div>
-
             </div>
           </div>
 
-        </div>
-
-        <div className="space-y-6 min-w-0">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur overflow-hidden">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Visit Setup</h3>
-                <p className="text-sm text-slate-600">Define the symptoms, doctor, and time slot for this appointment.</p>
-              </div>
+          {/* ── STEP 2: Visit Setup ── */}
+          <div className="rx-section-card">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
+                selectedDoctorId && appointmentDate && appointmentTime ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
+              }`}>
+                {selectedDoctorId && appointmentDate && appointmentTime ? (
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                ) : "2"}
+              </span>
+              <p className="text-sm font-semibold text-slate-900">Visit Setup</p>
+              {selectedDoctorId && appointmentDate && appointmentTime && (
+                <span className="ml-auto text-xs text-emerald-600 font-medium">{appointmentSummaryLabel}</span>
+              )}
             </div>
 
-            <div className="mt-6 space-y-6 overflow-visible">
+            <div className="p-4 space-y-5 overflow-visible">
               <div className="relative">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Symptoms (suggest doctor)</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chief Complaint / Symptoms</label>
                 <div className="mt-2 relative symptom-dropdown-container">
                   {/* Searchable Dropdown */}
                   <div
@@ -1267,10 +1238,10 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     <div className="flex items-center justify-between">
                       <span className={symptomCategory ? "text-slate-900" : "text-slate-400"}>
                         {symptomCategory === "custom"
-                          ? "Custom..."
+                          ? "Custom…"
                           : symptomCategory
-                          ? SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)?.label || "Select symptoms (optional)"
-                          : "Select symptoms (optional)"}
+                          ? SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)?.label || "Select symptoms"
+                          : "Select symptoms — filters recommended doctors"}
                       </span>
                       <svg
                         className={`w-4 h-4 text-slate-500 transition-transform ${showSymptomDropdown ? "rotate-180" : ""}`}
@@ -1408,77 +1379,148 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Doctor</label>
-                  <select
-                    value={selectedDoctorId}
-                    onChange={(e) => {
-                      const doctorId = e.target.value
-                      if (doctorId) {
-                        handleDoctorSelect(doctorId)
-                      } else {
-                        setSelectedDoctorId("")
-                        setSelectedDoctorFee(null)
-                      }
-                    }}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                  >
-                    <option value="">Select doctor</option>
-                    {/* Recommended Doctors Section */}
-                    {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0 && (
-                      <>
-                        <optgroup label={`⭐ Recommended for Symptoms (${recommendedDoctors.length})`}>
-                          {recommendedDoctors.map((d: any) => (
-                            <option key={d.id} value={d.id}>
-                              {d.firstName} {d.lastName} — {d.specialization}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </>
-                    )}
-                    {/* Other Doctors Section */}
-                    {symptomCategory && symptomCategory !== "custom" && otherDoctors.length > 0 && (
-                      <>
-                        <optgroup label={`👨‍⚕️ Other Doctors (${otherDoctors.length}) ⚠️ Not specifically recommended`}>
-                          {otherDoctors.map((d: any) => (
-                            <option key={d.id} value={d.id}>
-                              {d.firstName} {d.lastName} — {d.specialization}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </>
-                    )}
-                    {/* Show all doctors if no category selected or no recommendations */}
-                    {(!symptomCategory || symptomCategory === "custom" || recommendedDoctors.length === 0) && doctors.map((d: any) => (
-                      <option key={d.id} value={d.id}>
-                        {d.firstName} {d.lastName} — {d.specialization}
-                      </option>
-                    ))}
-                  </select>
-                  {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length === 0 && doctors.length > 0 && (
-                    <p className="mt-2 text-xs text-amber-600">
-                      ⚠️ No matching doctors found for selected symptoms. Showing all available doctors.
-                    </p>
-                  )}
+              {/* ── Doctor cards ── */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0
+                      ? `Recommended Doctors (${visibleDoctors.length})`
+                      : `Select Doctor (${visibleDoctors.length}${searchDoctor ? ` of ${doctors.length}` : ""})`}
+                  </label>
                   {selectedDoctorFee !== null && (
-                    <div className="mt-3 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-teal-700">Consultation Fee</span>
-                        <span className="text-lg font-semibold text-teal-700">
-                          ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)}
-                        </span>
-                      </div>
-                      {symptomCategory && symptomCategory !== "custom" && selectedDoctorId && !recommendedDoctors.some((d: any) => d.id === selectedDoctorId) && (
-                        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                          <p className="text-xs text-amber-700 font-medium">
-                            ⚠️ This doctor is not specifically recommended for the selected symptoms.
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                    <span className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-md px-2 py-0.5">
+                      ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)} fee
+                    </span>
                   )}
                 </div>
+
+                {/* Doctor search — only shown when 6+ doctors to avoid clutter */}
+                {doctors.length >= 6 && (
+                  <div className="relative mb-3">
+                    <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={searchDoctor}
+                      onChange={(e) => setSearchDoctor(e.target.value)}
+                      placeholder="Search by name or specialization…"
+                      className="w-full rounded-lg border border-slate-200 bg-white pl-8 pr-8 py-2 text-xs focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    />
+                    {searchDoctor && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchDoctor("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length === 0 && doctors.length > 0 && (
+                  <p className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    No doctors matched these symptoms — showing all available.
+                  </p>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                  {visibleDoctors.length === 0 && searchDoctor ? (
+                    <p className="sm:col-span-2 text-xs text-slate-400 py-4 text-center">
+                      No doctors match &ldquo;{searchDoctor}&rdquo;
+                    </p>
+                  ) : visibleDoctors.map((doc: any) => (
+                    <button
+                      key={doc.id}
+                      type="button"
+                      onClick={() => handleDoctorSelect(doc.id)}
+                      className={`text-left p-3 rounded-xl border transition-all ${
+                        selectedDoctorId === doc.id
+                          ? "border-cyan-500 bg-cyan-50 ring-1 ring-cyan-200"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                          selectedDoctorId === doc.id ? "bg-cyan-200 text-cyan-800" : "bg-slate-100 text-slate-600"
+                        }`}>
+                          {doc.firstName?.charAt(0)}{doc.lastName?.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-slate-900 truncate">
+                            Dr. {doc.firstName} {doc.lastName}
+                          </p>
+                          <p className="text-[10px] text-slate-500 truncate">{doc.specialization || "General"}</p>
+                          {doc.consultationFee && (
+                            <p className="text-[10px] font-bold text-teal-600 mt-0.5">
+                              ₹{new Intl.NumberFormat("en-IN").format(doc.consultationFee)}
+                            </p>
+                          )}
+                        </div>
+                        {selectedDoctorId === doc.id && (
+                          <svg className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Other (non-recommended) doctors */}
+                {symptomCategory && symptomCategory !== "custom" && visibleOtherDoctors.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 py-1">
+                      <svg className="h-3 w-3 transition-transform [[open]_&]:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      {visibleOtherDoctors.length} other doctor{visibleOtherDoctors.length > 1 ? "s" : ""} (not specifically recommended)
+                    </summary>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {visibleOtherDoctors.map((doc: any) => (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onClick={() => handleDoctorSelect(doc.id)}
+                          className={`text-left p-3 rounded-xl border transition-all opacity-70 hover:opacity-100 ${
+                            selectedDoctorId === doc.id
+                              ? "border-amber-400 bg-amber-50 ring-1 ring-amber-200 opacity-100"
+                              : "border-slate-200 bg-white hover:border-amber-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
+                              {doc.firstName?.charAt(0)}{doc.lastName?.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 truncate">Dr. {doc.firstName} {doc.lastName}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{doc.specialization || "General"}</p>
+                              {doc.consultationFee && (
+                                <p className="text-[10px] font-bold text-teal-600 mt-0.5">₹{new Intl.NumberFormat("en-IN").format(doc.consultationFee)}</p>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                {selectedDoctorId && symptomCategory && symptomCategory !== "custom" && !recommendedDoctors.some((d: any) => d.id === selectedDoctorId) && (
+                  <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    <svg className="h-3.5 w-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    Not specifically recommended for these symptoms
+                  </div>
+                )}
+              </div>
+
+              {/* ── Date + visual time slot picker ── */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</label>
                   <input
@@ -1488,83 +1530,97 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                     onChange={(e) => setAppointmentDate(e.target.value)}
                     className={`mt-2 w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-100 ${
                       isSelectedDateBlocked
-                        ? "border-red-400 bg-red-50 text-red-700 focus:ring-red-100"
+                        ? "border-red-400 bg-red-50 text-red-700"
                         : "border-slate-200 bg-white focus:border-cyan-600"
                     }`}
                   />
                   {isSelectedDateBlocked && (
-                    <div className="mt-2 text-sm bg-red-50 border-l-4 border-red-400 rounded-lg p-3">
-                      <div className="flex items-start gap-2">
-                        <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                        <div>
-                          <p className="font-semibold text-red-800 text-xs mb-1">Date Not Available</p>
-                          <p className="text-red-700 text-xs">Please select another date to continue.</p>
-                        </div>
-                      </div>
-                    </div>
+                    <p className="mt-1.5 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      Doctor unavailable on this date — pick another.
+                    </p>
                   )}
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Available time</label>
-                  <select
-                    value={appointmentTime}
-                    onChange={(e) => setAppointmentTime(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                    disabled={!selectedDoctorId || !appointmentDate || isSelectedDateBlocked}
-                  >
-                    <option value="">
-                      {!selectedDoctorId || !appointmentDate
-                        ? "Select doctor and date first"
-                        : isSelectedDateBlocked
-                        ? "Sorry, doctor not available"
-                        : availableSlots.length
-                        ? "Select time"
-                        : "No slots available"}
-                    </option>
-                    {availableSlots.map((s) => (
-                      <option key={s} value={s}>
-                        {formatTimeDisplay(s)}
-                      </option>
-                    ))}
-                  </select>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Time Slot
+                    {availableSlots.length > 0 && (
+                      <span className="ml-1 normal-case font-normal text-slate-400">({availableSlots.length} open)</span>
+                    )}
+                  </label>
+                  <div className="mt-2">
+                    {!selectedDoctorId || !appointmentDate ? (
+                      <p className="text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
+                        Select doctor &amp; date first
+                      </p>
+                    ) : isSelectedDateBlocked ? (
+                      <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+                        Doctor unavailable
+                      </p>
+                    ) : availableSlots.length === 0 ? (
+                      <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                        No slots available for this date
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">
+                        {availableSlots.map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setAppointmentTime(s)}
+                            className={`py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                              appointmentTime === s
+                                ? "bg-cyan-600 text-white border-cyan-600"
+                                : "bg-white text-slate-700 border-slate-200 hover:border-cyan-300 hover:bg-cyan-50"
+                            }`}
+                          >
+                            {formatTimeDisplay(s)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Payment & Confirmation</h3>
-                <p className="text-sm text-slate-600">Capture payment preference and finalize the booking.</p>
-              </div>
+          {/* ── STEP 3: Payment ── */}
+          <div className="rx-section-card">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
+                paymentMethod ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
+              }`}>
+                {paymentMethod ? (
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                ) : "3"}
+              </span>
+              <p className="text-sm font-semibold text-slate-900">Payment</p>
+              {paymentMethod && (
+                <span className="ml-auto text-xs text-emerald-600 font-medium">
+                  {paymentMethodLabel} · ₹{new Intl.NumberFormat("en-IN").format(paymentAmount)}
+                </span>
+              )}
             </div>
-
-            <div className="mt-6 space-y-5">
+            <div className="p-4 space-y-4">
               {selectedDoctorFee === null ? (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  Select a doctor to preview consultation fee and available payment methods.
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-400">
+                  Select a doctor to see the consultation fee
                 </div>
               ) : (
                 <>
-                  {/* Consultation Fee Display */}
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">Consultation Fee</span>
-                      <span className="text-base font-semibold text-slate-900">
-                        ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)}
-                      </span>
-                    </div>
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <span className="text-sm font-medium text-slate-700">Consultation Fee</span>
+                    <span className="text-base font-semibold text-slate-900">
+                      ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)}
+                    </span>
                   </div>
 
-                  {/* Additional Fees Section */}
                   <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <h4 className="text-sm font-semibold text-slate-900">Additional Fees</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">Add file charges, blood reports, etc.</p>
+                        <p className="text-xs text-slate-400 mt-0.5">File charges, reports, etc.</p>
                       </div>
                       <Button
                         type="button"
@@ -1579,10 +1635,9 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                           setAdditionalFees([...additionalFees, newFee])
                         }}
                       >
-                        + Add Fee
+                        + Add
                       </Button>
                     </div>
-
                     {additionalFees.length > 0 && (
                       <div className="space-y-2">
                         {additionalFees.map((fee, index) => (
@@ -1590,17 +1645,17 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                             <div className="flex-1 space-y-2">
                               <input
                                 type="text"
-                                placeholder="Description (e.g., File Charges, Blood Report)"
+                                placeholder="Description (e.g., File Charges)"
                                 value={fee.description}
                                 onChange={(e) => {
                                   const updated = [...additionalFees]
                                   updated[index] = { ...fee, description: e.target.value }
                                   setAdditionalFees(updated)
                                 }}
-                                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-600 focus:border-cyan-600"
+                                className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-100"
                               />
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-slate-600">₹</span>
+                                <span className="text-xs text-slate-500">₹</span>
                                 <input
                                   type="number"
                                   placeholder="Amount"
@@ -1613,26 +1668,25 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                                   }}
                                   min="0"
                                   step="0.01"
-                                  className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-600 focus:border-cyan-600"
+                                  className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-100"
                                 />
                               </div>
                             </div>
                             <button
                               type="button"
-                              onClick={() => {
-                                setAdditionalFees(additionalFees.filter((_, i) => i !== index))
-                              }}
-                              className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Remove"
+                              onClick={() => setAdditionalFees(additionalFees.filter((_, i) => i !== index))}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                             >
-                              ×
+                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
                             </button>
                           </div>
                         ))}
                         {totalAdditionalFees > 0 && (
                           <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                            <span className="text-sm font-medium text-slate-700">Total Additional Fees</span>
-                            <span className="text-base font-semibold text-slate-900">
+                            <span className="text-xs font-medium text-slate-600">Additional Total</span>
+                            <span className="text-sm font-semibold text-slate-900">
                               ₹{new Intl.NumberFormat("en-IN").format(totalAdditionalFees)}
                             </span>
                           </div>
@@ -1653,89 +1707,140 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                 </>
               )}
 
-              <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                <span className="font-medium text-slate-700">Total Amount due</span>
-                <span className="text-lg font-semibold text-slate-900">
-                  {paymentAmount ? `₹${new Intl.NumberFormat("en-IN").format(paymentAmount)}` : "Not set"}
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <span className="text-sm font-semibold text-slate-700">Total Due</span>
+                <span className="text-xl font-bold text-slate-900">
+                  {paymentAmount ? `₹${new Intl.NumberFormat("en-IN").format(paymentAmount)}` : "—"}
                 </span>
               </div>
+            </div>
+          </div>
 
-              <div className="flex justify-end">
+        </div>
+
+        {/* ── RIGHT: Sticky booking summary ── */}
+        <div className="xl:sticky xl:top-4 space-y-3">
+          <div className="rx-section-card">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-900">Booking Summary</p>
+            </div>
+            <div className="p-4">
+              <dl className="space-y-3 text-xs">
+                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <dt className="text-slate-500 font-medium shrink-0">Patient</dt>
+                  <dd className={`text-right font-semibold truncate max-w-[160px] ${selectedPatientSnapshot ? "text-slate-900" : "text-slate-400"}`}>
+                    {patientSummaryLabel}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <dt className="text-slate-500 font-medium shrink-0">Contact</dt>
+                  <dd className={`text-right truncate max-w-[160px] ${selectedPatientSnapshot ? "text-slate-700" : "text-slate-400"}`}>
+                    {contactSummaryLabel}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <dt className="text-slate-500 font-medium shrink-0">Doctor</dt>
+                  <dd className={`text-right font-semibold truncate max-w-[160px] ${selectedDoctor ? "text-slate-900" : "text-slate-400"}`}>
+                    {doctorSummaryLabel}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <dt className="text-slate-500 font-medium shrink-0">Schedule</dt>
+                  <dd className={`text-right truncate max-w-[160px] ${appointmentDate ? "text-slate-700" : "text-slate-400"}`}>
+                    {appointmentSummaryLabel}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <dt className="text-slate-500 font-medium shrink-0">Symptoms</dt>
+                  <dd className="text-right text-slate-600 truncate max-w-[160px]">{symptomSummary}</dd>
+                </div>
+                <div className="flex items-start justify-between gap-2">
+                  <dt className="text-slate-500 font-medium shrink-0">Payment</dt>
+                  <dd className={`text-right font-semibold ${paymentMethod ? "text-slate-900" : "text-slate-400"}`}>
+                    {paymentMethod
+                      ? `${paymentMethodLabel} · ₹${new Intl.NumberFormat("en-IN").format(paymentAmount)}`
+                      : paymentMethodLabel}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-5 pt-4 border-t border-slate-200">
                 <Button
                   onClick={handleBookAppointment}
                   loading={bookLoading}
-                  loadingText="Booking..."
+                  loadingText="Booking…"
                   size="lg"
+                  className="w-full"
                 >
-                  Book Appointment
+                  Confirm Booking
                 </Button>
               </div>
             </div>
           </div>
+
+          {/* Quick stats strip */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rx-metric-card">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Doctors</p>
+              <p className="mt-1 text-xl font-bold text-slate-900">{doctors.length}</p>
+              <p className="text-[10px] text-slate-400">active</p>
+            </div>
+            <div className="rx-metric-card">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Open Slots</p>
+              <p className="mt-1 text-xl font-bold text-slate-900">
+                {appointmentDate && selectedDoctorId ? availableSlots.length : "—"}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {appointmentDate && selectedDoctorId ? "for selected date" : "select doctor & date"}
+              </p>
+            </div>
+          </div>
         </div>
-      </section>
+
+      </div>
 
       <AppointmentSuccessModal isOpen={successOpen} onClose={() => setSuccessOpen(false)} appointmentData={successData} />
 
-      {/* Doctor Selection Confirmation Modal */}
+      {/* Doctor confirmation modal */}
       {showDoctorConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl">
-            {/* Modal Header */}
-            <div className="border-b border-slate-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-slate-900">Confirm Doctor Selection</h3>
-              <p className="text-xs text-slate-500 mt-1">You're selecting a doctor that's not specifically recommended</p>
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h3 className="text-base font-semibold text-slate-900">Confirm Doctor Selection</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Not specifically recommended for these symptoms</p>
             </div>
-
-            {/* Modal Body */}
-            <div className="p-6">
-              <div className="space-y-4">
-                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
-                  <p className="text-sm text-amber-800 font-semibold mb-2 flex items-center gap-2">
-                    <span>⚠️</span>
-                    <span>This doctor is not specifically recommended for the selected symptoms.</span>
-                  </p>
-                  <p className="text-xs text-amber-700 mt-2">
-                    You selected: <strong>{symptomCategory && SYMPTOM_CATEGORIES.find(c => c.id === symptomCategory)?.label}</strong>
-                  </p>
-                </div>
-
-                {/* Doctor Information */}
-                {(() => {
-                  const doctorToConfirm = doctors.find((d: any) => d.id === pendingDoctorId)
-                  return doctorToConfirm ? (
-                    <div className="bg-cyan-50 rounded-xl p-4 border-2 border-blue-100">
-                      <div className="flex items-start gap-3">
-                        <div className="text-3xl">👨‍⚕️</div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-800 mb-1">Selected Doctor</h4>
-                          <p className="text-lg font-bold text-teal-700">
-                            Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
-                          </p>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {doctorToConfirm.specialization}
-                          </p>
-                          {doctorToConfirm.consultationFee && (
-                            <p className="text-sm text-gray-500 mt-1">
-                              Consultation Fee: ₹{doctorToConfirm.consultationFee}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ) : null
-                })()}
-
-                <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-                  <p className="text-xs text-slate-600">
-                    <strong>Note:</strong> You can still select this doctor, but we recommend choosing from the suggested doctors above for better treatment of the specific symptoms.
-                  </p>
-                </div>
+            <div className="p-5 space-y-4">
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <svg className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <p className="text-xs text-amber-800">
+                  Symptoms: <strong>{symptomCategory && SYMPTOM_CATEGORIES.find(c => c.id === symptomCategory)?.label}</strong>
+                </p>
               </div>
+              {(() => {
+                const doctorToConfirm = doctors.find((d: any) => d.id === pendingDoctorId)
+                return doctorToConfirm ? (
+                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-600 flex-shrink-0">
+                      {doctorToConfirm.firstName?.charAt(0)}{doctorToConfirm.lastName?.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
+                      </p>
+                      <p className="text-xs text-slate-500">{doctorToConfirm.specialization}</p>
+                      {doctorToConfirm.consultationFee && (
+                        <p className="text-xs font-bold text-teal-700 mt-1">
+                          ₹{new Intl.NumberFormat("en-IN").format(doctorToConfirm.consultationFee)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : null
+              })()}
             </div>
-
-            {/* Modal Footer */}
-            <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-gray-200 rounded-b-2xl">
+            <div className="px-5 py-4 flex justify-end gap-3 border-t border-slate-100">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -1746,7 +1851,7 @@ export default function BookAppointmentPanel({ patientMode, onPatientModeChange,
                 Cancel
               </Button>
               <Button onClick={handleConfirmDoctorSelection}>
-                ✓ Yes, Select This Doctor
+                Select Anyway
               </Button>
             </div>
           </div>
