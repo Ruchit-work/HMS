@@ -1,4 +1,5 @@
 {
+  "buildCommand": "git lfs pull && npm run build",
   "crons": [
     {
       "path": "/api/auto-campaigns/generate?check=today&publish=true&sendWhatsApp=true",
