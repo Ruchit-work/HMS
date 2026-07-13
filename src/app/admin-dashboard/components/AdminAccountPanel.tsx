@@ -18,7 +18,9 @@ export default function AdminAccountPanel({
   return (
     <div className="space-y-6">
       <div className="hms-content-card rounded-2xl p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Profile</h3>
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">
+          {isSuperAdmin ? "Headquarters profile" : "Profile"}
+        </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
             <p className="text-xs font-semibold text-slate-500 mb-1">Name</p>
@@ -30,7 +32,9 @@ export default function AdminAccountPanel({
           </div>
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
             <p className="text-xs font-semibold text-slate-500 mb-1">Role</p>
-            <p className="text-slate-900 font-medium">{isSuperAdmin ? "Super Administrator" : "Hospital Administrator"}</p>
+            <p className="text-slate-900 font-medium">
+              {isSuperAdmin ? "Platform Super Admin" : "Hospital Administrator"}
+            </p>
           </div>
         </div>
       </div>

@@ -12,6 +12,13 @@ import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/Revea
 import DoctorProfileForm, { DoctorProfileFormValues } from '@/components/forms/DoctorProfileForm'
 import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/shared/date'
+import {
+  EnterpriseDataTable,
+  StatusPill,
+  AvatarCell,
+  type EnterpriseColumn,
+  type EnterpriseRowAction,
+} from '@/components/ui/enterprise-table'
 
 interface Doctor {
     id: string
@@ -596,6 +603,126 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         return () => { cancelled = true }
     }, [activeHospitalId])
 
+    const doctorColumns: EnterpriseColumn<Doctor>[] = useMemo(
+        () => [
+            {
+                key: 'doctor',
+                header: `Doctor (${displayedDoctors.length})`,
+                render: (doctor) => (
+                    <div>
+                        <AvatarCell
+                            name={`${doctor.firstName} ${doctor.lastName}`}
+                            color="emerald"
+                        />
+                        <p className="mt-0.5 text-xs text-slate-500 sm:hidden">{doctor.specialization}</p>
+                    </div>
+                ),
+            },
+            {
+                key: 'specialization',
+                header: 'Specialization',
+                hideBelow: 'sm',
+                render: (doctor) => (
+                    <div className="text-sm text-slate-900">{doctor.specialization}</div>
+                ),
+            },
+            {
+                key: 'qualification',
+                header: 'Qualification',
+                hideBelow: 'md',
+                render: (doctor) => (
+                    <div className="text-sm text-slate-900">{doctor.qualification}</div>
+                ),
+            },
+            {
+                key: 'experience',
+                header: 'Experience',
+                hideBelow: 'lg',
+                render: (doctor) => (
+                    <div className="text-sm text-slate-900">{doctor.experience}</div>
+                ),
+            },
+            {
+                key: 'status',
+                header: 'Status',
+                render: (doctor) => (
+                    <StatusPill
+                        label={
+                            doctor.status === 'active'
+                                ? 'Active'
+                                : doctor.status === 'pending'
+                                  ? 'Pending'
+                                  : 'Inactive'
+                        }
+                        variant={
+                            doctor.status === 'active'
+                                ? 'success'
+                                : doctor.status === 'pending'
+                                  ? 'warning'
+                                  : 'neutral'
+                        }
+                    />
+                ),
+            },
+            {
+                key: 'branches',
+                header: 'Branches',
+                hideBelow: 'md',
+                render: (doctor) => (
+                    <div className="max-w-[140px] truncate text-sm text-slate-900" title={getBranchNames(doctor)}>
+                        {getBranchNames(doctor)}
+                    </div>
+                ),
+            },
+            {
+                key: 'createdAt',
+                header: 'Created',
+                hideBelow: 'lg',
+                render: (doctor) => (
+                    <>
+                        <div className="text-sm font-medium text-slate-900">{formatDate(doctor.createdAt)}</div>
+                        <div className="text-xs text-slate-500">Updated {formatDate(doctor.updatedAt)}</div>
+                    </>
+                ),
+            },
+        ],
+        [displayedDoctors.length, branches]
+    )
+
+    const doctorRowActions: EnterpriseRowAction<Doctor>[] = useMemo(() => {
+        const actions: EnterpriseRowAction<Doctor>[] = []
+        if (user?.role === 'admin') {
+            actions.push(
+                {
+                    label: 'Approve',
+                    variant: 'success',
+                    hidden: (doctor) => !(activeTab === 'pending' && doctor.status === 'pending'),
+                    onClick: (doctor) => handleApproveDoctor(doctor.id),
+                },
+                {
+                    label: 'Reject',
+                    variant: 'danger',
+                    hidden: (doctor) => !(activeTab === 'pending' && doctor.status === 'pending'),
+                    onClick: (doctor) => handleRejectDoctor(doctor.id),
+                }
+            )
+        }
+        if (allowAdd) {
+            actions.push({
+                label: 'Delete',
+                variant: 'danger',
+                hidden: () => activeTab !== 'active',
+                icon: (
+                    <svg className="h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                ),
+                onClick: (doctor) => handleDelete(doctor),
+            })
+        }
+        return actions
+    }, [activeTab, allowAdd, user?.role])
+
     // Gate rendering by auth state (placed after all hooks)
     if (authLoading) {
         return <LoadingSpinner message="Loading doctor management..." />
@@ -745,334 +872,217 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                             </div>
                         </div>
 
-                        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                    <span className="font-semibold text-slate-700">Doctor directory</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                        <button
-                                        type="button"
-                            onClick={() => setActiveTab('active')}
-                                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                                activeTab === 'active'
-                                                ? 'border-cyan-500 bg-cyan-50 text-cyan-800 shadow-sm'
-                                                : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700'
-                            }`}
-                        >
-                                        Active ({metrics.activeCount})
-                        </button>
-                        {user?.role === 'admin' && (
-                            <button
+                        <EnterpriseDataTable
+                            data={displayedDoctors}
+                            columns={doctorColumns}
+                            loading={loading}
+                            loadingMessage="Loading doctors…"
+                            error={error}
+                            emptyTitle={
+                                search
+                                    ? `No ${activeTab === 'active' ? 'active' : 'pending'} doctors match your search`
+                                    : activeTab === 'pending'
+                                      ? 'No pending doctor approvals right now'
+                                      : 'No doctors found'
+                            }
+                            emptyDescription={
+                                search ? 'Try adjusting your keywords or clearing filters.' : undefined
+                            }
+                            toolbar={
+                                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                        <span className="font-semibold text-slate-700">Doctor directory</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
                                             type="button"
-                                onClick={() => setActiveTab('pending')}
+                                            onClick={() => setActiveTab('active')}
                                             className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                                    activeTab === 'pending'
-                                                    ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
+                                                activeTab === 'active'
+                                                    ? 'border-cyan-500 bg-cyan-50 text-cyan-800 shadow-sm'
                                                     : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700'
-                                }`}
-                            >
-                                            Pending ({metrics.pendingCount})
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-            <div className="overflow-x-auto">
-                                <table className="w-full min-w-[900px]">
-                                    <thead className="sticky top-0 z-10 bg-white shadow-sm">
-                                        <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            <th className="px-3 py-3 text-left">Doctor ({displayedDoctors.length})</th>
-                                            <th className="hidden px-3 py-3 text-left sm:table-cell">Specialization</th>
-                                            <th className="hidden px-3 py-3 text-left md:table-cell">Qualification</th>
-                                            <th className="hidden px-3 py-3 text-left lg:table-cell">Experience</th>
-                                            <th className="px-3 py-3 text-left">Status</th>
-                                            <th className="hidden px-3 py-3 text-left md:table-cell">Branches</th>
-                                            <th className="hidden px-3 py-3 text-left lg:table-cell">Created</th>
-                                            <th className="px-3 py-3 text-left">Actions</th>
-                        </tr>
-                    </thead>
-                                    <tbody className="divide-y divide-slate-100 bg-white text-sm text-slate-700">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center">
-                                        <div className="flex flex-col items-center">
-                                                        <svg className="mb-2 h-8 w-8 animate-spin text-cyan-700" fill="none" viewBox="0 0 24 24">
-                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                            </svg>
-                                                        <p className="text-sm text-slate-500">Loading doctors…</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : error ? (
-                                <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center">
-                                                    <svg className="mb-2 h-12 w-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                        </svg>
-                                                    <p className="text-sm font-semibold text-red-600">Error loading doctors</p>
-                                                    <p className="text-xs text-slate-500">{error}</p>
-                                </td>
-                                </tr>
-                                        ) : displayedDoctors.length === 0 ? (
-                                <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center">
-                                                    <svg className="mb-2 h-12 w-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                        </svg>
-                                                    <p className="mb-1 text-sm text-slate-500">
-                                            {search 
-                                                            ? `No ${activeTab === 'active' ? 'active' : 'pending'} doctors match your search`
-                                                : activeTab === 'pending' 
-                                                                ? 'No pending doctor approvals right now'
-                                                    : 'No doctors found'}
-                                        </p>
-                                        {search && (
-                                                        <p className="text-xs text-slate-400">
-                                                            Try adjusting your keywords or clearing filters.
-                                            </p>
+                                            }`}
+                                        >
+                                            Active ({metrics.activeCount})
+                                        </button>
+                                        {user?.role === 'admin' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab('pending')}
+                                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                                                    activeTab === 'pending'
+                                                        ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
+                                                        : 'border-transparent bg-white text-slate-500 hover:border-slate-200 hover:text-slate-700'
+                                                }`}
+                                            >
+                                                Pending ({metrics.pendingCount})
+                                            </button>
                                         )}
-                                    </td>
-                                </tr>
-                            ) : (
-                                            displayedDoctors.map((doctor, index) => (
-                                                <tr className="hover:bg-slate-50" key={`${activeTab}-${doctor.id}-${index}`}>
-                                                    <td className="px-3 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-600">
-                                                                {doctor.firstName.charAt(0)}
-                                                            </span>
-                                                            <div className="flex flex-col">
-                                                                <span className="text-sm font-semibold text-slate-900">
-                                                                    {doctor.firstName} {doctor.lastName}
-                                                                </span>
-                                                                <span className="text-xs text-slate-500 sm:hidden">{doctor.specialization}</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                                    <td className="hidden px-3 py-4 sm:table-cell">
-                                                        <div className="text-sm text-slate-900">{doctor.specialization}</div>
-                                        </td>
-                                                    <td className="hidden px-3 py-4 md:table-cell">
-                                                        <div className="text-sm text-slate-900">{doctor.qualification}</div>
-                                        </td>
-                                                    <td className="hidden px-3 py-4 lg:table-cell">
-                                                        <div className="text-sm text-slate-900">{doctor.experience}</div>
-                                        </td>
-                                                    <td className="px-3 py-4">
-                                                        <span
-                                                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                                doctor.status === 'active' 
-                                                                    ? 'bg-emerald-100 text-emerald-700'
-                                                    : doctor.status === 'pending'
-                                                                    ? 'bg-orange-100 text-orange-700'
-                                                                    : 'bg-slate-100 text-slate-600'
-                                                            }`}
-                                                        >
-                                                            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-current" />
-                                                            {doctor.status === 'active'
-                                                                ? 'Active'
-                                                                : doctor.status === 'pending'
-                                                                ? 'Pending'
-                                                                : 'Inactive'}
-                                            </span>
-                                        </td>
-                                                    <td className="hidden px-3 py-4 md:table-cell">
-                                                        <div className="text-sm text-slate-900 max-w-[140px] truncate" title={getBranchNames(doctor)}>{getBranchNames(doctor)}</div>
-                                        </td>
-                                                    <td className="hidden px-3 py-4 lg:table-cell">
-                                                        <div className="text-sm font-medium text-slate-900">{formatDate(doctor.createdAt)}</div>
-                                                        <div className="text-xs text-slate-500">Updated {formatDate(doctor.updatedAt)}</div>
-                                        </td>
-                                                    <td className="px-3 py-4">
-                                                        <div className="flex items-center gap-1.5">
-                                                <button 
-                                                                className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100"
-                                                    onClick={() => handleView(doctor)}
-                                                                type="button"
-                                                >
-                                                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                                    <span className="hidden sm:inline">View</span>
-                                    </button>
-                                                {activeTab === 'pending' && doctor.status === 'pending' && user?.role === 'admin' ? (
-                                                    <>
-                                                        <button 
-                                                                        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
-                                                            onClick={() => handleApproveDoctor(doctor.id)}
-                                                            disabled={loading}
-                                                                        type="button"
-                                                        >
-                                                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                            <span className="hidden sm:inline">Approve</span>
-                                                        </button>
-                                                        <button 
-                                                                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                                                            onClick={() => handleRejectDoctor(doctor.id)}
-                                                            disabled={loading}
-                                                                        type="button"
-                                                        >
-                                                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                            </svg>
-                                                            <span className="hidden sm:inline">Reject</span>
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                                allowAdd &&
-                                                                activeTab === 'active' && (
-                                                <button 
-                                                                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                                                    onClick={() => handleDelete(doctor)}
-                                                                        type="button"
-                                                >
-                                                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                                    <span className="hidden sm:inline">Delete</span>
-                                    </button>
-                                                                )
-                                                )}
-                                            </div>
-                                </td>
-                            </tr>
-                                ))
-                            )}
-                    </tbody>
-                </table>
-            </div>
-
-                            <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    Showing{' '}
-                                    <span className="font-semibold text-slate-800">{displayedDoctors.length}</span>{' '}
-                                    {activeTab === 'active' ? 'active' : 'pending'} doctors
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
-                                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                                    Active
-                                    {user?.role === 'admin' && (
-                                        <>
-                                            <span className="inline-flex h-2 w-2 rounded-full bg-orange-400" />
-                                            Pending
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                            }
+                            enableSearch={false}
+                            enableFilters={false}
+                            enableBulkSelection={false}
+                            enablePagination={false}
+                            enableSorting={false}
+                            primaryAction={{
+                                label: 'View',
+                                icon: (
+                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                ),
+                                onClick: handleView,
+                            }}
+                            rowActions={doctorRowActions}
+                            itemLabel="doctors"
+                            minWidth="min-w-[900px]"
+                        />
                     </div>
                 </div>
             </div>
 
-            {/* Doctor Details Modal */}
+            {/* Doctor Details Modal — same clinical overview pattern as Patient Profile */}
             <ViewModal
                 isOpen={showViewModal}
                 onClose={() => setShowViewModal(false)}
-                title="Doctor Details"
-                subtitle="Complete doctor information"
+                title="Doctor Profile"
+                subtitle="Clinical overview"
                 headerColor="green"
             >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
-                    {/* Personal Information */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                            </div>
-                            <h4 className="text-base sm:text-lg font-semibold text-gray-900">Personal Information</h4>
+                <div className="space-y-5">
+                    <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-xl font-bold text-emerald-700">
+                            {selectedDoctor?.firstName?.charAt(0)}
+                            {selectedDoctor?.lastName?.charAt(0)}
                         </div>
-                        <div className="space-y-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Full Name</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor?.firstName} {selectedDoctor?.lastName}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor?.email}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Gender</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor?.gender}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Professional Information */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-8 h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-5 h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <h4 className="text-lg font-semibold text-gray-900">Professional Information</h4>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Specialization</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor?.specialization}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Qualification</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor?.qualification}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Experience</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor?.experience}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Consultation Fee</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">₹{selectedDoctor?.consultationFee}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</label>
-                                <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                                    selectedDoctor?.status === 'active' 
-                                        ? 'bg-green-100 text-green-800' 
-                                        : 'bg-gray-100 text-gray-800'
-                                }`}>
-                                    {selectedDoctor?.status === 'active' ? 'Active' : 'Inactive'}
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">
+                                        {selectedDoctor?.firstName} {selectedDoctor?.lastName}
+                                    </h3>
+                                    <p className="mt-0.5 font-mono text-xs text-slate-400">#{selectedDoctor?.id?.slice(0, 8)}</p>
+                                </div>
+                                <span
+                                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                                        selectedDoctor?.status === 'active'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : selectedDoctor?.status === 'pending'
+                                              ? 'border-orange-200 bg-orange-50 text-orange-700'
+                                              : 'border-slate-200 bg-slate-100 text-slate-500'
+                                    }`}
+                                >
+                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                    {selectedDoctor?.status === 'active'
+                                        ? 'Active'
+                                        : selectedDoctor?.status === 'pending'
+                                          ? 'Pending'
+                                          : 'Inactive'}
                                 </span>
                             </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Assigned Branches</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedDoctor ? getBranchNames(selectedDoctor) : '—'}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {selectedDoctor?.specialization && (
+                                    <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                                        {selectedDoctor.specialization}
+                                    </span>
+                                )}
+                                {selectedDoctor?.experience && (
+                                    <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                                        {selectedDoctor.experience} exp.
+                                    </span>
+                                )}
+                                {selectedDoctor?.gender && (
+                                    <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium capitalize text-slate-700">
+                                        {selectedDoctor.gender}
+                                    </span>
+                                )}
+                                {selectedDoctor?.consultationFee != null && (
+                                    <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                                        ₹{selectedDoctor.consultationFee}
+                                    </span>
+                                )}
+                                {selectedDoctor?.phoneNumber && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                                        <svg className="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                        {selectedDoctor.phoneNumber}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* System Information */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                                </svg>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Professional</p>
+                            <div className="grid grid-cols-1 gap-3 text-sm">
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Specialization</p>
+                                    <p className="text-slate-800">{selectedDoctor?.specialization || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Qualification</p>
+                                    <p className="text-slate-800">{selectedDoctor?.qualification || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Experience</p>
+                                    <p className="text-slate-800">{selectedDoctor?.experience || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Consultation Fee</p>
+                                    <p className="text-slate-800">₹{selectedDoctor?.consultationFee ?? 0}</p>
+                                </div>
                             </div>
-                            <h4 className="text-lg font-semibold text-gray-900">System Information</h4>
                         </div>
-                        <div className="space-y-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Doctor ID</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md font-mono">{selectedDoctor?.id}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Created At</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{formatDateTime(selectedDoctor?.createdAt || '')}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Updated</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{formatDateTime(selectedDoctor?.updatedAt || '')}</p>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Contact & Branches</p>
+                            <div className="grid grid-cols-1 gap-3 text-sm">
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Email</p>
+                                    <p className="text-slate-800">{selectedDoctor?.email || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</p>
+                                    <p className="text-slate-800">{selectedDoctor?.phoneNumber || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Gender</p>
+                                    <p className="capitalize text-slate-800">{selectedDoctor?.gender || '—'}</p>
+                                </div>
+                                <div>
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Assigned Branches</p>
+                                    <p className="text-slate-800">{selectedDoctor ? getBranchNames(selectedDoctor) : '—'}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
+
+                    <details className="group">
+                        <summary className="flex cursor-pointer list-none select-none items-center gap-2 text-xs font-semibold text-slate-400 transition-colors hover:text-slate-600">
+                            <svg className="h-3.5 w-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            System Information
+                        </summary>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                            {[
+                                { label: 'Doctor ID', value: selectedDoctor?.id || '—', mono: true },
+                                { label: 'Status', value: selectedDoctor?.status || '—', mono: false },
+                                { label: 'Created', value: formatDateTime(selectedDoctor?.createdAt || ''), mono: false },
+                                { label: 'Last updated', value: formatDateTime(selectedDoctor?.updatedAt || ''), mono: false },
+                            ].map(({ label, value, mono }) => (
+                                <div key={label} className="rounded-lg bg-slate-50 px-3 py-2">
+                                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                                    <p className={`truncate text-slate-700 ${mono ? 'font-mono text-[11px]' : ''}`}>{value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </details>
                 </div>
             </ViewModal>
 

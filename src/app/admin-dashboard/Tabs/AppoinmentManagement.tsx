@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useDebounce } from '@/hooks/useDebounce'
 import { getDocs, doc, deleteDoc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { auth } from '@/firebase/config'
@@ -14,8 +13,6 @@ import {
   logAppointmentQuery,
 } from '@/utils/appointments/appointmentSource'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
-import { InlineSpinner } from '@/components/ui/feedback/StatusComponents'
-import EmptyState from '@/components/ui/feedback/EmptyState'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import { Appointment } from '@/types/patient'
@@ -23,11 +20,15 @@ import { Branch } from '@/types/branch'
 import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/shared/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
-import Pagination from '@/components/ui/navigation/Pagination'
-import { Button } from '@/components/ui/Button'
-import { FilterChip } from '@/components/ui/FilterChip'
-import { TableShell } from '@/components/ui/layout/TableShell'
-import { StatusPill, AvatarCell } from '@/components/ui/data/DataTable'
+import {
+  EnterpriseDataTable,
+  StatusPill,
+  AvatarCell,
+  type EnterpriseColumn,
+  type EnterpriseRowAction,
+  type EnterpriseBulkAction,
+  type StatusVariant,
+} from '@/components/ui/enterprise-table'
 import { useNewItems } from '@/hooks/useNewItems'
 import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
 import DocumentListCompact from '@/components/documents/DocumentListCompact'
@@ -150,31 +151,6 @@ export default function AppoinmentManagement({
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [processingBulk, setProcessingBulk] = useState(false)
     const [exportOpen, setExportOpen] = useState(false)
-    const [openActionId, setOpenActionId] = useState<string | null>(null)
-    const [actionMenuAnchor, setActionMenuAnchor] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
-    useEffect(() => {
-        if (!openActionId) return
-        const close = () => {
-            setOpenActionId(null)
-            setActionMenuAnchor(null)
-        }
-        document.addEventListener('click', close)
-        return () => document.removeEventListener('click', close)
-    }, [openActionId])
-
-    useEffect(() => {
-        if (!openActionId) return
-        const close = () => {
-            setOpenActionId(null)
-            setActionMenuAnchor(null)
-        }
-        window.addEventListener('scroll', close, true)
-        window.addEventListener('resize', close)
-        return () => {
-            window.removeEventListener('scroll', close, true)
-            window.removeEventListener('resize', close)
-        }
-    }, [openActionId])
 
     const resetFilters = () => {
         setSelectedDoctorId('all')
@@ -714,6 +690,209 @@ export default function AppoinmentManagement({
         resetOnFilterChange: true,
     })
 
+    const appointmentStatusVariant = (s: string): StatusVariant => {
+        if (s === 'completed') return 'success'
+        if (s === 'confirmed' || s === 'whatsapp_pending') return 'blue'
+        if (s === 'cancelled' || s === 'doctor_cancelled') return 'danger'
+        if (s === 'waiting') return 'warning'
+        if (s === 'in_consultation') return 'purple'
+        return 'neutral'
+    }
+
+    const updateAppointmentStatus = useCallback(
+        async (appointmentId: string, status: string, successMsg: string) => {
+            try {
+                await updateDoc(doc(getHospitalCollection(activeHospitalId!, 'appointments'), appointmentId), {
+                    status,
+                    updatedAt: new Date().toISOString(),
+                })
+                setSuccessMessage(successMsg)
+                setTimeout(() => setSuccessMessage(null), 2000)
+            } catch (e) {
+                setError((e as Error).message)
+            }
+        },
+        [activeHospitalId]
+    )
+
+    const appointmentColumns: EnterpriseColumn<Appointment>[] = useMemo(
+        () => [
+            {
+                key: 'patientName',
+                header: 'Patient',
+                width: 'w-[20%]',
+                sortable: true,
+                render: (appointment) => (
+                    <AvatarCell
+                        name={appointment.patientName || 'N/A'}
+                        sub={appointment.patientPhone || undefined}
+                        color="cyan"
+                    />
+                ),
+            },
+            {
+                key: 'doctorName',
+                header: 'Doctor',
+                width: 'w-[16%]',
+                sortable: true,
+                hideBelow: 'sm',
+                render: (appointment) => (
+                    <AvatarCell
+                        name={appointment.doctorName || 'N/A'}
+                        sub={appointment.doctorSpecialization || undefined}
+                        color="slate"
+                        size="sm"
+                    />
+                ),
+            },
+            {
+                key: 'appointmentDate',
+                header: 'Date & Time',
+                width: 'w-[12%]',
+                sortable: true,
+                render: (appointment) => (
+                    <>
+                        <p className="text-sm font-semibold text-slate-900">{formatDate(appointment.appointmentDate)}</p>
+                        <p className="text-xs text-slate-400">{appointment.appointmentTime || '—'}</p>
+                    </>
+                ),
+            },
+            {
+                key: 'visit',
+                header: 'Visit',
+                width: 'w-[7%]',
+                hideBelow: 'lg',
+                render: (appointment) => (
+                    <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                        {getVisitType(appointment)}
+                    </span>
+                ),
+            },
+            {
+                key: 'type',
+                header: 'Type',
+                width: 'w-[8%]',
+                hideBelow: 'lg',
+                render: (appointment) => (
+                    <span className="text-xs text-slate-600">{getAppointmentType(appointment)}</span>
+                ),
+            },
+            {
+                key: 'status',
+                header: 'Status',
+                width: 'w-[10%]',
+                hideBelow: 'md',
+                render: (appointment) => {
+                    const s = (appointment as any).status || ''
+                    return (
+                        <StatusPill
+                            label={getStatusDisplayLabel(s)}
+                            variant={appointmentStatusVariant(s)}
+                        />
+                    )
+                },
+            },
+            {
+                key: 'payment',
+                header: 'Payment',
+                width: 'w-[7%]',
+                hideBelow: 'md',
+                render: (appointment) => {
+                    const payLabel = getPaymentStatusLabel(appointment)
+                    const payCls =
+                        payLabel === 'Paid'
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                            : payLabel === 'Refunded'
+                              ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200'
+                    return (
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${payCls}`}>
+                            {payLabel}
+                        </span>
+                    )
+                },
+            },
+            {
+                key: 'amount',
+                header: 'Amount',
+                width: 'w-[7%]',
+                hideBelow: 'md',
+                render: (appointment) => (
+                    <span className="text-sm font-bold text-slate-900">
+                        ₹{Number(appointment.paymentAmount || 0).toLocaleString('en-IN')}
+                    </span>
+                ),
+            },
+        ],
+        []
+    )
+
+    const appointmentRowActions: EnterpriseRowAction<Appointment>[] = useMemo(
+        () => [
+            {
+                label: 'Check-in patient',
+                hidden: (a) => {
+                    const s = (a as any).status
+                    return !(s === 'pending' || s === 'confirmed' || s === 'whatsapp_pending')
+                },
+                onClick: (a) => updateAppointmentStatus(a.id, 'waiting', 'Checked in'),
+            },
+            {
+                label: 'Start consultation',
+                hidden: (a) => (a as any).status !== 'waiting',
+                onClick: (a) => updateAppointmentStatus(a.id, 'in_consultation', 'Consultation started'),
+            },
+            {
+                label: 'Complete visit',
+                variant: 'success',
+                hidden: (a) => {
+                    const s = (a as any).status
+                    return !(s === 'in_consultation' || s === 'waiting' || s === 'confirmed')
+                },
+                onClick: (a) => updateAppointmentStatus(a.id, 'completed', 'Visit completed'),
+            },
+            {
+                label: 'Cancel appointment',
+                variant: 'danger',
+                hidden: (a) => {
+                    const s = (a as any).status
+                    return s === 'cancelled' || s === 'doctor_cancelled' || s === 'completed'
+                },
+                onClick: async (a) => {
+                    if (!confirm('Cancel this appointment?')) return
+                    await updateAppointmentStatus(a.id, 'cancelled', 'Cancelled')
+                },
+            },
+            {
+                label: 'Mark not attended',
+                variant: 'warning',
+                hidden: (a) => !canMarkNotAttended(a),
+                onClick: (a) => handleMarkNotAttended(a),
+            },
+            {
+                label: 'Delete record',
+                onClick: (a) => handleDelete(a),
+            },
+        ],
+        [updateAppointmentStatus]
+    )
+
+    const appointmentBulkActions: EnterpriseBulkAction<Appointment>[] = useMemo(
+        () => [
+            {
+                label: 'Mark Completed',
+                variant: 'success',
+                onClick: () => handleBulkComplete(),
+            },
+            {
+                label: 'Cancel',
+                variant: 'danger',
+                onClick: () => handleBulkCancel(),
+            },
+        ],
+        []
+    )
+
     // Protect component - only allow admins (moved after all hooks)
     if (authLoading) {
         return <LoadingSpinner message="Loading appointment management..." />
@@ -879,455 +1058,291 @@ export default function AppoinmentManagement({
                         </div>
                     </div>
 
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-slate-900">Appointment Records</span>
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{filteredAppointments.length}</span>
+                    <EnterpriseDataTable
+                        data={paginatedAppointments}
+                        columns={appointmentColumns}
+                        loading={loading}
+                        loadingMessage="Loading appointments…"
+                        error={error}
+                        emptyTitle={search ? 'No appointments found' : 'No appointments yet'}
+                        emptyDescription={
+                            search
+                                ? "We couldn't find any appointments matching your search criteria. Try adjusting your filters or search terms."
+                                : 'There are no appointments in the system yet. Appointments will appear here once they are created.'
+                        }
+                        emptyAction={search ? { label: 'Clear Filters', onClick: resetFilters } : undefined}
+                        toolbar={
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-slate-900">Appointment Records</span>
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{filteredAppointments.length}</span>
+                                </div>
                             </div>
-                        </div>
-                        {selectedIds.size > 0 && (
-                            <div className="flex flex-wrap items-center gap-3 border-b border-amber-100 bg-amber-50/80 px-4 py-2 text-sm">
-                                <span className="font-medium text-amber-800">{selectedIds.size} selected</span>
-                                <Button type="button" variant="success" size="sm" onClick={handleBulkComplete} disabled={processingBulk}>Mark Completed</Button>
-                                <Button type="button" variant="danger" size="sm" onClick={handleBulkCancel} disabled={processingBulk}>Cancel</Button>
-                                <Button type="button" variant="link" size="sm" onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
-                            </div>
-                        )}
-                        <TableShell className="rounded-none border-0 shadow-none">
-                            <table className="w-full min-w-[760px] table-fixed">
-                                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-                                    <tr className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                                        <th className="w-[3%] max-w-[40px] px-3 py-3.5 text-left">
-                                            <input type="checkbox" checked={paginatedAppointments.length > 0 && selectedIds.size === paginatedAppointments.length} onChange={toggleSelectAllPage} className="rounded border-slate-300" />
-                                        </th>
-                                        <th className="w-[20%] cursor-pointer px-3 py-3.5 text-left hover:text-slate-600" onClick={() => handleSort('patientName')}>
-                                            Patient {sortField === 'patientName' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
-                                        </th>
-                                        <th className="hidden w-[16%] cursor-pointer px-3 py-3.5 text-left hover:text-slate-600 sm:table-cell" onClick={() => handleSort('doctorName')}>
-                                            Doctor {sortField === 'doctorName' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
-                                        </th>
-                                        <th className="w-[12%] cursor-pointer px-3 py-3.5 text-left hover:text-slate-600" onClick={() => handleSort('appointmentDate')}>
-                                            Date &amp; Time {sortField === 'appointmentDate' && <span>{sortOrder === 'asc' ? '↑' : '↓'}</span>}
-                                        </th>
-                                        <th className="hidden w-[7%] px-3 py-3.5 text-left lg:table-cell">Visit</th>
-                                        <th className="hidden w-[8%] px-3 py-3.5 text-left lg:table-cell">Type</th>
-                                        <th className="hidden w-[10%] px-3 py-3.5 text-left md:table-cell">Status</th>
-                                        <th className="hidden w-[7%] px-3 py-3.5 text-left md:table-cell">Payment</th>
-                                        <th className="hidden w-[7%] px-3 py-3.5 text-left md:table-cell">Amount</th>
-                                        <th className="w-[10%] min-w-[88px] px-3 py-3.5 text-left">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 bg-white text-sm text-slate-700">
-                                    {loading ? (
-                                        <tr>
-                                            <td colSpan={10} className="px-3 py-12 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <InlineSpinner size="md" />
-                                                    <p className="mt-2 text-sm text-slate-500">Loading appointments…</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : error ? (
-                                        <tr>
-                                            <td colSpan={10} className="px-3 py-12 text-center">
-                                                <svg className="mb-2 h-12 w-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                                </svg>
-                                                <p className="text-sm font-semibold text-red-600">Error loading appointments</p>
-                                                <p className="text-xs text-slate-500">{error}</p>
-                                            </td>
-                                        </tr>
-                                    ) : filteredAppointments.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={10} className="px-3 py-8">
-                                                <EmptyState
-                                                    illustration="appointments"
-                                                    title={search ? 'No appointments found' : 'No appointments yet'}
-                                                    description={search 
-                                                        ? "We couldn't find any appointments matching your search criteria. Try adjusting your filters or search terms."
-                                                        : "There are no appointments in the system yet. Appointments will appear here once they are created."}
-                                                    action={search ? {
-                                                        label: "Clear Filters",
-                                                        onClick: resetFilters
-                                                    } : undefined}
-                                                />
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        paginatedAppointments.map((appointment) => {
-                                            const itemIsNew = isNew(appointment)
-                                            const nameParts = (appointment.patientName || 'N/A').trim().split(' ')
-                                            const initials = nameParts.length >= 2
-                                                ? (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase()
-                                                : (appointment.patientName || 'N').charAt(0).toUpperCase()
-                                            const docParts = (appointment.doctorName || '').trim().split(' ')
-                                            const docInitials = docParts.length >= 2
-                                                ? (docParts[0].charAt(0) + docParts[docParts.length - 1].charAt(0)).toUpperCase()
-                                                : (appointment.doctorName || 'D').charAt(0).toUpperCase()
-                                            const s = (appointment as any).status || ''
-                                            const statusLabel = getStatusDisplayLabel(s)
-                                            const statusCls = s === 'completed'
-                                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                : s === 'confirmed' || s === 'whatsapp_pending'
-                                                ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                                                : s === 'cancelled' || s === 'doctor_cancelled'
-                                                ? 'bg-red-100 text-red-700 border border-red-200'
-                                                : s === 'not_attended' || s === 'no_show'
-                                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                                : s === 'pending'
-                                                ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                                : s === 'waiting'
-                                                ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                                : s === 'in_consultation'
-                                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                                                : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                            const payLabel = getPaymentStatusLabel(appointment)
-                                            const payCls = payLabel === 'Paid'
-                                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                : payLabel === 'Refunded'
-                                                ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                                : 'bg-slate-100 text-slate-500 border border-slate-200'
-                                            return (
-                                        <tr key={appointment.id}
-                                                className={`transition-colors ${
-                                                    itemIsNew
-                                                        ? 'bg-yellow-50/50 border-l-4 border-yellow-400'
-                                                        : 'hover:bg-slate-50/70'
-                                                }`}
-                                            >
-                                                <td className="w-[3%] max-w-[40px] px-3 py-4 align-middle">
-                                                    <input type="checkbox" checked={selectedIds.has(appointment.id)} onChange={() => toggleSelect(appointment.id)} className="rounded border-slate-300" aria-label={`Select ${appointment.patientName || 'appointment'}`} />
-                                                </td>
-                                                <td className="w-[20%] px-3 py-4">
-                                                    <AvatarCell
-                                                        name={appointment.patientName || 'N/A'}
-                                                        sub={appointment.patientPhone || undefined}
-                                                        color="cyan"
-                                                    />
-                                                </td>
-                                                <td className="hidden w-[16%] px-3 py-4 sm:table-cell">
-                                                    <AvatarCell
-                                                        name={appointment.doctorName || 'N/A'}
-                                                        sub={appointment.doctorSpecialization || undefined}
-                                                        color="slate"
-                                                        size="sm"
-                                                    />
-                                                </td>
-                                                <td className="w-[12%] px-3 py-4">
-                                                    <p className="text-sm font-semibold text-slate-900">{formatDate(appointment.appointmentDate)}</p>
-                                                    <p className="text-xs text-slate-400">{appointment.appointmentTime || '—'}</p>
-                                                </td>
-                                                <td className="hidden w-[7%] px-3 py-4 lg:table-cell">
-                                                    <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{getVisitType(appointment)}</span>
-                                                </td>
-                                                <td className="hidden w-[8%] px-3 py-4 lg:table-cell">
-                                                    <span className="text-xs text-slate-600">{getAppointmentType(appointment)}</span>
-                                                </td>
-                                                <td className="hidden w-[10%] px-3 py-4 md:table-cell">
-                                                    <StatusPill
-                                                        label={statusLabel}
-                                                        variant={
-                                                            s === 'completed' ? 'success'
-                                                            : s === 'confirmed' || s === 'whatsapp_pending' ? 'blue'
-                                                            : s === 'cancelled' || s === 'doctor_cancelled' ? 'danger'
-                                                            : s === 'waiting' ? 'warning'
-                                                            : s === 'in_consultation' ? 'purple'
-                                                            : 'neutral'
-                                                        }
-                                                    />
-                                                </td>
-                                                <td className="hidden w-[7%] px-3 py-4 md:table-cell">
-                                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${payCls}`}>{payLabel}</span>
-                                                </td>
-                                                <td className="hidden w-[7%] px-3 py-4 md:table-cell">
-                                                    <span className="text-sm font-bold text-slate-900">₹{Number(appointment.paymentAmount || 0).toLocaleString('en-IN')}</span>
-                                                </td>
-                                                <td className="w-[10%] min-w-[88px] px-3 py-4">
-                                                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                        <button type="button" onClick={() => handleView(appointment)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                                                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                                            View
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                if (openActionId === appointment.id) {
-                                                                    setOpenActionId(null)
-                                                                    setActionMenuAnchor(null)
-                                                                } else {
-                                                                    const rect = e.currentTarget.getBoundingClientRect()
-                                                                    setActionMenuAnchor({ top: rect.top, left: rect.left, width: rect.width, height: rect.height })
-                                                                    setOpenActionId(appointment.id)
-                                                                }
-                                                            }}
-                                                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                                                            aria-label="More actions"
-                                                        >
-                                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                            )
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </TableShell>
-
-                        <Pagination
-                                currentPage={currentPage}
-                                totalPages={totalPages}
-                                pageSize={pageSize}
-                                totalItems={filteredAppointments.length}
-                                onPageChange={goToPage}
-                                onPageSizeChange={setPageSize}
-                                pageSizeOptions={[10, 15, 20]}
-                                showPageSizeSelector={true}
-                                itemLabel="appointments"
-                            />
-                    </div>
+                        }
+                        enableSearch={false}
+                        enableFilters={false}
+                        selectable
+                        selectedIds={selectedIds}
+                        onToggleRow={toggleSelect}
+                        onToggleAll={toggleSelectAllPage}
+                        onClearSelection={() => setSelectedIds(new Set())}
+                        bulkActions={appointmentBulkActions}
+                        processingBulk={processingBulk}
+                        sortField={sortField}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
+                        getRowClassName={(appointment) =>
+                            isNew(appointment) ? 'bg-yellow-50/50 border-l-4 border-yellow-400' : ''
+                        }
+                        primaryAction={{
+                            label: 'View',
+                            icon: (
+                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            ),
+                            onClick: handleView,
+                        }}
+                        rowActions={appointmentRowActions}
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        pageSize={pageSize}
+                        totalItems={filteredAppointments.length}
+                        onPageChange={goToPage}
+                        onPageSizeChange={setPageSize}
+                        pageSizeOptions={[10, 15, 20]}
+                        showPageSize
+                        itemLabel="appointments"
+                        minWidth="min-w-[760px]"
+                    />
                 </div>
             </div>
 
-            {/* Appointment Details Modal */}
+            {/* Appointment Details Modal — same clinical overview pattern as Patient Profile */}
             <ViewModal
                 isOpen={showViewModal}
                 onClose={() => setShowViewModal(false)}
-                title="Appointment Details"
-                subtitle="Complete appointment information"
+                title="Appointment Profile"
+                subtitle="Clinical overview"
                 headerColor="blue"
             >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
-                    {/* Patient Information */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                            </div>
-                            <h4 className="text-base sm:text-lg font-semibold text-gray-900">Patient Information</h4>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Patient Name</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.patientName || 'N/A'}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Patient Email</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.patientEmail || 'N/A'}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Patient Phone</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.patientPhone || 'N/A'}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Doctor Information */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <h4 className="text-base sm:text-lg font-semibold text-gray-900">Doctor Information</h4>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Doctor Name</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.doctorName || 'N/A'}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Specialization</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.doctorSpecialization || 'N/A'}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Consultation Fee</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">₹{selectedAppointment?.totalConsultationFee || 0}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Appointment Details */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                            <h4 className="text-base sm:text-lg font-semibold text-gray-900">Appointment Details</h4>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Appointment Date</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{formatDate(selectedAppointment?.appointmentDate || '')}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Appointment Time</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.appointmentTime || 'N/A'}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Branch</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">
-                                    {(selectedAppointment as any)?.branchName
-                                      ? `${(selectedAppointment as any).branchName} (${(selectedAppointment as any).branchId || "no id"})`
-                                      : "Not assigned"}
-                                </p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</label>
-                                <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                                    selectedAppointment?.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                    selectedAppointment?.status === 'confirmed' ? 'bg-cyan-100 text-cyan-800' :
-                                    selectedAppointment?.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                    'bg-gray-100 text-gray-800'
-                                }`}>
-                                    {selectedAppointment?.status || 'N/A'}
-                                </span>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment Amount</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">₹{selectedAppointment?.paymentAmount || 0}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Documents Section */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                        <DocumentListCompact
-                            patientId={selectedAppointment?.patientId}
-                            patientUid={selectedAppointment?.patientUid}
-                            appointmentId={selectedAppointment?.id}
-                            title="Appointment Documents"
-                            maxItems={5}
-                        />
-                    </div>
-
-                    {/* Medical Information */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <h4 className="text-base sm:text-lg font-semibold text-gray-900">Medical Information</h4>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Chief Complaint</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.chiefComplaint || 'N/A'}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Associated Symptoms</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.associatedSymptoms || 'N/A'}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Medical History</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{selectedAppointment?.medicalHistory || 'N/A'}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Final Diagnosis - View-only for receptionist/admin */}
-                    {selectedAppointment && (selectedAppointment as any).finalDiagnosis && (
-                        <div className="bg-white rounded-lg shadow-sm border border-cyan-200 p-4 sm:p-6">
-                            <div className="flex items-center space-x-2 mb-4">
-                                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-cyan-100 rounded-lg flex items-center justify-center">
-                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                </div>
-                                <h4 className="text-base sm:text-lg font-semibold text-gray-900">Final Diagnosis</h4>
-                            </div>
-                            <div className="space-y-3">
-                                <div className="flex flex-col space-y-2">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Diagnoses</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {(selectedAppointment as any).finalDiagnosis.map((diagnosis: string, index: number) => (
-                                            <span
-                                                key={index}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-cyan-50 border border-cyan-200 rounded-lg text-sm font-medium text-cyan-800"
-                                            >
-                                                {diagnosis}
+                <div className="space-y-5">
+                    {(() => {
+                        const apt = selectedAppointment
+                        if (!apt) return null
+                        const s = (apt as any).status || ''
+                        const statusLabel = getStatusDisplayLabel(s)
+                        const statusCls =
+                            s === 'completed'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : s === 'confirmed' || s === 'whatsapp_pending'
+                                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                  : s === 'cancelled' || s === 'doctor_cancelled'
+                                    ? 'border-red-200 bg-red-50 text-red-700'
+                                    : s === 'waiting'
+                                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                      : s === 'in_consultation'
+                                        ? 'border-purple-200 bg-purple-50 text-purple-700'
+                                        : 'border-slate-200 bg-slate-100 text-slate-500'
+                        const nameParts = (apt.patientName || 'N/A').trim().split(' ')
+                        const initials =
+                            nameParts.length >= 2
+                                ? (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase()
+                                : (apt.patientName || 'N').charAt(0).toUpperCase()
+                        const payLabel = getPaymentStatusLabel(apt)
+                        return (
+                            <>
+                                <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-xl font-bold text-cyan-700">
+                                        {initials}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                            <div>
+                                                <h3 className="text-lg font-bold text-slate-900">{apt.patientName || 'N/A'}</h3>
+                                                <p className="mt-0.5 text-xs text-slate-400">
+                                                    with {apt.doctorName || 'Doctor TBD'}
+                                                    {apt.doctorSpecialization ? ` · ${apt.doctorSpecialization}` : ''}
+                                                </p>
+                                            </div>
+                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusCls}`}>
+                                                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                                {statusLabel}
                                             </span>
-                                        ))}
+                                        </div>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                                                {formatDate(apt.appointmentDate)}
+                                                {apt.appointmentTime ? ` · ${apt.appointmentTime}` : ''}
+                                            </span>
+                                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                                                {getVisitType(apt)}
+                                            </span>
+                                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                                                {getAppointmentType(apt)}
+                                            </span>
+                                            <span className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-bold ${
+                                                payLabel === 'Paid'
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                    : payLabel === 'Refunded'
+                                                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                                      : 'border-slate-200 bg-white text-slate-700'
+                                            }`}>
+                                                {payLabel} · ₹{Number(apt.paymentAmount || 0).toLocaleString('en-IN')}
+                                            </span>
+                                            {apt.patientPhone && (
+                                                <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                                                    <svg className="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                    </svg>
+                                                    {apt.patientPhone}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                                {(selectedAppointment as any).customDiagnosis && (
-                                    <div className="flex flex-col space-y-1">
-                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Custom Diagnosis</label>
-                                        <p className="text-sm font-medium text-gray-900 bg-cyan-50 border border-cyan-200 px-3 py-2 rounded-md">
-                                            {(selectedAppointment as any).customDiagnosis}
+
+                                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Patient</p>
+                                        <div className="grid grid-cols-1 gap-3 text-sm">
+                                            <div>
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Name</p>
+                                                <p className="text-slate-800">{apt.patientName || '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Email</p>
+                                                <p className="text-slate-800">{apt.patientEmail || '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Phone</p>
+                                                <p className="text-slate-800">{apt.patientPhone || '—'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Doctor & Visit</p>
+                                        <div className="grid grid-cols-1 gap-3 text-sm">
+                                            <div>
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Doctor</p>
+                                                <p className="text-slate-800">{apt.doctorName || '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Specialization</p>
+                                                <p className="text-slate-800">{apt.doctorSpecialization || '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Consultation Fee</p>
+                                                <p className="text-slate-800">₹{apt.totalConsultationFee || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Branch</p>
+                                                <p className="text-slate-800">
+                                                    {(apt as any)?.branchName
+                                                        ? `${(apt as any).branchName}`
+                                                        : 'Not assigned'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Clinical Notes</p>
+                                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                                        <div className="sm:col-span-2">
+                                            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Chief Complaint</p>
+                                            <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-slate-800">
+                                                {apt.chiefComplaint || '—'}
+                                            </p>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Associated Symptoms</p>
+                                            <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-slate-800">
+                                                {apt.associatedSymptoms || '—'}
+                                            </p>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Medical History</p>
+                                            <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-slate-800">
+                                                {apt.medicalHistory || '—'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <DocumentListCompact
+                                        patientId={apt.patientId}
+                                        patientUid={apt.patientUid}
+                                        appointmentId={apt.id}
+                                        title="Documents"
+                                        maxItems={5}
+                                    />
+                                </div>
+
+                                {(apt as any).finalDiagnosis && (
+                                    <div className="rounded-xl border border-cyan-200 bg-cyan-50/40 p-4">
+                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-cyan-700">Final Diagnosis</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {(apt as any).finalDiagnosis.map((diagnosis: string, index: number) => (
+                                                <span
+                                                    key={index}
+                                                    className="inline-flex items-center rounded-lg border border-cyan-200 bg-white px-3 py-1.5 text-sm font-medium text-cyan-800"
+                                                >
+                                                    {diagnosis}
+                                                </span>
+                                            ))}
+                                        </div>
+                                        {(apt as any).customDiagnosis && (
+                                            <p className="mt-3 rounded-lg border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-800">
+                                                {(apt as any).customDiagnosis}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                <PrescriptionDisplay
+                                    appointment={apt}
+                                    variant="modal"
+                                    showPdfButton={true}
+                                />
+
+                                {apt.whatsappPending && (apt as any).whatsappNotes && (
+                                    <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-4">
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-orange-700">WhatsApp Notes</p>
+                                        <p className="whitespace-pre-line rounded-lg border border-orange-100 bg-white px-3 py-2 text-sm text-slate-800">
+                                            {(apt as any).whatsappNotes}
                                         </p>
                                     </div>
                                 )}
-                            </div>
-                        </div>
-                    )}
 
-                    {/* Prescription & Notes - Only for completed appointments */}
-                    {selectedAppointment && (
-                        <PrescriptionDisplay 
-                            appointment={selectedAppointment} 
-                            variant="modal"
-                            showPdfButton={true}
-                        />
-                    )}
-
-                    {/* WhatsApp Notes - If available */}
-                    {selectedAppointment?.whatsappPending && (selectedAppointment as any).whatsappNotes && (
-                        <div className="bg-white rounded-lg shadow-sm border border-orange-200 p-4 sm:p-6">
-                            <div className="flex items-center space-x-2 mb-4">
-                                <div className="w-6 h-6 sm:w-8 sm:h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                    </svg>
-                                </div>
-                                <h4 className="text-base sm:text-lg font-semibold text-gray-900">WhatsApp Notes</h4>
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex flex-col space-y-1">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Initial Message/Notes</label>
-                                    <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md whitespace-pre-line">
-                                        {(selectedAppointment as any).whatsappNotes || 'N/A'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* System Information */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 lg:col-span-2">
-                        <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                                </svg>
-                            </div>
-                            <h4 className="text-base sm:text-lg font-semibold text-gray-900">System Information</h4>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Appointment ID</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md font-mono">{selectedAppointment?.id}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Created At</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{formatDateTime(selectedAppointment?.createdAt || '')}</p>
-                            </div>
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Updated At</label>
-                                <p className="text-sm font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-md">{formatDateTime(selectedAppointment?.updatedAt || '')}</p>
-                            </div>
-                        </div>
-                    </div>
+                                <details className="group">
+                                    <summary className="flex cursor-pointer list-none select-none items-center gap-2 text-xs font-semibold text-slate-400 transition-colors hover:text-slate-600">
+                                        <svg className="h-3.5 w-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        System Information
+                                    </summary>
+                                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                                        {[
+                                            { label: 'Appointment ID', value: apt.id || '—', mono: true },
+                                            { label: 'Status', value: statusLabel, mono: false },
+                                            { label: 'Created', value: formatDateTime(apt.createdAt || ''), mono: false },
+                                            { label: 'Last updated', value: formatDateTime(apt.updatedAt || ''), mono: false },
+                                        ].map(({ label, value, mono }) => (
+                                            <div key={label} className="rounded-lg bg-slate-50 px-3 py-2">
+                                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                                                <p className={`truncate text-slate-700 ${mono ? 'font-mono text-[11px]' : ''}`}>{value}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </details>
+                            </>
+                        )
+                    })()}
                 </div>
             </ViewModal>
 
@@ -1348,66 +1363,6 @@ export default function AppoinmentManagement({
                 }}
                 loading={loading}
             />
-            {typeof document !== 'undefined' && document.body && openActionId && actionMenuAnchor && (() => {
-                const appointment = paginatedAppointments.find(a => a.id === openActionId)
-                if (!appointment) return null
-                const closeMenu = () => {
-                    setOpenActionId(null)
-                    setActionMenuAnchor(null)
-                }
-                const dropdownW = 192
-                const top = actionMenuAnchor.top + actionMenuAnchor.height + 4
-                const left = Math.max(8, Math.min(actionMenuAnchor.left + actionMenuAnchor.width - dropdownW, window.innerWidth - dropdownW - 8))
-                return createPortal(
-                    <div
-                        className="fixed z-[100] w-52 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
-                        style={{ top, left }}
-                        onClick={(e) => e.stopPropagation()}
-                        role="menu"
-                    >
-                        <div className="border-b border-slate-100 px-3 py-2">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Actions</p>
-                        </div>
-                        {((appointment as any).status === 'pending' || (appointment as any).status === 'confirmed' || (appointment as any).status === 'whatsapp_pending') && (
-                            <button type="button" role="menuitem" onClick={async () => { try { await updateDoc(doc(getHospitalCollection(activeHospitalId!, 'appointments'), appointment.id), { status: 'waiting', updatedAt: new Date().toISOString() }); setSuccessMessage('Checked in'); closeMenu(); setTimeout(() => setSuccessMessage(null), 2000); } catch (e) { setError((e as Error).message); } }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50">
-                                <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                Check-in patient
-                            </button>
-                        )}
-                        {(appointment as any).status === 'waiting' && (
-                            <button type="button" role="menuitem" onClick={async () => { try { await updateDoc(doc(getHospitalCollection(activeHospitalId!, 'appointments'), appointment.id), { status: 'in_consultation', updatedAt: new Date().toISOString() }); setSuccessMessage('Consultation started'); closeMenu(); setTimeout(() => setSuccessMessage(null), 2000); } catch (e) { setError((e as Error).message); } }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50">
-                                <svg className="h-4 w-4 shrink-0 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                Start consultation
-                            </button>
-                        )}
-                        {((appointment as any).status === 'in_consultation' || (appointment as any).status === 'waiting' || (appointment as any).status === 'confirmed') && (
-                            <button type="button" role="menuitem" onClick={async () => { try { await updateDoc(doc(getHospitalCollection(activeHospitalId!, 'appointments'), appointment.id), { status: 'completed', updatedAt: new Date().toISOString() }); setSuccessMessage('Visit completed'); closeMenu(); setTimeout(() => setSuccessMessage(null), 2000); } catch (e) { setError((e as Error).message); } }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-emerald-700 hover:bg-emerald-50">
-                                <svg className="h-4 w-4 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                                Complete visit
-                            </button>
-                        )}
-                        {((appointment as any).status !== 'cancelled' && (appointment as any).status !== 'doctor_cancelled' && (appointment as any).status !== 'completed') && (
-                            <button type="button" role="menuitem" onClick={async () => { closeMenu(); if (!confirm('Cancel this appointment?')) return; try { await updateDoc(doc(getHospitalCollection(activeHospitalId!, 'appointments'), appointment.id), { status: 'cancelled', updatedAt: new Date().toISOString() }); setSuccessMessage('Cancelled'); setTimeout(() => setSuccessMessage(null), 2000); } catch (e) { setError((e as Error).message); } }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50">
-                                <svg className="h-4 w-4 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                                Cancel appointment
-                            </button>
-                        )}
-                        {canMarkNotAttended(appointment) && (
-                            <button type="button" role="menuitem" onClick={() => { closeMenu(); handleMarkNotAttended(appointment); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-amber-700 hover:bg-amber-50">
-                                <svg className="h-4 w-4 shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                Mark not attended
-                            </button>
-                        )}
-                        <div className="mt-1 border-t border-slate-100">
-                            <button type="button" role="menuitem" onClick={() => { closeMenu(); handleDelete(appointment); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50">
-                                <svg className="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                Delete record
-                            </button>
-                        </div>
-                    </div>,
-                    document.body
-                )
-            })()}
         </div>
     )
 

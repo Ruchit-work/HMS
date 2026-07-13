@@ -5,6 +5,13 @@ import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 import Pagination from '@/components/ui/navigation/Pagination'
 import type { PharmacyPurchaseOrder, PharmacySupplier } from '@/types/pharmacy'
 import { ActionEmptyState } from './RealWorldUiBlocks'
+import {
+  PhOpsShell,
+  PhOpsPageHeader,
+  PhOpsMetricGrid,
+  PhOpsMetricCard,
+  PhOpsSearchToolbar,
+} from '@/components/pharmacy/ops'
 
 export function SuppliersTabContent(props: {
   suppliers: PharmacySupplier[]
@@ -44,90 +51,52 @@ export function SuppliersTabContent(props: {
   } = props
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-[var(--color-neutral-900)]">Suppliers</h2>
-        <p className="text-sm text-[var(--color-neutral-500)] mt-1">Manage suppliers and contact information.</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="hms-kpi-card flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-[var(--color-primary)]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-neutral-500)]">Total Suppliers</p>
-            <p className="mt-1 text-2xl font-semibold text-[var(--color-neutral-900)]">{suppliers.length}</p>
-          </div>
-        </div>
-        <div className="hms-kpi-card flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#E8F5E9] text-[#2E7D32]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-neutral-500)]">Active Suppliers</p>
-            <p className="mt-1 text-2xl font-semibold text-[var(--color-neutral-900)]">{suppliers.length}</p>
-          </div>
-        </div>
-        <div className="hms-kpi-card flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#FFF3E0] text-[#E65100]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-neutral-500)]">Pending Orders</p>
-            <p className="mt-1 text-2xl font-semibold text-[var(--color-neutral-900)]">{purchaseOrders.filter((o) => o.status === 'pending' || o.status === 'draft').length}</p>
-          </div>
-        </div>
-        <div className="hms-kpi-card flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#E0F2F1] text-[#00796B]">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-neutral-500)]">Top Supplier</p>
-            <p className="mt-1 text-xl font-semibold text-[var(--color-neutral-900)] truncate" title={suppliers[0]?.name ?? '—'}>{suppliers[0]?.name ?? '—'}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <Button type="button" onClick={onOpenAddSupplier}>
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            Add Supplier
+    <PhOpsShell>
+      <PhOpsPageHeader
+        eyebrow="Supply network"
+        title="Suppliers"
+        description="Contacts, pending orders, and supplier-linked procurement."
+        actions={
+          <Button type="button" size="sm" variant="primary" onClick={onOpenAddSupplier}>
+            Add supplier
           </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-neutral-500)]">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            </span>
-            <input
-              type="search"
-              placeholder="Search suppliers"
-              value={supplierSearchQuery}
-              onChange={(e) => setSupplierSearchQuery(e.target.value)}
-              className="w-48 rounded-lg border border-[var(--color-neutral-200)] bg-white py-2 pl-8 pr-3 text-sm text-[var(--color-neutral-900)] placeholder-[var(--color-neutral-500)] focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
-            />
-          </div>
-          {supplierSearchQuery.trim() && (
+        }
+      />
+
+      <PhOpsMetricGrid columns={4}>
+        <PhOpsMetricCard label="Total suppliers" value={suppliers.length} />
+        <PhOpsMetricCard label="Active suppliers" value={suppliers.length} tone="ok" />
+        <PhOpsMetricCard
+          label="Pending orders"
+          value={purchaseOrders.filter((o) => o.status === 'pending' || o.status === 'draft').length}
+          tone="warn"
+        />
+        <PhOpsMetricCard
+          label="Matching search"
+          value={filteredSuppliers.length}
+          hint={supplierSearchQuery.trim() ? `Filter: ${supplierSearchQuery}` : 'All suppliers'}
+        />
+      </PhOpsMetricGrid>
+
+      <PhOpsSearchToolbar
+        leading={
+          <input
+            type="search"
+            value={supplierSearchQuery}
+            onChange={(e) => setSupplierSearchQuery(e.target.value)}
+            placeholder="Search suppliers…"
+            className="ph-ops-input min-w-[220px]"
+            aria-label="Search suppliers"
+          />
+        }
+        trailing={
+          supplierSearchQuery.trim() ? (
             <Button type="button" variant="outline" size="sm" onClick={() => setSupplierSearchQuery('')}>
-              Clear search
+              Clear
             </Button>
-          )}
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-neutral-200)] bg-white px-3 py-2 text-sm font-medium text-[var(--color-neutral-500)] hover:bg-[var(--color-neutral-50)] transition-colors">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
-            Filter
-          </button>
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-neutral-200)] bg-white px-3 py-2 text-sm font-medium text-[var(--color-neutral-500)] hover:bg-[var(--color-neutral-50)] transition-colors">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            Export
-          </button>
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-neutral-200)] bg-white px-3 py-2 text-sm font-medium text-[var(--color-neutral-500)] hover:bg-[var(--color-neutral-50)] transition-colors">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-            Import CSV
-          </button>
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {loading ? (
         <div className="flex justify-center py-12"><LoadingSpinner inline /></div>
@@ -235,6 +204,6 @@ export function SuppliersTabContent(props: {
             </table>
         </TableShell>
       )}
-    </div>
+    </PhOpsShell>
   )
 }

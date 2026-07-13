@@ -1,13 +1,13 @@
 import type { PharmacyPortalTabId } from '@/contexts/PharmacyPortalContext'
 
 export const PHARMACY_TAB_LABELS: Record<PharmacyPortalTabId, string> = {
-  overview: 'Overview',
+  overview: 'Operations Center',
   inventory: 'Inventory',
   queue: 'Dispense & Billing',
   sales: 'Sales Records',
   cash_and_expenses: 'Cash & Expenses',
   returns: 'Sales Returns',
-  orders: 'Orders',
+  orders: 'Purchase Orders',
   transfers: 'Transfers',
   reports: 'Reports',
   users: 'Pharmacy Users',
@@ -16,13 +16,13 @@ export const PHARMACY_TAB_LABELS: Record<PharmacyPortalTabId, string> = {
 }
 
 export const PHARMACY_TAB_SUBTITLES: Record<PharmacyPortalTabId, string> = {
-  overview: 'Pharmacy sales results, charts and recent sales',
-  inventory: 'Stock levels, barcode lookup and bulk import',
-  queue: 'Dispense prescriptions and sell to walk-in customers',
+  overview: 'Queue, stock alerts, sales and cash counter at a glance',
+  inventory: 'Stock levels, batches, expiry and barcode lookup',
+  queue: 'Receive prescriptions, dispense and bill at the POS',
   sales: 'View and track all pharmacy sales',
   cash_and_expenses: 'Daily income & expense, billing counter, shifts and expenses',
   returns: 'Process medicine sales returns and refunds',
-  orders: 'Place and receive purchase orders',
+  orders: 'Place orders, track deliveries and receive stock',
   transfers: 'Transfer stock between branches',
   reports: 'Expiry, valuation, sales and reorder reports',
   users: 'Manage pharmacy login credentials',
@@ -45,6 +45,11 @@ export function buildPharmacyPortalNavSections(options: {
     {
       title: 'Operations',
       items: [
+        {
+          id: 'overview',
+          label: PHARMACY_TAB_LABELS.overview,
+          badge: alertTotal > 0 ? (alertTotal > 99 ? '99+' : alertTotal) : undefined,
+        },
         { id: 'queue', label: PHARMACY_TAB_LABELS.queue },
         { id: 'returns', label: PHARMACY_TAB_LABELS.returns },
         { id: 'sales', label: PHARMACY_TAB_LABELS.sales },
@@ -62,14 +67,7 @@ export function buildPharmacyPortalNavSections(options: {
     },
     {
       title: 'Insights',
-      items: [
-        { id: 'reports', label: PHARMACY_TAB_LABELS.reports },
-        {
-          id: 'overview',
-          label: PHARMACY_TAB_LABELS.overview,
-          badge: alertTotal > 0 ? (alertTotal > 99 ? '99+' : alertTotal) : undefined,
-        },
-      ],
+      items: [{ id: 'reports', label: PHARMACY_TAB_LABELS.reports }],
     },
     {
       title: 'Administration',
@@ -91,6 +89,7 @@ export function buildPharmacyAdminNavSections(options: {
     {
       title: 'Operations',
       items: [
+        { id: 'overview', label: PHARMACY_TAB_LABELS.overview },
         { id: 'queue', label: PHARMACY_TAB_LABELS.queue },
         { id: 'returns', label: PHARMACY_TAB_LABELS.returns },
         { id: 'sales', label: PHARMACY_TAB_LABELS.sales },
@@ -107,10 +106,7 @@ export function buildPharmacyAdminNavSections(options: {
     },
     {
       title: 'Insights',
-      items: [
-        { id: 'reports', label: PHARMACY_TAB_LABELS.reports },
-        { id: 'overview', label: PHARMACY_TAB_LABELS.overview },
-      ],
+      items: [{ id: 'reports', label: PHARMACY_TAB_LABELS.reports }],
     },
   ]
   if (isAdmin) {

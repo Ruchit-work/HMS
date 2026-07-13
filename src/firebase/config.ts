@@ -51,4 +51,4 @@ if (typeof window !== "undefined") {
 }
 
 export const performance = performanceInstance;
-export { db };
+export { db, firebaseConfig };

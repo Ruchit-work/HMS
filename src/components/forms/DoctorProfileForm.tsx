@@ -8,6 +8,8 @@ import { DEFAULT_VISITING_HOURS } from '@/utils/timeSlots'
 import VisitingHoursEditor from '@/components/doctor/schedule/VisitingHoursEditor'
 import { Branch } from '@/types/branch'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
+import { Button } from '@/components/ui/Button'
+import { FormSection, FormErrorBanner, FormActions, FormField } from '@/components/ui/forms'
 
 export interface DoctorProfileFormValues {
   firstName: string
@@ -350,7 +352,7 @@ export default function DoctorProfileForm({
   const renderSpecializationStep = () => {
     return (
       <div className="mb-4">
-        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Specialization *</label>
+        <label className="rx-form-label">Specialization <span className="rx-required">*</span></label>
 
         {specializationCategory !== 'other' && finalSpecializationLabel && (
           <div className="bg-teal-50 border-2 border-teal-300 rounded-lg p-3 mb-3">
@@ -375,7 +377,7 @@ export default function DoctorProfileForm({
 
         {!finalSpecializationLabel && (
           <div>
-            <p className="text-xs text-slate-600 mb-2">Step 1: Select your medical field</p>
+            <p className="rx-form-helper mb-2">Step 1: Select your medical field</p>
             <div className="relative">
               <button
                 data-dropdown-toggle="specialization"
@@ -384,10 +386,9 @@ export default function DoctorProfileForm({
                   setShowSpecializationDropdown((prev) => !prev)
                   setShowQualificationDropdown(false)
                 }}
-                className="w-full pl-12 pr-10 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 text-left flex items-center justify-between hover:border-slate-400 transition-all duration-200"
+                className="rx-form-input flex items-center justify-between text-left"
                 type="button"
               >
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🩺</span>
                 <span className="text-slate-700">
                   {specializationCategory
                     ? specializationCategories.find((cat) => cat.id === specializationCategory)?.name ?? 'Medical Field'
@@ -473,7 +474,7 @@ export default function DoctorProfileForm({
         {specializationCategory && specializationCategory !== 'other' && !specialization && (
           <div className="mt-3">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-slate-600 font-medium">Step 2: Choose your specialization</p>
+              <p className="rx-form-helper !mt-0 font-medium">Step 2: Choose your specialization</p>
               <button
                 type="button"
                 onClick={() => setSpecializationCategory('')}
@@ -512,7 +513,7 @@ export default function DoctorProfileForm({
         {specializationCategory === 'other' && (
           <div className="mt-3">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-slate-600 font-medium">Step 2: Enter your specialization</p>
+              <p className="rx-form-helper !mt-0 font-medium">Step 2: Enter your specialization</p>
               <button
                 type="button"
                 onClick={() => {
@@ -525,12 +526,11 @@ export default function DoctorProfileForm({
               </button>
             </div>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">✏️</span>
               <input
                 type="text"
                 value={customSpecialization}
                 onChange={(e) => setCustomSpecialization(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+                className="rx-form-input"
                 placeholder="Enter your specialization (e.g., Sports Medicine)"
                 required
               />
@@ -543,7 +543,7 @@ export default function DoctorProfileForm({
 
   const renderQualificationStep = () => (
     <div className="mb-4">
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Qualification *</label>
+      <label className="rx-form-label">Qualification <span className="rx-required">*</span></label>
       <div className="relative">
         <button
           data-dropdown-toggle="qualification"
@@ -552,10 +552,9 @@ export default function DoctorProfileForm({
             setShowQualificationDropdown((prev) => !prev)
             setShowSpecializationDropdown(false)
           }}
-          className="w-full pl-12 pr-10 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 text-left flex items-center justify-between hover:border-slate-400 transition-all duration-200"
+          className="rx-form-input flex items-center justify-between text-left"
           type="button"
         >
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🎓</span>
           <span className="text-slate-700">{qualification || 'Select Qualification'}</span>
           <svg
             className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
@@ -613,12 +612,11 @@ export default function DoctorProfileForm({
 
       {qualification === 'Other' && (
         <div className="relative mt-3">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">✏️</span>
           <input
             type="text"
             value={customQualification}
             onChange={(e) => setCustomQualification(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+            className="rx-form-input"
             placeholder="Enter your qualification"
             required
           />
@@ -628,395 +626,294 @@ export default function DoctorProfileForm({
   )
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
+    <form className="rx-form" onSubmit={handleSubmit}>
       {(formError || externalError) && (
-        <div className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-300 p-4 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-lg font-bold">!</span>
-              </div>
-              <p className="text-sm text-red-800 font-semibold leading-relaxed">{formError ?? externalError}</p>
-            </div>
-            <button
-              type="button"
-              onClick={clearErrors}
-              className="flex-shrink-0 text-red-400 hover:text-red-600 transition-colors"
-              aria-label="Dismiss error"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <FormErrorBanner message={formError ?? externalError ?? ''} onDismiss={clearErrors} />
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            First Name <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">👤</span>
+      <FormSection
+        title="Personal Information"
+        description="Basic identity and contact details for the doctor"
+        icon={
+          <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FormField label="First Name" required>
             <input
               type="text"
               value={firstName}
-              onChange={(e) => {
-                setFirstName(e.target.value)
-                clearErrors()
-              }}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+              onChange={(e) => { setFirstName(e.target.value); clearErrors() }}
+              className="rx-form-input"
               placeholder="John"
               required
             />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Last Name <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">👤</span>
+          </FormField>
+          <FormField label="Last Name" required>
             <input
               type="text"
               value={lastName}
-              onChange={(e) => {
-                setLastName(e.target.value)
-                clearErrors()
-              }}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+              onChange={(e) => { setLastName(e.target.value); clearErrors() }}
+              className="rx-form-input"
               placeholder="Smith"
               required
             />
-          </div>
+          </FormField>
         </div>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Email Address <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
+        <FormField label="Email Address" required>
           <input
             type="email"
             value={email}
-            onChange={(e) => {
-              setEmail(e.target.value)
-              clearErrors()
-            }}
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+            onChange={(e) => { setEmail(e.target.value); clearErrors() }}
+            className="rx-form-input"
             placeholder="doctor@hospital.com"
             required
           />
-        </div>
-      </div>
+        </FormField>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Phone Number <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📱</span>
+        <FormField label="Phone Number" required hint="Include country code for OTP (e.g., +91 9876543210)">
           <input
             type="tel"
             value={phoneNumber}
-            onChange={(e) => {
-              setPhoneNumber(e.target.value)
-              clearErrors()
-            }}
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+            onChange={(e) => { setPhoneNumber(e.target.value); clearErrors() }}
+            className="rx-form-input"
             placeholder="+91 98765 43210"
             required
           />
-        </div>
-        <p className="text-xs text-slate-500 mt-1">Include country code for OTP (e.g., +91 9876543210)</p>
-      </div>
+        </FormField>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Gender</label>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Male', icon: '👨' },
-            { label: 'Female', icon: '👩' },
-            { label: 'Other', icon: '⚧️' },
-          ].map((option) => (
-            <label
-              key={option.label}
-              className={`flex items-center justify-center gap-2 px-3 py-2.5 border-2 rounded-lg cursor-pointer transition-all ${
-                gender === option.label
-                  ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                  : 'border-slate-300 hover:border-cyan-400 hover:bg-slate-50 text-slate-700'
-              }`}
-            >
-              <input
-                type="radio"
-                name="gender"
-                value={option.label}
-                checked={gender === option.label}
-                onChange={(e) => {
-                  setGender(e.target.value)
-                  clearErrors()
-                }}
-                className="sr-only"
-              />
-              <span className="text-lg">{option.icon}</span>
-              <span className="text-sm font-semibold">{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+        <FormField label="Gender">
+          <div className="grid grid-cols-3 gap-2">
+            {[{ label: 'Male' }, { label: 'Female' }, { label: 'Other' }].map((option) => (
+              <label
+                key={option.label}
+                className={`rx-form-tile ${gender === option.label ? 'rx-form-tile--active' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="gender"
+                  value={option.label}
+                  checked={gender === option.label}
+                  onChange={(e) => { setGender(e.target.value); clearErrors() }}
+                  className="sr-only"
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </FormField>
+      </FormSection>
 
-      {renderSpecializationStep()}
-      {renderQualificationStep()}
+      <FormSection
+        title="Professional Details"
+        description="Specialization, credentials, experience, and fees"
+        icon={
+          <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        }
+      >
+        {renderQualificationStep()}
+        {renderSpecializationStep()}
 
-      <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Experience <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">⏱️</span>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FormField label="Experience" required>
             <input
               type="text"
               value={experience}
-              onChange={(e) => {
-                setExperience(e.target.value)
-                clearErrors()
-              }}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+              onChange={(e) => { setExperience(e.target.value); clearErrors() }}
+              className="rx-form-input"
               placeholder="5 years"
               required
             />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Consultation Fee (₹) <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">💰</span>
+          </FormField>
+          <FormField label="Consultation Fee (₹)" required hint="Per consultation">
             <input
               type="number"
               value={consultationFee}
-              onChange={(e) => {
-                setConsultationFee(e.target.value)
-                clearErrors()
-              }}
-              className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
+              onChange={(e) => { setConsultationFee(e.target.value); clearErrors() }}
+              className="rx-form-input"
               placeholder="500"
               min="0"
               step="50"
               required
             />
-          </div>
-          <p className="text-xs text-slate-500 mt-1">Per consultation</p>
+          </FormField>
         </div>
-      </div>
 
-      {showStatusField && (
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value as DoctorProfileFormValues['status'])
-              clearErrors()
-            }}
-            className="w-full px-3 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 transition-all duration-200"
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="pending">Pending</option>
-          </select>
-        </div>
-      )}
+        {showStatusField && (
+          <FormField label="Status">
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value as DoctorProfileFormValues['status'])
+                clearErrors()
+              }}
+              className="rx-form-select"
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="pending">Pending</option>
+            </select>
+          </FormField>
+        )}
+      </FormSection>
 
-      {/* Branch Selection */}
-      {branches.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Branches <span className="text-xs text-slate-500">(Select branches where this doctor works)</span>
-          </label>
-          <div className="space-y-2">
-            {branches.map((branch) => {
-              const isSelected = selectedBranchIds.includes(branch.id)
-              return (
-                <label
-                  key={branch.id}
-                  className="flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all hover:bg-slate-50"
-                  style={{
-                    borderColor: isSelected ? '#14b8a6' : '#e2e8f0',
-                    backgroundColor: isSelected ? '#f0fdfa' : 'white',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedBranchIds([...selectedBranchIds, branch.id])
-                        // Initialize branch timings if not exists
-                        if (!branchTimings[branch.id]) {
-                          setBranchTimings({
-                            ...branchTimings,
-                            [branch.id]: DEFAULT_VISITING_HOURS,
-                          })
+      <FormSection
+        title="Branches and Schedule"
+        description="Assign branches and set visiting hours"
+        icon={
+          <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        }
+      >
+        {branches.length > 0 && (
+          <FormField label="Branches" hint="Select branches where this doctor works">
+            <div className="space-y-2">
+              {branches.map((branch) => {
+                const isSelected = selectedBranchIds.includes(branch.id)
+                return (
+                  <label
+                    key={branch.id}
+                    className={`rx-form-choice ${isSelected ? 'rx-form-choice--active' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedBranchIds([...selectedBranchIds, branch.id])
+                          if (!branchTimings[branch.id]) {
+                            setBranchTimings({
+                              ...branchTimings,
+                              [branch.id]: DEFAULT_VISITING_HOURS,
+                            })
+                          }
+                        } else {
+                          setSelectedBranchIds(selectedBranchIds.filter((id) => id !== branch.id))
+                          const updated = { ...branchTimings }
+                          delete updated[branch.id]
+                          setBranchTimings(updated)
+                          setShowBranchTimings({ ...showBranchTimings, [branch.id]: false })
                         }
-                      } else {
-                        setSelectedBranchIds(selectedBranchIds.filter((id) => id !== branch.id))
-                        // Remove branch timings when branch is deselected
-                        const updated = { ...branchTimings }
-                        delete updated[branch.id]
-                        setBranchTimings(updated)
-                        setShowBranchTimings({ ...showBranchTimings, [branch.id]: false })
-                      }
-                    }}
-                    className="w-4 h-4 text-teal-600 border-slate-300 rounded focus:ring-teal-500"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-slate-800">{branch.name}</div>
-                    <div className="text-xs text-slate-500">{branch.location}</div>
-                  </div>
-                  {isSelected && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setShowBranchTimings({
-                          ...showBranchTimings,
-                          [branch.id]: !showBranchTimings[branch.id],
-                        })
                       }}
-                      className="text-xs px-3 py-1 bg-teal-100 text-teal-700 rounded hover:bg-teal-200 transition-colors"
-                    >
-                      {showBranchTimings[branch.id] ? 'Hide' : 'Set'} Timings
-                    </button>
-                  )}
-                </label>
+                      className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-slate-800">{branch.name}</div>
+                      <div className="text-xs text-slate-500">{branch.location}</div>
+                    </div>
+                    {isSelected && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setShowBranchTimings({
+                            ...showBranchTimings,
+                            [branch.id]: !showBranchTimings[branch.id],
+                          })
+                        }}
+                        className="shrink-0 rounded-md border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700 transition-colors hover:bg-cyan-100"
+                      >
+                        {showBranchTimings[branch.id] ? 'Hide' : 'Set'} Timings
+                      </button>
+                    )}
+                  </label>
+                )
+              })}
+            </div>
+
+            {selectedBranchIds.map((branchId) => {
+              const branch = branches.find((b) => b.id === branchId)
+              if (!branch || !showBranchTimings[branchId]) return null
+
+              return (
+                <div key={branchId} className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="mb-3 text-sm font-semibold text-slate-700">
+                    Visiting Hours for {branch.name}
+                  </h4>
+                  <VisitingHoursEditor
+                    value={branchTimings[branchId] || DEFAULT_VISITING_HOURS}
+                    onChange={(hours) => {
+                      setBranchTimings({
+                        ...branchTimings,
+                        [branchId]: hours,
+                      })
+                    }}
+                  />
+                </div>
               )
             })}
-          </div>
-          
-          {/* Branch-specific timings */}
-          {selectedBranchIds.map((branchId) => {
-            const branch = branches.find((b) => b.id === branchId)
-            if (!branch || !showBranchTimings[branchId]) return null
-            
-            return (
-              <div key={branchId} className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3">
-                  Visiting Hours for {branch.name}
-                </h4>
-                <VisitingHoursEditor
-                  value={branchTimings[branchId] || DEFAULT_VISITING_HOURS}
-                  onChange={(hours) => {
-                    setBranchTimings({
-                      ...branchTimings,
-                      [branchId]: hours,
-                    })
-                  }}
-                />
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* General Visiting Hours (fallback) */}
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          General Visiting Hours <span className="text-xs text-slate-500">(Used as fallback if branch timings not set)</span>
-        </label>
-        <VisitingHoursEditor value={visitingHours} onChange={setVisitingHours} />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Password <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value)
-              clearErrors()
-            }}
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-slate-500 focus:outline-none bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-            placeholder="Enter password"
-            minLength={6}
-            required
-          />
-        </div>
-        {requirePasswordStrength && <PasswordRequirements password={password} />}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Confirm Password <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value)
-              clearErrors()
-            }}
-            className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none transition-all duration-200"
-            placeholder="Re-enter password"
-            minLength={6}
-            required
-          />
-        </div>
-        {confirmPassword && (
-          <p className={`mt-2 text-xs font-semibold ${password === confirmPassword ? 'text-emerald-600' : 'text-red-600'}`}>
-            {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
-          </p>
+          </FormField>
         )}
-      </div>
 
-      <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:items-center gap-3 pt-2">
+        <FormField label="General Visiting Hours" hint="Used as fallback if branch timings are not set">
+          <VisitingHoursEditor value={visitingHours} onChange={setVisitingHours} />
+        </FormField>
+      </FormSection>
+
+      <FormSection
+        title="Account Security"
+        description="Login credentials for the doctor portal"
+        icon={
+          <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FormField label="Password" required>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="Enter password"
+              minLength={6}
+              required
+            />
+            {requirePasswordStrength && <PasswordRequirements password={password} />}
+          </FormField>
+
+          <FormField label="Confirm Password" required>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); clearErrors() }}
+              className={`rx-form-input ${
+                confirmPassword && password !== confirmPassword
+                  ? 'rx-form-input--error'
+                  : confirmPassword && password === confirmPassword
+                    ? 'rx-form-input--success'
+                    : ''
+              }`}
+              placeholder="Re-enter password"
+              minLength={6}
+              required
+            />
+            {confirmPassword && (
+              <p className={`text-xs font-semibold ${password === confirmPassword ? 'text-emerald-600' : 'text-red-600'}`}>
+                {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+              </p>
+            )}
+          </FormField>
+        </div>
+      </FormSection>
+
+      <FormActions>
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 sm:px-6 py-2 text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors duration-200 font-medium text-sm sm:text-base"
-            disabled={loading}
-          >
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             Cancel
-          </button>
+          </Button>
         )}
-        <button
-          type="submit"
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          {loading ? (
-            <>
-              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              <span>{submitLabel ?? 'Saving...'}</span>
-            </>
-          ) : (
-            <>
-              <span className="text-lg">🚀</span>
-              <span>{submitLabel ?? (mode === 'public' ? 'Create Doctor Account' : 'Save Doctor')}</span>
-            </>
-          )}
-        </button>
-      </div>
+        <Button type="submit" size="lg" loading={loading} loadingText={submitLabel ?? 'Saving…'}>
+          {submitLabel ?? (mode === 'public' ? 'Create Doctor Account' : 'Save Doctor')}
+        </Button>
+      </FormActions>
     </form>
   )
 }
-

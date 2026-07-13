@@ -1190,35 +1190,44 @@ export default function BillingHistoryPanel({
           PAYMENT MODAL
           ════════════════════════════════════════════ */}
       {billingPaymentModalOpen && selectedBillingRecord && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            {/* Modal header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <div>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-3 sm:p-4 backdrop-blur-sm">
+          <div className="flex w-full max-w-lg max-h-[min(92vh,720px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            {/* Modal header — fixed */}
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-3.5 sm:px-6 sm:py-4">
+              <div className="min-w-0">
                 <h3 className="text-base font-bold text-slate-900">Record Patient Payment</h3>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 truncate text-xs text-slate-500">
                   {selectedBillingRecord.patientName || "Patient"} · Bill #{selectedBillingRecord.id.slice(0, 6).toUpperCase()}
                 </p>
               </div>
-              <button onClick={resetPaymentState}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+              <button
+                type="button"
+                onClick={resetPaymentState}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
-              {/* Amount due */}
+            {/* Scrollable body — prevents Card/UPI details from overflowing the viewport */}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5 space-y-4">
               <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500 mb-2">Amount Due</p>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-3xl font-bold text-amber-700 tabular-nums leading-none">{formatCurrency(selectedBillingRecord.totalAmount)}</p>
+                    <p className="text-3xl font-bold text-amber-700 tabular-nums leading-none">
+                      {formatCurrency(selectedBillingRecord.totalAmount)}
+                    </p>
                     <p className="mt-1.5 text-[11px] text-amber-600">
                       Invoice generated{" "}
                       {selectedBillingRecord.generatedAt
-                        ? new Date(selectedBillingRecord.generatedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                        ? new Date(selectedBillingRecord.generatedAt).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })
                         : "N/A"}
                     </p>
                   </div>
@@ -1241,12 +1250,18 @@ export default function BillingHistoryPanel({
               />
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            {/* Footer — always visible */}
+            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-100 bg-white px-5 py-3.5 sm:px-6 sm:py-4">
               <Button type="button" variant="outline" onClick={resetPaymentState} disabled={processingBillingPayment}>
                 Cancel
               </Button>
-              <Button type="button" variant="primary" onClick={handleConfirmBillingPayment}
-                loading={processingBillingPayment} loadingText="Recording…">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleConfirmBillingPayment}
+                loading={processingBillingPayment}
+                loadingText="Recording…"
+              >
                 Confirm · {formatCurrency(selectedBillingRecord.totalAmount)}
               </Button>
             </div>

@@ -249,8 +249,8 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
               </svg>
             </div>
             <div>
-              <h1 className="text-[var(--color-neutral-900)] text-sm font-semibold">HMS Pharmacy</h1>
-              <p className="text-[var(--color-neutral-500)] text-xs">Inventory &amp; Dispensing</p>
+              <h1 className="text-[var(--color-neutral-900)] text-sm font-semibold">Harmony Pharmacy</h1>
+              <p className="text-[var(--color-neutral-500)] text-xs">Operations Center</p>
             </div>
           </div>
           <button
@@ -332,9 +332,30 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
                   <div className="absolute right-0 top-full mt-1 w-72 rounded-xl border border-[var(--color-neutral-200)] bg-white shadow-lg py-2 z-50">
                     <p className="px-4 py-2 text-sm font-medium text-[var(--color-neutral-900)]">Notifications</p>
                     {alertTotal > 0 ? (
-                      <p className="px-4 py-2 text-sm text-[var(--color-neutral-500)]">You have {alertTotal} alert(s) (low stock / expiring).</p>
+                      <>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-2 text-left text-sm text-[var(--color-neutral-700)] hover:bg-[var(--color-neutral-50)]"
+                          onClick={() => {
+                            selectTab('overview')
+                            setNotificationsOpen(false)
+                          }}
+                        >
+                          {alertTotal} stock / expiry alert{alertTotal === 1 ? '' : 's'} — open Operations Center
+                        </button>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-2 text-left text-sm text-[var(--color-neutral-700)] hover:bg-[var(--color-neutral-50)]"
+                          onClick={() => {
+                            selectTab('inventory')
+                            setNotificationsOpen(false)
+                          }}
+                        >
+                          Review inventory
+                        </button>
+                      </>
                     ) : (
-                      <p className="px-4 py-2 text-sm text-[var(--color-neutral-500)]">No new notifications.</p>
+                      <p className="px-4 py-2 text-sm text-[var(--color-neutral-500)]">No new alerts. Counter is clear.</p>
                     )}
                   </div>
                 )}

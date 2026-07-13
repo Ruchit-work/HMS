@@ -11,6 +11,16 @@ import { ReceiveByFileForm } from './StockTransferAndImportForms'
 import { BarcodeScanInput } from './SearchInputs'
 import { MedicineFileUploader } from './Uploaders'
 import type { InventoryExpiryFilter, InventoryStatusFilter } from '../inventoryFilters'
+import {
+  PhOpsShell,
+  PhOpsPageHeader,
+  PhOpsMetricGrid,
+  PhOpsInventorySummaryCard,
+  PhOpsFormSection,
+  PhOpsFilterToolbar,
+  PhOpsPanel,
+  PhOpsStatusBadge,
+} from '@/components/pharmacy/ops'
 
 type BranchOption = { id: string; name: string }
 
@@ -114,19 +124,44 @@ export function InventoryTabContent(props: {
   } = props
 
   return (
-    <div className="space-y-6" >
-      <div>
-        <h2 className="text-xl font-semibold text-[#1e293b]">Medicine stock</h2>
-        <p className="mt-0.5 text-sm text-slate-600">View and manage stock levels, batches and expiry</p>
-      </div>
+    <PhOpsShell>
+      <PhOpsPageHeader
+        eyebrow="Inventory"
+        title="Medicine stock"
+        description="Scan stock by name, batch, and expiry. Filter low stock or near-expiry before dispensing."
+        actions={
+          !isViewOnly ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => setSubTab('orders')}>
+              Place purchase order
+            </Button>
+          ) : null
+        }
+      />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <div className="hms-kpi-card"><p className="text-xs font-medium text-slate-500">Total Medicines</p><p className="mt-1 text-xl font-bold text-slate-900">{inventorySummary.totalMedicines}</p></div>
-        <div className="hms-kpi-card"><p className="text-xs font-medium text-slate-500">Low Stock</p><p className="mt-1 text-xl font-bold text-slate-900">{inventorySummary.lowStock}</p></div>
-        <div className="hms-kpi-card"><p className="text-xs font-medium text-slate-500">Out of Stock</p><p className="mt-1 text-xl font-bold text-slate-900">{inventorySummary.outOfStock}</p></div>
-        <div className="hms-kpi-card"><p className="text-xs font-medium text-slate-500">Expiring Soon</p><p className="mt-1 text-xl font-bold text-slate-900">{inventorySummary.expiringSoon}</p></div>
-        <div className="hms-kpi-card"><p className="text-xs font-medium text-slate-500">Total Inventory Value</p><p className="mt-1 text-xl font-bold text-slate-900">₹{inventorySummary.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p></div>
-      </div>
+      <PhOpsMetricGrid columns={5}>
+        <PhOpsInventorySummaryCard label="Total medicines" value={inventorySummary.totalMedicines} hint="In catalog / stock rows" />
+        <PhOpsInventorySummaryCard
+          label="Low stock"
+          value={inventorySummary.lowStock}
+          tone={inventorySummary.lowStock > 0 ? 'warn' : 'ok'}
+          hint="Below minimum"
+        />
+        <PhOpsInventorySummaryCard
+          label="Out of stock"
+          value={inventorySummary.outOfStock}
+          tone={inventorySummary.outOfStock > 0 ? 'danger' : 'ok'}
+        />
+        <PhOpsInventorySummaryCard
+          label="Expiring soon"
+          value={inventorySummary.expiringSoon}
+          tone={inventorySummary.expiringSoon > 0 ? 'danger' : 'ok'}
+        />
+        <PhOpsInventorySummaryCard
+          label="Inventory value"
+          value={`₹${inventorySummary.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+          hint="Estimated"
+        />
+      </PhOpsMetricGrid>
 
       {!isViewOnly && (
         <ReceiveByFileForm
@@ -139,11 +174,7 @@ export function InventoryTabContent(props: {
       )}
 
       {!isViewOnly && activeHospitalId && (
-        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-1">Add stock manually</h3>
-          <p className="text-sm text-slate-600 mb-4">
-            Increase quantity for an existing medicine (batch and expiry optional). For bulk import, use the file sections below.
-          </p>
+        <PhOpsFormSection title="Add stock manually" description="Increase quantity for an existing medicine (batch and expiry optional).">
           <AddStockForm
             branches={branches}
             medicines={medicines}
@@ -157,12 +188,11 @@ export function InventoryTabContent(props: {
             getToken={getToken}
             hospitalId={activeHospitalId}
           />
-        </div>
+        </PhOpsFormSection>
       )}
 
       {activeHospitalId && (
-        <div className="rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-2">Barcode lookup</h3>
+        <PhOpsFormSection title="Barcode lookup" description="Scan or type barcode to find a medicine instantly.">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[200px]">
               <BarcodeScanInput
@@ -178,36 +208,39 @@ export function InventoryTabContent(props: {
             </div>
             <Button type="button" variant="outline" size="md" onClick={() => setAddMedicineModalBarcode('')}>Add Medicine</Button>
           </div>
-        </div>
+        </PhOpsFormSection>
       )}
 
-      <div className="hms-filter-bar">
-        <TextField
-          type="search"
-          placeholder="Search medicine by name"
-          value={inventorySearch}
-          onChange={(e) => setInventorySearch(e.target.value)}
-          className="w-48 max-w-full"
-          aria-label="Search inventory"
-        />
-        <select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value as InventoryStatusFilter)} className="rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm">
-          <option value="all">All status</option><option value="in_stock">In stock</option><option value="low_stock">Low stock</option><option value="out_of_stock">Out of stock</option>
-        </select>
-        <select value={inventorySupplierFilter} onChange={(e) => setInventorySupplierFilter(e.target.value)} className="rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm">
-          <option value="all">All suppliers</option>{suppliers.map((sup) => (<option key={sup.id} value={sup.id}>{sup.name}</option>))}
-        </select>
-        <select value={inventoryExpiryFilter} onChange={(e) => setInventoryExpiryFilter(e.target.value as InventoryExpiryFilter)} className="rounded-lg border border-[var(--color-neutral-200)] px-3 py-2 text-sm">
-          <option value="all">All expiry</option><option value="expiring_soon">Expiring soon (30d)</option><option value="expired">Expired</option>
-        </select>
-        {hasInventoryFiltersApplied && (
-          <Button type="button" variant="outline" size="sm" onClick={clearInventoryFilters}>Clear filters</Button>
-        )}
-        <span className="text-slate-500 text-sm ml-auto">{inventoryTableRows.length} of {filteredStock.length} row(s)</span>
-      </div>
+      <PhOpsFilterToolbar
+        leading={
+          <>
+            <TextField
+              type="search"
+              placeholder="Search medicine by name"
+              value={inventorySearch}
+              onChange={(e) => setInventorySearch(e.target.value)}
+              className="w-48 max-w-full"
+              aria-label="Search inventory"
+            />
+            <select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value as InventoryStatusFilter)} className="ph-ops-input">
+              <option value="all">All status</option><option value="in_stock">In stock</option><option value="low_stock">Low stock</option><option value="out_of_stock">Out of stock</option>
+            </select>
+            <select value={inventorySupplierFilter} onChange={(e) => setInventorySupplierFilter(e.target.value)} className="ph-ops-input">
+              <option value="all">All suppliers</option>{suppliers.map((sup) => (<option key={sup.id} value={sup.id}>{sup.name}</option>))}
+            </select>
+            <select value={inventoryExpiryFilter} onChange={(e) => setInventoryExpiryFilter(e.target.value as InventoryExpiryFilter)} className="ph-ops-input">
+              <option value="all">All expiry</option><option value="expiring_soon">Expiring soon (30d)</option><option value="expired">Expired</option>
+            </select>
+            {hasInventoryFiltersApplied && (
+              <Button type="button" variant="outline" size="sm" onClick={clearInventoryFilters}>Clear filters</Button>
+            )}
+          </>
+        }
+        trailing={<span className="text-slate-500 text-xs">{inventoryTableRows.length} of {filteredStock.length} row(s)</span>}
+      />
 
       {!isPharmacyPortal && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-          <h3 className="font-semibold text-slate-800 mb-3">Bulk add / update</h3>
+        <PhOpsFormSection title="Bulk add / update">
           <MedicineFileUploader
             branchId={branchFilter !== 'all' ? branchFilter : undefined}
             branchName={branchFilter !== 'all' ? branches.find((b) => b.id === branchFilter)?.name : undefined}
@@ -216,7 +249,7 @@ export function InventoryTabContent(props: {
             onError={(e) => setError(e)}
             getToken={getToken}
           />
-        </div>
+        </PhOpsFormSection>
       )}
 
       {loading ? (
@@ -230,11 +263,18 @@ export function InventoryTabContent(props: {
                   const med = medicines.find((m) => (m.medicineId ?? m.id) === s.medicineId)
                   const nearestExpiry = getNearestExpiry(s)
                   const isActionsOpen = inventoryRowActionsOpen === s.id
+                  const branchName = branches.find((b) => b.id === s.branchId)?.name ?? s.branchId
+                  const isLow = lowStock.some((l) => l.medicineId === s.medicineId && l.branchName === branchName)
                   return (
                     <tr key={s.id} className="border-t border-[var(--color-neutral-200)] hover:bg-slate-50/80 transition">
-                      <td className="p-4 font-medium text-slate-900">{s.medicineName}</td>
-                      <td className="p-4 text-slate-600">{branches.find((b) => b.id === s.branchId)?.name ?? s.branchId}</td>
-                      <td className="p-4 text-right font-medium text-slate-900">{s.totalQuantity}</td>
+                      <td className="p-4 font-medium text-slate-900">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{s.medicineName}</span>
+                          {isLow ? <PhOpsStatusBadge label="Low" tone="warn" /> : null}
+                        </div>
+                      </td>
+                      <td className="p-4 text-slate-600">{branchName}</td>
+                      <td className="p-4 text-right font-medium text-slate-900 tabular-nums">{s.totalQuantity}</td>
                       <td className="p-4 text-right text-slate-600"><DaysCoverBadge daysCover={getDaysOfCover(s)} /></td>
                       <td className="p-4 text-slate-600">{nearestExpiry ?? '—'}</td>
                       <td className="p-4 text-right">
@@ -264,12 +304,9 @@ export function InventoryTabContent(props: {
         <Pagination currentPage={inventoryPage} totalPages={inventoryTotalPages} pageSize={inventoryPageSize} totalItems={inventoryTableRows.length} onPageChange={goToInventoryPage} onPageSizeChange={setInventoryPageSize} itemLabel="items" className="mt-3 rounded-xl border border-slate-200" />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 rounded-xl border border-[var(--color-neutral-200)] bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Inventory health</h3>
-          <ul className="space-y-2">{inventoryHealthDonut.map((seg, i) => (<li key={i} className="flex items-center gap-2 text-sm"><span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: seg.color }} /><span className="text-slate-700">{seg.label}</span><span className="font-semibold text-slate-900">{seg.value}</span></li>))}</ul>
-        </div>
-      </div>
+      <PhOpsPanel title="Inventory health" subtitle="Distribution across stock states">
+        <ul className="space-y-2">{inventoryHealthDonut.map((seg, i) => (<li key={i} className="flex items-center gap-2 text-sm"><span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: seg.color }} /><span className="text-slate-700">{seg.label}</span><span className="font-semibold text-slate-900 tabular-nums">{seg.value}</span></li>))}</ul>
+      </PhOpsPanel>
 
       {inventoryDetailView && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setInventoryDetailView(null)}>
@@ -336,6 +373,6 @@ export function InventoryTabContent(props: {
           </ul>
         </div>
       )}
-    </div>
+    </PhOpsShell>
   )
 }

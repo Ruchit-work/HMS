@@ -226,29 +226,17 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
         filteredAppointments = appointments.filter(a => new Date(a.createdAt) >= oneYearAgo)
       }
 
-      // Combine all paid transactions
+      // Combine paid transactions from unified billing only.
+      // billing-records already includes admission + appointment payments (Reception parity).
       const allPaidRecords: Array<{ amount: number; date: string; method?: string; type: string }> = []
-      
-      // From billing records
-      filteredBillingRecords.forEach(record => {
-        if (record.status === 'paid') {
+
+      filteredBillingRecords.forEach((record) => {
+        if (record.status === "paid") {
           allPaidRecords.push({
             amount: record.totalAmount,
             date: record.paidAt || record.generatedAt,
             method: record.paymentMethod,
-            type: record.type
-          })
-        }
-      })
-
-      // From appointments
-      filteredAppointments.forEach(apt => {
-        if (apt.paymentStatus === 'paid' && apt.paymentAmount > 0) {
-          allPaidRecords.push({
-            amount: apt.paymentAmount,
-            date: apt.paidAt || apt.createdAt,
-            method: apt.paymentMethod,
-            type: 'appointment'
+            type: record.type,
           })
         }
       })
@@ -256,12 +244,11 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
       // Calculate revenue metrics
       const totalRevenue = allPaidRecords.reduce((sum, r) => sum + r.amount, 0)
       const paidRevenue = totalRevenue
-      const averageTransactionValue = allPaidRecords.length > 0 
-        ? totalRevenue / allPaidRecords.length 
-        : 0
+      const averageTransactionValue =
+        allPaidRecords.length > 0 ? totalRevenue / allPaidRecords.length : 0
 
       // Calculate outstanding payments
-      const allPendingRecords: Array<{ 
+      const allPendingRecords: Array<{
         id: string
         amount: number
         date: string
@@ -270,8 +257,8 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
         type: string
       }> = []
 
-      filteredBillingRecords.forEach(record => {
-        if (record.status === 'pending') {
+      filteredBillingRecords.forEach((record) => {
+        if (record.status === "pending") {
           allPendingRecords.push({
             id: record.id,
             amount: record.totalAmount,

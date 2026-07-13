@@ -23,18 +23,44 @@ import BillingManagement from "./Tabs/BillingManagement"
 import FinancialAnalytics from "./Tabs/FinancialAnalytics"
 import HospitalManagement from "./Tabs/HospitalManagement"
 import AdminAssignment from "./Tabs/AdminAssignment"
-import ReceptionistManagement from "./Tabs/ReceptionistManagement"
-import PharmacistManagement from "./Tabs/PharmacistManagement"
+import PlatformMonitoring from "./Tabs/PlatformMonitoring"
+import SubscriptionCenter from "./Tabs/SubscriptionCenter"
+import LiveActivityCenter from "./Tabs/LiveActivityCenter"
+import GlobalSettingsCenter from "./Tabs/GlobalSettingsCenter"
+import BusinessAnalytics from "./Tabs/BusinessAnalytics"
+import StaffManagement from "./Tabs/StaffManagement"
 import DoctorPerformanceAnalytics from "./Tabs/DoctorPerformanceAnalytics"
 import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnalytics"
 import BranchManagement from "./Tabs/BranchManagement"
 import AdminProtected from "@/components/AdminProtected"
 import AdminDashboardOverview from "./components/AdminDashboardOverview"
+import PlatformCommandCenter from "./components/PlatformCommandCenter"
+import AdminOverviewSkeleton from "./components/AdminOverviewSkeleton"
+import { HqTenantLens, HqGlobalSearch, HqGlobalSearchTrigger } from "@/components/hq"
+import type { HqGlobalSearchNavigate } from "@/components/hq"
 import AdminAccountPanel from "./components/AdminAccountPanel"
-import TabButton from "@/components/admin/TabButton"
 import SidebarAccountButton from "@/components/admin/SidebarAccountButton"
-import { Button } from "@/components/ui/Button"
 import AdminPageHeader from "@/components/admin/AdminPageHeader"
+import {
+  LayoutDashboard,
+  Users,
+  Stethoscope,
+  CalendarDays,
+  ReceiptText,
+  Megaphone,
+  BarChart3,
+  Building2,
+  UserCog,
+  Activity,
+  CreditCard,
+  Radio,
+  Settings,
+  GitBranch,
+  UsersRound,
+  LogOut,
+  Menu,
+  X,
+} from "lucide-react"
 import SubTabNavigation from "@/components/admin/SubTabNavigation"
 import {
   calculateAllTrends,
@@ -42,7 +68,12 @@ import {
   calculateCommonConditions,
   calculateMostPrescribedMedicines,
   calculateRevenueTrend,
-  calculateTopDepartments
+  calculateTopDepartments,
+  formatLocalYmd,
+  getPaidAmount,
+  isPaidAppointment,
+  isSameLocalDay,
+  revenueDateKey,
 } from "@/utils/analytics/dashboardCalculations"
 import type { TrendPoint } from "@/utils/analytics/dashboardCalculations"
 import type { RevenueTrendPoint } from "@/utils/analytics/dashboardCalculations"
@@ -61,6 +92,7 @@ interface DashboardStats {
   totalAppointments: number;
   todayAppointments: number;
   todayRevenue: number;
+  yesterdayRevenue: number;
   completedAppointments: number;
   pendingAppointments: number;
   totalRevenue: number;
@@ -91,6 +123,58 @@ interface DashboardStats {
   topDepartments: Array<{ department: string; count: number }>;
 }
 
+/** Unified billing row from /api/admin/billing-records (admissions + appointments). */
+type DashboardBillingRecord = {
+  id: string
+  type?: "admission" | "appointment"
+  status?: string
+  totalAmount?: number
+  paidAt?: string | null
+  generatedAt?: string
+  hospitalId?: string | null
+  branchId?: string | null
+  paymentMethod?: string | null
+}
+
+function startOfLocalDay(d = new Date()) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function endOfLocalDay(d = new Date()) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+}
+
+function isPaidBillingInRange(
+  record: DashboardBillingRecord,
+  start: Date,
+  end: Date,
+  hospitalId?: string | null,
+  branchId?: string
+) {
+  if (String(record.status || "").toLowerCase() !== "paid") return false
+  if (!record.paidAt) return false
+  if (hospitalId && record.hospitalId && record.hospitalId !== hospitalId) return false
+  if (branchId && branchId !== "all") {
+    // Keep unassigned branch bills visible (same rule as appointments)
+    if (record.branchId && record.branchId !== branchId) return false
+  }
+  const paidAt = new Date(record.paidAt)
+  if (Number.isNaN(paidAt.getTime())) return false
+  return paidAt >= start && paidAt <= end
+}
+
+function sumBillingCollection(
+  records: DashboardBillingRecord[],
+  start: Date,
+  end: Date,
+  hospitalId?: string | null,
+  branchId?: string
+) {
+  return records
+    .filter((r) => isPaidBillingInRange(r, start, end, hospitalId, branchId))
+    .reduce((sum, r) => sum + Number(r.totalAmount || 0), 0)
+}
+
 const TAB_IDS = [
   "overview",
   "patients",
@@ -101,6 +185,9 @@ const TAB_IDS = [
   "analytics",
   "hospitals",
   "admins",
+  "monitoring",
+  "subscriptions",
+  "activity",
   "branches",
   "staff",
   "account",
@@ -110,18 +197,58 @@ const isAdminTabId = (value: string): value is AdminTabId =>
   (TAB_IDS as readonly string[]).includes(value)
 
 const TAB_META: Record<AdminTabId, { title: string; description: string }> = {
-  overview: { title: "Dashboard Overview", description: "Hospital management system overview" },
+  overview: { title: "Hospital Command Center", description: "Busy status, critical patients, capacity, revenue, and bottlenecks at a glance" },
   patients: { title: "Patient Management", description: "Manage patient records and information" },
   doctors: { title: "Doctor Management", description: "Manage doctor profiles and schedules" },
-  campaigns: { title: "Campaigns", description: "Create, publish, and manage promotional campaigns" },
+  campaigns: { title: "Campaigns", description: "Outreach library, automation, and performance" },
   appointments: { title: "Appointment Management", description: "Monitor and manage all appointments" },
   billing: { title: "Revenue & Analytics", description: "Comprehensive revenue analytics, billing records, and financial insights" },
   analytics: { title: "Analytics Hub", description: "Unified analytics dashboard – patient, financial, and doctor performance insights" },
-  hospitals: { title: "Hospital Management", description: "Create and manage hospitals in the system" },
-  admins: { title: "Admin Assignment", description: "Create and assign admins to hospitals" },
-  branches: { title: "Branch Management", description: "Create and manage branches for your hospital" },
-  staff: { title: "Staff Management", description: "Create and manage receptionists & pharmacists for your hospital" },
+  hospitals: { title: "Tenant Management", description: "SaaS customer directory — plans, health, usage, and lifecycle for every hospital on the platform" },
+  admins: { title: "Tenant Administrators", description: "Provision customer admins and assign them to hospital tenants" },
+  monitoring: { title: "Platform Monitoring", description: "Infrastructure health, latency, incidents, and probe logs across Harmony services" },
+  subscriptions: { title: "Subscription Center", description: "Plans, renewals, revenue trends, and entitlement lifecycle for every hospital tenant" },
+  activity: { title: "Live Activity Center", description: "Real-time platform activity feed sorted by severity — hospitals, clinical, billing, messaging, and ops" },
+  branches: { title: "Branch Management", description: "Multi-site operations · capacity · staffing control" },
+  staff: { title: "Staff Management", description: "Workforce directory · roles · shifts · access control" },
   account: { title: "My Account", description: "View your profile and update your login password" },
+}
+
+function getTabMeta(tab: AdminTabId, isSuperAdmin: boolean, tenantName?: string | null) {
+  if (!isSuperAdmin) return TAB_META[tab]
+
+  if (tab === "overview") {
+    return {
+      title: "Platform Command Center",
+      description: "Fleet health, entitlements, and operators across every hospital on Harmony HMS",
+    }
+  }
+
+  if (tab === "account") {
+    return {
+      title: "Global Settings",
+      description: "Platform, branding, integrations, security, roles, and feature flags — organized HQ configuration",
+    }
+  }
+
+  if (tab === "analytics") {
+    return {
+      title: "Business Analytics",
+      description: "SaaS KPIs — MRR, ARR, growth, renewals, churn, plan mix, and hospital usage across the fleet",
+    }
+  }
+
+  const inspectTabs: AdminTabId[] = ["patients", "doctors", "appointments", "billing"]
+  if (inspectTabs.includes(tab)) {
+    const lens = tenantName ? ` · ${tenantName}` : ""
+    const base = TAB_META[tab]
+    return {
+      title: `Inspect${lens}`,
+      description: `${base.title} for the selected tenant — platform HQ inspection mode`,
+    }
+  }
+
+  return TAB_META[tab]
 }
 
 export default function AdminDashboard() {
@@ -129,6 +256,7 @@ export default function AdminDashboard() {
   // Store raw data (unfiltered) for client-side filtering
   const [rawPatients, setRawPatients] = useState<any[]>([])
   const [rawAppointments, setRawAppointments] = useState<AppointmentType[]>([])
+  const [rawBillingRecords, setRawBillingRecords] = useState<DashboardBillingRecord[]>([])
   const [stats, setStats] = useState<DashboardStats>({
     totalPatients: 0,
     totalDoctors: 0,
@@ -140,6 +268,7 @@ export default function AdminDashboard() {
     monthlyRevenue: 0,
     weeklyRevenue: 0,
     todayRevenue: 0,
+    yesterdayRevenue: 0,
     activeDoctorsToday: 0,
     appointmentTrends: {
       weekly: [],
@@ -176,6 +305,7 @@ export default function AdminDashboard() {
   const [trendView, setTrendView] = useState<"weekly" | "monthly" | "yearly">("weekly")
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
 
@@ -220,6 +350,33 @@ export default function AdminDashboard() {
       setStaffSubTab(tabFromUrl)
     }
   }, [tabFromUrl, setStaffSubTab])
+
+  // Super Admin global search (⌘K / Ctrl+K)
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setGlobalSearchOpen((open) => !open)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [isSuperAdmin])
+
+  const handleGlobalSearchNavigate = async (target: HqGlobalSearchNavigate) => {
+    try {
+      if (target.hospitalId && target.hospitalId !== activeHospitalId) {
+        await setActiveHospital(target.hospitalId)
+      }
+    } catch {
+      /* still navigate */
+    }
+    if (isAdminTabId(target.tab)) {
+      setActiveTab(target.tab)
+    }
+    setSidebarOpen(false)
+  }
 
   // If there is no authenticated user (e.g. after logout + browser back),
   // immediately redirect to the admin login page and render nothing here.
@@ -269,12 +426,13 @@ export default function AdminDashboard() {
 
   // Reset analytics sub-tabs and tab when analytics is disabled for hospital
   useEffect(() => {
+    if (isSuperAdmin) return
     if (!analyticsEnabled) {
       if (patientSubTab === "analytics") setPatientSubTab("all")
       if (billingSubTab === "analytics") setBillingSubTab("all")
       if (activeTab === "analytics") setActiveTab("overview")
     }
-  }, [analyticsEnabled])
+  }, [analyticsEnabled, isSuperAdmin])
 
   const fetchDashboardData = async () => {
     if (!user || !activeHospitalId) return
@@ -321,13 +479,38 @@ export default function AdminDashboard() {
 
       // Get all appointments - use hospital-scoped collection
       const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "appointments"))
-      const allAppointments = appointmentsSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const allAppointments = appointmentsSnapshot.docs.map(docSnap => ({ 
+        id: docSnap.id, 
+        ...docSnap.data() 
       } as AppointmentType))
       
       // Store raw data for client-side filtering
       setRawAppointments(allAppointments)
+
+      const todayKey = formatLocalYmd(new Date())
+      const todaySample = allAppointments
+        .slice(0, 5)
+        .map((a) => ({
+          id: a.id,
+          appointmentDate: a.appointmentDate,
+          dateKey: revenueDateKey(a) || null,
+          status: a.status,
+          paymentStatus: a.paymentStatus,
+          paymentAmount: a.paymentAmount,
+          totalConsultationFee: a.totalConsultationFee,
+        }))
+
+      if (process.env.NODE_ENV === "development") {
+        console.info("[admin-dashboard] raw fetch", {
+          hospitalId: activeHospitalId,
+          patients: allPatients.length,
+          doctors: totalDoctors,
+          appointments: allAppointments.length,
+          todayKey,
+          todayAppointments: allAppointments.filter((a) => isSameLocalDay(a.appointmentDate)).length,
+          sample: todaySample,
+        })
+      }
 
       // Calculate basic stats for initialization (filtered stats calculated in useMemo)
       const totalPatients = allPatients.length
@@ -335,28 +518,32 @@ export default function AdminDashboard() {
       const completedAppointments = allAppointments.filter(apt => apt.status === "completed").length
       const pendingAppointments = allAppointments.filter(apt => apt.status === "confirmed" || (apt as any).status === 'resrescheduled').length
 
-      // Today's appointments
-      const today = new Date().toDateString()
-      const todayAppointments = allAppointments.filter(apt => 
-        new Date(apt.appointmentDate).toDateString() === today
+      // Today's appointments — local YYYY-MM-DD (same rule as receptionist dashboard)
+      const todayAppointments = allAppointments.filter(apt =>
+        isSameLocalDay(apt.appointmentDate)
       ).length
 
-      // Calculate revenue using utility functions
-      const totalRevenue = calculateRevenue(allAppointments, Infinity)
-      const monthlyRevenue = calculateRevenue(allAppointments, 30)
-      const weeklyRevenue = calculateRevenue(allAppointments, 7)
-
-      // Get recent appointments (last 5) - use hospital-scoped collection
-      const recentAppointmentsQuery = query(
-        getHospitalCollection(activeHospitalId, "appointments"),
-        orderBy("createdAt", "desc"),
-        limit(5)
-      )
-      const recentSnapshot = await getDocs(recentAppointmentsQuery)
-      const recent = recentSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as AppointmentType))
+      // Get recent appointments (last 5) — isolated so index/orderBy failures don't wipe dashboard data
+      let recent: AppointmentType[] = []
+      try {
+        const recentAppointmentsQuery = query(
+          getHospitalCollection(activeHospitalId, "appointments"),
+          orderBy("createdAt", "desc"),
+          limit(5)
+        )
+        const recentSnapshot = await getDocs(recentAppointmentsQuery)
+        recent = recentSnapshot.docs.map(docSnap => ({ 
+          id: docSnap.id, 
+          ...docSnap.data() 
+        } as AppointmentType))
+      } catch (recentErr) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[admin-dashboard] recent appointments query failed; using client sort fallback", recentErr)
+        }
+        recent = [...allAppointments]
+          .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+          .slice(0, 5)
+      }
 
       // Calculate trends and analytics using utility functions
       const trends = calculateAllTrends(allAppointments)
@@ -365,15 +552,112 @@ export default function AdminDashboard() {
       const revenueTrend = calculateRevenueTrend(allAppointments)
       const topDepartments = calculateTopDepartments(allAppointments)
 
-      const todayDateStr = new Date().toDateString();
-      const todayRevenue = allAppointments
-        .filter((a) => a.status === 'completed' && new Date(a.appointmentDate).toDateString() === todayDateStr)
-        .reduce((s, a) => s + (a.paymentAmount || 0), 0);
+      // Unified billing (admission discharge + appointment payments) — same source as Reception Billing
+      let billingRecords: DashboardBillingRecord[] = []
+      try {
+        const currentUser = auth.currentUser
+        if (currentUser) {
+          const token = await currentUser.getIdToken()
+          const billingRes = await fetch("/api/admin/billing-records", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          })
+          if (billingRes.ok) {
+            const billingData = await billingRes.json().catch(() => ({}))
+            billingRecords = Array.isArray(billingData?.records) ? billingData.records : []
+          } else if (process.env.NODE_ENV === "development") {
+            console.warn("[admin-dashboard] billing-records fetch failed", billingRes.status)
+          }
+        }
+      } catch (billingErr) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[admin-dashboard] billing-records error", billingErr)
+        }
+      }
+      setRawBillingRecords(billingRecords)
+
+      const todayStart = startOfLocalDay()
+      const todayEnd = endOfLocalDay()
+      const yesterdayStart = startOfLocalDay(new Date(Date.now() - 86400000))
+      const yesterdayEnd = endOfLocalDay(new Date(Date.now() - 86400000))
+      const weekStart = startOfLocalDay(new Date(Date.now() - 6 * 86400000))
+      const monthStart = startOfLocalDay(new Date(Date.now() - 29 * 86400000))
+
+      const appointmentTodayRevenue = allAppointments
+        .filter((a) => isPaidAppointment(a) && revenueDateKey(a) === todayKey)
+        .reduce((s, a) => s + getPaidAmount(a), 0)
+
+      // Prefer unified billing totals (includes admission card settlements like ₹82,502)
+      const billingTodayRevenue = sumBillingCollection(
+        billingRecords,
+        todayStart,
+        todayEnd,
+        activeHospitalId
+      )
+      const billingYesterdayRevenue = sumBillingCollection(
+        billingRecords,
+        yesterdayStart,
+        yesterdayEnd,
+        activeHospitalId
+      )
+      const billingWeeklyRevenue = sumBillingCollection(
+        billingRecords,
+        weekStart,
+        todayEnd,
+        activeHospitalId
+      )
+      const billingMonthlyRevenue = sumBillingCollection(
+        billingRecords,
+        monthStart,
+        todayEnd,
+        activeHospitalId
+      )
+      const billingTotalRevenue = billingRecords
+        .filter((r) => String(r.status || "").toLowerCase() === "paid")
+        .filter((r) => !r.hospitalId || r.hospitalId === activeHospitalId)
+        .reduce((s, r) => s + Number(r.totalAmount || 0), 0)
+
+      const todayRevenue = billingRecords.length > 0 ? billingTodayRevenue : appointmentTodayRevenue
+      const yesterdayRevenue = billingRecords.length > 0 ? billingYesterdayRevenue : 0
+      const weeklyRevenue =
+        billingRecords.length > 0 ? billingWeeklyRevenue : calculateRevenue(allAppointments, 7)
+      const monthlyRevenue =
+        billingRecords.length > 0 ? billingMonthlyRevenue : calculateRevenue(allAppointments, 30)
+      const totalRevenue =
+        billingRecords.length > 0 ? billingTotalRevenue : calculateRevenue(allAppointments, Infinity)
+
       const activeDoctorsToday = new Set(
         allAppointments
-          .filter((a) => new Date(a.appointmentDate).toDateString() === todayDateStr && a.doctorId)
+          .filter((a) => isSameLocalDay(a.appointmentDate) && a.doctorId)
           .map((a) => a.doctorId)
-      ).size;
+      ).size
+
+      if (process.env.NODE_ENV === "development") {
+        console.info("[admin-dashboard] processed stats", {
+          todayKey,
+          todayAppointments,
+          appointmentTodayRevenue,
+          billingTodayRevenue,
+          todayRevenue,
+          yesterdayRevenue,
+          billingRecords: billingRecords.length,
+          paidTodaySample: billingRecords
+            .filter((r) => isPaidBillingInRange(r, todayStart, todayEnd, activeHospitalId))
+            .map((r) => ({
+              id: r.id,
+              type: r.type,
+              totalAmount: r.totalAmount,
+              paidAt: r.paidAt,
+              method: r.paymentMethod,
+            })),
+          activeDoctorsToday,
+          totalRevenue,
+          weeklyRevenue,
+          monthlyRevenue,
+        })
+      }
 
       setStats({
         totalPatients,
@@ -381,6 +665,7 @@ export default function AdminDashboard() {
         totalAppointments,
         todayAppointments,
         todayRevenue,
+        yesterdayRevenue,
         completedAppointments,
         pendingAppointments,
         totalRevenue,
@@ -397,8 +682,10 @@ export default function AdminDashboard() {
 
       setRecentAppointments(recent)
 
-    } catch {
-
+    } catch (err) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("[admin-dashboard] fetchDashboardData failed", err)
+      }
       setNotification({ 
         type: "error", 
         message: "Failed to load dashboard data" 
@@ -426,16 +713,24 @@ export default function AdminDashboard() {
 
   // Filter data and recalculate stats based on selectedBranchId
   const filteredStats = useMemo(() => {
-    // Filter patients by branch
+    // Filter patients by branch (keep unassigned visible)
     let filteredPatients = rawPatients
     if (selectedBranchId !== "all") {
-      filteredPatients = rawPatients.filter((p: any) => p.defaultBranchId === selectedBranchId)
+      filteredPatients = rawPatients.filter((p: any) => {
+        const branch = p.defaultBranchId
+        if (branch == null || branch === "") return true
+        return branch === selectedBranchId
+      })
     }
 
-    // Filter appointments by branch
+    // Filter appointments by branch (keep unassigned / legacy visible)
     let filteredAppointments = rawAppointments
     if (selectedBranchId !== "all") {
-      filteredAppointments = rawAppointments.filter((apt) => apt.branchId === selectedBranchId)
+      filteredAppointments = rawAppointments.filter((apt) => {
+        const branch = apt.branchId
+        if (branch == null || branch === "") return true
+        return branch === selectedBranchId
+      })
     }
 
     // Recalculate all stats from filtered data
@@ -445,22 +740,50 @@ export default function AdminDashboard() {
     const pendingAppointments = filteredAppointments.filter(apt => apt.status === "confirmed" || (apt as any).status === 'resrescheduled').length
 
     // Today's appointments
-    const today = new Date().toDateString()
-    const todayAppointments = filteredAppointments.filter(apt => 
-      new Date(apt.appointmentDate).toDateString() === today
+    const todayKey = formatLocalYmd(new Date())
+    const todayAppointments = filteredAppointments.filter(apt =>
+      isSameLocalDay(apt.appointmentDate)
     ).length
 
-    // Calculate revenue and trends using utility functions
-    const totalRevenue = calculateRevenue(filteredAppointments, Infinity)
-    const monthlyRevenue = calculateRevenue(filteredAppointments, 30)
-    const weeklyRevenue = calculateRevenue(filteredAppointments, 7)
-    const todayDateStr = new Date().toDateString()
-    const todayRevenue = filteredAppointments
-      .filter((a) => a.status === 'completed' && new Date(a.appointmentDate).toDateString() === todayDateStr)
-      .reduce((s, a) => s + (a.paymentAmount || 0), 0)
+    const todayStart = startOfLocalDay()
+    const todayEnd = endOfLocalDay()
+    const yesterdayStart = startOfLocalDay(new Date(Date.now() - 86400000))
+    const yesterdayEnd = endOfLocalDay(new Date(Date.now() - 86400000))
+    const weekStart = startOfLocalDay(new Date(Date.now() - 6 * 86400000))
+    const monthStart = startOfLocalDay(new Date(Date.now() - 29 * 86400000))
+
+    const appointmentTodayRevenue = filteredAppointments
+      .filter((a) => isPaidAppointment(a) && revenueDateKey(a) === todayKey)
+      .reduce((s, a) => s + getPaidAmount(a), 0)
+
+    const useBilling = rawBillingRecords.length > 0
+    const todayRevenue = useBilling
+      ? sumBillingCollection(rawBillingRecords, todayStart, todayEnd, activeHospitalId, selectedBranchId)
+      : appointmentTodayRevenue
+    const yesterdayRevenue = useBilling
+      ? sumBillingCollection(rawBillingRecords, yesterdayStart, yesterdayEnd, activeHospitalId, selectedBranchId)
+      : 0
+    const weeklyRevenue = useBilling
+      ? sumBillingCollection(rawBillingRecords, weekStart, todayEnd, activeHospitalId, selectedBranchId)
+      : calculateRevenue(filteredAppointments, 7)
+    const monthlyRevenue = useBilling
+      ? sumBillingCollection(rawBillingRecords, monthStart, todayEnd, activeHospitalId, selectedBranchId)
+      : calculateRevenue(filteredAppointments, 30)
+    const totalRevenue = useBilling
+      ? rawBillingRecords
+          .filter((r) => String(r.status || "").toLowerCase() === "paid")
+          .filter((r) => !r.hospitalId || !activeHospitalId || r.hospitalId === activeHospitalId)
+          .filter((r) => {
+            if (selectedBranchId === "all") return true
+            if (!r.branchId) return true
+            return r.branchId === selectedBranchId
+          })
+          .reduce((s, r) => s + Number(r.totalAmount || 0), 0)
+      : calculateRevenue(filteredAppointments, Infinity)
+
     const activeDoctorsToday = new Set(
       filteredAppointments
-        .filter((a) => new Date(a.appointmentDate).toDateString() === todayDateStr && a.doctorId)
+        .filter((a) => isSameLocalDay(a.appointmentDate) && a.doctorId)
         .map((a) => a.doctorId)
     ).size
     const trends = calculateAllTrends(filteredAppointments)
@@ -475,6 +798,7 @@ export default function AdminDashboard() {
       totalAppointments,
       todayAppointments,
       todayRevenue,
+      yesterdayRevenue,
       completedAppointments,
       pendingAppointments,
       totalRevenue,
@@ -488,7 +812,7 @@ export default function AdminDashboard() {
       revenueTrend,
       topDepartments
     }
-  }, [rawPatients, rawAppointments, selectedBranchId, stats.totalDoctors])
+  }, [rawPatients, rawAppointments, rawBillingRecords, selectedBranchId, stats.totalDoctors, activeHospitalId])
 
   // Use filtered stats for display
   const displayStats = filteredStats
@@ -501,11 +825,26 @@ export default function AdminDashboard() {
     return recentAppointments.filter((apt) => apt.branchId === selectedBranchId)
   }, [recentAppointments, selectedBranchId])
 
-  // Filter all appointments by branch (for overview analytics)
+  // Filter all appointments by branch (for overview analytics).
+  // Include unassigned branch docs (null/empty) so WhatsApp/legacy records remain visible —
+  // same visibility rule reception uses for unassigned appointments.
   const filteredAppointmentsForOverview = useMemo(() => {
     if (selectedBranchId === "all") return rawAppointments
-    return rawAppointments.filter((apt) => apt.branchId === selectedBranchId)
+    return rawAppointments.filter((apt) => {
+      const branch = apt.branchId
+      if (branch == null || branch === "") return true
+      return branch === selectedBranchId
+    })
   }, [rawAppointments, selectedBranchId])
+
+  const filteredPatientsForOverview = useMemo(() => {
+    if (selectedBranchId === "all") return rawPatients
+    return rawPatients.filter((p: any) => {
+      const branch = p.defaultBranchId
+      if (branch == null || branch === "") return true
+      return branch === selectedBranchId
+    })
+  }, [rawPatients, selectedBranchId])
 
   // Setup real-time listeners for badge counts
   const setupRealtimeBadgeListeners = () => {
@@ -675,7 +1014,27 @@ export default function AdminDashboard() {
 
   // Authenticated admin — load dashboard data; never block forever on missing profile doc
   if (hospitalLoading || loading) {
-    return <LoadingSpinner message="Loading dashboard..." inline />
+    return (
+      <AdminProtected allowedRoles={["admin"]}>
+        <div className="hms-portal-shell">
+          <div className="lg:ml-64">
+            <header className="px-4 sm:px-6 lg:px-6 pt-4 pb-0">
+              <AdminPageHeader
+                title={isSuperAdmin ? "Platform Command Center" : "Hospital Command Center"}
+                description={
+                  isSuperAdmin
+                    ? "Loading platform fleet snapshot…"
+                    : "Loading operational status…"
+                }
+              />
+            </header>
+            <main className="hms-page min-w-0">
+              <AdminOverviewSkeleton />
+            </main>
+          </div>
+        </div>
+      </AdminProtected>
+    )
   }
 
   const resolvedUserData: UserData = userData ?? {
@@ -692,250 +1051,356 @@ export default function AdminDashboard() {
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-[60] lg:hidden bg-white/95 backdrop-blur-xl p-2.5 rounded-lg shadow-lg border border-slate-200/50 hover:shadow-xl hover:bg-white transition-all duration-200"
+          className="fixed top-4 left-4 z-50 rounded-lg border border-slate-200 bg-white p-2 shadow-sm lg:hidden"
+          aria-label="Open menu"
         >
-          <svg className="w-6 h-6 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
+          <Menu className="w-5 h-5 text-slate-700" />
         </button>
       )}
 
-      {sidebarOpen && (<div className="fixed inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />)}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      {/* Professional Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-40 w-72 hms-sidebar transform transition-all duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
-        {/* Header */}
-        <div className="hms-sidebar-header flex items-center justify-between">
-          <div className="relative z-[1] flex items-center gap-4">
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-cyan-200 shadow-sm">
-              <svg className="w-6 h-6 text-sky-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+      {/* Sidebar — matches receptionist rx-sidebar */}
+      <aside
+        className={`rx-sidebar fixed inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-out ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+      >
+        {/* Brand */}
+        <div className="h-14 flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-cyan-600 rounded-lg flex items-center justify-center shrink-0">
+              <Building2 className="w-3.5 h-3.5 text-white" />
             </div>
             <div>
-              <h1 className="text-slate-900 text-lg font-bold drop-shadow-sm">HMS Admin</h1>
-              <p className="text-slate-600 text-xs font-medium">Administrative Portal</p>
+              <p className="text-sm font-semibold text-slate-900 leading-tight">
+                {isSuperAdmin ? "Harmony HMS" : "HMS"}
+              </p>
+              <p className="text-xs text-slate-400 leading-tight">
+                {isSuperAdmin ? "SaaS platform owner" : "Admin Portal"}
+              </p>
             </div>
           </div>
-          
-          <button 
-            onClick={() => setSidebarOpen(false)} 
-            className="lg:hidden relative z-[1] p-2 text-slate-600 hover:text-slate-900 hover:bg-white/60 rounded-lg transition-all duration-200"
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors"
+            aria-label="Close menu"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Navigation Menu */}
-        <nav className="flex-1 flex flex-col mt-4 px-3">
-          <div className="flex-1 space-y-1">
-            <TabButton
-              id="overview"
-              activeTab={activeTab}
-              onClick={() => { setActiveTab("overview"); setSidebarOpen(false) }}
-              icon={
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
-                </svg>
-              }
-              label="Dashboard Overview"
-              badgeCount={overviewBadge.displayCount}
-            />
-            
-            <TabButton
-              id="patients"
-              activeTab={activeTab}
-              onClick={() => { setActiveTab("patients"); setSidebarOpen(false) }}
-              icon={
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              }
-              label="Patients"
-              badgeCount={patientsBadge.displayCount}
-              badgeProps={{ size: "sm", color: "blue", animate: true }}
-            />
-            
-            <TabButton
-              id="doctors"
-              activeTab={activeTab}
-              onClick={() => { setActiveTab("doctors"); setSidebarOpen(false) }}
-              icon={
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              }
-              label="Doctors"
-            />
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-3">
+          {isSuperAdmin ? (
+            <>
+              <div className="px-3 mb-1">
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab("overview"); setSidebarOpen(false) }}
+                  className={`rx-nav-item ${activeTab === "overview" ? "rx-nav-item--active" : ""}`}
+                >
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <span>Command Center</span>
+                </button>
+              </div>
 
-            {!isSuperAdmin && (
-              <TabButton
-                id="campaigns"
-                activeTab={activeTab}
-                onClick={() => { setActiveTab("campaigns"); setSidebarOpen(false) }}
-                icon={
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 8a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2 20l4-2a4 4 0 014 0l4 2 4-2a4 4 0 014 0l0 0" />
-                  </svg>
-                }
-                label="Campaigns"
-              />
-            )}
-
-            <TabButton
-              id="appointments"
-              activeTab={activeTab}
-              onClick={() => { setActiveTab("appointments"); setSidebarOpen(false) }}
-              icon={
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              }
-              label="Appointments"
-              badgeCount={appointmentsBadge.displayCount}
-              badgeProps={{ size: "sm", color: "orange", animate: true }}
-            />
-            
-            <TabButton
-              id="billing"
-              activeTab={activeTab}
-              onClick={() => { setActiveTab("billing"); setSidebarOpen(false) }}
-              icon={
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              }
-              label="Revenue & Analytics"
-              badgeCount={billingBadge.displayCount}
-              badgeProps={{ size: "sm", color: "red", animate: true }}
-            />
-
-            {analyticsEnabled && (
-              <TabButton
-                id="analytics"
-                activeTab={activeTab}
-                onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }}
-                icon={
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                }
-                label="Analytics Hub"
-              />
-            )}
-
-            {isSuperAdmin && (
-              <>
-                <div className="border-t border-slate-300/30 my-2"></div>
-                <div className="px-3 py-1">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Super Admin</p>
+              <div className="rx-nav-group mt-3">
+                <span className="rx-nav-group-label">Platform control</span>
+                <div className="space-y-0.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("hospitals"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "hospitals" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Building2 className="w-4 h-4 shrink-0" />
+                    <span>Tenants</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("admins"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "admins" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <UserCog className="w-4 h-4 shrink-0" />
+                    <span>Tenant Admins</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("monitoring"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "monitoring" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Activity className="w-4 h-4 shrink-0" />
+                    <span>Monitoring</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("subscriptions"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "subscriptions" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <CreditCard className="w-4 h-4 shrink-0" />
+                    <span>Subscriptions</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "analytics" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <BarChart3 className="w-4 h-4 shrink-0" />
+                    <span>Business Analytics</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("activity"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "activity" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Radio className="w-4 h-4 shrink-0" />
+                    <span>Activity</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("account"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "account" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Settings className="w-4 h-4 shrink-0" />
+                    <span>Global Settings</span>
+                  </button>
                 </div>
-                <TabButton
-                  id="hospitals"
-                  activeTab={activeTab}
-                  onClick={() => { setActiveTab("hospitals"); setSidebarOpen(false) }}
-                  icon={
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  }
-                  label="Hospitals"
-                />
-                <TabButton
-                  id="admins"
-                  activeTab={activeTab}
-                  onClick={() => { setActiveTab("admins"); setSidebarOpen(false) }}
-                  icon={
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                  }
-                  label="Admin Assignment"
-                />
-              </>
-            )}
+              </div>
 
-            {/* Management section: Branches & Staff (hospital admins only for Staff) */}
-            <div className="border-t border-slate-300/30 my-2"></div>
-            <div className="px-3 py-1">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Management</p>
-            </div>
-            {/* Pharmacy tab removed from admin sidebar; pharmacy users use dedicated /pharmacy portal */}
-            {!isSuperAdmin && branchManagementEnabled && (
-              <TabButton
-                id="branches"
-                activeTab={activeTab}
-                onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
-                icon={
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h6a2 2 0 012 2v10H5a2 2 0 01-2-2V7zm12 0h4a2 2 0 012 2v10h-6V9a2 2 0 012-2z" />
-                  </svg>
-                }
-                label="Branches"
-              />
-            )}
-            {!isSuperAdmin && (
-              <TabButton
-                id="staff"
-                activeTab={activeTab}
-                onClick={() => { setActiveTab("staff"); setStaffSubTab("receptionists"); setSidebarOpen(false) }}
-                icon={
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                }
-                label="Staff"
-              />
-            )}
-            
-          </div>
+              <div className="rx-nav-group mt-4">
+                <span className="rx-nav-group-label">Inspect tenant</span>
+                {activeHospital?.name && (
+                  <p className="px-2 pt-1 pb-0.5 text-[10px] font-medium text-slate-400 truncate">
+                    Lens: {activeHospital.name}
+                  </p>
+                )}
+                <div className="space-y-0.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("patients"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "patients" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Users className="w-4 h-4 shrink-0" />
+                    <span>Inspect · Patients</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("doctors"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "doctors" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Stethoscope className="w-4 h-4 shrink-0" />
+                    <span>Inspect · Doctors</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("appointments"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "appointments" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <CalendarDays className="w-4 h-4 shrink-0" />
+                    <span>Inspect · Appointments</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("billing"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "billing" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <ReceiptText className="w-4 h-4 shrink-0" />
+                    <span>Inspect · Billing</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="px-3 mb-1">
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab("overview"); setSidebarOpen(false) }}
+                  className={`rx-nav-item ${activeTab === "overview" ? "rx-nav-item--active" : ""}`}
+                >
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <span>Dashboard</span>
+                  {overviewBadge.displayCount > 0 && (
+                    <span className="rx-nav-badge rx-nav-badge--blue ml-auto">
+                      {overviewBadge.displayCount}
+                    </span>
+                  )}
+                </button>
+              </div>
 
-          {/* Logout Section - Fixed at Bottom */}
-          <div className="px-3 pb-3 mt-2">
-            <div className="border-t border-slate-200 pt-2">
-              <SidebarAccountButton
-                active={activeTab === "account"}
-                onClick={() => { setActiveTab("account"); setSidebarOpen(false) }}
-                displayName={resolvedUserData.firstName || resolvedUserData.name || "Admin"}
-                roleLabel={isSuperAdmin ? "Super Administrator" : "Administrator"}
-                initial={resolvedUserData.firstName?.charAt(0) || resolvedUserData.email.charAt(0).toUpperCase()}
-              />
+              <div className="rx-nav-group mt-3">
+                <span className="rx-nav-group-label">Operations</span>
+                <div className="space-y-0.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("patients"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "patients" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Users className="w-4 h-4 shrink-0" />
+                    <span>Patients</span>
+                    {patientsBadge.displayCount > 0 && (
+                      <span className="rx-nav-badge rx-nav-badge--blue ml-auto">
+                        {patientsBadge.displayCount}
+                      </span>
+                    )}
+                  </button>
 
-              {/* Logout Button */}
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                className="w-full"
-                onClick={() => setLogoutConfirmOpen(true)}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Logout
-              </Button>
-            </div>
-          </div>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("doctors"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "doctors" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Stethoscope className="w-4 h-4 shrink-0" />
+                    <span>Doctors</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("campaigns"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "campaigns" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Megaphone className="w-4 h-4 shrink-0" />
+                    <span>Campaigns</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("appointments"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "appointments" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <CalendarDays className="w-4 h-4 shrink-0" />
+                    <span>Appointments</span>
+                    {appointmentsBadge.displayCount > 0 && (
+                      <span className="rx-nav-badge rx-nav-badge--amber ml-auto">
+                        {appointmentsBadge.displayCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("billing"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "billing" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <ReceiptText className="w-4 h-4 shrink-0" />
+                    <span>Revenue & Analytics</span>
+                    {billingBadge.displayCount > 0 && (
+                      <span className="rx-nav-badge rx-nav-badge--red ml-auto">
+                        {billingBadge.displayCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {analyticsEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab("analytics"); setSidebarOpen(false) }}
+                      className={`rx-nav-item ${activeTab === "analytics" ? "rx-nav-item--active" : ""}`}
+                    >
+                      <BarChart3 className="w-4 h-4 shrink-0" />
+                      <span>Analytics Hub</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="rx-nav-group mt-4">
+                <span className="rx-nav-group-label">Management</span>
+                <div className="space-y-0.5 mt-1.5">
+                  {branchManagementEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
+                      className={`rx-nav-item ${activeTab === "branches" ? "rx-nav-item--active" : ""}`}
+                    >
+                      <GitBranch className="w-4 h-4 shrink-0" />
+                      <span>Branches</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("staff")
+                      setStaffSubTab("receptionists")
+                      setSidebarOpen(false)
+                    }}
+                    className={`rx-nav-item ${activeTab === "staff" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <UsersRound className="w-4 h-4 shrink-0" />
+                    <span>Staff</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </nav>
 
-      </div>
+        {/* User / sign-out */}
+        <div className="border-t border-slate-200 p-3 shrink-0">
+          <SidebarAccountButton
+            active={activeTab === "account"}
+            onClick={() => { setActiveTab("account"); setSidebarOpen(false) }}
+            displayName={resolvedUserData.firstName || resolvedUserData.name || "Admin"}
+            roleLabel={isSuperAdmin ? "Platform Super Admin" : "Administrator"}
+            initial={resolvedUserData.firstName?.charAt(0) || resolvedUserData.email.charAt(0).toUpperCase()}
+          />
+          <button
+            type="button"
+            onClick={() => setLogoutConfirmOpen(true)}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign out</span>
+          </button>
+        </div>
+      </aside>
 
       {/* Main Content */}
-      <div className="lg:ml-72">
+      <div className="lg:ml-64">
         {/* Standard Admin Page Header */}
-        <header className={`px-4 sm:px-6 lg:px-6 pt-4 pb-0 ${!sidebarOpen ? 'pl-16 sm:pl-20 lg:pl-6' : ''}`}>
+        <header className={!sidebarOpen ? "pl-12 sm:pl-14 lg:pl-0" : undefined}>
           <AdminPageHeader
-            title={TAB_META[activeTab].title}
-            description={TAB_META[activeTab].description}
+            title={getTabMeta(activeTab, isSuperAdmin, activeHospital?.name).title}
+            description={getTabMeta(activeTab, isSuperAdmin, activeHospital?.name).description}
+            chromeOnly={
+              isSuperAdmin &&
+              [
+                "overview",
+                "hospitals",
+                "admins",
+                "monitoring",
+                "subscriptions",
+                "activity",
+                "account",
+                "analytics",
+              ].includes(activeTab)
+            }
+            dense={
+              activeTab === "campaigns" ||
+              activeTab === "branches" ||
+              activeTab === "staff" ||
+              activeTab === "hospitals" ||
+              activeTab === "admins" ||
+              activeTab === "monitoring" ||
+              activeTab === "subscriptions" ||
+              activeTab === "activity" ||
+              activeTab === "account" ||
+              (isSuperAdmin && activeTab === "analytics") ||
+              (isSuperAdmin && activeTab === "overview")
+            }
             controls={
               <>
+                {isSuperAdmin && (
+                  <HqGlobalSearchTrigger onClick={() => setGlobalSearchOpen(true)} />
+                )}
                 {isSuperAdmin && hasMultipleHospitals && (
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-700">Hospital</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tenant</label>
                     <select
                       value={activeHospitalId || ""}
                       onChange={async (e) => {
@@ -943,13 +1408,13 @@ export default function AdminDashboard() {
                         if (hospitalId) {
                           try {
                             await setActiveHospital(hospitalId)
-                            setNotification({ type: "success", message: "Hospital switched successfully" })
+                            setNotification({ type: "success", message: "Active tenant switched" })
                           } catch (err: any) {
-                            setNotification({ type: "error", message: err?.message || "Failed to switch hospital" })
+                            setNotification({ type: "error", message: err?.message || "Failed to switch tenant" })
                           }
                         }
                       }}
-                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] min-w-[180px]"
+                      className="hq-ds-input hq-ds-input--lg min-w-[180px]"
                     >
                       {userHospitals.map((hospital) => (
                         <option key={hospital.id} value={hospital.id}>
@@ -961,11 +1426,11 @@ export default function AdminDashboard() {
                 )}
                 {branches.length > 0 && branchManagementEnabled && (
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-700">Branch</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Branch</label>
                     <select
                       value={selectedBranchId}
                       onChange={(e) => setSelectedBranchId(e.target.value)}
-                      className="h-10 px-3 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] min-w-[160px]"
+                      className="hq-ds-input hq-ds-input--lg min-w-[160px]"
                     >
                       <option value="all">All branches</option>
                       {branches.map((branch) => (
@@ -983,31 +1448,85 @@ export default function AdminDashboard() {
 
         {/* Content Area */}
         <main className="hms-page min-w-0">
+          {isSuperAdmin &&
+            ["patients", "doctors", "appointments", "billing"].includes(activeTab) && (
+              <HqTenantLens tenantName={activeHospital?.name}>
+                {hasMultipleHospitals && (
+                  <select
+                    value={activeHospitalId || ""}
+                    onChange={async (e) => {
+                      const hospitalId = e.target.value
+                      if (hospitalId) {
+                        try {
+                          await setActiveHospital(hospitalId)
+                        } catch (err: any) {
+                          setNotification({
+                            type: "error",
+                            message: err?.message || "Failed to switch tenant",
+                          })
+                        }
+                      }
+                    }}
+                    className="hq-ds-input h-8 min-w-[10rem]"
+                  >
+                    {userHospitals.map((hospital) => (
+                      <option key={hospital.id} value={hospital.id}>
+                        {hospital.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </HqTenantLens>
+            )}
+
           {activeTab === "overview" && (
-            <AdminDashboardOverview
-              displayStats={displayStats}
-              trendView={trendView}
-              setTrendView={setTrendView}
-              filteredAppointments={filteredAppointmentsForOverview}
-              branches={branches}
-              selectedBranchId={selectedBranchId}
-              filteredRecentAppointments={filteredRecentAppointments}
-              showRecentAppointments={showRecentAppointments}
-              setShowRecentAppointments={setShowRecentAppointments}
-              pendingRefunds={pendingRefunds}
-              onApproveRefund={approveRefund}
-              processingRefundId={processingRefundId}
-              setActiveTab={setActiveTab}
-              setSidebarOpen={setSidebarOpen}
-              overviewBadge={overviewBadge}
-            />
+            isSuperAdmin ? (
+              <PlatformCommandCenter
+                setActiveTab={(tab) => setActiveTab(tab)}
+                setSidebarOpen={setSidebarOpen}
+                onOpenGlobalSearch={() => setGlobalSearchOpen(true)}
+              />
+            ) : (
+              <AdminDashboardOverview
+                displayStats={displayStats}
+                trendView={trendView}
+                setTrendView={setTrendView}
+                filteredAppointments={filteredAppointmentsForOverview}
+                filteredPatients={filteredPatientsForOverview}
+                branches={branches}
+                selectedBranchId={selectedBranchId}
+                filteredRecentAppointments={filteredRecentAppointments}
+                showRecentAppointments={showRecentAppointments}
+                setShowRecentAppointments={setShowRecentAppointments}
+                pendingRefunds={pendingRefunds}
+                onApproveRefund={approveRefund}
+                processingRefundId={processingRefundId}
+                setActiveTab={setActiveTab}
+                setSidebarOpen={setSidebarOpen}
+                overviewBadge={overviewBadge}
+              />
+            )
           )}
           {activeTab === "branches" && !isSuperAdmin && (
             branchManagementEnabled ? (
-              <BranchManagement />
+              <div className="hms-content-card rounded-xl p-2.5 sm:p-3">
+                <BranchManagement
+                  selectedBranchId={selectedBranchId}
+                  onBranchFilterChange={setSelectedBranchId}
+                  kpi={{
+                    doctors: displayStats.totalDoctors,
+                    staff: null,
+                    todayAppointments: displayStats.todayAppointments,
+                    todayRevenue: displayStats.todayRevenue,
+                  }}
+                />
+              </div>
             ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
-                <p className="text-slate-600">This hospital has single-branch mode. Contact Super Admin to enable multiple branches.</p>
+              <div className="camp-crm-empty rounded-xl border border-dashed border-slate-200 bg-white py-10">
+                <p className="camp-crm-empty-title">Single-branch mode</p>
+                <p className="camp-crm-empty-desc">
+                  Multi-branch control is disabled for this hospital. Contact Super Admin to enable it.
+                </p>
               </div>
             )
           )}
@@ -1036,8 +1555,8 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "campaigns" && !isSuperAdmin && (
-            <div className="hms-content-card rounded-2xl p-6">
-              <CampaignManagement />
+            <div className="hms-content-card rounded-xl p-3 sm:p-3.5">
+              <CampaignManagement selectedBranchId={selectedBranchId} branches={branches} />
             </div>
           )}
 
@@ -1065,27 +1584,18 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === "staff" && !isSuperAdmin && (
-            <div className="hms-content-card rounded-2xl">
-              <SubTabNavigation
-                tabs={[
-                  { id: "receptionists", label: "Receptionists" },
-                  { id: "pharmacists", label: "Pharmacists" },
-                ]}
-                activeTab={staffSubTab}
-                onTabChange={setStaffSubTab}
+            <div className="hms-content-card rounded-xl p-2.5 sm:p-3">
+              <StaffManagement
+                selectedBranchId={selectedBranchId}
+                doctorCount={displayStats.totalDoctors}
+                initialRoleFilter={staffSubTab === "pharmacists" ? "pharmacist" : "all"}
               />
-              <div className="p-6">
-                {staffSubTab === "receptionists" && (
-                  <ReceptionistManagement selectedBranchId={selectedBranchId} />
-                )}
-                {staffSubTab === "pharmacists" && (
-                  <PharmacistManagement selectedBranchId={selectedBranchId} />
-                )}
-              </div>
             </div>
           )}
 
-          {activeTab === "analytics" && (
+          {activeTab === "analytics" && isSuperAdmin && <BusinessAnalytics />}
+
+          {activeTab === "analytics" && !isSuperAdmin && (
             <div className="hms-content-card rounded-2xl">
               <SubTabNavigation
                 tabs={[
@@ -1232,25 +1742,37 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeTab === "hospitals" && (
-            <div className="hms-content-card rounded-2xl p-6">
-              <HospitalManagement />
-            </div>
-          )}
+          {activeTab === "hospitals" && <HospitalManagement />}
 
-          {activeTab === "admins" && (
-            <div className="hms-content-card rounded-2xl p-6">
-              <AdminAssignment />
-            </div>
-          )}
+          {activeTab === "admins" && <AdminAssignment />}
+
+          {activeTab === "monitoring" && isSuperAdmin && <PlatformMonitoring />}
+
+          {activeTab === "subscriptions" && isSuperAdmin && <SubscriptionCenter />}
+
+          {activeTab === "activity" && isSuperAdmin && <LiveActivityCenter />}
 
           {activeTab === "account" && user?.email && (
-            <AdminAccountPanel
-              userEmail={user.email}
-              displayName={resolvedUserData.firstName || resolvedUserData.name || "Admin"}
-              isSuperAdmin={isSuperAdmin}
-              onNotify={(type, message) => setNotification({ type, message })}
-            />
+            isSuperAdmin ? (
+              <GlobalSettingsCenter
+                userEmail={user.email}
+                displayName={resolvedUserData.firstName || resolvedUserData.name || "Admin"}
+                onNotify={(type, message) => setNotification({ type, message })}
+                onNavigate={(tab) => {
+                  if (isAdminTabId(tab)) {
+                    setActiveTab(tab)
+                    setSidebarOpen(false)
+                  }
+                }}
+              />
+            ) : (
+              <AdminAccountPanel
+                userEmail={user.email}
+                displayName={resolvedUserData.firstName || resolvedUserData.name || "Admin"}
+                isSuperAdmin={isSuperAdmin}
+                onNotify={(type, message) => setNotification({ type, message })}
+              />
+            )
           )}
 
         </main>
@@ -1273,6 +1795,15 @@ export default function AdminDashboard() {
         onCancel={() => setLogoutConfirmOpen(false)}
         confirmLoading={logoutLoading}
       />
+
+      {isSuperAdmin && (
+        <HqGlobalSearch
+          open={globalSearchOpen}
+          onClose={() => setGlobalSearchOpen(false)}
+          onNavigate={handleGlobalSearchNavigate}
+          preferredHospitalId={activeHospitalId}
+        />
+      )}
       
       </div>
     </AdminProtected>

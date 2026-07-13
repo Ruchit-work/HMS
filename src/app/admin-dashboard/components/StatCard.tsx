@@ -11,14 +11,14 @@ interface StatCardProps {
 
 export default function StatCard({ label, value, icon, bgColor, borderColor, iconBgColor }: StatCardProps) {
   return (
-    <div className={`flex items-center justify-between p-3 ${bgColor} rounded-lg border ${borderColor}`}>
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 ${iconBgColor} rounded-lg flex items-center justify-center`}>
+    <div className={`flex items-center justify-between px-3 py-2.5 ${bgColor} rounded-lg border ${borderColor}`}>
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className={`w-8 h-8 ${iconBgColor} rounded-md flex items-center justify-center shrink-0`}>
           {icon}
         </div>
-        <div>
-          <p className="text-xs text-gray-600">{label}</p>
-          <p className="text-lg font-bold text-gray-900">{value}</p>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-slate-500 leading-tight">{label}</p>
+          <p className="text-base font-bold text-slate-900 tabular-nums leading-tight mt-0.5">{value}</p>
         </div>
       </div>
     </div>

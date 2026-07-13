@@ -83,9 +83,9 @@ export default function PaymentMethodSection({
   }
 
   return (
-    <div className="mt-4 border-t border-slate-100 pt-5 space-y-4">
+    <div className="mt-3 border-t border-slate-100 pt-4 space-y-3">
       {/* ── Section header ── */}
-      <div className="rx-form-section-header">
+      <div className="rx-form-section-header !mb-3">
         <div className="rx-form-section-icon">
           <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -106,7 +106,7 @@ export default function PaymentMethodSection({
             const active = paymentMethod === method
             return (
               <button key={method} type="button" onClick={() => setPaymentMethod(method)}
-                className={`flex flex-col items-center gap-1.5 rounded-lg border px-3 py-3.5 text-center transition-all ${
+                className={`flex flex-col items-center gap-1 rounded-lg border px-2.5 py-2.5 text-center transition-all sm:px-3 sm:py-3 ${
                   active
                     ? "border-cyan-500 bg-cyan-50 text-cyan-700 shadow-sm"
                     : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:bg-slate-50"
@@ -122,8 +122,8 @@ export default function PaymentMethodSection({
 
       {/* ── Card details ── */}
       {paymentMethod === "card" && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-          <div className="flex items-center gap-2 mb-1">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5 sm:p-4 sm:space-y-3">
+          <div className="flex items-center gap-2">
             <svg className="h-3.5 w-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
             </svg>
@@ -175,8 +175,8 @@ export default function PaymentMethodSection({
 
       {/* ── UPI details ── */}
       {paymentMethod === "upi" && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-          <div className="flex items-center gap-2 mb-1">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5 sm:p-4 sm:space-y-3">
+          <div className="flex items-center gap-2">
             <svg className="h-3.5 w-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
@@ -197,14 +197,16 @@ export default function PaymentMethodSection({
 
       {/* ── Amount summary ── */}
       {paymentMethod && (
-        <div className="flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3">
+        <div className="flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-2.5 sm:py-3">
           <div>
             <p className="text-xs font-semibold text-cyan-800">Total Amount Due</p>
             {showPartialNote && (
               <p className="mt-0.5 text-[11px] text-cyan-600">Remaining balance shown on confirmation slip</p>
             )}
           </div>
-          <span className="text-xl font-bold tracking-tight text-cyan-800">₹{amountToPay}</span>
+          <span className="text-lg font-bold tracking-tight text-cyan-800 sm:text-xl">
+            ₹{Number(amountToPay || 0).toLocaleString("en-IN")}
+          </span>
         </div>
       )}
     </div>

@@ -9,8 +9,6 @@ import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
 import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
-import { InlineSpinner } from '@/components/ui/feedback/StatusComponents'
-import EmptyState from '@/components/ui/feedback/EmptyState'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
@@ -19,9 +17,13 @@ import PatientProfileForm, { PatientProfileFormValues } from '@/components/forms
 import { calculateAge, formatDate, formatDateTime } from '@/utils/shared/date'
 import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { useTablePagination } from '@/hooks/useTablePagination'
-import Pagination from '@/components/ui/navigation/Pagination'
 import DocumentListCompact from '@/components/documents/DocumentListCompact'
-import { StatusPill } from '@/components/ui/data/DataTable'
+import {
+  EnterpriseDataTable,
+  StatusPill,
+  type EnterpriseColumn,
+  type EnterpriseRowAction,
+} from '@/components/ui/enterprise-table'
 // import toast from 'react-hot-toast'
 
 interface Patient {
@@ -1156,6 +1158,118 @@ export default function PatientManagement({
         }
     }
 
+    const patientColumns: EnterpriseColumn<Patient>[] = useMemo(
+        () => [
+            {
+                key: 'name',
+                header: `Patient (${filteredPatients.length})`,
+                sortable: true,
+                render: (patient) => {
+                    const age = calculateAge(patient.dateOfBirth)
+                    const initials = `${patient.firstName.charAt(0)}${patient.lastName.charAt(0)}`
+                    return (
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600 transition-colors group-hover:bg-cyan-100 group-hover:text-cyan-700">
+                                {initials}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">
+                                    {patient.firstName} {patient.lastName}
+                                </p>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                    {age !== null && (
+                                        <span className="text-xs text-slate-500">{age}y</span>
+                                    )}
+                                    {patient.bloodGroup && (
+                                        <>
+                                            {age !== null && <span className="text-xs text-slate-300">·</span>}
+                                            <span className="text-xs font-semibold text-rose-600">{patient.bloodGroup}</span>
+                                        </>
+                                    )}
+                                    {patient.gender && (
+                                        <>
+                                            <span className="text-xs text-slate-300">·</span>
+                                            <span className="text-xs capitalize text-slate-400">{patient.gender}</span>
+                                        </>
+                                    )}
+                                </div>
+                                {patient.patientId && (
+                                    <p className="mt-0.5 font-mono text-[10px] text-slate-400">#{patient.patientId}</p>
+                                )}
+                            </div>
+                        </div>
+                    )
+                },
+            },
+            {
+                key: 'email',
+                header: 'Contact',
+                sortable: true,
+                hideBelow: 'sm',
+                render: (patient) => (
+                    <>
+                        <p className="max-w-[180px] truncate text-sm text-slate-700">{patient.email}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">{patient.phone || '—'}</p>
+                    </>
+                ),
+            },
+            {
+                key: 'branch',
+                header: 'Branch',
+                hideBelow: 'lg',
+                render: (patient) => (
+                    <p className="text-sm text-slate-700">{patient.defaultBranchName || 'Not assigned'}</p>
+                ),
+            },
+            {
+                key: 'createdAt',
+                header: 'Created',
+                sortable: true,
+                hideBelow: 'lg',
+                render: (patient) => (
+                    <>
+                        <p className="text-sm text-slate-700">{formatDate(patient.createdAt)}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">Updated {formatDate(patient.updatedAt)}</p>
+                    </>
+                ),
+            },
+            {
+                key: 'status',
+                header: 'Status',
+                sortable: true,
+                render: (patient) => (
+                    <StatusPill
+                        label={patient.status === 'active' ? 'Active' : 'Inactive'}
+                        variant={patient.status === 'active' ? 'success' : 'neutral'}
+                    />
+                ),
+            },
+        ],
+        [filteredPatients.length]
+    )
+
+    const patientRowActions: EnterpriseRowAction<Patient>[] = useMemo(() => {
+        const actions: EnterpriseRowAction<Patient>[] = [
+            {
+                label: 'Branch',
+                onClick: (patient) => openBranchEditModal(patient),
+            },
+        ]
+        if (canDelete) {
+            actions.push({
+                label: 'Delete',
+                variant: 'danger',
+                icon: (
+                    <svg className="h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                ),
+                onClick: (patient) => handleDelete(patient),
+            })
+        }
+        return actions
+    }, [canDelete])
+
     if (authLoading) {
         return <LoadingSpinner message="Loading patient management..." />
     }
@@ -1322,243 +1436,62 @@ export default function PatientManagement({
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  <span className="font-semibold text-slate-700">
-                    Patient directory
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {filteredPatients.length.toLocaleString()} total
-                  </span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px]">
-                    <thead className="sticky top-0 z-10 bg-white shadow-sm">
-                      <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <th
-                          className="px-3 py-3 text-left hover:bg-slate-50"
-                          onClick={() => handleSort("name")}
-                        >
-                          <div className="inline-flex items-center gap-1">
-                            Patient ({filteredPatients.length})
-                            {sortField === "name" && (
-                              <span>{sortOrder === "asc" ? "↑" : "↓"}</span>
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          className="hidden px-3 py-3 text-left hover:bg-slate-50 sm:table-cell"
-                          onClick={() => handleSort("email")}
-                        >
-                          <div className="inline-flex items-center gap-1">
-                            Contact
-                            {sortField === "email" && (
-                              <span>{sortOrder === "asc" ? "↑" : "↓"}</span>
-                            )}
-                          </div>
-                        </th>
-                        {/* Removed Medical info column */}
-                        <th className="hidden px-3 py-3 text-left lg:table-cell">
-                          Branch
-                        </th>
-                        <th
-                          className="hidden px-3 py-3 text-left hover:bg-slate-50 lg:table-cell"
-                          onClick={() => handleSort("createdAt")}
-                        >
-                          <div className="inline-flex items-center gap-1">
-                            Created
-                            {sortField === "createdAt" && (
-                              <span>{sortOrder === "asc" ? "↑" : "↓"}</span>
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          className="px-3 py-3 text-left hover:bg-slate-50"
-                          onClick={() => handleSort("status")}
-                        >
-                          <div className="inline-flex items-center gap-1">
-                            Status
-                            {sortField === "status" && (
-                              <span>{sortOrder === "asc" ? "↑" : "↓"}</span>
-                            )}
-                          </div>
-                        </th>
-                        <th className="px-3 py-3 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white text-sm text-slate-700">
-                      {loading ? (
-                        <tr>
-                          <td colSpan={6} className="px-3 py-12 text-center">
-                            <div className="flex flex-col items-center">
-                              <InlineSpinner size="md" />
-                              <p className="mt-2 text-sm text-slate-500">
-                                Loading patients…
-                              </p>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : error ? (
-                        <tr>
-                          <td colSpan={6} className="px-3 py-12 text-center">
-                            <svg
-                              className="mb-2 h-12 w-12 text-red-400"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                              />
-                            </svg>
-                            <p className="text-sm font-semibold text-red-600">
-                              Error loading patients
-                            </p>
-                            <p className="text-xs text-slate-500">{error}</p>
-                          </td>
-                        </tr>
-                      ) : paginatedPatients.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-3 py-8">
-                            <EmptyState
-                              illustration="patients"
-                              title={search ? 'No patients found' : 'No patients yet'}
-                              description={search
-                                ? "We couldn't find any patients matching your search. Try adjusting your filters or search keywords."
-                                : "There are no patients in the system yet. Patients will appear here once they register or are added."}
-                              action={canAdd && !search ? {
-                                label: "Add Patient",
-                                onClick: openAddPatientModal,
-                              } : search ? {
-                                label: "Clear Search",
-                                onClick: () => setSearch(''),
-                              } : undefined}
-                            />
-                          </td>
-                        </tr>
-                      ) : (
-                        paginatedPatients.map((patient) => {
-                          const age = calculateAge(patient.dateOfBirth)
-                          const initials = `${patient.firstName.charAt(0)}${patient.lastName.charAt(0)}`
-                          return (
-                            <tr
-                              className="group hover:bg-slate-50/80 transition-colors cursor-pointer"
-                              key={patient.id}
-                              onClick={() => handleView(patient)}
-                            >
-                              {/* Identity column */}
-                              <td className="px-4 py-3.5">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 group-hover:bg-cyan-100 group-hover:text-cyan-700 transition-colors">
-                                    {initials}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-slate-900 truncate">
-                                      {patient.firstName} {patient.lastName}
-                                    </p>
-                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                      {age !== null && (
-                                        <span className="text-xs text-slate-500">{age}y</span>
-                                      )}
-                                      {patient.bloodGroup && (
-                                        <>
-                                          {age !== null && <span className="text-slate-300 text-xs">·</span>}
-                                          <span className="text-xs font-semibold text-rose-600">{patient.bloodGroup}</span>
-                                        </>
-                                      )}
-                                      {patient.gender && (
-                                        <>
-                                          <span className="text-slate-300 text-xs">·</span>
-                                          <span className="text-xs text-slate-400 capitalize">{patient.gender}</span>
-                                        </>
-                                      )}
-                                    </div>
-                                    {patient.patientId && (
-                                      <p className="text-[10px] font-mono text-slate-400 mt-0.5">#{patient.patientId}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              {/* Contact column */}
-                              <td className="hidden px-4 py-3.5 sm:table-cell">
-                                <p className="text-sm text-slate-700 truncate max-w-[180px]">{patient.email}</p>
-                                <p className="text-xs text-slate-400 mt-0.5">{patient.phone || '—'}</p>
-                              </td>
-                              {/* Branch column */}
-                              <td className="hidden px-4 py-3.5 lg:table-cell">
-                                <p className="text-sm text-slate-700">{patient.defaultBranchName || 'Not assigned'}</p>
-                              </td>
-                              {/* Registered column */}
-                              <td className="hidden px-4 py-3.5 md:table-cell">
-                                <p className="text-sm text-slate-700">{formatDate(patient.createdAt)}</p>
-                                <p className="text-xs text-slate-400 mt-0.5">Updated {formatDate(patient.updatedAt)}</p>
-                              </td>
-                              {/* Status column */}
-                              <td className="px-4 py-3.5">
-                                <StatusPill
-                                  label={patient.status === 'active' ? 'Active' : 'Inactive'}
-                                  variant={patient.status === 'active' ? 'success' : 'neutral'}
-                                />
-                              </td>
-                              {/* Actions column */}
-                              <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 transition-colors"
-                                    onClick={() => handleView(patient)}
-                                    type="button"
-                                  >
-                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                    <span className="hidden sm:inline">View</span>
-                                  </button>
-                                  <button
-                                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700 transition-colors"
-                                    onClick={() => openBranchEditModal(patient)}
-                                    type="button"
-                                  >
-                                    <span className="hidden sm:inline">Branch</span>
-                                    <span className="sm:hidden">B</span>
-                                  </button>
-                                  {canDelete && (
-                                    <button
-                                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                      onClick={() => handleDelete(patient)}
-                                      type="button"
-                                    >
-                                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                      <span className="hidden sm:inline">Delete</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  pageSize={pageSize}
-                  totalItems={filteredPatients.length}
-                  onPageChange={goToPage}
-                  onPageSizeChange={setPageSize}
-                  pageSizeOptions={[10, 15, 20]}
-                  showPageSizeSelector={false}
-                  itemLabel="patients"
-                />
-              </div>
+              <EnterpriseDataTable
+                data={paginatedPatients}
+                columns={patientColumns}
+                loading={loading}
+                loadingMessage="Loading patients…"
+                error={error}
+                emptyTitle={search ? 'No patients found' : 'No patients yet'}
+                emptyDescription={
+                  search
+                    ? "We couldn't find any patients matching your search. Try adjusting your filters or search keywords."
+                    : 'There are no patients in the system yet. Patients will appear here once they register or are added.'
+                }
+                emptyAction={
+                  canAdd && !search
+                    ? { label: 'Add Patient', onClick: openAddPatientModal }
+                    : search
+                      ? { label: 'Clear Search', onClick: () => setSearch('') }
+                      : undefined
+                }
+                toolbar={
+                  <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <span className="font-semibold text-slate-700">Patient directory</span>
+                    <span className="text-xs text-slate-500">
+                      {filteredPatients.length.toLocaleString()} total
+                    </span>
+                  </div>
+                }
+                enableSearch={false}
+                enableFilters={false}
+                enableBulkSelection={false}
+                sortField={sortField}
+                sortOrder={sortOrder}
+                onSort={handleSort}
+                onRowClick={handleView}
+                primaryAction={{
+                  label: 'View',
+                  icon: (
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  ),
+                  onClick: handleView,
+                }}
+                rowActions={patientRowActions}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                totalItems={filteredPatients.length}
+                onPageChange={goToPage}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 15, 20]}
+                showPageSize={false}
+                itemLabel="patients"
+                minWidth="min-w-[900px]"
+              />
             </div>
           </div>
           {/* Patient Details Modal */}

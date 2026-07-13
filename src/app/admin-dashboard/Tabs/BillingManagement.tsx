@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { auth } from "@/firebase/config"
+import BillingCollectionAnalytics from "@/components/billing/BillingCollectionAnalytics"
+import {
+  computeCollectionTrend,
+  formatBillingCurrency,
+  getCollectionPeriodRanges,
+  sumPeriodMetrics,
+} from "@/utils/billing/collectionAnalytics"
 
 const BILLING_PAGE_SIZE = 10
 
@@ -49,7 +56,6 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
       setBillingLoading(true)
       setBillingError(null)
 
-      // Get Firebase Auth token
       const currentUser = auth.currentUser
       if (!currentUser) {
         throw new Error("You must be logged in to access billing records")
@@ -59,7 +65,7 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
 
       const res = await fetch("/api/admin/billing-records", {
         headers: {
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       })
@@ -70,15 +76,14 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
       }
       const data = await res.json().catch(() => ({}))
       let records = Array.isArray(data?.records) ? data.records : []
-      
-      // Filter by branch if selected (client-side filtering)
+
       if (selectedBranchId !== "all") {
-        records = records.filter((record: any) => {
-          // Filter by branchId - API now includes branchId in all records
+        records = records.filter((record: UnifiedBillingRecord) => {
+          if (!record.branchId) return true
           return record.branchId === selectedBranchId
         })
       }
-      
+
       setBillingRecords(records as UnifiedBillingRecord[])
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load billing records"
@@ -90,12 +95,9 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
 
   useEffect(() => {
     fetchBillingRecords()
-    
-    // Set up auto-refresh every 30 seconds
     const interval = setInterval(() => {
       fetchBillingRecords()
     }, 30000)
-    
     return () => clearInterval(interval)
   }, [fetchBillingRecords])
 
@@ -153,7 +155,8 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
   }, [filteredBillingRecords, currentPage])
 
   const pageStart = filteredBillingRecords.length === 0 ? 0 : (currentPage - 1) * BILLING_PAGE_SIZE + 1
-  const pageEnd = filteredBillingRecords.length === 0 ? 0 : Math.min(filteredBillingRecords.length, currentPage * BILLING_PAGE_SIZE)
+  const pageEnd =
+    filteredBillingRecords.length === 0 ? 0 : Math.min(filteredBillingRecords.length, currentPage * BILLING_PAGE_SIZE)
 
   const billingMetrics = useMemo(() => {
     let totalBilled = 0
@@ -165,20 +168,21 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
     let cancelledCount = 0
     let admissionCount = 0
     let appointmentCount = 0
+    let lastPaymentAt: string | null = null
 
     billingRecords.forEach((record) => {
       const amount = record.totalAmount || 0
       totalBilled += amount
 
-      if (record.type === "admission") {
-        admissionCount += 1
-      } else if (record.type === "appointment") {
-        appointmentCount += 1
-      }
+      if (record.type === "admission") admissionCount += 1
+      else if (record.type === "appointment") appointmentCount += 1
 
       if (record.status === "paid") {
         totalCollected += amount
         paidCount += 1
+        if (record.paidAt && (!lastPaymentAt || record.paidAt > lastPaymentAt)) {
+          lastPaymentAt = record.paidAt
+        }
       } else if (record.status === "void") {
         voidCount += 1
       } else if (record.status === "cancelled") {
@@ -200,46 +204,23 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
       admissionCount,
       appointmentCount,
       totalCount: billingRecords.length,
+      lastPaymentAt,
     }
   }, [billingRecords])
 
-  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`
+  const todayPeriodMetrics = useMemo(() => {
+    const ranges = getCollectionPeriodRanges("today")
+    return sumPeriodMetrics(billingRecords, ranges.current.start, ranges.current.end)
+  }, [billingRecords])
 
-  const summaryCards = useMemo(() => {
-    return [
-      {
-        label: "Total Billed",
-        value: formatCurrency(billingMetrics.totalBilled),
-        caption: `${billingMetrics.totalCount} invoices issued`,
-        icon: "🧾",
-        tone: "from-slate-500 to-slate-700",
-      },
-      {
-        label: "Revenue Collected",
-        value: formatCurrency(billingMetrics.totalCollected),
-        caption: `${billingMetrics.paidCount} invoices settled`,
-        icon: "💰",
-        tone: "from-emerald-500 to-teal-500",
-      },
-      {
-        label: "Outstanding Dues",
-        value: formatCurrency(billingMetrics.pendingAmount),
-        caption: billingMetrics.pendingCount ? `${billingMetrics.pendingCount} unsettled bills` : "All clear",
-        icon: "⏳",
-        tone: "from-amber-500 to-orange-500",
-      },
-      {
-        label: "Average Bill Size",
-        value:
-          billingMetrics.totalCount > 0
-            ? formatCurrency(Math.round(billingMetrics.totalBilled / billingMetrics.totalCount))
-            : "₹0",
-        caption: `${billingMetrics.voidCount} voided bills`,
-        icon: "📊",
-        tone: "from-sky-500 to-cyan-500",
-      },
-    ]
-  }, [billingMetrics])
+  const todayCollectionTrend = useMemo(() => {
+    const ranges = getCollectionPeriodRanges("today")
+    const current = sumPeriodMetrics(billingRecords, ranges.current.start, ranges.current.end)
+    const previous = sumPeriodMetrics(billingRecords, ranges.previous.start, ranges.previous.end)
+    return computeCollectionTrend(current.collectionAmount, previous.collectionAmount)
+  }, [billingRecords])
+
+  const formatCurrency = formatBillingCurrency
 
   const statusTabs = useMemo(
     () => [
@@ -262,85 +243,191 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
   )
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-teal-800 text-white shadow-lg">
-        <div className="relative px-6 py-10 sm:px-10">
-          <div className="absolute inset-y-0 right-0 hidden w-48 translate-x-16 rotate-12 rounded-full bg-white/10 blur-3xl sm:block" />
-          <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-2xl space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-cyan-200/80"> Billing & Payments </p>
-              <h2 className="text-3xl font-bold leading-tight sm:text-4xl"> Monitor all billing records and payments.</h2>
-              <p className="text-sm text-white/90/90 sm:text-base">
-                View comprehensive billing history, track revenue, and monitor outstanding dues across all appointments and admissions.
-              </p>
-              <div className="flex flex-wrap gap-2 text-xs text-white/90/90">
-                <span className="rounded-full border border-cyan-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
-                  Complete overview  </span>
-                <span className="rounded-full border border-cyan-300/50 px-3 py-1 font-semibold uppercase tracking-wide">
-                  Revenue tracking </span>
-              </div>
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+          <div>
+            <p className="text-sm font-bold text-slate-900">Revenue & Analytics</p>
+            <p className="text-[11px] text-slate-400">
+              Unified collections from admissions and appointments · same source as Reception Billing
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-700">
+              <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500" />
+              Live Sync
             </div>
-            <div className="grid w-full max-w-md grid-cols-1 gap-4 sm:grid-cols-2">
-              {summaryCards.map((card) => (
-                <div key={card.label}
-                  className="relative overflow-hidden rounded-2xl border border-white/20 bg-white/15 p-4 shadow-md backdrop-blur"  >
-                  <div className="absolute right-3 top-3 text-lg">{card.icon}</div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/90/90">{card.label}</p>
-                  <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
-                  <p className="mt-2 text-[12px] text-white/90/80">{card.caption}</p>
-                  <div className={`absolute inset-0 -z-10 bg-gradient-to-br ${card.tone} opacity-20`} />
-                </div>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => void fetchBillingRecords()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Refresh
+            </button>
           </div>
         </div>
-      </section>
 
-      <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 xl:grid-cols-4 xl:divide-y-0">
+          {(
+            [
+              {
+                label: "Total Billed",
+                value: formatCurrency(billingMetrics.totalBilled),
+                sub: `${billingMetrics.totalCount} invoices issued`,
+                trend: todayPeriodMetrics.invoicesCount > 0 ? `${todayPeriodMetrics.invoicesCount} today` : null,
+                valueColor: "text-slate-800",
+                top: "border-t-[3px] border-t-slate-400",
+                iconBg: "bg-slate-100",
+                iconColor: "text-slate-500",
+                iconPath:
+                  "M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 2.5 2 2.5-2 3.5 2z",
+              },
+              {
+                label: "Revenue Collected",
+                value: formatCurrency(billingMetrics.totalCollected),
+                sub: `${billingMetrics.paidCount} invoices settled`,
+                trend:
+                  todayPeriodMetrics.collectionAmount > 0
+                    ? `${formatCurrency(todayPeriodMetrics.collectionAmount)} today · ${todayCollectionTrend.text} vs yesterday`
+                    : `${todayCollectionTrend.text} vs yesterday`,
+                trendUp: todayCollectionTrend.increased,
+                valueColor: "text-emerald-700",
+                top: "border-t-[3px] border-t-emerald-500",
+                iconBg: "bg-emerald-50",
+                iconColor: "text-emerald-600",
+                iconPath: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+              },
+              {
+                label: "Outstanding Dues",
+                value: formatCurrency(billingMetrics.pendingAmount),
+                sub: billingMetrics.pendingCount ? `${billingMetrics.pendingCount} unsettled` : "All cleared",
+                trend: todayPeriodMetrics.pendingCount > 0 ? `${todayPeriodMetrics.pendingCount} due today` : null,
+                valueColor: "text-amber-700",
+                top: "border-t-[3px] border-t-amber-400",
+                iconBg: "bg-amber-50",
+                iconColor: "text-amber-600",
+                iconPath: "M12 8v4l2.5 2.5M12 22a10 10 0 100-20 10 10 0 000 20z",
+              },
+              {
+                label: "Average Bill Size",
+                value:
+                  billingMetrics.totalCount > 0
+                    ? formatCurrency(Math.round(billingMetrics.totalBilled / billingMetrics.totalCount))
+                    : "₹0",
+                sub: billingMetrics.lastPaymentAt
+                  ? `Last: ${new Date(billingMetrics.lastPaymentAt).toLocaleDateString("en-IN", {
+                      month: "short",
+                      day: "2-digit",
+                    })}`
+                  : "No payments yet",
+                trend:
+                  billingMetrics.totalBilled > 0
+                    ? `${Math.round((billingMetrics.totalCollected / billingMetrics.totalBilled) * 100)}% collected`
+                    : null,
+                valueColor: "text-sky-700",
+                top: "border-t-[3px] border-t-sky-500",
+                iconBg: "bg-sky-50",
+                iconColor: "text-sky-600",
+                iconPath:
+                  "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+              },
+            ] as const
+          ).map((kpi) => (
+            <div
+              key={kpi.label}
+              className={`group flex flex-col gap-3 bg-white px-5 py-5 transition-all duration-150 hover:bg-slate-50/70 ${kpi.top}`}
+            >
+              <div className="flex items-start justify-between">
+                <div className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${kpi.iconBg}`}>
+                  <svg className={`h-4 w-4 ${kpi.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={kpi.iconPath} />
+                  </svg>
+                </div>
+                {kpi.trend && (
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                      "trendUp" in kpi && kpi.trendUp
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "trendUp" in kpi && kpi.trendUp === false && String(kpi.trend).includes("%")
+                          ? "border-red-200 bg-red-50 text-red-600"
+                          : "border-slate-200 bg-slate-50 text-slate-600"
+                    }`}
+                  >
+                    {kpi.trend}
+                  </span>
+                )}
+              </div>
+              <div>
+                <p className={`text-[1.6rem] font-bold leading-none tabular-nums ${kpi.valueColor}`}>{kpi.value}</p>
+                <p className="mt-1.5 text-xs font-semibold text-slate-700">{kpi.label}</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">{kpi.sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <BillingCollectionAnalytics records={billingRecords} />
+
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-xl font-semibold text-slate-900">Billing History</h3>
-            <p className="text-sm text-slate-500">All billing records from appointments and patient admissions.</p>
+            <h3 className="text-sm font-bold text-slate-900">Invoice History</h3>
+            <p className="text-[11px] text-slate-400">
+              {filteredBillingRecords.length} record{filteredBillingRecords.length !== 1 ? "s" : ""} · admissions &
+              appointments
+            </p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <div className="relative sm:w-48">
-              <input  type="date" value={billingDateFilter}
-                onChange={(e) => setBillingDateFilter(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 pr-10 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-100"
+              <input
+                type="date"
+                value={billingDateFilter}
+                onChange={(e) => setBillingDateFilter(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 pr-10 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-100"
               />
               {billingDateFilter && (
-                <button type="button" onClick={() => setBillingDateFilter("")}
-                  className="absolute inset-y-0 right-2 flex items-center rounded-full bg-white px-2 text-slate-400 shadow-sm hover:text-slate-600">
+                <button
+                  type="button"
+                  onClick={() => setBillingDateFilter("")}
+                  className="absolute inset-y-0 right-2 flex items-center rounded-full bg-white px-2 text-slate-400 shadow-sm hover:text-slate-600"
+                >
                   ✕
                 </button>
               )}
             </div>
             <div className="relative sm:w-72">
-              <input type="text"   value={billingSearchTerm}onChange={(e) => setBillingSearchTerm(e.target.value)}
+              <input
+                type="text"
+                value={billingSearchTerm}
+                onChange={(e) => setBillingSearchTerm(e.target.value)}
                 placeholder="Search by patient name, ID, doctor name, or bill ID"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-cyan-100"
               />
               {billingSearchTerm && (
-                <button type="button"   onClick={() => setBillingSearchTerm("")}
-                  className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 text-sm">
+                <button
+                  type="button"
+                  onClick={() => setBillingSearchTerm("")}
+                  className="absolute inset-y-0 right-2 flex items-center text-sm text-slate-400 hover:text-slate-600"
+                >
                   ✕
                 </button>
               )}
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2 bg-cyan-50 border border-cyan-200 rounded-lg text-xs font-semibold text-cyan-800">
-              <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
-              <span>Auto-Refresh</span>
             </div>
           </div>
         </div>
 
         <div className="space-y-3">
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filter by Type</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by Type</p>
             <div className="flex flex-wrap gap-2">
               {typeTabs.map((tab) => {
                 const isActive = billingTypeFilter === tab.value
                 return (
-                  <button  key={tab.value}  onClick={() => setBillingTypeFilter(tab.value)}
+                  <button
+                    key={tab.value}
+                    type="button"
+                    onClick={() => setBillingTypeFilter(tab.value)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       isActive
                         ? "border-[var(--color-primary)] bg-cyan-50 text-cyan-800 shadow-sm"
@@ -361,12 +448,14 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
             </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filter by Status</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by Status</p>
             <div className="flex flex-wrap gap-2">
               {statusTabs.map((tab) => {
                 const isActive = billingStatusFilter === tab.value
                 return (
-                  <button key={tab.value}
+                  <button
+                    key={tab.value}
+                    type="button"
                     onClick={() => setBillingStatusFilter(tab.value)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                       isActive
@@ -375,7 +464,8 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                     }`}
                   >
                     {tab.label}
-                    <span   className={`rounded-full px-2 py-0.5 text-[11px] ${
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] ${
                         isActive ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-500"
                       }`}
                     >
@@ -389,30 +479,22 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
         </div>
 
         {billingError && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {billingError}
-          </div>
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{billingError}</div>
         )}
 
         {billingLoading && billingRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12">
-            <div className="loading" style={{ width: "48px", height: "48px" }}>
-              <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
-                <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
-                <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
-              </svg>
-            </div>
-            <p className="mt-4 text-sm text-slate-500">Loading billing history…</p>
+            <p className="text-sm text-slate-500">Loading billing history…</p>
           </div>
         ) : billingRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">
-            <span className="mb-2 text-4xl">📄</span>
             <p className="text-sm font-medium">No billing records yet</p>
-            <p className="text-xs text-slate-400">Billing records appear when appointments are paid or patients are discharged.</p>
+            <p className="text-xs text-slate-400">
+              Billing records appear when appointments are paid or patients are discharged.
+            </p>
           </div>
         ) : filteredBillingRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 text-center text-slate-500">
-            <span className="mb-2 text-4xl">🔍</span>
             <p className="text-sm font-medium">No records match your filters.</p>
             <p className="text-xs text-slate-400">Try adjusting the search or status filter.</p>
           </div>
@@ -426,13 +508,16 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                   record.status === "paid"
                     ? "bg-emerald-100 text-emerald-700"
                     : record.status === "void"
-                    ? "bg-rose-100 text-rose-700"
-                    : "bg-amber-100 text-amber-700"
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-amber-100 text-amber-700"
                 const statusLabel =
-                  record.status === "paid" ? "Paid" : 
-                  record.status === "void" ? "Voided" : 
-                  record.status === "cancelled" ? "Cancelled" : 
-                  "Pending Settlement"
+                  record.status === "paid"
+                    ? "Paid"
+                    : record.status === "void"
+                      ? "Voided"
+                      : record.status === "cancelled"
+                        ? "Cancelled"
+                        : "Pending Settlement"
                 return (
                   <article
                     key={record.id}
@@ -441,160 +526,72 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div className="flex-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-                            record.type === "admission" 
-                              ? "bg-cyan-100 text-cyan-800" 
-                              : "bg-green-100 text-green-700"
-                          }`}>
-                            {record.type === "admission" ? "🏥 Admission" : "📅 Appointment"}
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                              record.type === "admission"
+                                ? "bg-cyan-100 text-cyan-800"
+                                : "bg-green-100 text-green-700"
+                            }`}
+                          >
+                            {record.type === "admission" ? "Admission" : "Appointment"}
                           </span>
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                            {record.type === "admission" ? "Bill" : "Payment"} #{record.id.slice(0, 8).toUpperCase()}
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusStyle}`}
+                          >
+                            {statusLabel}
                           </span>
-                          {record.admissionId && (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-500">
-                              Admission {record.admissionId.slice(0, 8)}
-                            </span>
-                          )}
-                          {record.appointmentId && (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-500">
-                              Appointment {record.appointmentId.slice(0, 8)}
+                          {(record.paymentMethod || record.settlementMode) && (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-600">
+                              {record.paymentMethod || record.settlementMode}
                             </span>
                           )}
                         </div>
-
-                        <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
-                          <div>
-                            <p className="text-[11px] uppercase tracking-wide text-slate-400">
-                              {record.type === "admission" ? "Generated" : "Paid"}
-                            </p>
-                            <p className="font-semibold text-slate-800">{generatedAt ? generatedAt.toLocaleString() : "—"}</p>
-                          </div>
-                          <div>
-                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Patient</p>
-                            <p className="font-semibold text-slate-800">
-                              {record.patientName || "Unknown"}{" "}
-                              <span className="ml-1 text-[11px] font-mono text-slate-500">
-                                (ID {record.patientId || "N/A"})
-                              </span>
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Doctor</p>
-                            <p className="font-semibold text-slate-800">{record.doctorName || "—"}</p>
-                          </div>
-                          {record.type === "admission" ? (
-                            <>
-                              <div>
-                                <p className="text-[11px] uppercase tracking-wide text-slate-400">Room Charges</p>
-                                <p className="font-semibold text-slate-800">{formatCurrency(record.roomCharges || 0)}</p>
-                              </div>
-                              <div>
-                                <p className="text-[11px] uppercase tracking-wide text-slate-400">Doctor Fee</p>
-                                <p className="font-semibold text-slate-800">{formatCurrency(record.doctorFee || 0)}</p>
-                              </div>
-                            </>
-                          ) : (
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Consultation Fee</p>
-                              <p className="font-semibold text-slate-800">{formatCurrency(record.consultationFee || 0)}</p>
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Total Amount</p>
-                            <p className="text-base font-bold text-slate-900">{formatCurrency(record.totalAmount)}</p>
-                          </div>
-                          {record.type === "appointment" && record.remainingAmount !== undefined && record.remainingAmount > 0 && (
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Remaining Amount</p>
-                              <p className="font-semibold text-amber-600">{formatCurrency(record.remainingAmount)}</p>
-                            </div>
-                          )}
-                          {record.type === "appointment" && record.paymentType && (
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Payment Type</p>
-                              <p className="font-semibold text-slate-800 capitalize">{record.paymentType}</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {record.otherServices && record.otherServices.length > 0 && (
-                          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                              Additional services
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {record.otherServices.map((service, idx) => (
-                                <span
-                                  key={idx}
-                                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600"
-                                >
-                                  {service.description || "Service"} · {formatCurrency(Number(service.amount) || 0)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex w-full flex-col gap-2 sm:max-w-[200px] text-xs">
-                        <div className="flex flex-col gap-2">
-                          <span className={`inline-flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-[11px] font-semibold ${statusStyle}`}>
-                            <span>{statusLabel}</span>
-                            {record.paymentMethod && record.status === "paid" && (
-                              <span className="capitalize text-[11px] opacity-80">via {record.paymentMethod}</span>
-                            )}
-                          </span>
-                          {paidAt && (
-                            <span className="text-[11px] text-emerald-600">
-                              Settled on {paidAt.toLocaleDateString()} at {paidAt.toLocaleTimeString()}
-                            </span>
-                          )}
-                          {record.paidAtFrontDesk && record.status === "paid" && (
-                            <span className="text-[11px] text-emerald-600">Collected at front desk</span>
-                          )}
-                          {record.paymentReference && (
-                            <span className="text-[11px] text-slate-500 font-mono">Ref: {record.paymentReference}</span>
-                          )}
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {record.patientName || record.patientId || "Patient"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Dr. {record.doctorName || "—"} · ₹{(record.totalAmount || 0).toLocaleString("en-IN")}
+                            {generatedAt ? ` · ${generatedAt.toLocaleString("en-IN")}` : ""}
+                            {paidAt ? ` · Paid ${paidAt.toLocaleString("en-IN")}` : ""}
+                          </p>
+                          <p className="font-mono text-[10px] text-slate-400">{record.id}</p>
                         </div>
                       </div>
                     </div>
                   </article>
                 )
               })}
-              <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  Showing {pageStart.toLocaleString("en-IN")}–{pageEnd.toLocaleString("en-IN")} of {filteredBillingRecords.length.toLocaleString("en-IN")} bills
-                </p>
-                <div className="flex items-center gap-2">
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                <span>
+                  Showing {pageStart}–{pageEnd} of {filteredBillingRecords.length}
+                </span>
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
-                      currentPage === 1
-                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800"
-                    }`}
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
                   >
                     Previous
                   </button>
-                  <span className="text-slate-600">  Page {currentPage} of {totalPages}</span>
-                  <button type="button"onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className={`inline-flex items-center rounded-lg border px-3 py-1.5 font-semibold transition ${
-                      currentPage === totalPages
-                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800"
-                    }`}
-                  >  Next </button>
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold disabled:opacity-40"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </section>
     </div>
   )
 }
-

@@ -9,15 +9,92 @@ export interface TrendPoint {
   count: number
 }
 
+/** YYYY-MM-DD in the browser's local timezone (avoids UTC shift on date-only strings). */
+export function formatLocalYmd(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
 /**
- * Parse appointment dates into Date objects
+ * Normalize Firestore appointment dates (string YYYY-MM-DD, ISO, or Timestamp) to YYYY-MM-DD.
+ */
+export function toLocalDateKey(value: unknown): string | null {
+  if (value == null || value === "") return null
+
+  if (typeof value === "object" && value !== null && typeof (value as { toDate?: () => Date }).toDate === "function") {
+    try {
+      const d = (value as { toDate: () => Date }).toDate()
+      if (Number.isNaN(d.getTime())) return null
+      return formatLocalYmd(d)
+    } catch {
+      return null
+    }
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    return formatLocalYmd(value)
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    const ymd = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`
+    const d = new Date(trimmed)
+    if (Number.isNaN(d.getTime())) return null
+    return formatLocalYmd(d)
+  }
+
+  return null
+}
+
+export function isSameLocalDay(value: unknown, day: Date = new Date()): boolean {
+  return toLocalDateKey(value) === formatLocalYmd(day)
+}
+
+export type PaidAppointmentLike = {
+  status?: string
+  appointmentDate?: string
+  paidAt?: string | null
+  paymentStatus?: string
+  paymentAmount?: number
+  totalConsultationFee?: number
+  consultationFee?: number
+}
+
+/** Amount actually collected / billable — mirrors billing-records logic. */
+export function getPaidAmount(apt: PaidAppointmentLike): number {
+  const paid = Number(apt.paymentAmount ?? 0)
+  if (Number.isFinite(paid) && paid > 0) return paid
+  const fee = Number(apt.totalConsultationFee ?? apt.consultationFee ?? 0)
+  return Number.isFinite(fee) && fee > 0 ? fee : 0
+}
+
+export function isPaidAppointment(apt: PaidAppointmentLike): boolean {
+  const status = String(apt.paymentStatus || "").toLowerCase()
+  if (status === "paid") return true
+  if (apt.paidAt) return true
+  if (apt.status === "completed" && getPaidAmount(apt) > 0) return true
+  return false
+}
+
+/** Prefer paidAt day for revenue attribution; fall back to appointmentDate. */
+export function revenueDateKey(apt: PaidAppointmentLike): string | null {
+  return toLocalDateKey(apt.paidAt) || toLocalDateKey(apt.appointmentDate)
+}
+
+/**
+ * Parse appointment dates into Date objects (local calendar day at midnight).
  */
 export function parseAppointmentDates(appointments: Array<{ appointmentDate?: string }>): Date[] {
   return appointments
     .map((apt) => {
-      if (!apt.appointmentDate) return null
-      const dt = new Date(apt.appointmentDate)
-      if (Number.isNaN(dt.getTime())) return null
+      const key = toLocalDateKey(apt.appointmentDate)
+      if (!key) return null
+      const [y, m, d] = key.split("-").map(Number)
+      const dt = new Date(y, m - 1, d)
       dt.setHours(0, 0, 0, 0)
       return dt
     })
@@ -133,17 +210,26 @@ export function calculateAllTrends(appointments: Array<{ appointmentDate?: strin
 }
 
 /**
- * Calculate revenue for a time period
+ * Calculate revenue for a time period (paid appointments; amount from payment or consultation fee).
  */
 export function calculateRevenue(
-  appointments: Array<{ status: string; appointmentDate: string; paymentAmount?: number }>,
+  appointments: Array<PaidAppointmentLike>,
   days: number
 ): number {
-  const cutoffDate = new Date()
-  cutoffDate.setDate(cutoffDate.getDate() - days)
+  let cutoffKey: string | null = null
+  if (Number.isFinite(days)) {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    cutoffKey = formatLocalYmd(cutoff)
+  }
   return appointments
-    .filter(apt => apt.status === "completed" && new Date(apt.appointmentDate) >= cutoffDate)
-    .reduce((sum, apt) => sum + (apt.paymentAmount || 0), 0)
+    .filter((apt) => {
+      if (!isPaidAppointment(apt)) return false
+      const key = revenueDateKey(apt)
+      if (!key) return false
+      return cutoffKey == null ? true : key >= cutoffKey
+    })
+    .reduce((sum, apt) => sum + getPaidAmount(apt), 0)
 }
 
 export interface RevenueTrendPoint {
@@ -156,15 +242,13 @@ export interface RevenueTrendPoint {
  * Revenue trend: weekly (last 7 days), monthly (last 6 buckets), yearly (12 months)
  */
 export function calculateRevenueTrend(
-  appointments: Array<{ status: string; appointmentDate: string; paymentAmount?: number }>
+  appointments: Array<PaidAppointmentLike>
 ): {
   weekly: RevenueTrendPoint[]
   monthly: RevenueTrendPoint[]
   yearly: RevenueTrendPoint[]
 } {
-  const completed = appointments.filter(
-    (apt) => apt.status === "completed" && apt.paymentAmount != null && apt.paymentAmount > 0
-  )
+  const paid = appointments.filter((apt) => isPaidAppointment(apt) && getPaidAmount(apt) > 0)
 
   const now = new Date()
   now.setHours(0, 0, 0, 0)
@@ -174,15 +258,10 @@ export function calculateRevenueTrend(
   for (let offset = 6; offset >= 0; offset--) {
     const d = new Date(now)
     d.setDate(d.getDate() - offset)
-    const next = new Date(d)
-    next.setDate(next.getDate() + 1)
-    const revenue = completed
-      .filter((apt) => {
-        const dt = new Date(apt.appointmentDate)
-        dt.setHours(0, 0, 0, 0)
-        return dt >= d && dt < next
-      })
-      .reduce((s, apt) => s + (apt.paymentAmount || 0), 0)
+    const key = formatLocalYmd(d)
+    const revenue = paid
+      .filter((apt) => revenueDateKey(apt) === key)
+      .reduce((s, apt) => s + getPaidAmount(apt), 0)
     weekly.push({
       label: d.toLocaleDateString("en-US", { weekday: "short" }),
       fullLabel: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
@@ -204,14 +283,15 @@ export function calculateRevenueTrend(
   ]
   const monthly: RevenueTrendPoint[] = bucketRanges.map(([startDay, endDay]) => {
     const adjustedEndDay = Math.min(endDay, daysInMonth)
+    const startKey = formatLocalYmd(new Date(currentYear, currentMonth, startDay))
+    const endKey = formatLocalYmd(new Date(currentYear, currentMonth, adjustedEndDay))
     const startDate = new Date(currentYear, currentMonth, startDay)
-    const endDate = new Date(currentYear, currentMonth, adjustedEndDay + 1)
-    const revenue = completed
+    const revenue = paid
       .filter((apt) => {
-        const dt = new Date(apt.appointmentDate)
-        return dt >= startDate && dt < endDate
+        const key = revenueDateKey(apt)
+        return key != null && key >= startKey && key <= endKey
       })
-      .reduce((s, apt) => s + (apt.paymentAmount || 0), 0)
+      .reduce((s, apt) => s + getPaidAmount(apt), 0)
     return {
       label: `${startDay}-${adjustedEndDay}`,
       fullLabel: `${startDay}-${adjustedEndDay} ${startDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`,
@@ -223,13 +303,10 @@ export function calculateRevenueTrend(
   const yearly: RevenueTrendPoint[] = []
   for (let month = 0; month < 12; month++) {
     const startDate = new Date(currentYear, month, 1)
-    const endDate = new Date(currentYear, month + 1, 1)
-    const revenue = completed
-      .filter((apt) => {
-        const dt = new Date(apt.appointmentDate)
-        return dt >= startDate && dt < endDate
-      })
-      .reduce((s, apt) => s + (apt.paymentAmount || 0), 0)
+    const prefix = `${currentYear}-${String(month + 1).padStart(2, "0")}`
+    const revenue = paid
+      .filter((apt) => (revenueDateKey(apt) || "").startsWith(prefix))
+      .reduce((s, apt) => s + getPaidAmount(apt), 0)
     yearly.push({
       label: startDate.toLocaleDateString("en-US", { month: "short" }),
       fullLabel: startDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),

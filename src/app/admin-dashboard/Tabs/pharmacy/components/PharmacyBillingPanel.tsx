@@ -567,9 +567,15 @@ export function PharmacyBillingPanel({
   const showCashPanel = paymentMode === 'cash' && !!pendingDispensePayload && pendingBillAmount > 0
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full min-h-0 bg-white rounded-xl border border-[var(--color-neutral-200)] shadow-sm overflow-hidden">
+    <form onSubmit={handleSubmit} className="ph-ops flex flex-col h-full min-h-0 bg-white rounded-xl border border-[var(--color-neutral-200)] shadow-sm overflow-hidden">
       {/* Load pending prescription into walk-in sale */}
-      <div className="shrink-0 p-4 border-b border-[var(--color-neutral-200)] bg-white" ref={patientSearchRef}>
+      <div className="shrink-0 p-4 border-b border-[var(--color-neutral-200)] bg-gradient-to-r from-teal-50/80 to-white" ref={patientSearchRef}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-teal-900">Pharmacy POS</label>
+          {pendingPrescriptionCount > 0 ? (
+            <span className="ph-ops-badge ph-ops-badge--info">{pendingPrescriptionCount} in queue</span>
+          ) : null}
+        </div>
         <label className="block text-xs font-medium text-slate-500 mb-1">Search prescription</label>
         <p className="text-[11px] text-slate-500 mb-1.5">
           {pendingPrescriptionCount > 0

@@ -7,6 +7,14 @@ import type { LowStockAlert, PharmacyMedicine, PharmacyPurchaseOrder, PharmacySu
 import { downloadPurchaseOrderPDF, printPurchaseOrderPDF } from '../purchaseOrderPdf'
 import { ActionEmptyState, getPurchaseOrderStatusMeta } from './RealWorldUiBlocks'
 import { PlaceOrderForm } from './PlaceOrderForm'
+import {
+  PhOpsShell,
+  PhOpsPageHeader,
+  PhOpsFormSection,
+  PhOpsPanel,
+  PhOpsMetricGrid,
+  PhOpsMetricCard,
+} from '@/components/pharmacy/ops'
 
 type BranchOption = { id: string; name: string }
 
@@ -87,11 +95,27 @@ export function OrdersTabContent(props: {
     setCancelOrderSubmitting,
   } = props
 
+  const pendingCount = purchaseOrders.filter((o) => o.status === 'pending' || o.status === 'draft').length
+  const receivedCount = purchaseOrders.filter((o) => o.status === 'received').length
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6 w-full max-w-none">
-        <h3 className="font-semibold text-slate-800 mb-3">Place order</h3>
-        <p className="text-sm text-slate-600 mb-4">Select branch and supplier, then either upload a file to fill order lines or add lines manually.</p>
+    <PhOpsShell>
+      <PhOpsPageHeader
+        eyebrow="Purchase management"
+        title="Purchase orders"
+        description="Place orders with suppliers, track pending deliveries, and receive stock into inventory."
+      />
+
+      <PhOpsMetricGrid columns={3}>
+        <PhOpsMetricCard label="Pending deliveries" value={pendingCount} tone={pendingCount > 0 ? 'warn' : 'ok'} hint="Awaiting receipt" />
+        <PhOpsMetricCard label="Received" value={receivedCount} tone="ok" hint="Stock already booked in" />
+        <PhOpsMetricCard label="Low-stock signals" value={lowStock.length} tone={lowStock.length > 0 ? 'warn' : 'neutral'} hint="From inventory alerts" />
+      </PhOpsMetricGrid>
+
+      <PhOpsFormSection
+        title="Place order"
+        description="Select branch and supplier, then upload a file or add lines manually."
+      >
         <PlaceOrderForm
           branches={branches}
           suppliers={suppliers}
@@ -105,10 +129,9 @@ export function OrdersTabContent(props: {
           onError={onError}
           getToken={getToken}
         />
-      </div>
+      </PhOpsFormSection>
 
-      <div className="space-y-3">
-        <h3 className="font-semibold text-slate-800 px-1">Purchase orders</h3>
+      <PhOpsPanel title="Order register" subtitle="Supplier, status, expected delivery and receive actions" padded={false}>
         {loading ? (
           <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
         ) : (
@@ -193,7 +216,7 @@ export function OrdersTabContent(props: {
             itemLabel="orders"
           />
         )}
-      </div>
+      </PhOpsPanel>
 
       {receiveOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !receiveSubmitting && setReceiveOrder(null)}>
@@ -334,6 +357,6 @@ export function OrdersTabContent(props: {
           </div>
         </div>
       )}
-    </div>
+    </PhOpsShell>
   )
 }

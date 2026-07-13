@@ -45,6 +45,7 @@ import { AddMedicineForm, EditMinLevelModal } from './pharmacy/components/Invent
 import { OrdersTabContent } from './pharmacy/components/OrdersTabContent'
 import { OverviewTabContent } from './pharmacy/components/OverviewTabContent'
 import { PharmacyBillingPanel } from './pharmacy/components/PharmacyBillingPanel'
+import { PhOpsSkeleton } from '@/components/pharmacy/ops'
 import { ReportsTabContent } from './pharmacy/components/ReportsTabContent'
 import { SalesTabContent } from './pharmacy/components/SalesTabContent'
 import { CashExpensesDailyContent } from './pharmacy/components/CashExpensesDailyContent'
@@ -1254,7 +1255,7 @@ export default function PharmacyManagement() {
 
         {subTab === 'overview' && (
           loading ? (
-            <div className="flex justify-center py-12"><LoadingSpinner inline /></div>
+            <div className="py-2"><PhOpsSkeleton cards={6} /></div>
           ) : (
             <OverviewTabContent
               overviewDateRange={overviewDateRange}
@@ -1282,6 +1283,10 @@ export default function PharmacyManagement() {
               recentSalesFiltered={recentSalesFiltered}
               isPharmacyPortal={isPharmacyPortal}
               headerSearchQuery={headerSearchQuery}
+              onGoToQueue={() => setSubTab('queue')}
+              onGoToOrders={() => setSubTab('orders')}
+              onGoToBilling={() => setSubTab('queue')}
+              onGoToCash={() => setSubTab('cash_and_expenses')}
             />
           )
         )}

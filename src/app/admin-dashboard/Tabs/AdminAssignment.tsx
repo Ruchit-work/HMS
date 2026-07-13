@@ -1,15 +1,34 @@
-'use client'
+"use client"
 
-import { useEffect, useState } from 'react'
-import { useAuth } from '@/hooks/useAuth'
-import { useMultiHospital } from '@/contexts/MultiHospitalContext'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
-import Notification from '@/components/ui/feedback/Notification'
-import { ConfirmDialog } from '@/components/ui/overlays/Modals'
-import { auth, db } from '@/firebase/config'
-import { collection, getDocs, query, orderBy, doc, getDoc, deleteDoc } from 'firebase/firestore'
-import { Hospital } from '@/types/hospital'
-import { Button } from '@/components/ui/Button'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useAuth } from "@/hooks/useAuth"
+import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import Notification from "@/components/ui/feedback/Notification"
+import { ConfirmDialog } from "@/components/ui/overlays/Modals"
+import { RevealModal, useRevealModalClose } from "@/components/ui/overlays/RevealModal"
+import { Button } from "@/components/ui/Button"
+import { FilterChip } from "@/components/ui/FilterChip"
+import { useTablePagination } from "@/hooks/useTablePagination"
+import { auth, db } from "@/firebase/config"
+import { collection, getDocs, query, orderBy, doc, getDoc, deleteDoc } from "firebase/firestore"
+import { Hospital } from "@/types/hospital"
+import {
+  AvatarCell,
+  EnterpriseDataTable,
+  StatusPill,
+  type EnterpriseColumn,
+  type EnterpriseRowAction,
+} from "@/components/ui/enterprise-table"
+import {
+  HqShell,
+  HqPageHeader,
+  HqToolbar,
+  HqMetricGrid,
+  HqMetricCard,
+  HqPanel,
+  HqEmptyState,
+  HqSkeleton,
+} from "@/components/hq"
 
 interface Admin {
   id: string
@@ -20,7 +39,7 @@ interface Admin {
   hospitalId: string
   hospitalName?: string
   isSuperAdmin: boolean
-  createdAt?: any
+  createdAt?: unknown
 }
 
 interface AdminFormData {
@@ -32,6 +51,213 @@ interface AdminFormData {
   hospitalId: string
 }
 
+const EMPTY_FORM: AdminFormData = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  password: "",
+  hospitalId: "",
+}
+
+function Field({
+  label,
+  required,
+  children,
+  hint,
+  full,
+}: {
+  label: string
+  required?: boolean
+  children: ReactNode
+  hint?: string
+  full?: boolean
+}) {
+  return (
+    <label className={`block ${full ? "sm:col-span-2" : ""}`}>
+      <span className="mb-1 block text-[11px] font-semibold text-slate-600">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </span>
+      {children}
+      {hint ? <p className="mt-1 text-[10px] text-slate-400">{hint}</p> : null}
+    </label>
+  )
+}
+
+const inputClass =
+  "hq-ds-input hq-ds-input--lg w-full max-w-none"
+
+function AdminFormModal({
+  isOpen,
+  editing,
+  formData,
+  setFormData,
+  hospitals,
+  saving,
+  onClose,
+  onSubmit,
+}: {
+  isOpen: boolean
+  editing: Admin | null
+  formData: AdminFormData
+  setFormData: (next: AdminFormData) => void
+  hospitals: Hospital[]
+  saving: boolean
+  onClose: () => void
+  onSubmit: (e: FormEvent) => void
+}) {
+  return (
+    <RevealModal isOpen={isOpen} onClose={onClose} closeOnOverlayClick contentClassName="max-w-lg w-full mx-4">
+      <AdminFormBody
+        editing={editing}
+        formData={formData}
+        setFormData={setFormData}
+        hospitals={hospitals}
+        saving={saving}
+        onSubmit={onSubmit}
+      />
+    </RevealModal>
+  )
+}
+
+function AdminFormBody({
+  editing,
+  formData,
+  setFormData,
+  hospitals,
+  saving,
+  onSubmit,
+}: {
+  editing: Admin | null
+  formData: AdminFormData
+  setFormData: (next: AdminFormData) => void
+  hospitals: Hospital[]
+  saving: boolean
+  onSubmit: (e: FormEvent) => void
+}) {
+  const requestClose = useRevealModalClose()
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+      <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+        <p className="hq-ds-eyebrow">Platform · Tenant Admins</p>
+        <h3 className="text-sm font-semibold text-slate-900">
+          {editing ? "Update tenant admin" : "Provision tenant admin"}
+        </h3>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Customer administrators own day-to-day operations inside a single hospital tenant.
+        </p>
+      </div>
+
+      <form onSubmit={onSubmit} className="max-h-[70vh] overflow-y-auto px-4 py-3 sm:px-5 space-y-3">
+        <section className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 space-y-2.5">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700">Identity</h4>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="First name" required>
+              <input
+                type="text"
+                required
+                value={formData.firstName}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                className={inputClass}
+                placeholder="First name"
+              />
+            </Field>
+            <Field label="Last name" required>
+              <input
+                type="text"
+                required
+                value={formData.lastName}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                className={inputClass}
+                placeholder="Last name"
+              />
+            </Field>
+            <Field label="Email" required full>
+              <input
+                type="email"
+                required
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className={inputClass}
+                placeholder="admin@hospital.com"
+              />
+            </Field>
+            <Field label="Phone" full>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className={inputClass}
+                placeholder="Optional phone"
+              />
+            </Field>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 space-y-2.5">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700">Tenant assignment</h4>
+          <Field label="Hospital tenant" required full>
+            <select
+              required
+              value={formData.hospitalId}
+              onChange={(e) => setFormData({ ...formData, hospitalId: e.target.value })}
+              className={inputClass}
+            >
+              <option value="">Select a tenant…</option>
+              {hospitals.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name} ({h.code})
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {!editing ? (
+            <Field
+              label="Temporary password"
+              required
+              full
+              hint="Minimum 6 characters. Share securely with the customer admin."
+            >
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className={inputClass}
+                placeholder="••••••••"
+              />
+            </Field>
+          ) : (
+            <div className="rounded-lg border border-cyan-100 bg-cyan-50/80 px-3 py-2.5">
+              <p className="text-[11px] text-cyan-900">
+                Password cannot be changed here. The admin can update it from their account settings.
+              </p>
+            </div>
+          )}
+        </section>
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 pb-1">
+          <Button type="button" variant="outline" size="sm" onClick={requestClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            size="sm"
+            loading={saving}
+            loadingText={editing ? "Updating…" : "Creating…"}
+          >
+            {editing ? "Save admin" : "Create admin"}
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 export default function AdminAssignment() {
   const { user, loading: authLoading } = useAuth()
   const { isSuperAdmin } = useMultiHospital()
@@ -40,24 +266,20 @@ export default function AdminAssignment() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deletingAdmin, setDeletingAdmin] = useState<Admin | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [formData, setFormData] = useState<AdminFormData>({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    password: '',
-    hospitalId: ''
-  })
+  const [formData, setFormData] = useState<AdminFormData>(EMPTY_FORM)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [hospitalFilter, setHospitalFilter] = useState("all")
+  const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "super">("all")
 
   useEffect(() => {
     if (user && isSuperAdmin) {
-      loadData()
+      void loadData()
     }
   }, [user, isSuperAdmin])
 
@@ -65,31 +287,31 @@ export default function AdminAssignment() {
     setLoading(true)
     setError(null)
     try {
-      // Load hospitals
-      const hospitalsRef = collection(db, 'hospitals')
-      const hospitalsQuery = query(hospitalsRef, orderBy('name', 'asc'))
+      const hospitalsRef = collection(db, "hospitals")
+      const hospitalsQuery = query(hospitalsRef, orderBy("name", "asc"))
       const hospitalsSnapshot = await getDocs(hospitalsQuery)
       const hospitalsList = hospitalsSnapshot.docs
-        .filter(doc => doc.data().status === 'active')
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Hospital))
+        .filter((d) => d.data().status === "active")
+        .map(
+          (d) =>
+            ({
+              id: d.id,
+              ...d.data(),
+            }) as Hospital,
+        )
       setHospitals(hospitalsList)
 
-      // Load admins
-      const adminsRef = collection(db, 'admins')
-      const adminsQuery = query(adminsRef, orderBy('createdAt', 'desc'))
+      const adminsRef = collection(db, "admins")
+      const adminsQuery = query(adminsRef, orderBy("createdAt", "desc"))
       const adminsSnapshot = await getDocs(adminsQuery)
-      
-      // Enrich with hospital names
+
       const adminsList: Admin[] = []
       for (const adminDoc of adminsSnapshot.docs) {
         const adminData = adminDoc.data()
-        let hospitalName = 'Unknown'
-        
+        let hospitalName = "Unassigned"
+
         if (adminData.hospitalId) {
-          const hospitalDoc = await getDoc(doc(db, 'hospitals', adminData.hospitalId))
+          const hospitalDoc = await getDoc(doc(db, "hospitals", adminData.hospitalId))
           if (hospitalDoc.exists()) {
             hospitalName = hospitalDoc.data().name
           }
@@ -98,94 +320,36 @@ export default function AdminAssignment() {
         adminsList.push({
           id: adminDoc.id,
           email: adminData.email,
-          firstName: adminData.firstName || '',
-          lastName: adminData.lastName || '',
+          firstName: adminData.firstName || "",
+          lastName: adminData.lastName || "",
           phone: adminData.phone,
-          hospitalId: adminData.hospitalId || '',
+          hospitalId: adminData.hospitalId || "",
           hospitalName,
           isSuperAdmin: adminData.isSuperAdmin || false,
-          createdAt: adminData.createdAt
+          createdAt: adminData.createdAt,
         })
       }
 
       setAdmins(adminsList)
     } catch {
-      setError('Failed to load data. Please try again.')
+      setError("Failed to load tenant administrators. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const openCreate = () => {
+    setEditingAdmin(null)
+    setFormData(EMPTY_FORM)
     setError(null)
     setSuccess(null)
-    setSaving(true)
-
-    try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error('You must be logged in to create admins')
-      }
-
-      const token = await currentUser.getIdToken()
-      if (!token) {
-        throw new Error('Authentication token not found')
-      }
-
-      const response = await fetch('/api/admin/create-admin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          adminData: {
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            phone: formData.phone || null
-          },
-          password: formData.password,
-          hospitalId: formData.hospitalId
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create admin')
-      }
-
-      setSuccess('Admin created and assigned to hospital successfully!')
-      setShowAddModal(false)
-      setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        password: '',
-        hospitalId: ''
-      })
-      await loadData()
-    } catch (err: any) {
-      setError(err.message || 'Failed to create admin. Please try again.')
-    } finally {
-      setSaving(false)
-    }
+    setShowModal(true)
   }
 
   const handleCancel = () => {
-    setShowAddModal(false)
+    setShowModal(false)
     setEditingAdmin(null)
-    setFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      password: '',
-      hospitalId: ''
-    })
+    setFormData(EMPTY_FORM)
     setError(null)
     setSuccess(null)
   }
@@ -196,20 +360,112 @@ export default function AdminAssignment() {
       firstName: admin.firstName,
       lastName: admin.lastName,
       email: admin.email,
-      phone: admin.phone || '',
-      password: '', // Don't populate password for edit
-      hospitalId: admin.hospitalId
+      phone: admin.phone || "",
+      password: "",
+      hospitalId: admin.hospitalId,
     })
-    setShowAddModal(true)
+    setShowModal(true)
   }
 
   const handleDeleteClick = (admin: Admin) => {
     if (admin.isSuperAdmin) {
-      setError('Cannot delete super admin account')
+      setError("Cannot delete a platform super admin account.")
       return
     }
     setDeletingAdmin(admin)
     setShowDeleteDialog(true)
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+    setSaving(true)
+
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error("You must be logged in to create admins")
+
+      const token = await currentUser.getIdToken()
+      if (!token) throw new Error("Authentication token not found")
+
+      const response = await fetch("/api/admin/create-admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          adminData: {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            phone: formData.phone || null,
+          },
+          password: formData.password,
+          hospitalId: formData.hospitalId,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Failed to create admin")
+
+      setSuccess("Tenant admin provisioned and assigned successfully.")
+      handleCancel()
+      await loadData()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create admin. Please try again."
+      setError(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!editingAdmin) return
+
+    setError(null)
+    setSuccess(null)
+    setSaving(true)
+
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error("You must be logged in to update admins")
+
+      const token = await currentUser.getIdToken()
+      if (!token) throw new Error("Authentication token not found")
+
+      const response = await fetch("/api/admin/update-admin", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          adminId: editingAdmin.id,
+          adminData: {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            phone: formData.phone || null,
+          },
+          hospitalId: formData.hospitalId,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Failed to update admin")
+
+      setSuccess("Tenant admin updated successfully.")
+      handleCancel()
+      await loadData()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update admin. Please try again."
+      setError(message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDeleteConfirm = async () => {
@@ -220,358 +476,298 @@ export default function AdminAssignment() {
 
     try {
       const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error('You must be logged in to delete admins')
-      }
+      if (!currentUser) throw new Error("You must be logged in to delete admins")
 
       const token = await currentUser.getIdToken()
-      if (!token) {
-        throw new Error('Authentication token not found')
-      }
+      if (!token) throw new Error("Authentication token not found")
 
-      // Delete from Firebase Auth
-      const authDeleteResponse = await fetch('/api/admin/delete-user', {
-        method: 'POST',
+      const authDeleteResponse = await fetch("/api/admin/delete-user", {
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ uid: deletingAdmin.id, userType: 'admin' })
+        body: JSON.stringify({ uid: deletingAdmin.id, userType: "admin" }),
       })
 
       if (!authDeleteResponse.ok) {
         await authDeleteResponse.json().catch(() => ({}))
-        // Continue with Firestore deletion even if auth deletion fails
       }
 
-      // Delete from Firestore admins collection
-      const adminRef = doc(db, 'admins', deletingAdmin.id)
-      await deleteDoc(adminRef)
+      await deleteDoc(doc(db, "admins", deletingAdmin.id))
+      await deleteDoc(doc(db, "users", deletingAdmin.id)).catch(() => undefined)
 
-      // Also delete from users collection
-      const userRef = doc(db, 'users', deletingAdmin.id)
-      await deleteDoc(userRef).catch(() => {
-        // Ignore if doesn't exist
-      })
-
-      setSuccess('Admin deleted successfully!')
+      setSuccess("Tenant admin removed from the platform.")
       setShowDeleteDialog(false)
       setDeletingAdmin(null)
       await loadData()
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete admin. Please try again.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete admin. Please try again."
+      setError(message)
     } finally {
       setDeleting(false)
     }
   }
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingAdmin) return
+  const filtered = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    return admins.filter((a) => {
+      if (roleFilter === "admin" && a.isSuperAdmin) return false
+      if (roleFilter === "super" && !a.isSuperAdmin) return false
+      if (hospitalFilter !== "all" && a.hospitalId !== hospitalFilter) return false
+      if (!q) return true
+      const name = `${a.firstName} ${a.lastName}`.toLowerCase()
+      return (
+        name.includes(q) ||
+        a.email?.toLowerCase().includes(q) ||
+        a.phone?.toLowerCase().includes(q) ||
+        a.hospitalName?.toLowerCase().includes(q)
+      )
+    })
+  }, [admins, searchTerm, hospitalFilter, roleFilter])
 
-    setError(null)
-    setSuccess(null)
-    setSaving(true)
+  const { paginatedItems, currentPage, totalPages, goToPage, pageSize, setPageSize } =
+    useTablePagination(filtered, { initialPageSize: 10 })
 
-    try {
-      const currentUser = auth.currentUser
-      if (!currentUser) {
-        throw new Error('You must be logged in to update admins')
-      }
-
-      const token = await currentUser.getIdToken()
-      if (!token) {
-        throw new Error('Authentication token not found')
-      }
-
-      const response = await fetch('/api/admin/update-admin', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          adminId: editingAdmin.id,
-          adminData: {
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            phone: formData.phone || null
-          },
-          hospitalId: formData.hospitalId
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update admin')
-      }
-
-      setSuccess('Admin updated successfully!')
-      setShowAddModal(false)
-      setEditingAdmin(null)
-      setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        password: '',
-        hospitalId: ''
-      })
-      await loadData()
-    } catch (err: any) {
-      setError(err.message || 'Failed to update admin. Please try again.')
-    } finally {
-      setSaving(false)
+  const kpi = useMemo(() => {
+    const tenantAdmins = admins.filter((a) => !a.isSuperAdmin)
+    const platform = admins.filter((a) => a.isSuperAdmin)
+    const assignedTenants = new Set(tenantAdmins.map((a) => a.hospitalId).filter(Boolean)).size
+    const unassigned = tenantAdmins.filter((a) => !a.hospitalId).length
+    return {
+      total: admins.length,
+      tenantAdmins: tenantAdmins.length,
+      platform: platform.length,
+      assignedTenants,
+      unassigned,
     }
+  }, [admins])
+
+  const columns: EnterpriseColumn<Admin>[] = [
+    {
+      key: "name",
+      header: "Administrator",
+      sortable: true,
+      render: (a) => (
+        <AvatarCell
+          name={`${a.firstName} ${a.lastName}`.trim() || a.email}
+          sub={a.email}
+        />
+      ),
+    },
+    {
+      key: "hospital",
+      header: "Tenant",
+      sortable: true,
+      render: (a) => (
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-slate-800 truncate">
+            {a.isSuperAdmin ? "All tenants" : a.hospitalName || "—"}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "phone",
+      header: "Contact",
+      hideBelow: "lg",
+      render: (a) => <span className="text-xs tabular-nums text-slate-700">{a.phone || "—"}</span>,
+    },
+    {
+      key: "role",
+      header: "Role",
+      render: (a) => (
+        <StatusPill
+          label={a.isSuperAdmin ? "Platform" : "Tenant admin"}
+          variant={a.isSuperAdmin ? "cyan" : "success"}
+        />
+      ),
+    },
+  ]
+
+  const rowActions: EnterpriseRowAction<Admin>[] = [
+    {
+      label: "Edit",
+      onClick: (a) => handleEdit(a),
+      hidden: (a) => a.isSuperAdmin,
+    },
+    {
+      label: "Remove",
+      onClick: (a) => handleDeleteClick(a),
+      variant: "danger",
+      hidden: (a) => a.isSuperAdmin,
+    },
+  ]
+
+  if (authLoading || (loading && admins.length === 0)) {
+    return <HqSkeleton />
   }
 
-  if (authLoading || loading) {
-    return <LoadingSpinner message="Loading admins..." />
-  }
-
-  // Only super admins can access this
   if (!isSuperAdmin) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-600 font-medium">Access Denied: Super Admin privileges required</p>
-      </div>
+      <HqEmptyState
+        title="Platform access required"
+        description="Only platform super admins can provision and assign tenant administrators."
+      />
     )
   }
 
   return (
-    <div className="space-y-6">
-      {error && (
-        <Notification
-          type="error"
-          message={error}
-          onClose={() => setError(null)}
-        />
-      )}
+    <HqShell>
+      {error && <Notification type="error" message={error} onClose={() => setError(null)} />}
+      {success && <Notification type="success" message={success} onClose={() => setSuccess(null)} />}
 
-      {success && (
-        <Notification
-          type="success"
-          message={success}
-          onClose={() => setSuccess(null)}
-        />
-      )}
+      <HqPageHeader
+        variant="hero"
+        eyebrow="Customer management · Operators"
+        title="Tenant administrators"
+        description={`${kpi.tenantAdmins} customer admins · ${kpi.assignedTenants} tenants covered · platform operators`}
+        actions={
+          <>
+            <Button type="button" variant="outline" size="sm" onClick={() => void loadData()} loading={loading} loadingText="…">
+              Refresh
+            </Button>
+            <Button type="button" size="sm" onClick={openCreate}>
+              Provision admin
+            </Button>
+          </>
+        }
+      />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Admin Assignment</h2>
-          <p className="text-sm text-slate-600 mt-1">Create and assign admins to hospitals</p>
-        </div>
-        <button
-          onClick={() => {
-            setEditingAdmin(null)
-            setFormData({
-              firstName: '',
-              lastName: '',
-              email: '',
-              phone: '',
-              password: '',
-              hospitalId: ''
-            })
-            setError(null)
-            setSuccess(null)
-            setShowAddModal(true)
-          }}
-          className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        > + Create Admin </button>
-      </div>
-
-      {/* Admins List */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Phone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hospital</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-slate-200">
-              {admins.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                    No admins found. Click "Create Admin" to create one.
-                  </td>
-                </tr>
-              ) : (
-                admins.map((admin) => (
-                  <tr key={admin.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-slate-900">
-                        {admin.firstName} {admin.lastName}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-600">{admin.email}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-600">{admin.phone || 'N/A'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-slate-600">{admin.hospitalName}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        admin.isSuperAdmin 
-                          ? 'bg-cyan-100 text-cyan-900' 
-                          : 'bg-cyan-100 text-cyan-800'
-                      }`}>
-                        {admin.isSuperAdmin ? 'Super Admin' : 'Admin'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {!admin.isSuperAdmin && (
-                          <>
-                            <button  onClick={() => handleEdit(admin)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-800 bg-cyan-50 rounded hover:bg-cyan-100 transition-colors"
-                              title="Edit admin">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                              Edit
-                            </button>
-                            <button onClick={() => handleDeleteClick(admin)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100 transition-colors"
-                              title="Delete admin">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                              Delete
-                            </button>
-                          </>
-                        )}
-                        {admin.isSuperAdmin && (
-                          <span className="text-xs text-slate-400 italic">No actions available</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h3 className="text-2xl font-bold text-slate-800 mb-4">
-                {editingAdmin ? 'Edit Admin' : 'Create New Admin'}
-              </h3>
-
-              <form onSubmit={editingAdmin ? handleUpdate : handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">  First Name *  </label>
-                    <input type="text"  required value={formData.firstName}  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                      placeholder="Enter first name"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">   Last Name * </label>
-                    <input   type="text"required  value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                      placeholder="Enter last name"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">  Email * </label>
-                  <input   type="email"  required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                    placeholder="Enter email address"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1"> Phone</label>
-                  <input type="tel"  value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                    placeholder="Enter phone number (optional)"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">  Hospital * </label>
-                  <select required  value={formData.hospitalId}
-                    onChange={(e) => setFormData({ ...formData, hospitalId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                  >
-                    <option value="">Select a hospital</option>
-                    {hospitals.map((hospital) => (
-                      <option key={hospital.id} value={hospital.id}>
-                        {hospital.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {!editingAdmin && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">  Password *</label>
-                    <input  type="password" required minLength={6} value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                      placeholder="Enter password (min 6 characters)"/>
-                    <p className="text-xs text-slate-500 mt-1">Password must be at least 6 characters</p>
-                  </div>
-                )}
-                {editingAdmin && (
-                  <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
-                    <p className="text-sm text-cyan-800">
-                      <strong>Note:</strong> Password cannot be changed here. The admin can change their password from their profile settings.
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <Button type="button" variant="outline" onClick={handleCancel} disabled={saving}>
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    loading={saving}
-                    loadingText={editingAdmin ? 'Updating...' : 'Creating...'}
-                  >
-                    {editingAdmin ? 'Update Admin' : 'Create Admin'}
-                  </Button>
-                </div>
-              </form>
+      <HqToolbar
+        leading={
+          <>
+            <div className="relative">
+              <svg className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search admins…"
+                className="hq-ds-input hq-ds-input--search"
+              />
             </div>
-          </div>
-        </div>
-      )}
+            <select
+              value={hospitalFilter}
+              onChange={(e) => setHospitalFilter(e.target.value)}
+              className="hq-ds-input w-auto max-w-[11rem]"
+            >
+              <option value="all">All tenants</option>
+              {hospitals.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}
+              className="hq-ds-input w-auto max-w-[9rem]"
+            >
+              <option value="all">All roles</option>
+              <option value="admin">Tenant admins</option>
+              <option value="super">Platform SA</option>
+            </select>
+          </>
+        }
+      />
 
-      {/* Delete Confirmation Dialog */}
-      <ConfirmDialog  isOpen={showDeleteDialog} title="Delete Admin"
-        message={deletingAdmin ? `Are you sure you want to delete ${deletingAdmin.firstName} ${deletingAdmin.lastName}? This action cannot be undone and will remove the admin from the system.` : ''}
-        confirmText="Delete" cancelText="Cancel"
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => { setShowDeleteDialog(false) 
+      <HqMetricGrid columns={4}>
+        <HqMetricCard label="All admins" value={kpi.total} hint="directory" />
+        <HqMetricCard label="Tenant admins" value={kpi.tenantAdmins} hint="customers" />
+        <HqMetricCard label="Covered tenants" value={kpi.assignedTenants} hint="assigned" />
+        <HqMetricCard label="Platform SA" value={kpi.platform} hint="hq" />
+      </HqMetricGrid>
+
+      <HqPanel>
+        <EnterpriseDataTable
+          data={paginatedItems}
+          columns={columns}
+          loading={loading}
+          loadingVariant="skeleton"
+          emptyTitle={
+            searchTerm || hospitalFilter !== "all" || roleFilter !== "all"
+              ? "No admins match these filters"
+              : "No tenant administrators yet"
+          }
+          emptyDescription={
+            searchTerm || hospitalFilter !== "all" || roleFilter !== "all"
+              ? "Adjust search or filters to see more operators."
+              : "Provision a customer admin and assign them to a hospital tenant."
+          }
+          emptyAction={
+            searchTerm || hospitalFilter !== "all" || roleFilter !== "all"
+              ? undefined
+              : { label: "Provision admin", onClick: openCreate }
+          }
+          toolbar={
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-3 py-2">
+              <div>
+                <h3 className="hq-ds-panel-title">Admin directory</h3>
+                <p className="hq-ds-panel-sub">
+                  {filtered.length} matching · page {currentPage} of {Math.max(totalPages, 1)}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                <FilterChip
+                  active={roleFilter === "admin"}
+                  onClick={() => setRoleFilter((r) => (r === "admin" ? "all" : "admin"))}
+                >
+                  Tenant admins
+                </FilterChip>
+                <FilterChip
+                  active={roleFilter === "super"}
+                  onClick={() => setRoleFilter((r) => (r === "super" ? "all" : "super"))}
+                >
+                  Platform
+                </FilterChip>
+              </div>
+            </div>
+          }
+          rowActions={rowActions}
+          onRowClick={(a) => {
+            if (!a.isSuperAdmin) handleEdit(a)
+          }}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={filtered.length}
+          onPageChange={goToPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="admins"
+          minWidth="min-w-[900px]"
+        />
+      </HqPanel>
+
+      <AdminFormModal
+        isOpen={showModal}
+        editing={editingAdmin}
+        formData={formData}
+        setFormData={setFormData}
+        hospitals={hospitals}
+        saving={saving}
+        onClose={handleCancel}
+        onSubmit={editingAdmin ? handleUpdate : handleSubmit}
+      />
+
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        title="Remove tenant admin"
+        message={
+          deletingAdmin
+            ? `Remove ${deletingAdmin.firstName} ${deletingAdmin.lastName} from the platform? This cannot be undone.`
+            : ""
+        }
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={() => void handleDeleteConfirm()}
+        onCancel={() => {
+          setShowDeleteDialog(false)
           setDeletingAdmin(null)
-         }}
+        }}
         confirmLoading={deleting}
       />
-    </div>
+    </HqShell>
   )
 }
-
