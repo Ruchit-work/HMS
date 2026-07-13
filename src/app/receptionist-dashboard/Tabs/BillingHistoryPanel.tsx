@@ -919,12 +919,19 @@ export default function BillingHistoryPanel({
 
         {/* Loading */}
         {billingLoading && billingRecords.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <svg className="mb-3 h-10 w-10 animate-spin text-slate-200" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-            <p className="text-sm font-medium text-slate-400">Loading billing history…</p>
+          <div className="space-y-3 px-4 py-6 animate-pulse" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-slate-100 bg-white p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:justify-between">
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-40 rounded bg-slate-100" />
+                    <div className="h-3 w-56 rounded bg-slate-50" />
+                    <div className="h-3 w-32 rounded bg-slate-50" />
+                  </div>
+                  <div className="h-16 w-36 rounded-xl bg-slate-100" />
+                </div>
+              </div>
+            ))}
           </div>
 
         ) : billingRecords.length === 0 ? (

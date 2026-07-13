@@ -1,0 +1,281 @@
+rules_version = '2';
+
+/**
+ * Harmony HMS — hospital tenant isolation (client SDK).
+ * Admin SDK / API routes bypass these rules.
+ *
+ * Deploy: firebase deploy --only firestore:rules
+ * Or paste into Firebase Console → Firestore → Rules → Publish
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function userData() {
+      return get(userPath()).data;
+    }
+
+    function adminPath() {
+      return /databases/$(database)/documents/admins/$(request.auth.uid);
+    }
+
+    function rolePath(coll) {
+      return /databases/$(database)/documents/$(coll)/$(request.auth.uid);
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        (exists(userPath()) && userData().role == 'super_admin') ||
+        (exists(adminPath()) && (
+          get(adminPath()).data.isSuperAdmin == true ||
+          get(adminPath()).data.role == 'super_admin'
+        ))
+      );
+    }
+
+    function membershipIds() {
+      return exists(userPath()) && userData().keys().hasAny(['hospitals']) && userData().hospitals is list
+        ? userData().hospitals
+        : [];
+    }
+
+    /** True if a role profile doc associates this user with hospitalId */
+    function roleHasHospital(coll, hospitalId) {
+      return exists(rolePath(coll)) && (
+        get(rolePath(coll)).data.hospitalId == hospitalId ||
+        get(rolePath(coll)).data.activeHospital == hospitalId ||
+        (
+          get(rolePath(coll)).data.keys().hasAny(['hospitals']) &&
+          get(rolePath(coll)).data.hospitals is list &&
+          hospitalId in get(rolePath(coll)).data.hospitals
+        )
+      );
+    }
+
+    function belongsToHospital(hospitalId) {
+      return isSignedIn() && hospitalId is string && hospitalId.size() > 0 && (
+        isSuperAdmin() ||
+        hospitalId in membershipIds() ||
+        (exists(userPath()) && userData().activeHospital == hospitalId) ||
+        (exists(userPath()) && userData().hospitalId == hospitalId) ||
+        roleHasHospital('admins', hospitalId) ||
+        roleHasHospital('doctors', hospitalId) ||
+        roleHasHospital('receptionists', hospitalId) ||
+        roleHasHospital('patients', hospitalId) ||
+        roleHasHospital('pharmacists', hospitalId)
+      );
+    }
+
+    function docBelongsToCallerHospital() {
+      return resource.data.keys().hasAny(['hospitalId']) &&
+        belongsToHospital(resource.data.hospitalId);
+    }
+
+    function writeBelongsToCallerHospital() {
+      return request.resource.data.keys().hasAny(['hospitalId']) &&
+        belongsToHospital(request.resource.data.hospitalId);
+    }
+
+    function isOwnUid(docId) {
+      return isSignedIn() && request.auth.uid == docId;
+    }
+
+    function staffRole() {
+      return exists(userPath()) && userData().role in [
+        'admin', 'super_admin', 'receptionist', 'doctor', 'pharmacist', 'pharmacy'
+      ];
+    }
+
+    // ——— Auth / MFA (required for login) ———
+    match /mfaSessions/{userId} {
+      allow read, write: if isOwnUid(userId);
+    }
+
+    // ——— Profile / role docs (own document or super admin) ———
+    match /users/{userId} {
+      allow read: if isOwnUid(userId) || isSuperAdmin();
+      allow create, update: if isOwnUid(userId) || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /admins/{userId} {
+      allow read: if isOwnUid(userId) || isSuperAdmin() ||
+        (resource.data.keys().hasAny(['hospitalId']) && belongsToHospital(resource.data.hospitalId));
+      allow write: if isSuperAdmin();
+    }
+
+    match /doctors/{userId} {
+      allow read: if isOwnUid(userId) || isSuperAdmin() ||
+        (resource.data.keys().hasAny(['hospitalId']) && belongsToHospital(resource.data.hospitalId));
+      allow write: if isSuperAdmin() ||
+        (isSignedIn() && writeBelongsToCallerHospital() &&
+          exists(userPath()) && userData().role in ['admin', 'super_admin']);
+    }
+
+    match /receptionists/{userId} {
+      allow read: if isOwnUid(userId) || isSuperAdmin() ||
+        (resource.data.keys().hasAny(['hospitalId']) && belongsToHospital(resource.data.hospitalId));
+      allow write: if isSuperAdmin() ||
+        (isSignedIn() && writeBelongsToCallerHospital() &&
+          exists(userPath()) && userData().role in ['admin', 'super_admin']);
+    }
+
+    match /pharmacists/{userId} {
+      allow read: if isOwnUid(userId) || isSuperAdmin() ||
+        (resource.data.keys().hasAny(['hospitalId']) && belongsToHospital(resource.data.hospitalId));
+      allow write: if isSuperAdmin() ||
+        (isSignedIn() && writeBelongsToCallerHospital() &&
+          exists(userPath()) && userData().role in ['admin', 'super_admin']);
+    }
+
+    match /patients/{userId} {
+      allow read: if isOwnUid(userId) || isSuperAdmin() || docBelongsToCallerHospital();
+      allow create, update: if isOwnUid(userId) || isSuperAdmin() ||
+        (isSignedIn() && writeBelongsToCallerHospital() &&
+          exists(userPath()) && userData().role in ['admin', 'super_admin', 'receptionist', 'doctor']);
+      allow delete: if isSuperAdmin() ||
+        (isSignedIn() && exists(userPath()) && userData().role in ['admin', 'super_admin']);
+    }
+
+    // ——— Hospitals + nested tenant collections ———
+    match /hospitals/{hospitalId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+
+      match /{subcollection}/{docId} {
+        allow read: if belongsToHospital(hospitalId);
+        allow write: if belongsToHospital(hospitalId) && (
+          isSuperAdmin() ||
+          staffRole() ||
+          roleHasHospital('admins', hospitalId) ||
+          roleHasHospital('doctors', hospitalId) ||
+          roleHasHospital('receptionists', hospitalId) ||
+          roleHasHospital('pharmacists', hospitalId)
+        );
+      }
+    }
+
+    // ——— Root collections keyed by hospitalId ———
+    match /branches/{docId} {
+      allow read: if isSignedIn() && docBelongsToCallerHospital();
+      allow write: if isSignedIn() && writeBelongsToCallerHospital() && (
+        isSuperAdmin() ||
+        (exists(userPath()) && userData().role in ['admin', 'super_admin'])
+      );
+    }
+
+    match /rooms/{docId} {
+      allow read: if isSignedIn() && docBelongsToCallerHospital();
+      allow write: if isSignedIn() && writeBelongsToCallerHospital() && (
+        isSuperAdmin() ||
+        (exists(userPath()) && userData().role in ['admin', 'super_admin', 'receptionist']) ||
+        roleHasHospital('receptionists', resource.data.hospitalId) ||
+        roleHasHospital('admins', resource.data.hospitalId)
+      );
+    }
+
+    match /admissions/{docId} {
+      allow read: if isSignedIn() && (
+        docBelongsToCallerHospital() ||
+        (resource.data.keys().hasAny(['doctorId']) && resource.data.doctorId == request.auth.uid)
+      );
+      allow write: if isSignedIn() && (
+        writeBelongsToCallerHospital() ||
+        (resource.data.keys().hasAny(['doctorId']) && resource.data.doctorId == request.auth.uid)
+      ) && (
+        isSuperAdmin() ||
+        staffRole() ||
+        roleHasHospital('admins', request.resource.data.hospitalId) ||
+        roleHasHospital('receptionists', request.resource.data.hospitalId) ||
+        roleHasHospital('doctors', request.resource.data.hospitalId)
+      );
+    }
+
+    match /admission_requests/{docId} {
+      allow read: if isSignedIn() && (
+        docBelongsToCallerHospital() ||
+        (resource.data.keys().hasAny(['doctorId']) && resource.data.doctorId == request.auth.uid)
+      );
+      allow write: if isSignedIn() && (
+        writeBelongsToCallerHospital() ||
+        (request.resource.data.keys().hasAny(['doctorId']) && request.resource.data.doctorId == request.auth.uid)
+      );
+    }
+
+    match /appointments/{docId} {
+      allow read: if isSignedIn() && (
+        docBelongsToCallerHospital() ||
+        (resource.data.keys().hasAny(['doctorId']) && resource.data.doctorId == request.auth.uid) ||
+        (resource.data.keys().hasAny(['patientUid']) && resource.data.patientUid == request.auth.uid)
+      );
+      allow write: if isSignedIn() && (
+        writeBelongsToCallerHospital() ||
+        (resource.data.keys().hasAny(['doctorId']) && resource.data.doctorId == request.auth.uid)
+      );
+    }
+
+    match /appointmentSlots/{docId} {
+      allow read: if isSignedIn() && docBelongsToCallerHospital();
+      allow write: if isSignedIn() && writeBelongsToCallerHospital();
+    }
+
+    match /billing_records/{docId} {
+      allow read: if isSignedIn() && docBelongsToCallerHospital();
+      allow write: if isSignedIn() && writeBelongsToCallerHospital();
+    }
+
+    match /refund_requests/{docId} {
+      allow read: if isSignedIn() && (
+        docBelongsToCallerHospital() ||
+        (resource.data.keys().hasAny(['patientUid']) && resource.data.patientUid == request.auth.uid)
+      );
+      allow create: if isSignedIn() && (
+        writeBelongsToCallerHospital() ||
+        (request.resource.data.keys().hasAny(['patientUid']) && request.resource.data.patientUid == request.auth.uid)
+      );
+      allow update, delete: if isSignedIn() && docBelongsToCallerHospital();
+    }
+
+    match /campaigns/{docId} {
+      allow read: if isSignedIn() && (
+        docBelongsToCallerHospital() ||
+        (resource.data.keys().hasAny(['audience']) && resource.data.status == 'published')
+      );
+      allow write: if isSignedIn() && writeBelongsToCallerHospital() && (
+        isSuperAdmin() ||
+        (exists(userPath()) && userData().role in ['admin', 'super_admin'])
+      );
+    }
+
+    match /notifications/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin() || staffRole();
+    }
+
+    // Sensitive / internal — Admin SDK only
+    match /prescriptionPDFs/{docId} {
+      allow read, write: if false;
+    }
+    match /appointmentPDFs/{docId} {
+      allow read, write: if false;
+    }
+    match /meta/{docId} {
+      allow read, write: if false;
+    }
+    match /errorLogs/{docId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isSuperAdmin();
+    }
+
+    // Default deny for anything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

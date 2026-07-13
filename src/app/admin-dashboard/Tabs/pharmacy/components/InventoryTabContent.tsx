@@ -2,7 +2,7 @@ import React from 'react'
 import { Button } from '@/components/ui/Button'
 import { TextField } from '@/components/ui/forms/TextField'
 import { TableShell } from '@/components/ui/layout/TableShell'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import Pagination from '@/components/ui/navigation/Pagination'
 import type { BranchMedicineStock, MedicineBatch, PharmacyMedicine, PharmacyPurchaseOrder, PharmacySupplier } from '@/types/pharmacy'
 import { DaysCoverBadge } from './RealWorldUiBlocks'
@@ -253,7 +253,7 @@ export function InventoryTabContent(props: {
       )}
 
       {loading ? (
-        <div className="flex justify-center py-12"><LoadingSpinner inline /></div>
+        <TabSkeleton variant="table" />
       ) : (
         <TableShell className="hidden md:block">
             <table className="min-w-[720px] w-full text-sm">

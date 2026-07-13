@@ -7,11 +7,11 @@ import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { query, where, getDocs } from "firebase/firestore"
 import { Appointment } from "@/types/patient"
 import {
-  ClinicalLoadingState,
   ClinicalPageFrame,
   ClinicalPageHeader,
   ClinicalEmptyState,
 } from "@/components/doctor/clinical"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
 import { BarChart3 } from "lucide-react"
 
@@ -369,8 +369,8 @@ export default function DoctorAnalyticsPage() {
     return `${hour12} ${period}`
   }
 
-  if (authLoading || loading) {
-    return <ClinicalLoadingState message="Loading practice insights…" />
+  if ((authLoading || loading) && !analytics) {
+    return <TabSkeleton variant="dashboard" />
   }
 
   if (!user || !analytics) {

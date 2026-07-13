@@ -12,6 +12,7 @@ import { detectDocumentType, detectDocumentTypeFromText, detectDocumentTypeEnhan
 import { getStorage } from "firebase-admin/storage"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 import crypto from "crypto"
+import { createPdfAccessToken } from "@/utils/security/pdfAccessToken"
 
 type BookingState =
   | "idle"
@@ -894,7 +895,17 @@ export async function POST(req: Request) {
     }
 
     const appSecret = process.env.META_WHATSAPP_APP_SECRET
-    if (appSecret) {
+    const allowUnsigned =
+      process.env.ALLOW_UNSIGNED_META_WEBHOOK === "true" ||
+      process.env.NODE_ENV !== "production"
+    if (!appSecret) {
+      if (!allowUnsigned) {
+        return NextResponse.json(
+          { error: "Webhook signature verification is required (set META_WHATSAPP_APP_SECRET)" },
+          { status: 503 }
+        )
+      }
+    } else {
       const signatureHeader = req.headers.get("x-hub-signature-256")
       if (!signatureHeader || !verifyMetaWebhookSignature(rawBody, signatureHeader, appSecret)) {
         return NextResponse.json({ error: "Invalid webhook signature" }, { status: 403 })
@@ -4609,16 +4620,24 @@ To book again, type Book. For help, type Help.`
 
     // Store PDF in Firestore temporarily (for API endpoint to serve it)
     const db = admin.firestore()
+    const accessToken = createPdfAccessToken()
     await db.collection("appointmentPDFs").doc(appointmentId).set({
       pdfBase64: base64Data,
+      accessToken,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
     })
 
     // Create PDF URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
-    
-    const pdfUrl = `${baseUrl}/api/appointments/${appointmentId}/confirmation-pdf`
+    let origin = baseUrl
+    try {
+      origin = new URL(baseUrl).origin
+    } catch {
+      origin = "https://hospitalmanagementsystem-hazel.vercel.app"
+    }
+
+    const pdfUrl = `${origin}/api/appointments/${appointmentId}/confirmation-pdf?token=${encodeURIComponent(accessToken)}`
     
     // Verify PDF URL is accessible before sending
     try {

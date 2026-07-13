@@ -28,6 +28,21 @@ type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "redirecting
 const userDataCache = new Map<string, { role: UserRole; data: Record<string, unknown>; timestamp: number }>()
 const CACHE_DURATION = 5 * 60 * 1000
 
+/** Seed cache after login so dashboards skip another sequential role scan. */
+export function seedUserRoleCache(
+  uid: string,
+  role: UserRole,
+  data: Record<string, unknown> = {}
+) {
+  if (!uid || !role) return
+  userDataCache.set(uid, { role, data, timestamp: Date.now() })
+}
+
+export function clearUserRoleCache(uid?: string) {
+  if (uid) userDataCache.delete(uid)
+  else userDataCache.clear()
+}
+
 async function fetchRoleDocument(
   uid: string,
   role: Exclude<UserRole, null | "super_admin">
@@ -70,8 +85,10 @@ async function getUserRole(
       "pharmacy",
     ]
 
-    for (const role of roleOrder) {
-      const match = await fetchRoleDocument(uid, role)
+    // Parallel role lookups — same priority order when picking the winner
+    const matches = await Promise.all(roleOrder.map((role) => fetchRoleDocument(uid, role)))
+    for (let i = 0; i < roleOrder.length; i++) {
+      const match = matches[i]
       if (match) {
         userDataCache.set(uid, { ...match, timestamp: Date.now() })
         return match

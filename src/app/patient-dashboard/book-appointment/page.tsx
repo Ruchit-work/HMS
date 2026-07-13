@@ -6,7 +6,7 @@ import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import Notification from "@/components/ui/feedback/Notification"
 import BookAppointmentForm from "@/components/patient/BookAppointmentForm"
 import { AppointmentSuccessModal } from "@/components/patient/appointments/AppointmentModals"
@@ -20,7 +20,7 @@ import { assertAppointmentSlotAvailable } from "@/utils/booking/checkAppointment
 
 export default function BookAppointmentPage() {
   return (
-    <Suspense fallback={<LoadingSpinner message="Loading Booking Form..." />}>
+    <Suspense fallback={<TabSkeleton variant="form" />}>
       <BookAppointmentContent />
     </Suspense>
   )
@@ -161,7 +161,7 @@ See you soon! 🏥`
   }, [user, activeHospitalId])
 
   if (loading) {
-    return <LoadingSpinner message="Loading Booking Form..." />
+    return <TabSkeleton variant="form" />
   }
 
   if (!user || !userData) {

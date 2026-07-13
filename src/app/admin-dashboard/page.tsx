@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
@@ -8,37 +9,92 @@ import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import Notification from "@/components/ui/feedback/Notification"
 import { Appointment as AppointmentType } from "@/types/patient"
 import { Branch } from "@/types/branch"
-import PatientManagement from "./Tabs/PatientManagement"
-import PatientAnalytics from "./Tabs/PatientAnalytics"
-import DoctorManagement from "./Tabs/DoctorManagement"
-import AppoinmentManagement from "./Tabs/AppoinmentManagement"
-import CampaignManagement from "./Tabs/CampaignManagement"
-import BillingManagement from "./Tabs/BillingManagement"
-import FinancialAnalytics from "./Tabs/FinancialAnalytics"
-import HospitalManagement from "./Tabs/HospitalManagement"
-import AdminAssignment from "./Tabs/AdminAssignment"
-import PlatformMonitoring from "./Tabs/PlatformMonitoring"
-import SubscriptionCenter from "./Tabs/SubscriptionCenter"
-import LiveActivityCenter from "./Tabs/LiveActivityCenter"
-import GlobalSettingsCenter from "./Tabs/GlobalSettingsCenter"
-import BusinessAnalytics from "./Tabs/BusinessAnalytics"
-import StaffManagement from "./Tabs/StaffManagement"
-import DoctorPerformanceAnalytics from "./Tabs/DoctorPerformanceAnalytics"
-import ReceptionistPerformanceAnalytics from "./Tabs/ReceptionistPerformanceAnalytics"
-import BranchManagement from "./Tabs/BranchManagement"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import AdminProtected from "@/components/AdminProtected"
-import AdminDashboardOverview from "./components/AdminDashboardOverview"
-import PlatformCommandCenter from "./components/PlatformCommandCenter"
 import AdminOverviewSkeleton from "./components/AdminOverviewSkeleton"
-import { HqTenantLens, HqGlobalSearch, HqGlobalSearchTrigger } from "@/components/hq"
+
+const PatientManagement = dynamic(() => import("./Tabs/PatientManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const PatientAnalytics = dynamic(() => import("./Tabs/PatientAnalytics"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const DoctorManagement = dynamic(() => import("./Tabs/DoctorManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const AppoinmentManagement = dynamic(() => import("./Tabs/AppoinmentManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const CampaignManagement = dynamic(() => import("./Tabs/CampaignManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const BillingManagement = dynamic(() => import("./Tabs/BillingManagement"), {
+  loading: () => <TabSkeleton variant="billing" />,
+})
+const FinancialAnalytics = dynamic(() => import("./Tabs/FinancialAnalytics"), {
+  loading: () => <TabSkeleton variant="dashboard" />,
+})
+const HospitalManagement = dynamic(() => import("./Tabs/HospitalManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const AdminAssignment = dynamic(() => import("./Tabs/AdminAssignment"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const PlatformMonitoring = dynamic(() => import("./Tabs/PlatformMonitoring"), {
+  loading: () => <TabSkeleton variant="dashboard" />,
+})
+const SubscriptionCenter = dynamic(() => import("./Tabs/SubscriptionCenter"), {
+  loading: () => <TabSkeleton variant="dashboard" />,
+})
+const LiveActivityCenter = dynamic(() => import("./Tabs/LiveActivityCenter"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const BusinessAnalytics = dynamic(() => import("./Tabs/BusinessAnalytics"), {
+  loading: () => <TabSkeleton variant="dashboard" />,
+})
+const StaffManagement = dynamic(() => import("./Tabs/StaffManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const DoctorPerformanceAnalytics = dynamic(() => import("./Tabs/DoctorPerformanceAnalytics"), {
+  loading: () => <TabSkeleton variant="dashboard" />,
+})
+const ReceptionistPerformanceAnalytics = dynamic(
+  () => import("./Tabs/ReceptionistPerformanceAnalytics"),
+  { loading: () => <TabSkeleton variant="dashboard" /> }
+)
+const BranchManagement = dynamic(() => import("./Tabs/BranchManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
+const AdminDashboardOverview = dynamic(() => import("./components/AdminDashboardOverview"), {
+  loading: () => <AdminOverviewSkeleton />,
+})
+const PlatformCommandCenter = dynamic(() => import("./components/PlatformCommandCenter"), {
+  loading: () => <AdminOverviewSkeleton />,
+})
+const AdminAccountPanel = dynamic(() => import("./components/AdminAccountPanel"), {
+  loading: () => <TabSkeleton variant="form" />,
+})
+const GlobalSettingsCenter = dynamic(() => import("./Tabs/GlobalSettingsCenter"), {
+  loading: () => <TabSkeleton variant="form" />,
+})
+const HqTenantLens = dynamic(
+  () => import("@/components/hq").then((m) => ({ default: m.HqTenantLens })),
+  { ssr: false }
+)
+const HqGlobalSearch = dynamic(
+  () => import("@/components/hq").then((m) => ({ default: m.HqGlobalSearch })),
+  { ssr: false }
+)
+const HqGlobalSearchTrigger = dynamic(
+  () => import("@/components/hq").then((m) => ({ default: m.HqGlobalSearchTrigger })),
+  { ssr: false }
+)
 import type { HqGlobalSearchNavigate } from "@/components/hq"
-import AdminAccountPanel from "./components/AdminAccountPanel"
 import SidebarAccountButton from "@/components/admin/SidebarAccountButton"
 import AdminPageHeader from "@/components/admin/AdminPageHeader"
 import {
@@ -463,8 +519,13 @@ export default function AdminDashboard() {
         })
       }
 
-      // Get all patients count - use hospital-scoped collection
-      const patientsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "patients"))
+      // Load hospital-scoped collections in parallel (same data, faster wall-clock)
+      const [patientsSnapshot, doctorsSnapshot, appointmentsSnapshot] = await Promise.all([
+        getDocs(getHospitalCollection(activeHospitalId, "patients")),
+        getDocs(getHospitalCollection(activeHospitalId, "doctors")),
+        getDocs(getHospitalCollection(activeHospitalId, "appointments")),
+      ])
+
       const allPatients = patientsSnapshot.docs.map(d => ({ 
         id: d.id, 
         ...d.data() 
@@ -473,12 +534,8 @@ export default function AdminDashboard() {
       // Store raw data for client-side filtering
       setRawPatients(allPatients)
 
-      // Get all doctors count - use hospital-scoped collection
-      const doctorsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "doctors"))
       const totalDoctors = doctorsSnapshot.size
 
-      // Get all appointments - use hospital-scoped collection
-      const appointmentsSnapshot = await getDocs(getHospitalCollection(activeHospitalId, "appointments"))
       const allAppointments = appointmentsSnapshot.docs.map(docSnap => ({ 
         id: docSnap.id, 
         ...docSnap.data() 
@@ -902,13 +959,14 @@ export default function AdminDashboard() {
     }
   }
 
-  // Real-time listener for refund requests
+  // Real-time listener for refund requests (tenant-scoped)
   useEffect(() => {
-    if (!user) return
+    if (!user || !activeHospitalId) return
 
     const refundQuery = query(
       collection(db, 'refund_requests'),
       where('status', '==', 'pending'),
+      where('hospitalId', '==', activeHospitalId),
       limit(50)
     )
     
@@ -945,9 +1003,7 @@ export default function AdminDashboard() {
     return () => {
       unsubscribeRefunds()
     }
-  }, [user])
-
-  // Redirect super admins away from campaigns tab
+  }, [user, activeHospitalId])
   useEffect(() => {
     if (isSuperAdmin && activeTab === "campaigns") {
       setActiveTab("overview")
@@ -1009,7 +1065,15 @@ export default function AdminDashboard() {
 
   // Unauthenticated or redirecting users are handled by useAuth('admin')
   if (authLoading || !user) {
-    return <LoadingSpinner message="Verifying access..." inline />
+    return (
+      <div className="hms-portal-shell min-h-screen bg-slate-50">
+        <div className="lg:ml-64">
+          <main className="hms-page min-w-0 p-4 sm:p-6">
+            <AdminOverviewSkeleton />
+          </main>
+        </div>
+      </div>
+    )
   }
 
   // Authenticated admin — load dashboard data; never block forever on missing profile doc

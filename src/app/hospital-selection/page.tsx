@@ -9,7 +9,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { auth } from '@/firebase/config'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import { Hospital } from '@/types/hospital'
 
 function HospitalSelectionContent() {
@@ -109,8 +109,10 @@ function HospitalSelectionContent() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner message="Loading hospitals..." />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-50 py-12 px-4">
+        <div className="mx-auto max-w-4xl">
+          <TabSkeleton variant="generic" />
+        </div>
       </div>
     )
   }
@@ -229,9 +231,7 @@ export default function HospitalSelectionPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <LoadingSpinner message="Loading hospitals..." />
-        </div>
+        <div className="min-h-screen bg-slate-50" aria-busy="true" />
       }
     >
       <HospitalSelectionContent />

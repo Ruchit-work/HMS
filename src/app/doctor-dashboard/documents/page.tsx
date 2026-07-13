@@ -8,10 +8,10 @@ import DocumentsTab from "@/components/documents/DocumentsTab"
 import {
   ClinicalAlertCard,
   ClinicalFormSection,
-  ClinicalLoadingState,
   ClinicalPageFrame,
   ClinicalPageHeader,
 } from "@/components/doctor/clinical"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
 import { FileText } from "lucide-react"
 
@@ -21,7 +21,7 @@ export default function DoctorDocumentsPage() {
   const [selectedPatient] = useState<{ id: string; uid: string; patientId: string; firstName: string; lastName: string; email: string; phone?: string } | null>(null)
 
   if (authLoading || hospitalLoading) {
-    return <ClinicalLoadingState message="Loading documents…" />
+    return <TabSkeleton variant="documents" />
   }
 
   if (!user) {

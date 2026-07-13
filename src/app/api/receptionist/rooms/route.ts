@@ -1,5 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
 
 export async function POST(req: Request) {
   const auth = await authenticateRequest(req)
@@ -17,6 +18,11 @@ export async function POST(req: Request) {
     const initResult = initFirebaseAdmin("receptionist-create-room API")
     if (!initResult.ok) {
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
+    }
+
+    const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
+    if (!hospitalId) {
+      return Response.json({ error: "Hospital context required" }, { status: 400 })
     }
 
     const body = await req.json().catch(() => ({}))
@@ -42,11 +48,20 @@ export async function POST(req: Request) {
     }
 
     const firestore = admin.firestore()
-    const existingCandidates = await firestore
-      .collection("rooms")
-      .where("roomNumber", "==", roomNumber)
-      .limit(10)
-      .get()
+    let existingCandidates
+    try {
+      existingCandidates = await firestore
+        .collection("rooms")
+        .where("roomNumber", "==", roomNumber)
+        .where("hospitalId", "==", hospitalId)
+        .limit(10)
+        .get()
+    } catch {
+      const snap = await firestore.collection("rooms").where("roomNumber", "==", roomNumber).limit(20).get()
+      existingCandidates = {
+        docs: snap.docs.filter((d) => String(d.data()?.hospitalId || "") === hospitalId),
+      }
+    }
     const hasActiveRoomWithSameNumber = existingCandidates.docs.some((docSnap) => {
       const data = docSnap.data() || {}
       return data.isArchived !== true
@@ -62,9 +77,11 @@ export async function POST(req: Request) {
       customRoomTypeName: roomType === "custom" ? customRoomTypeName : null,
       ratePerDay,
       status,
+      hospitalId,
       isArchived: false,
       createdAt: nowIso,
       updatedAt: nowIso,
+      createdBy: auth.user!.uid,
     })
 
     return Response.json({ success: true, roomId: roomRef.id })

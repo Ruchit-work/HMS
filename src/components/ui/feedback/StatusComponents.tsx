@@ -1,34 +1,39 @@
 "use client"
 
 // ============================================================================
-// LoadingSpinner - Full-screen loading indicator with message
+// LoadingSpinner — reserved for essential waits (auth init, long jobs).
+// Prefer TabSkeleton / table skeletons for dashboard content.
 // ============================================================================
 
 interface LoadingSpinnerProps {
   message?: string
   size?: "sm" | "md" | "lg"
   className?: string
-  /** When true, no full-height box or background – use inside tabs/sections */
+  /** When true, compact section placeholder — no full-screen takeover */
   inline?: boolean
 }
 
-export function LoadingSpinner({ message = "Loading...", size = "lg", className = "", inline = false }: LoadingSpinnerProps) {
+export function LoadingSpinner({ message = "Loading...", size = "md", className = "", inline = false }: LoadingSpinnerProps) {
+  if (inline) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-2 py-10 ${className}`} role="status" aria-label={message}>
+        <div className="h-2 w-36 animate-pulse rounded-full bg-slate-200" />
+        <div className="h-2 w-24 animate-pulse rounded-full bg-slate-100" />
+        {message ? <p className="text-xs text-slate-400">{message}</p> : null}
+      </div>
+    )
+  }
+
   const sizeMap = {
     sm: "32px",
     md: "48px",
-    lg: "64px"
+    lg: "56px",
   }
 
   const spinnerSize = sizeMap[size]
 
   return (
-    <div
-      className={
-        inline
-          ? `flex items-center justify-center py-12 ${className}`
-          : `min-h-screen flex items-center justify-center bg-slate-50 ${className}`
-      }
-    >
+    <div className={`min-h-screen flex items-center justify-center bg-slate-50 ${className}`} role="status" aria-label={message}>
       <div className="text-center">
         <div className="loading mx-auto" style={{ width: spinnerSize, height: spinnerSize }}>
           <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
@@ -36,24 +41,23 @@ export function LoadingSpinner({ message = "Loading...", size = "lg", className 
             <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
           </svg>
         </div>
-        {message && <p className="mt-4 text-slate-500">{message}</p>}
+        {message && <p className="mt-4 text-sm text-slate-500">{message}</p>}
       </div>
     </div>
   )
 }
 
-// Inline spinner component for use in smaller contexts
-export function InlineSpinner({ size = "md", className = "" }: { size?: "sm" | "md" | "lg", className?: string }) {
+export function InlineSpinner({ size = "md", className = "" }: { size?: "sm" | "md" | "lg"; className?: string }) {
   const sizeMap = {
-    sm: "32px",
-    md: "48px",
-    lg: "64px"
+    sm: "24px",
+    md: "32px",
+    lg: "40px",
   }
 
   const spinnerSize = sizeMap[size]
 
   return (
-    <div className={`loading ${className}`} style={{ width: spinnerSize, height: spinnerSize }}>
+    <div className={`loading ${className}`} style={{ width: spinnerSize, height: spinnerSize }} role="status" aria-label="Loading">
       <svg width="64px" height="48px" viewBox="0 0 64 48" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
         <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="back"></polyline>
         <polyline points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24" id="front"></polyline>
@@ -62,7 +66,6 @@ export function InlineSpinner({ size = "md", className = "" }: { size?: "sm" | "
   )
 }
 
-// Default export for backward compatibility
 export default LoadingSpinner
 
 // ============================================================================
@@ -75,11 +78,11 @@ interface SuccessToastProps {
   className?: string
 }
 
-export function SuccessToast({ message, onClose, className = '' }: SuccessToastProps) {
+export function SuccessToast({ message, onClose, className = "" }: SuccessToastProps) {
   return (
     <div
-      className={`fixed top-4 right-4 z-50 flex items-center space-x-2 rounded-lg bg-emerald-500 px-6 py-3 text-white shadow-lg animate-pulse ${className}`}
-      style={{ animation: 'slideInRight 0.3s ease-out' }}
+      className={`fixed top-4 right-4 z-50 flex items-center space-x-2 rounded-lg bg-emerald-500 px-6 py-3 text-white shadow-lg ${className}`}
+      style={{ animation: "slideInRight 0.3s ease-out" }}
     >
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -93,4 +96,3 @@ export function SuccessToast({ message, onClose, className = '' }: SuccessToastP
     </div>
   )
 }
-

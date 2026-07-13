@@ -2,6 +2,11 @@ import { NextResponse } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
+import {
+  assertUserHospitalAccess,
+  getUserActiveHospitalId,
+  isPlatformSuperAdmin,
+} from "@/utils/firebase/serverHospitalQueries"
 
 /**
  * POST /api/campaigns/delete
@@ -9,7 +14,6 @@ import { applyRateLimit } from "@/utils/shared/rateLimit"
  * Requires admin role
  */
 export async function POST(request: Request) {
-  // Authenticate request - requires admin role
   const auth = await authenticateRequest(request, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
@@ -39,11 +43,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Use Firebase Admin SDK to delete the campaign
     const db = admin.firestore()
     const campaignRef = db.collection("campaigns").doc(id)
-    
-    // Check if campaign exists
+
     const campaignDoc = await campaignRef.get()
     if (!campaignDoc.exists) {
       return NextResponse.json(
@@ -52,29 +54,49 @@ export async function POST(request: Request) {
       )
     }
 
-    // Backward-compatible tenant guard:
-    // enforce match only when both campaign + request carry hospital context.
     const campaignData = campaignDoc.data() as { hospitalId?: string | null } | undefined
-    const campaignHospitalId = campaignData?.hospitalId || null
-    const requestedHospitalId =
-      typeof hospitalId === "string" && hospitalId.trim().length > 0 ? hospitalId.trim() : null
-    const requesterHospitalId =
-      typeof auth.user?.data?.hospitalId === "string" && auth.user.data.hospitalId.trim().length > 0
-        ? auth.user.data.hospitalId.trim()
+    const campaignHospitalId =
+      typeof campaignData?.hospitalId === "string" && campaignData.hospitalId.trim()
+        ? campaignData.hospitalId.trim()
         : null
-    const isSuperAdmin = Boolean(auth.user?.data?.isSuperAdmin)
 
-    if (!isSuperAdmin && campaignHospitalId && (requestedHospitalId || requesterHospitalId)) {
-      const effectiveHospitalId = requestedHospitalId || requesterHospitalId
-      if (effectiveHospitalId !== campaignHospitalId) {
+    const superAdmin = await isPlatformSuperAdmin(auth.user!.uid)
+    if (!superAdmin) {
+      const requesterHospitalId =
+        (typeof hospitalId === "string" && hospitalId.trim()
+          ? hospitalId.trim()
+          : null) || (await getUserActiveHospitalId(auth.user!.uid))
+
+      if (!requesterHospitalId) {
         return NextResponse.json(
-          { success: false, error: "Forbidden: Campaign does not belong to your hospital context" },
+          { success: false, error: "Hospital context required" },
+          { status: 403 }
+        )
+      }
+
+      const hasAccess = await assertUserHospitalAccess(auth.user!.uid, requesterHospitalId)
+      if (!hasAccess) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: hospital access denied" },
+          { status: 403 }
+        )
+      }
+
+      if (!campaignHospitalId) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: campaign has no hospital scope" },
+          { status: 403 }
+        )
+      }
+
+      if (campaignHospitalId !== requesterHospitalId) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: Campaign does not belong to your hospital" },
           { status: 403 }
         )
       }
     }
 
-    // Delete the campaign
     await campaignRef.delete()
 
     return NextResponse.json({
@@ -91,4 +113,3 @@ export async function POST(request: Request) {
     )
   }
 }
-

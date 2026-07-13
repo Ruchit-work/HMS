@@ -1,7 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getAllActiveHospitals, getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getAllActiveHospitals, getDoctorHospitalId, getHospitalCollectionPath, getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   requestId: string
@@ -102,6 +102,24 @@ export async function POST(
       return Response.json({ error: "Room is not available" }, { status: 400 })
     }
 
+    const hospitalId =
+      (await getUserActiveHospitalId(auth.user!.uid)) ||
+      (typeof roomData.hospitalId === "string" ? roomData.hospitalId.trim() : "") ||
+      (typeof appointmentSnap.data()?.hospitalId === "string"
+        ? String(appointmentSnap.data()?.hospitalId).trim()
+        : "") ||
+      (await getDoctorHospitalId(String(requestData.doctorId || "")))
+
+    if (!hospitalId) {
+      return Response.json({ error: "No active hospital found for current user" }, { status: 400 })
+    }
+
+    const roomHospitalId =
+      typeof roomData.hospitalId === "string" ? roomData.hospitalId.trim() : ""
+    if (roomHospitalId && roomHospitalId !== hospitalId) {
+      return Response.json({ error: "Room does not belong to your hospital" }, { status: 403 })
+    }
+
     const nowIso = new Date().toISOString()
     const admissionRef = firestore.collection("admissions").doc()
     const parsedInitialDeposit = Math.max(0, Number(initialDeposit || 0))
@@ -114,6 +132,7 @@ export async function POST(
         : "cash"
 
     const admissionPayload = {
+      hospitalId,
       appointmentId,
       patientUid: String(requestData.patientUid || ""),
       patientId: requestData.patientId || null,

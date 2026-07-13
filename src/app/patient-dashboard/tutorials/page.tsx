@@ -3,14 +3,13 @@
 import Link from "next/link"
 import PageHeader from "@/components/ui/layout/PageHeader"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 
 export default function PatientPortalTutorial() {
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
 
   if (loading) {
-    return <LoadingSpinner />
+    return <div className="min-h-screen bg-gray-50" aria-busy="true" />
   }
 
   if (!user) {

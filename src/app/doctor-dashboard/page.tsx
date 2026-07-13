@@ -12,9 +12,9 @@ import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campa
 import CampaignCarousel from "@/components/patient/ui/CampaignCarousel"
 import {
   ClinicalFormSection,
-  ClinicalLoadingState,
   ClinicalPageFrame,
 } from "@/components/doctor/clinical"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import { Button } from "@/components/ui/Button"
 import VisitingHoursEditor from "@/components/doctor/schedule/VisitingHoursEditor"
 import BlockedDatesManager from "@/components/doctor/schedule/BlockedDatesManager"
@@ -249,7 +249,7 @@ export default function DoctorDashboard() {
   })
 
   if (loading) {
-    return <ClinicalLoadingState message="Preparing your clinic…" />
+    return <TabSkeleton variant="dashboard" />
   }
 
   if (!user) {
@@ -257,7 +257,7 @@ export default function DoctorDashboard() {
   }
 
   if (!userData) {
-    return <ClinicalLoadingState message="Preparing your clinic…" />
+    return <TabSkeleton variant="dashboard" />
   }
 
   return (

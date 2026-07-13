@@ -6,7 +6,7 @@ import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import Notification from "@/components/ui/feedback/Notification"
 import { AppointmentsList } from "@/components/patient/appointments/AppointmentCard"
 import DocumentsTab from "@/components/documents/DocumentsTab"
@@ -174,7 +174,7 @@ export default function PatientAppointments() {
   }, [activeTab, viewMode])
 
   if (loading || hospitalLoading) {
-    return <LoadingSpinner message="Loading appointments..." />
+    return <TabSkeleton variant="table" />
   }
 
   if (!activeHospitalId) {

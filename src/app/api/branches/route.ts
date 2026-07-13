@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
 import { authenticateRequest } from '@/utils/firebase/apiAuth'
-import { getUserActiveHospitalId } from '@/utils/firebase/serverHospitalQueries'
+import { assertUserHospitalAccess, getUserActiveHospitalId } from '@/utils/firebase/serverHospitalQueries'
 import { Branch, BranchTimings } from '@/types/branch'
 import { applyRateLimit } from '@/utils/shared/rateLimit'
 
@@ -40,41 +40,26 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const hospitalId = searchParams.get('hospitalId')
-    const enforceHospitalAuth = process.env.ENFORCE_BRANCH_HOSPITAL_AUTH === 'true'
     const auth = await authenticateRequest(request)
-    const authWarningHeaders: Record<string, string> = {}
 
-    let targetHospitalId = hospitalId
+    if (!auth.success || !auth.user) {
+      return NextResponse.json(
+        { success: false, error: auth.error || 'Unauthorized' },
+        { status: auth.statusCode || 401 }
+      )
+    }
 
-    // If no hospitalId provided, fall back to authenticated user's active hospital
+    let targetHospitalId = hospitalId?.trim() || null
+
     if (!targetHospitalId) {
-      if (!auth.success || !auth.user) {
-        return NextResponse.json(
-          { success: false, error: auth.error || 'Unauthorized' },
-          { status: auth.statusCode || 401 }
-        )
-      }
       targetHospitalId = await getUserActiveHospitalId(auth.user.uid)
     } else {
-      if (!auth.success || !auth.user) {
-        if (enforceHospitalAuth) {
-          return NextResponse.json(
-            { success: false, error: auth.error || 'Unauthorized' },
-            { status: auth.statusCode || 401 }
-          )
-        }
-        authWarningHeaders['X-Branch-Auth-Warning'] = 'Unauthenticated hospitalId query allowed in compatibility mode'
-      } else {
-        const userHospitalId = await getUserActiveHospitalId(auth.user.uid)
-        if (userHospitalId && userHospitalId !== targetHospitalId.trim()) {
-          if (enforceHospitalAuth) {
-            return NextResponse.json(
-              { success: false, error: 'Forbidden: hospital access mismatch' },
-              { status: 403 }
-            )
-          }
-          authWarningHeaders['X-Branch-Auth-Warning'] = 'Cross-hospital access allowed in compatibility mode'
-        }
+      const hasAccess = await assertUserHospitalAccess(auth.user.uid, targetHospitalId)
+      if (!hasAccess) {
+        return NextResponse.json(
+          { success: false, error: 'Forbidden: hospital access mismatch' },
+          { status: 403 }
+        )
       }
     }
 
@@ -109,7 +94,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       branches
-    }, { headers: authWarningHeaders })
+    })
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch branches' },
@@ -160,6 +145,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Name, location, timings, and hospitalId are required' },
         { status: 400 }
+      )
+    }
+
+    const hasAccess = await assertUserHospitalAccess(auth.user.uid, normalizedHospitalId)
+    if (!hasAccess) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: hospital access mismatch' },
+        { status: 403 }
       )
     }
 

@@ -1,5 +1,5 @@
 import React from 'react'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import type { PharmacyMedicine, StockTransfer } from '@/types/pharmacy'
 import { ActionEmptyState, getTransferStatusMeta } from './RealWorldUiBlocks'
 import { TransferStockForm } from './StockTransferAndImportForms'
@@ -44,7 +44,7 @@ export function TransfersTabContent(props: {
       </div>
       <div className="overflow-x-auto">
         {loading ? (
-          <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
+          <TabSkeleton variant="table" />
         ) : (
           <table className="w-full text-sm border border-slate-200 rounded-lg">
             <thead className="bg-slate-100">

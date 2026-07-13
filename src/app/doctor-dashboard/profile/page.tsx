@@ -13,10 +13,10 @@ import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { Button } from "@/components/ui/Button"
 import {
   ClinicalFormSection,
-  ClinicalLoadingState,
   ClinicalPageFrame,
   ClinicalPageHeader,
 } from "@/components/doctor/clinical"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
 import PatientAvatar from "@/components/doctor/clinical/PatientAvatar"
 import { User } from "lucide-react"
@@ -72,7 +72,7 @@ export default function DoctorProfilePage() {
   }, [user])
 
   if (authLoading || loading) {
-    return <ClinicalLoadingState message="Loading profile…" />
+    return <TabSkeleton variant="form" />
   }
 
   if (!user || !userData) {

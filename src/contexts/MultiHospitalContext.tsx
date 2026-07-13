@@ -5,7 +5,7 @@
 
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { doc, getDoc, updateDoc, getDocs, collection } from 'firebase/firestore'
 import { db } from '@/firebase/config'
@@ -68,28 +68,51 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
       if (userDoc.exists()) {
         const userData = userDoc.data()
         hospitals = userData?.hospitals || []
-        currentActiveHospitalId = userData?.activeHospital || null
+        currentActiveHospitalId = userData?.activeHospital || userData?.hospitalId || null
         userIsSuperAdmin = userData?.role === 'super_admin'
         setIsSuperAdmin(userIsSuperAdmin)
-      } else {
-        // Fallback: Check role-specific collections for backward compatibility
-        const roleCollections = ['admins', 'doctors', 'receptionists', 'patients', 'pharmacists']
-        for (const roleColl of roleCollections) {
-          const roleDoc = await getDoc(doc(db, roleColl, user.uid))
-          if (roleDoc.exists()) {
+
+        // If users doc exists but has no hospital membership, fall back to role collections
+        if (!userIsSuperAdmin && hospitals.length === 0) {
+          const roleCollections = ['admins', 'doctors', 'receptionists', 'patients', 'pharmacists'] as const
+          const roleSnaps = await Promise.all(
+            roleCollections.map((roleColl) => getDoc(doc(db, roleColl, user.uid)))
+          )
+          for (let i = 0; i < roleCollections.length; i++) {
+            const roleDoc = roleSnaps[i]
+            if (!roleDoc.exists()) continue
             const data = roleDoc.data()
-            // Extract hospitalId or hospitals array
             if (data?.hospitalId) {
               hospitals = [data.hospitalId]
-              currentActiveHospitalId = data.hospitalId
-            } else if (data?.hospitals) {
+              currentActiveHospitalId = currentActiveHospitalId || data.hospitalId
+            } else if (Array.isArray(data?.hospitals) && data.hospitals.length > 0) {
               hospitals = data.hospitals
-              currentActiveHospitalId = data.activeHospital || hospitals[0] || null
+              currentActiveHospitalId =
+                currentActiveHospitalId || data.activeHospital || hospitals[0] || null
             }
-            userIsSuperAdmin = data?.role === 'super_admin' || data?.isSuperAdmin === true
-            setIsSuperAdmin(userIsSuperAdmin)
             break
           }
+        }
+      } else {
+        // Fallback: Check role-specific collections for backward compatibility
+        const roleCollections = ['admins', 'doctors', 'receptionists', 'patients', 'pharmacists'] as const
+        const roleSnaps = await Promise.all(
+          roleCollections.map((roleColl) => getDoc(doc(db, roleColl, user.uid)))
+        )
+        for (let i = 0; i < roleCollections.length; i++) {
+          const roleDoc = roleSnaps[i]
+          if (!roleDoc.exists()) continue
+          const data = roleDoc.data()
+          if (data?.hospitalId) {
+            hospitals = [data.hospitalId]
+            currentActiveHospitalId = data.hospitalId
+          } else if (data?.hospitals) {
+            hospitals = data.hospitals
+            currentActiveHospitalId = data.activeHospital || hospitals[0] || null
+          }
+          userIsSuperAdmin = data?.role === 'super_admin' || data?.isSuperAdmin === true
+          setIsSuperAdmin(userIsSuperAdmin)
+          break
         }
       }
 
@@ -239,18 +262,30 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, userHospitals, activeHospitalId])
 
-  const value: MultiHospitalContextType = {
-    activeHospital,
-    activeHospitalId,
-    userHospitals,
-    loading,
-    error,
-    setActiveHospital,
-    refreshHospitals,
-    isSuperAdmin,
-    hasMultipleHospitals: userHospitals.length > 1,
-    needsHospitalSelection: userHospitals.length === 0 || (userHospitals.length > 1 && !activeHospitalId)
-  }
+  const value = useMemo<MultiHospitalContextType>(
+    () => ({
+      activeHospital,
+      activeHospitalId,
+      userHospitals,
+      loading,
+      error,
+      setActiveHospital,
+      refreshHospitals,
+      isSuperAdmin,
+      hasMultipleHospitals: userHospitals.length > 1,
+      needsHospitalSelection: userHospitals.length === 0 || (userHospitals.length > 1 && !activeHospitalId),
+    }),
+    [
+      activeHospital,
+      activeHospitalId,
+      userHospitals,
+      loading,
+      error,
+      setActiveHospital,
+      refreshHospitals,
+      isSuperAdmin,
+    ]
+  )
 
   return (
     <MultiHospitalContext.Provider value={value}>

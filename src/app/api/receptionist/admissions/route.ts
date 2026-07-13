@@ -4,6 +4,7 @@ import {
   getHospitalCollectionPath,
   getReceptionistDefaultBranch,
   getUserActiveHospitalId,
+  resolveAdmissionHospitalId,
 } from "@/utils/firebase/serverHospitalQueries"
 
 const DOB_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -43,16 +44,43 @@ export async function GET(req: Request) {
     const status = searchParams.get("status")
     const includeAppointmentDetails = searchParams.get("includeAppointmentDetails") !== "false"
 
+    const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
+    if (!hospitalId) {
+      return Response.json({ error: "No active hospital found for current user" }, { status: 400 })
+    }
+
     const firestore = admin.firestore()
     const baseRef = firestore.collection("admissions")
 
     const fetchDocs = async () => {
-      if (status) {
-        const filteredSnap = await baseRef.where("status", "==", status).get()
-        return filteredSnap.docs
+      try {
+        if (status) {
+          const filteredSnap = await baseRef
+            .where("hospitalId", "==", hospitalId)
+            .where("status", "==", status)
+            .get()
+          return filteredSnap.docs
+        }
+        const orderedSnap = await baseRef
+          .where("hospitalId", "==", hospitalId)
+          .orderBy("checkInAt", "desc")
+          .get()
+        return orderedSnap.docs
+      } catch {
+        // Missing composite index or legacy docs without hospitalId
+        const snap = status
+          ? await baseRef.where("status", "==", status).get()
+          : await baseRef.orderBy("checkInAt", "desc").get()
+        const matched: typeof snap.docs = []
+        for (const docSnap of snap.docs) {
+          const data = docSnap.data() || {}
+          const docHospital =
+            (typeof data.hospitalId === "string" && data.hospitalId.trim()) ||
+            (await resolveAdmissionHospitalId(data))
+          if (docHospital === hospitalId) matched.push(docSnap)
+        }
+        return matched
       }
-      const orderedSnap = await baseRef.orderBy("checkInAt", "desc").get()
-      return orderedSnap.docs
     }
 
     const docs = await fetchDocs()
@@ -73,7 +101,13 @@ export async function GET(req: Request) {
             const appointmentId = String(data.appointmentId || "")
             if (appointmentId) {
               try {
-                const aptSnap = await firestore.collection("appointments").doc(appointmentId).get()
+                const scopedSnap = await firestore
+                  .collection(getHospitalCollectionPath(hospitalId, "appointments"))
+                  .doc(appointmentId)
+                  .get()
+                const aptSnap = scopedSnap.exists
+                  ? scopedSnap
+                  : await firestore.collection("appointments").doc(appointmentId).get()
                 if (aptSnap.exists) {
                   const aptData = aptSnap.data() || {}
                   appointmentDetails = {
@@ -198,6 +232,12 @@ export async function POST(req: Request) {
       return Response.json({ error: "No active hospital found for current user" }, { status: 400 })
     }
 
+    const roomHospitalId =
+      typeof roomData.hospitalId === "string" ? roomData.hospitalId.trim() : ""
+    if (roomHospitalId && roomHospitalId !== hospitalId) {
+      return Response.json({ error: "Room does not belong to your hospital" }, { status: 403 })
+    }
+
     const nowIso = new Date().toISOString()
     const isPlanned = admitType === "planned"
     const admissionRef = firestore.collection("admissions").doc()
@@ -298,10 +338,14 @@ export async function POST(req: Request) {
         .collection("admissions")
         .where("patientUid", "==", resolvedPatientUid)
         .where("status", "in", ["admitted", "scheduled"])
-        .limit(1)
+        .limit(5)
         .get()
-      if (!existingAdmissionSnap.empty) {
-        const activeStatus = String(existingAdmissionSnap.docs[0]?.data()?.status || "")
+      const conflicting = existingAdmissionSnap.docs.find((d) => {
+        const data = d.data() || {}
+        return !data.hospitalId || data.hospitalId === hospitalId
+      })
+      if (conflicting) {
+        const activeStatus = String(conflicting.data()?.status || "")
         return Response.json(
           {
             error:
@@ -351,6 +395,7 @@ export async function POST(req: Request) {
           ]
         : []
     const admissionPayload = {
+      hospitalId,
       ipdNo,
       appointmentId: "",
       patientUid: resolvedPatientUid || resolvedPatientId || `direct-${admissionRef.id}`,

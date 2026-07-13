@@ -5,7 +5,7 @@ import { getDocs } from 'firebase/firestore'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import { formatDate, calculateAge } from '@/utils/shared/date'
 
 interface Patient {
@@ -919,8 +919,8 @@ export default function PatientAnalytics({ selectedBranchId = "all" }: { selecte
     }
   }
 
-  if (authLoading || loading) {
-    return <LoadingSpinner message="Loading patient analytics..." />
+  if (authLoading || (loading && !analytics)) {
+    return <TabSkeleton variant="dashboard" />
   }
 
   if (!analytics) {

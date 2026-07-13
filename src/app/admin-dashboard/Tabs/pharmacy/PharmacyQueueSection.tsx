@@ -1,6 +1,6 @@
 import React from 'react'
 import Notification from '@/components/ui/feedback/Notification'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import { QueueFiltersBar } from './components/RealWorldUiBlocks'
 
 type QueueListItem = {
@@ -179,7 +179,7 @@ export function PharmacyQueueSection({
                   showClear={Boolean(queueSearch.trim() || showUrgentOnly || queueSort !== 'oldest')}
                 />
                 {loading ? (
-                  <div className="flex justify-center py-12"><LoadingSpinner inline /></div>
+                  <TabSkeleton variant="table" />
                 ) : (
                   <div className="flex-1 min-h-0 overflow-auto">
                     <table className="w-full text-sm">

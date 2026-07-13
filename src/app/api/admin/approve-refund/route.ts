@@ -2,15 +2,19 @@ import { NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
+import {
+  assertUserHospitalAccess,
+  getHospitalCollectionPath,
+  getUserActiveHospitalId,
+  isPlatformSuperAdmin,
+} from "@/utils/firebase/serverHospitalQueries"
 
 export async function POST(req: Request) {
-  // Apply rate limiting first
   const rateLimitResult = await applyRateLimit(req, "ADMIN")
   if (rateLimitResult instanceof Response) {
-    return rateLimitResult // Rate limited
+    return rateLimitResult
   }
 
-  // Authenticate request - requires admin role
   const auth = await authenticateRequest(req, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
@@ -20,10 +24,9 @@ export async function POST(req: Request) {
   }
   const adminUser = auth.user
 
-  // Re-apply rate limit with user ID for better tracking
   const rateLimitWithUser = await applyRateLimit(req, "ADMIN", adminUser.uid)
   if (rateLimitWithUser instanceof Response) {
-    return rateLimitWithUser // Rate limited
+    return rateLimitWithUser
   }
 
   try {
@@ -45,17 +48,53 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Refund request is not pending' }, { status: 400 })
     }
 
+    const superAdmin = await isPlatformSuperAdmin(adminUser.uid)
+    const adminHospitalId = await getUserActiveHospitalId(adminUser.uid)
+    const refundHospitalId =
+      typeof refund?.hospitalId === 'string' && refund.hospitalId.trim()
+        ? refund.hospitalId.trim()
+        : null
+
+    if (!superAdmin) {
+      if (!adminHospitalId) {
+        return NextResponse.json({ error: 'Hospital context required' }, { status: 403 })
+      }
+      if (refundHospitalId && refundHospitalId !== adminHospitalId) {
+        return NextResponse.json({ error: 'Refund belongs to another hospital' }, { status: 403 })
+      }
+    }
+
     const appointmentId = String(refund?.appointmentId || '')
     if (!appointmentId) {
       return NextResponse.json({ error: 'Invalid appointmentId on refund request' }, { status: 400 })
     }
 
-    const aptRef = firestore.collection('appointments').doc(appointmentId)
-    const aptSnap = await aptRef.get()
+    const hospitalForApt = refundHospitalId || adminHospitalId
+    let aptRef = hospitalForApt
+      ? firestore.collection(getHospitalCollectionPath(hospitalForApt, 'appointments')).doc(appointmentId)
+      : firestore.collection('appointments').doc(appointmentId)
+    let aptSnap = await aptRef.get()
+
+    if (!aptSnap.exists && hospitalForApt) {
+      aptRef = firestore.collection('appointments').doc(appointmentId)
+      aptSnap = await aptRef.get()
+    }
+
     if (!aptSnap.exists) {
       return NextResponse.json({ error: 'Appointment not found' }, { status: 404 })
     }
     const apt = aptSnap.data() as any
+    const aptHospitalId =
+      typeof apt?.hospitalId === 'string' && apt.hospitalId.trim()
+        ? apt.hospitalId.trim()
+        : hospitalForApt
+
+    if (!superAdmin && aptHospitalId) {
+      const ok = await assertUserHospitalAccess(adminUser.uid, aptHospitalId)
+      if (!ok) {
+        return NextResponse.json({ error: 'Appointment belongs to another hospital' }, { status: 403 })
+      }
+    }
 
     const amount = Number(refund?.paymentAmount ?? apt?.paymentAmount ?? apt?.totalConsultationFee ?? 0)
     const patientId = String(refund?.patientId || apt?.patientId || "")
@@ -64,7 +103,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Patient ID missing on refund request" }, { status: 400 })
     }
 
-    // Update appointment to reflect refund
     await aptRef.update({
       paymentStatus: 'refunded',
       refundApproved: true,
@@ -75,21 +113,14 @@ export async function POST(req: Request) {
       updatedAt: new Date().toISOString(),
     })
 
-    // Mark refund request as approved
     await refundRef.update({
       status: 'approved',
       approvedAt: new Date().toISOString(),
-      approvedBy: null, // can be set by auth context in future
+      approvedBy: adminUser.uid,
     })
-
-    // Note: Wallet refund feature has been removed
-    // Refunds are now processed through other payment methods
-
 
     return NextResponse.json({ ok: true, amountRefunded: amount })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? 'Internal error' }, { status: 500 })
   }
 }
-
-

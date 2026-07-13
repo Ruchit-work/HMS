@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import { useDebounce } from "@/hooks/useDebounce"
+import { SuccessToast } from "@/components/ui/feedback/StatusComponents"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import AdminProtected from "@/components/AdminProtected"
 import { Campaign, CampaignAudience, CampaignStatus, createCampaign, slugify, updateCampaign } from "@/utils/campaigns/campaigns"
-import { collection, getDocs, orderBy, query, Timestamp } from "firebase/firestore"
+import { collection, getDocs, orderBy, query, where, Timestamp } from "firebase/firestore"
 import { db, auth } from "@/firebase/config"
-import { SuccessToast } from "@/components/ui/feedback/StatusComponents"
 import { formatDateTime } from "@/utils/shared/date"
 import { sanitizeForInnerHTML } from "@/utils/shared/sanitizeHtml"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
@@ -62,6 +63,7 @@ export default function CampaignManagement({
   const [form, setForm] = useState<Campaign>(() => createInitialFormState())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [filter, setFilter] = useState<{ status: CampaignStatus | "all" }>({ status: "all" })
   const [audienceFilter, setAudienceFilter] = useState<CampaignAudience | "all">("all")
@@ -82,19 +84,26 @@ export default function CampaignManagement({
 
   const reloadCampaigns = async (): Promise<Campaign[]> => {
     try {
-      const q = query(collection(db, 'campaigns'), orderBy('updatedAt', 'desc'))
-      const snap = await getDocs(q)
-      const campaignsData = snap.docs.map(d => {
-        const data = d.data()
-        return { id: d.id, ...data } as Campaign
-      })
-      setCampaigns(campaignsData)
-      return campaignsData
-    } catch {
+      if (!activeHospitalId) {
+        setCampaigns([])
+        return []
+      }
+      let campaignsData: Campaign[] = []
       try {
-        const q = query(collection(db, 'campaigns'))
+        const q = query(
+          collection(db, 'campaigns'),
+          where('hospitalId', '==', activeHospitalId),
+          orderBy('updatedAt', 'desc')
+        )
         const snap = await getDocs(q)
-        const campaignsData = snap.docs.map(d => {
+        campaignsData = snap.docs.map(d => {
+          const data = d.data()
+          return { id: d.id, ...data } as Campaign
+        })
+      } catch {
+        const q = query(collection(db, 'campaigns'), where('hospitalId', '==', activeHospitalId))
+        const snap = await getDocs(q)
+        campaignsData = snap.docs.map(d => {
           const data = d.data()
           return { id: d.id, ...data } as Campaign
         })
@@ -103,11 +112,11 @@ export default function CampaignManagement({
           const bUpdated = b.updatedAt instanceof Timestamp ? b.updatedAt.toMillis() : 0
           return bUpdated - aUpdated
         })
-        setCampaigns(campaignsData)
-        return campaignsData
-      } catch {
-        return campaigns
       }
+      setCampaigns(campaignsData)
+      return campaignsData
+    } catch {
+      return campaigns
     } finally {
       setLoadingCampaigns(false)
     }
@@ -123,7 +132,7 @@ export default function CampaignManagement({
     checkCronStatus()
     checkReminderStatus()
      
-  }, [user, authLoading])
+  }, [user, authLoading, activeHospitalId])
 
   const checkCronStatus = async () => {
     try {
@@ -247,8 +256,8 @@ export default function CampaignManagement({
     if (audienceFilter !== "all") {
       rows = rows.filter((c) => c.audience === audienceFilter)
     }
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase()
+    if (debouncedSearchTerm.trim()) {
+      const term = debouncedSearchTerm.toLowerCase()
       rows = rows.filter(
         (c) =>
           c.title.toLowerCase().includes(term) ||
@@ -285,7 +294,7 @@ export default function CampaignManagement({
           return 0
       }
     })
-  }, [campaigns, filter, searchTerm, audienceFilter, sortField, sortOrder])
+  }, [campaigns, filter, debouncedSearchTerm, audienceFilter, sortField, sortOrder])
 
   const {
     currentPage,
@@ -428,7 +437,7 @@ export default function CampaignManagement({
   }
 
   if (authLoading) {
-    return <LoadingSpinner message="Loading campaigns..." />
+    return <TabSkeleton variant="table" />
   }
 
   if (!user) {

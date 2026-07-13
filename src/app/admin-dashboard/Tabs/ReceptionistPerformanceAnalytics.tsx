@@ -6,7 +6,7 @@ import { db } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 
 interface Appointment {
   id: string
@@ -288,7 +288,7 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
   }
 
   if (authLoading || hospitalLoading || loading) {
-    return <LoadingSpinner message="Loading receptionist analytics..." />
+    return <TabSkeleton variant="dashboard" />
   }
 
   return (

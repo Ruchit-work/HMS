@@ -15,6 +15,7 @@ import { sendDocumentMessage } from "@/server/metaWhatsApp"
 import { getPrescriptionPDFBuffer } from "@/utils/documents/pdfGenerators"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { createPdfAccessToken } from "@/utils/security/pdfAccessToken"
 
 export async function POST(request: Request) {
   // Authenticate request - requires doctor role
@@ -125,6 +126,7 @@ export async function POST(request: Request) {
 
     // Generate prescription PDF and store for WhatsApp document (fees + medicine)
     let pdfStored = false
+    let pdfAccessToken = ""
     const hasCompletionData =
       fullAppointment &&
       (fullAppointment.status === "completed" ||
@@ -144,13 +146,16 @@ export async function POST(request: Request) {
         const pdfBase64 = pdfBuffer.toString("base64")
         const expiresAt = new Date()
         expiresAt.setDate(expiresAt.getDate() + 7)
+        const accessToken = createPdfAccessToken()
         await db.collection("prescriptionPDFs").doc(appointmentId).set({
           pdfBase64,
+          accessToken,
           expiresAt: expiresAt.toISOString(),
           patientName: name,
           appointmentDate: apt.appointmentDate || "",
           createdAt: new Date().toISOString(),
         })
+        pdfAccessToken = accessToken
         pdfStored = true
       } catch (pdfErr) {
         // Don't fail completion if PDF fails - log and continue
@@ -180,8 +185,8 @@ export async function POST(request: Request) {
 
     // Add PDF download link if we have it (fallback if document send fails)
     let pdfDownloadUrl = ""
-    if (pdfStored) {
-      pdfDownloadUrl = `${getPdfBaseUrl()}/api/appointments/${appointmentId}/prescription-pdf`
+    if (pdfStored && pdfAccessToken) {
+      pdfDownloadUrl = `${getPdfBaseUrl()}/api/appointments/${appointmentId}/prescription-pdf?token=${encodeURIComponent(pdfAccessToken)}`
       messageText += `\n\n📄 *Download your prescription & invoice:*\n${pdfDownloadUrl}`
     }
 
@@ -214,9 +219,9 @@ export async function POST(request: Request) {
     }
 
     // Send prescription PDF as document (fees + medicine)
-    if (pdfStored) {
+    if (pdfStored && pdfAccessToken) {
       try {
-        const pdfUrl = `${getPdfBaseUrl()}/api/appointments/${appointmentId}/prescription-pdf`
+        const pdfUrl = `${getPdfBaseUrl()}/api/appointments/${appointmentId}/prescription-pdf?token=${encodeURIComponent(pdfAccessToken)}`
         const dateStr = fullAppointment?.appointmentDate
           ? new Date(String(fullAppointment.appointmentDate)).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0]

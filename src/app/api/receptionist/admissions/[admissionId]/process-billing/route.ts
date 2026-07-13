@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   admissionId: string
@@ -46,6 +47,10 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
     const admissionSnap = await admissionRef.get()
     if (!admissionSnap.exists) {
       return Response.json({ error: "Admission not found" }, { status: 404 })
+    }
+
+    if (!(await assertAdmissionHospitalAccess(auth.user!.uid, admissionSnap.data()))) {
+      return Response.json({ error: "Forbidden: hospital access mismatch" }, { status: 403 })
     }
 
     const admissionData = admissionSnap.data() || {}

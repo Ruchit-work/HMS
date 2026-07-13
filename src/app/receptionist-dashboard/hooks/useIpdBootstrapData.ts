@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from "react"
 import type { Dispatch, SetStateAction } from "react"
-import { collection, getDocs } from "firebase/firestore"
+import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "@/firebase/config"
 import type { Admission, AdmissionRequest, Room } from "@/types/patient"
 import { authedFetchJson } from "@/utils/client/authedFetch"
@@ -59,16 +59,43 @@ export function useIpdBootstrapData({
   const fetchRooms = useCallback(async () => {
     try {
       setRoomsLoading(true)
-      let roomsSnap = await getDocs(collection(db, "rooms"))
-      if (roomsSnap.empty) {
-        await authedFetchJson("/api/admin/rooms/seed", { method: "POST" }, "Failed to seed rooms")
+      const hospitalId =
+        typeof window !== "undefined" ? window.sessionStorage.getItem("activeHospitalId") : null
+
+      let roomsSnap
+      if (hospitalId) {
+        try {
+          roomsSnap = await getDocs(
+            query(collection(db, "rooms"), where("hospitalId", "==", hospitalId))
+          )
+        } catch {
+          roomsSnap = await getDocs(collection(db, "rooms"))
+        }
+      } else {
         roomsSnap = await getDocs(collection(db, "rooms"))
       }
+
+      if (roomsSnap.empty && hospitalId) {
+        await authedFetchJson("/api/admin/rooms/seed", { method: "POST" }, "Failed to seed rooms")
+        try {
+          roomsSnap = await getDocs(
+            query(collection(db, "rooms"), where("hospitalId", "==", hospitalId))
+          )
+        } catch {
+          roomsSnap = await getDocs(collection(db, "rooms"))
+        }
+      }
+
       let roomsList = roomsSnap.docs.map((r) => {
-        const data = r.data() as Omit<Room, "id"> & Partial<Room>
-        return { ...data, id: r.id } as Room
+        const data = r.data() as Omit<Room, "id"> & Partial<Room> & { hospitalId?: string; isArchived?: boolean }
+        return { ...data, id: r.id } as Room & { hospitalId?: string; isArchived?: boolean }
       })
-      roomsList = roomsList.filter((room) => !(room as any).isArchived)
+      roomsList = roomsList.filter((room) => {
+        if ((room as { isArchived?: boolean }).isArchived) return false
+        if (!hospitalId) return false
+        const roomHospital = (room as { hospitalId?: string }).hospitalId
+        return roomHospital === hospitalId
+      })
       if (roomsList.length === 0) {
         roomsList = Object.entries(fallbackRoomNumbersByType).flatMap(([type, numbers]) => {
           const roomTypeId = type as Room["roomType"]

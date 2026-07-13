@@ -1,6 +1,6 @@
 import React from 'react'
 import { Button } from '@/components/ui/Button'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import { RefundCashModal } from '@/components/pharmacy/RefundCashModal'
 import type { RefundNotesRecord } from '@/components/pharmacy/RefundCashModal'
 import type {
@@ -181,7 +181,7 @@ export function CashExpensesShiftContent(props: {
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           {cashSessionsLoading ? (
             <div className="flex justify-center py-12">
-              <LoadingSpinner inline />
+              <TabSkeleton variant="table" />
             </div>
           ) : activeCashSession ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-5">

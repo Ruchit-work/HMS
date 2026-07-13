@@ -38,7 +38,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { collection, getDocs } from "firebase/firestore"
+import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "@/firebase/config"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
@@ -489,7 +489,11 @@ export default function AdminDashboardOverview({
   // Read-only rooms inventory for resource widgets (no seed / no mutations).
   useEffect(() => {
     let cancelled = false
-    getDocs(collection(db, "rooms"))
+    if (!activeHospitalId) {
+      setRoomsInventory([])
+      return
+    }
+    getDocs(query(collection(db, "rooms"), where("hospitalId", "==", activeHospitalId)))
       .then((snap) => {
         if (cancelled) return
         const rooms = snap.docs
@@ -497,13 +501,7 @@ export default function AdminDashboardOverview({
             const data = docSnap.data() as Omit<Room, "id"> & Partial<Room> & { isArchived?: boolean; hospitalId?: string }
             return { ...data, id: docSnap.id } as Room & { isArchived?: boolean; hospitalId?: string }
           })
-          .filter((room) => {
-            if ((room as Room & { isArchived?: boolean }).isArchived) return false
-            const roomHospital = (room as Room & { hospitalId?: string }).hospitalId
-            // Include global rooms (no hospitalId) and rooms tagged to this hospital
-            if (!activeHospitalId || !roomHospital) return true
-            return roomHospital === activeHospitalId
-          })
+          .filter((room) => !(room as Room & { isArchived?: boolean }).isArchived)
         setRoomsInventory(rooms)
         if (process.env.NODE_ENV === "development") {
           console.info("[admin-dashboard] rooms inventory", {
@@ -532,19 +530,19 @@ export default function AdminDashboardOverview({
       return
     }
     let cancelled = false
-    getDocs(getHospitalCollection(activeHospitalId, "admissions"))
+    getDocs(
+      query(
+        getHospitalCollection(activeHospitalId, "admissions"),
+        where("status", "in", ["admitted", "scheduled"])
+      )
+    )
       .then((snap) => {
         if (cancelled) return
-        const active = snap.docs.filter((d) => {
-          const status = String(d.data()?.status || "").toLowerCase()
-          return status === "admitted" || status === "scheduled"
-        }).length
-        setActiveAdmissionsCount(active)
+        setActiveAdmissionsCount(snap.size)
         if (process.env.NODE_ENV === "development") {
           console.info("[admin-dashboard] admissions", {
             hospitalId: activeHospitalId,
-            total: snap.size,
-            active,
+            active: snap.size,
           })
         }
       })

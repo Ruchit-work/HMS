@@ -5,12 +5,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { useDebounce } from '@/hooks/useDebounce'
+import { useTablePagination } from '@/hooks/useTablePagination'
+import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 import DoctorProfileForm, { DoctorProfileFormValues } from '@/components/forms/DoctorProfileForm'
-import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/shared/date'
 import {
   EnterpriseDataTable,
@@ -92,9 +94,11 @@ function AddDoctorModalContent({
 export default function DoctorManagement({ canDelete = true, canAdd = true, disableAdminGuard = true, selectedBranchId = "all" }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean; selectedBranchId?: string } = {}) {
     const [doctors, setDoctors] = useState<Doctor[]>([])
     const [pendingDoctors, setPendingDoctors] = useState<Doctor[]>([])
-    const [loading, setLoading] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
+    const debouncedSearch = useDebounce(search, 300)
     const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null)
     const [showViewModal, setShowViewModal] = useState(false)
     const [deleteModal, setDeleteModal] = useState(false)
@@ -117,24 +121,24 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     }
 
     const filteredActiveDoctors = useMemo(() => {
-        if (!search.trim()) return doctors
-        const query = search.toLowerCase()
+        if (!debouncedSearch.trim()) return doctors
+        const query = debouncedSearch.toLowerCase()
         return doctors.filter((doctor) =>
             `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(query) ||
             doctor.email.toLowerCase().includes(query) ||
             doctor.specialization.toLowerCase().includes(query)
         )
-    }, [doctors, search])
+    }, [doctors, debouncedSearch])
 
     const filteredPendingDoctors = useMemo(() => {
-        if (!search.trim()) return pendingDoctors
-        const query = search.toLowerCase()
+        if (!debouncedSearch.trim()) return pendingDoctors
+        const query = debouncedSearch.toLowerCase()
         return pendingDoctors.filter((doctor) =>
             `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(query) ||
             doctor.email.toLowerCase().includes(query) ||
             doctor.specialization.toLowerCase().includes(query)
         )
-    }, [pendingDoctors, search])
+    }, [pendingDoctors, debouncedSearch])
 
     const displayedDoctors = useMemo(() => {
         const doctors = activeTab === 'active' ? filteredActiveDoctors : filteredPendingDoctors
@@ -144,6 +148,15 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         )
         return uniqueDoctors
     }, [activeTab, filteredActiveDoctors, filteredPendingDoctors])
+
+    const {
+        currentPage,
+        pageSize,
+        totalPages,
+        paginatedItems: paginatedDoctors,
+        goToPage,
+        setPageSize,
+    } = useTablePagination(displayedDoctors, { initialPageSize: 10 })
 
     const metrics = useMemo(() => {
         const activeCount = doctors.length
@@ -178,7 +191,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     const handleCreateDoctor = async (formValues: DoctorProfileFormValues) => {
         if (!allowAdd) return
         try {
-            setLoading(true)
+            setSubmitting(true)
             setError(null)
 
             const doctorData = {
@@ -245,7 +258,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                 setError('Failed to add doctor. Please try again.')
             }
         } finally {
-            setLoading(false)
+            setSubmitting(false)
         }
     }
 
@@ -314,7 +327,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     const handleDeleteConfirm = async () => {
         if (!canDelete || !deleteDoctor) return
         try {
-            setLoading(true)
+            setSubmitting(true)
             setError(null)
             
             // First, delete from Firebase Auth
@@ -384,7 +397,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         } catch (error) {
             setError((error as Error).message)
         } finally {
-            setLoading(false)
+            setSubmitting(false)
         }
     }
     const setupRealtimeListeners = useCallback(() => {
@@ -411,9 +424,11 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             }
             
             setDoctors(activeList)
+            setLoading(false)
             }, (error) => {
 
                 setError(error.message)
+                setLoading(false)
             })
             
             const pendingQ = query(doctorsRef, where('status', '==', 'pending'))
@@ -432,7 +447,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             }
             
             setPendingDoctors(pendingList)
-                setLoading(false)
+            setLoading(false)
             }, (error) => {
 
                 setError(error.message)
@@ -459,7 +474,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         }
         
         try {
-            setLoading(true)
+            setSubmitting(true)
             setError(null)
             const doctorRef = doc(db, 'doctors', doctorId)
             await updateDoc(doctorRef, {
@@ -480,7 +495,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         } catch (error) {
             setError((error as Error).message)
         } finally {
-            setLoading(false)
+            setSubmitting(false)
         }
     }
     
@@ -496,7 +511,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         }
         
         try {
-            setLoading(true)
+            setSubmitting(true)
             setError(null)
             
             // Delete from Firebase Auth first
@@ -562,7 +577,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         } catch (error) {
             setError((error as Error).message)
         } finally {
-            setLoading(false)
+            setSubmitting(false)
         }
     }
     useEffect(() => {
@@ -725,7 +740,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
 
     // Gate rendering by auth state (placed after all hooks)
     if (authLoading) {
-        return <LoadingSpinner message="Loading doctor management..." />
+        return <TabSkeleton variant="table" />
     }
 
     if (!user) {
@@ -873,21 +888,30 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                         </div>
 
                         <EnterpriseDataTable
-                            data={displayedDoctors}
+                            data={paginatedDoctors}
                             columns={doctorColumns}
-                            loading={loading}
+                            loading={loading && displayedDoctors.length === 0}
+                            loadingVariant="skeleton"
                             loadingMessage="Loading doctors…"
                             error={error}
                             emptyTitle={
-                                search
+                                debouncedSearch
                                     ? `No ${activeTab === 'active' ? 'active' : 'pending'} doctors match your search`
                                     : activeTab === 'pending'
                                       ? 'No pending doctor approvals right now'
                                       : 'No doctors found'
                             }
                             emptyDescription={
-                                search ? 'Try adjusting your keywords or clearing filters.' : undefined
+                                debouncedSearch ? 'Try adjusting your keywords or clearing filters.' : undefined
                             }
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            pageSize={pageSize}
+                            totalItems={displayedDoctors.length}
+                            onPageChange={goToPage}
+                            onPageSizeChange={setPageSize}
+                            pageSizeOptions={[10, 15, 20]}
+                            itemLabel="doctors"
                             toolbar={
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
                                     <div className="flex items-center gap-3">
@@ -924,7 +948,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                             enableSearch={false}
                             enableFilters={false}
                             enableBulkSelection={false}
-                            enablePagination={false}
+                            enablePagination
                             enableSorting={false}
                             primaryAction={{
                                 label: 'View',
@@ -937,7 +961,6 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                                 onClick: handleView,
                             }}
                             rowActions={doctorRowActions}
-                            itemLabel="doctors"
                             minWidth="min-w-[900px]"
                         />
                     </div>
@@ -1101,7 +1124,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                     qualification: deleteDoctor?.qualification,
                     id: deleteDoctor?.id || ''
                 }}
-                loading={loading}
+                loading={submitting}
             />
             {/* Add Doctor Modal */}
             {showAddModal && (
@@ -1111,11 +1134,11 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                     contentClassName="p-0"
                 >
                     <AddDoctorModalContent
-                        loading={loading}
+                        loading={submitting}
                         error={error}
                         onErrorClear={() => setError(null)}
                         onSubmit={handleCreateDoctor}
-                        submitLabel={loading ? 'Adding Doctor...' : 'Add Doctor'}
+                        submitLabel={submitting ? 'Adding Doctor...' : 'Add Doctor'}
                     />
                 </RevealModal>
             )}

@@ -1,6 +1,62 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
 import { Appointment } from "@/types/patient"
+import type { Query } from "firebase-admin/firestore"
+
+const APPOINTMENT_SELECT_FIELDS = [
+  "patientId",
+  "patientUid",
+  "patientName",
+  "patientEmail",
+  "patientPhone",
+  "doctorId",
+  "doctorName",
+  "doctorSpecialization",
+  "appointmentDate",
+  "appointmentTime",
+  "chiefComplaint",
+  "medicalHistory",
+  "paymentStatus",
+  "paymentMethod",
+  "paymentType",
+  "totalConsultationFee",
+  "consultationFee",
+  "paymentAmount",
+  "remainingAmount",
+  "transactionId",
+  "paidAt",
+  "status",
+  "whatsappPending",
+  "branchId",
+  "createdAt",
+  "updatedAt",
+] as const
+
+async function runQuerySafe(build: () => Query): Promise<FirebaseFirestore.QuerySnapshot | null> {
+  try {
+    try {
+      return await build().select(...APPOINTMENT_SELECT_FIELDS).get()
+    } catch {
+      // Some environments/indexes edge-cases: fall back to full docs (same filters).
+      return await build().get()
+    }
+  } catch {
+    return null
+  }
+}
+
+function mergeSnapshot(
+  appointmentMap: Map<string, Record<string, unknown>>,
+  snap: FirebaseFirestore.QuerySnapshot | null
+) {
+  if (!snap) return
+  snap.docs.forEach((doc) => {
+    if (!appointmentMap.has(doc.id)) {
+      appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+    }
+  })
+}
 
 export async function GET(request: Request) {
   // Authenticate request - requires receptionist or admin role
@@ -22,124 +78,81 @@ export async function GET(request: Request) {
     }
 
     const firestore = admin.firestore()
-    
-    // Get receptionist's branchId if user is a receptionist
+
+    // Prefer branchId already loaded by authenticateRequest (avoids a duplicate receptionist read).
     let receptionistBranchId: string | null = null
     if (auth.user && auth.user.role === "receptionist") {
-      try {
-        const receptionistDoc = await firestore.collection("receptionists").doc(auth.user.uid).get()
-        if (receptionistDoc.exists) {
-          const receptionistData = receptionistDoc.data()
-          receptionistBranchId = receptionistData?.branchId || null
-        }
-      } catch {
-      }
-    }
-    
-    // Get user's active hospital ID
-    const { getUserActiveHospitalId } = await import("@/utils/firebase/serverHospitalQueries")
-    const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
-    
-    // Fetch appointments with whatsappPending flag or status whatsapp_pending
-    // Note: Can't use orderBy with where in Firestore without composite index, so we fetch and sort in memory
-    const appointmentMap = new Map<string, any>()
-    
-    // Fetch from hospital-scoped collections if hospitalId is available
-    if (hospitalId) {
-      try {
-        const hospAppointmentsRef = firestore.collection(`hospitals/${hospitalId}/appointments`)
-        let whatsappQuery
-        if (receptionistBranchId) {
-          whatsappQuery = hospAppointmentsRef
-            .where("whatsappPending", "==", true)
-            .where("branchId", "==", receptionistBranchId)
-            .limit(100)
-        } else {
-          whatsappQuery = hospAppointmentsRef
-            .where("whatsappPending", "==", true)
-            .limit(100)
-        }
-        
-        const appointmentsSnapshot = await whatsappQuery.get()
-        appointmentsSnapshot.docs.forEach((doc) => {
-          appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
-        })
-      } catch {
-      }
-      
-      // Also fetch appointments with status whatsapp_pending (for backward compatibility)
-      try {
-        const hospAppointmentsRef = firestore.collection(`hospitals/${hospitalId}/appointments`)
-        let pendingQuery
-        if (receptionistBranchId) {
-          pendingQuery = hospAppointmentsRef
-            .where("status", "==", "whatsapp_pending")
-            .where("branchId", "==", receptionistBranchId)
-            .limit(100)
-        } else {
-          pendingQuery = hospAppointmentsRef
-            .where("status", "==", "whatsapp_pending")
-            .limit(100)
-        }
-        
-        const pendingSnapshot = await pendingQuery.get()
-        pendingSnapshot.docs.forEach((doc) => {
-          if (!appointmentMap.has(doc.id)) {
-            appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+      const fromAuth =
+        typeof auth.user.data?.branchId === "string" && auth.user.data.branchId.trim()
+          ? auth.user.data.branchId.trim()
+          : null
+      if (fromAuth) {
+        receptionistBranchId = fromAuth
+      } else {
+        try {
+          const receptionistDoc = await firestore.collection("receptionists").doc(auth.user.uid).get()
+          if (receptionistDoc.exists) {
+            const receptionistData = receptionistDoc.data()
+            receptionistBranchId = receptionistData?.branchId || null
           }
-        })
-      } catch {
+        } catch {
+          // ignore
+        }
       }
     }
-    
-    // Fallback to root collection if no hospital-scoped data found (for backward compatibility)
-    if (appointmentMap.size === 0) {
-      try {
-        let rootQuery
-        if (receptionistBranchId) {
-          rootQuery = firestore
-            .collection("appointments")
-            .where("whatsappPending", "==", true)
-            .where("branchId", "==", receptionistBranchId)
-            .limit(100)
-        } else {
-          rootQuery = firestore
-            .collection("appointments")
-            .where("whatsappPending", "==", true)
-            .limit(100)
-        }
-        
-        const appointmentsSnapshot = await rootQuery.get()
-        appointmentsSnapshot.docs.forEach((doc) => {
-          appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
-        })
-      } catch {
-      }
 
-      // Also fetch appointments with status whatsapp_pending (for backward compatibility)
-      try {
-        let pendingQuery
-        if (receptionistBranchId) {
-          pendingQuery = firestore
-            .collection("appointments")
-            .where("status", "==", "whatsapp_pending")
-            .where("branchId", "==", receptionistBranchId)
-            .limit(100)
-        } else {
-          pendingQuery = firestore
-            .collection("appointments")
-            .where("status", "==", "whatsapp_pending")
-            .limit(100)
-        }
-        
-        const pendingSnapshot = await pendingQuery.get()
-        pendingSnapshot.docs.forEach((doc) => {
-          if (!appointmentMap.has(doc.id)) {
-            appointmentMap.set(doc.id, { id: doc.id, ...doc.data() })
+    const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
+
+    // Fetch appointments with whatsappPending flag or status whatsapp_pending
+    // Note: Can't use orderBy with where without composite index; sort in memory.
+    const appointmentMap = new Map<string, Record<string, unknown>>()
+
+    if (hospitalId) {
+      const hospAppointmentsRef = firestore.collection(`hospitals/${hospitalId}/appointments`)
+
+      const [whatsappSnap, pendingSnap] = await Promise.all([
+        runQuerySafe(() => {
+          let q: Query = hospAppointmentsRef.where("whatsappPending", "==", true)
+          if (receptionistBranchId) {
+            q = q.where("branchId", "==", receptionistBranchId)
           }
-        })
-      } catch {
-      }
+          return q.limit(100)
+        }),
+        runQuerySafe(() => {
+          let q: Query = hospAppointmentsRef.where("status", "==", "whatsapp_pending")
+          if (receptionistBranchId) {
+            q = q.where("branchId", "==", receptionistBranchId)
+          }
+          return q.limit(100)
+        }),
+      ])
+
+      mergeSnapshot(appointmentMap, whatsappSnap)
+      mergeSnapshot(appointmentMap, pendingSnap)
+    }
+
+    // Fallback to root collection only when hospital-scoped data is empty (backward compatible).
+    if (appointmentMap.size === 0) {
+      const rootRef = firestore.collection("appointments")
+      const [rootWhatsappSnap, rootPendingSnap] = await Promise.all([
+        runQuerySafe(() => {
+          let q: Query = rootRef.where("whatsappPending", "==", true)
+          if (receptionistBranchId) {
+            q = q.where("branchId", "==", receptionistBranchId)
+          }
+          return q.limit(100)
+        }),
+        runQuerySafe(() => {
+          let q: Query = rootRef.where("status", "==", "whatsapp_pending")
+          if (receptionistBranchId) {
+            q = q.where("branchId", "==", receptionistBranchId)
+          }
+          return q.limit(100)
+        }),
+      ])
+
+      mergeSnapshot(appointmentMap, rootWhatsappSnap)
+      mergeSnapshot(appointmentMap, rootPendingSnap)
     }
 
     const appointments: Appointment[] = Array.from(appointmentMap.values()).map((data: any) => {
@@ -154,7 +167,7 @@ export async function GET(request: Request) {
       } else if (data.status === "cancelled") {
         status = "cancelled"
       }
-      
+
       return {
         id: data.id,
         patientId: data.patientId || "",
@@ -172,9 +185,9 @@ export async function GET(request: Request) {
         paymentStatus: data.paymentStatus || "pending",
         paymentMethod: data.paymentMethod || "cash",
         paymentType: (data.paymentType as "full" | "partial") || "full",
-        totalConsultationFee: data.totalConsultationFee || data.consultationFee || 0, // Doctor fee
+        totalConsultationFee: data.totalConsultationFee || data.consultationFee || 0,
         paymentAmount: data.paymentAmount || 0,
-        remainingAmount: data.remainingAmount || data.totalConsultationFee || data.consultationFee || 0, // Based on doctor fee
+        remainingAmount: data.remainingAmount || data.totalConsultationFee || data.consultationFee || 0,
         transactionId: data.transactionId || data.id,
         paidAt: data.paidAt || "",
         status,
@@ -183,7 +196,6 @@ export async function GET(request: Request) {
       } as Appointment
     })
 
-    // Sort by creation date (newest first)
     appointments.sort((a, b) => {
       const dateA = new Date(a.createdAt).getTime()
       const dateB = new Date(b.createdAt).getTime()
@@ -198,4 +210,3 @@ export async function GET(request: Request) {
     )
   }
 }
-

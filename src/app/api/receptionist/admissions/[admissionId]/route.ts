@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   admissionId: string
@@ -43,6 +44,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<Params>
         const snap = await tx.get(admissionRef)
         if (!snap.exists) throw new Error("Admission not found")
         const data = snap.data() || {}
+        if (!(await assertAdmissionHospitalAccess(auth.user!.uid, data))) {
+          throw new Error("Forbidden: hospital access mismatch")
+        }
         const status = String(data.status || "")
         if (status !== "scheduled") {
           throw new Error("Only scheduled admissions can be marked ready to admit")
@@ -99,6 +103,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<Params>
         const snap = await tx.get(admissionRef)
         if (!snap.exists) throw new Error("Admission not found")
         const data = snap.data() || {}
+        if (!(await assertAdmissionHospitalAccess(auth.user!.uid, data))) {
+          throw new Error("Forbidden: hospital access mismatch")
+        }
         const status = String(data.status || "")
         if (status !== "scheduled") {
           throw new Error("Only scheduled admissions can be postponed")
@@ -111,6 +118,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<Params>
         })
       })
       return Response.json({ success: true })
+    }
+
+    const existingSnap = await admissionRef.get()
+    if (!existingSnap.exists) {
+      return Response.json({ error: "Admission not found" }, { status: 404 })
+    }
+    if (!(await assertAdmissionHospitalAccess(auth.user!.uid, existingSnap.data()))) {
+      return Response.json({ error: "Forbidden: hospital access mismatch" }, { status: 403 })
     }
 
     const updates: Record<string, unknown> = {

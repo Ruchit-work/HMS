@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { usePublicRoute } from "@/hooks/useAuth"
+import { useDeferredVisible } from "@/hooks/useDeferredVisible"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 
 const MIVS_ABOUT_PATH = "/demo/mivs"
@@ -13,9 +14,14 @@ export default function Home() {
   const { loading } = usePublicRoute()
   const router = useRouter()
   const [portalLoading, setPortalLoading] = useState(false)
+  const showAuthLoader = useDeferredVisible(loading, 400)
+
+  if (loading && showAuthLoader) {
+    return <LoadingSpinner message="Loading..." />
+  }
 
   if (loading) {
-    return <LoadingSpinner message="Loading..." />
+    return <div className="min-h-screen bg-slate-50" aria-busy="true" />
   }
 
   return (
@@ -124,14 +130,11 @@ export default function Home() {
                   router.push("/auth/login")
                 }}
                 className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-cyan-800 shadow-sm transition hover:bg-cyan-50 ${
-                  portalLoading ? "ring-2 ring-offset-2 ring-blue-300 animate-pulse" : ""
+                  portalLoading ? "opacity-80" : ""
                 }`}
               >
                 {portalLoading ? (
-                  <>
-                    <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
-                    Opening portal…
-                  </>
+                  <>Opening portal…</>
                 ) : (
                   <>
                     Access Healthcare Portal

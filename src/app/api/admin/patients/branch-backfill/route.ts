@@ -6,6 +6,7 @@ import {
   getHospitalCollectionPath,
   getReceptionistDefaultBranch,
   getUserActiveHospitalId,
+  resolveAuthorizedHospitalId,
 } from "@/utils/firebase/serverHospitalQueries"
 
 type TargetBranch = { id: string; name: string }
@@ -58,21 +59,25 @@ export async function POST(req: Request) {
   const maxUpdates = Math.min(2000, Math.max(1, Number(body?.maxUpdates) || 400))
 
   const userHospitalId = await getUserActiveHospitalId(auth.user.uid)
-  let hospitalId =
-    typeof body?.hospitalId === "string" && body.hospitalId.trim() ? body.hospitalId.trim() : userHospitalId || ""
+  const requestedHospitalId =
+    typeof body?.hospitalId === "string" && body.hospitalId.trim() ? body.hospitalId.trim() : null
+
+  const hospitalId = await resolveAuthorizedHospitalId(auth.user.uid, requestedHospitalId || userHospitalId)
 
   if (role === "receptionist") {
     if (!userHospitalId) {
       return Response.json({ error: "No active hospital for this user." }, { status: 400 })
     }
-    if (hospitalId && hospitalId !== userHospitalId) {
+    if (requestedHospitalId && requestedHospitalId !== userHospitalId) {
       return Response.json({ error: "Receptionists can only backfill their active hospital." }, { status: 403 })
     }
-    hospitalId = userHospitalId
   }
 
   if (!hospitalId) {
-    return Response.json({ error: "hospitalId is required (or set active hospital on your account)." }, { status: 400 })
+    return Response.json(
+      { error: "hospitalId is required (or set active hospital on your account), or access denied for requested hospital." },
+      { status: 403 }
+    )
   }
 
   const explicitBranch =

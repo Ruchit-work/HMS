@@ -1,7 +1,7 @@
 import React from 'react'
 import { Button } from '@/components/ui/Button'
 import { TableShell } from '@/components/ui/layout/TableShell'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import Pagination from '@/components/ui/navigation/Pagination'
 import type { LowStockAlert, PharmacyMedicine, PharmacyPurchaseOrder, PharmacySupplier, PurchaseOrderLine } from '@/types/pharmacy'
 import { downloadPurchaseOrderPDF, printPurchaseOrderPDF } from '../purchaseOrderPdf'
@@ -133,7 +133,7 @@ export function OrdersTabContent(props: {
 
       <PhOpsPanel title="Order register" subtitle="Supplier, status, expected delivery and receive actions" padded={false}>
         {loading ? (
-          <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
+          <TabSkeleton variant="table" />
         ) : (
           <TableShell>
           <table className="min-w-[900px] w-full text-sm">

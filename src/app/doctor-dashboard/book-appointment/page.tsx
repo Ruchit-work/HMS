@@ -15,10 +15,10 @@ import { ConfirmDialog } from "@/components/ui/overlays/Modals"
 import { Button } from "@/components/ui/Button"
 import {
   ClinicalFormSection,
-  ClinicalLoadingState,
   ClinicalPageFrame,
   ClinicalPageHeader,
 } from "@/components/doctor/clinical"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
 import { CalendarPlus } from "lucide-react"
 
@@ -361,7 +361,7 @@ export default function DoctorBookAppointmentPage() {
   }
 
   if (authLoading || !user) {
-    return <ClinicalLoadingState message="Loading booking form…" />
+    return <TabSkeleton variant="form" />
   }
 
   const inputBase = "w-full h-11 rounded-lg border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-300 ease-out focus:border-[#0d6efd] focus:ring-2 focus:ring-[#0d6efd]/25 focus:outline-none"

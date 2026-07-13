@@ -6,7 +6,7 @@ import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import { formatDate } from '@/utils/shared/date'
 
 interface UnifiedBillingRecord {
@@ -660,8 +660,8 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
     }
   }
 
-  if (authLoading || loading) {
-    return <LoadingSpinner message="Loading financial analytics..." />
+  if (authLoading || (loading && !analytics)) {
+    return <TabSkeleton variant="dashboard" />
   }
 
   if (!analytics) {

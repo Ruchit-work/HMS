@@ -66,30 +66,61 @@ export async function POST(request: Request) {
       return Response.json({ error: "User ID (uid) is required" }, { status: 400 })
     }
 
+    const { assertUserHospitalAccess, getUserActiveHospitalId, isPlatformSuperAdmin } = await import(
+      "@/utils/firebase/serverHospitalQueries"
+    )
+    const superAdmin = await isPlatformSuperAdmin(auth.user.uid)
+    const callerHospitalId = await getUserActiveHospitalId(auth.user.uid)
+
     // Determine user role by checking Firestore collections
     let detectedUserType = userType || "user"
+    let targetHospitalId: string | null = null
     try {
       // Check admins collection first
       const adminDoc = await db.collection("admins").doc(uid).get()
       if (adminDoc.exists) {
         detectedUserType = "admin"
+        targetHospitalId = adminDoc.data()?.hospitalId || null
       } else {
         const patientDoc = await db.collection("patients").doc(uid).get()
         if (patientDoc.exists) {
           detectedUserType = "patient"
+          targetHospitalId = patientDoc.data()?.hospitalId || null
         } else {
           const doctorDoc = await db.collection("doctors").doc(uid).get()
           if (doctorDoc.exists) {
             detectedUserType = "doctor"
+            targetHospitalId = doctorDoc.data()?.hospitalId || null
           } else {
             const receptionistDoc = await db.collection("receptionists").doc(uid).get()
             if (receptionistDoc.exists) {
               detectedUserType = "receptionist"
+              targetHospitalId = receptionistDoc.data()?.hospitalId || null
             }
           }
         }
       }
+      const targetUserDoc = await db.collection("users").doc(uid).get()
+      if (targetUserDoc.exists) {
+        const td = targetUserDoc.data() || {}
+        if (!targetHospitalId && typeof td.hospitalId === "string") targetHospitalId = td.hospitalId
+        if (!targetHospitalId && Array.isArray(td.hospitals) && td.hospitals[0]) {
+          targetHospitalId = String(td.hospitals[0])
+        }
+      }
     } catch {
+    }
+
+    if (!superAdmin) {
+      if (!callerHospitalId) {
+        return Response.json({ error: "Hospital context required" }, { status: 403 })
+      }
+      if (!targetHospitalId || !(await assertUserHospitalAccess(auth.user.uid, targetHospitalId)) || targetHospitalId !== callerHospitalId) {
+        return Response.json(
+          { error: "Cannot delete users belonging to another hospital" },
+          { status: 403 }
+        )
+      }
     }
 
     // Delete user from Firebase Auth

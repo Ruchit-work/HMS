@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   admissionId: string
@@ -79,6 +80,9 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
       const admissionSnap = await tx.get(admissionRef)
       if (!admissionSnap.exists) throw new Error("Admission not found")
       const admission = admissionSnap.data() || {}
+      if (!(await assertAdmissionHospitalAccess(auth.user!.uid, admission))) {
+        throw new Error("Forbidden: hospital access mismatch")
+      }
       if (admission.status !== "admitted") throw new Error("Rounds can only be marked for admitted patients")
       if (String(admission.doctorId || "") !== auth.user!.uid) {
         throw new Error("You can mark rounds only for your admitted patients")

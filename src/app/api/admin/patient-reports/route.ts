@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/firebase/apiAuth"
-import { getHospitalCollectionPath, getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
 import { generatePatientReportExcel } from "@/utils/documents/excelGenerators"
 
 interface AppointmentData {
@@ -399,16 +399,18 @@ export async function GET(request: Request) {
     const startDate = searchParams.get('startDate') || undefined
     const endDate = searchParams.get('endDate') || undefined
     const format = searchParams.get('format') || 'pdf' // pdf or excel
-    const hospitalId = searchParams.get('hospitalId') || undefined
+    const hospitalIdParam = searchParams.get('hospitalId') || undefined
 
-    // Get hospital ID
-    let activeHospitalId: string | null = hospitalId || null
-    if (!activeHospitalId && auth.user?.uid) {
-      activeHospitalId = await getUserActiveHospitalId(auth.user.uid)
-    }
+    // Never trust client hospitalId without membership check
+    const activeHospitalId = auth.user?.uid
+      ? await resolveAuthorizedHospitalId(auth.user.uid, hospitalIdParam)
+      : null
 
     if (!activeHospitalId) {
-      return NextResponse.json({ error: "Hospital ID not found" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Hospital ID not found or access denied for this hospital" },
+        { status: 403 }
+      )
     }
 
     const firestore = admin.firestore()

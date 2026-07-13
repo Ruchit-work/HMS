@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useDebounce } from '@/hooks/useDebounce'
-import { getDocs, doc, deleteDoc, onSnapshot, updateDoc } from 'firebase/firestore'
+import { getDocs, doc, deleteDoc, onSnapshot, updateDoc, query, where, orderBy } from 'firebase/firestore'
 import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
@@ -12,12 +12,12 @@ import {
   isAppointmentVisibleToReceptionist,
   logAppointmentQuery,
 } from '@/utils/appointments/appointmentSource'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import { Appointment } from '@/types/patient'
 import { Branch } from '@/types/branch'
-import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { formatDate, formatDateTime } from '@/utils/shared/date'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import {
@@ -32,7 +32,6 @@ import {
 import { useNewItems } from '@/hooks/useNewItems'
 import PrescriptionDisplay from '@/components/prescription/PrescriptionDisplay'
 import DocumentListCompact from '@/components/documents/DocumentListCompact'
-import ExcelJS from 'exceljs'
 
 interface AppoinmentManagementProps {
     disableAdminGuard?: boolean
@@ -42,6 +41,50 @@ interface AppoinmentManagementProps {
     selectedBranchId?: string
 }
 
+type AppointmentTimeRange = 'all' | 'today' | 'last10' | 'month' | 'year'
+
+function formatLocalYmd(date: Date): string {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+/** Date bounds for Firestore queries (appointmentDate is stored as YYYY-MM-DD). */
+function getAppointmentDateBounds(timeRange: AppointmentTimeRange): { start: string; end: string } {
+    const now = new Date()
+    const today = formatLocalYmd(now)
+
+    switch (timeRange) {
+        case 'today':
+            return { start: today, end: today }
+        case 'last10': {
+            const past = new Date(now)
+            past.setDate(past.getDate() - 10)
+            return { start: formatLocalYmd(past), end: today }
+        }
+        case 'month': {
+            const start = new Date(now.getFullYear(), now.getMonth(), 1)
+            const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+            return { start: formatLocalYmd(start), end: formatLocalYmd(end) }
+        }
+        case 'year': {
+            const start = new Date(now.getFullYear(), 0, 1)
+            const end = new Date(now.getFullYear(), 11, 31)
+            return { start: formatLocalYmd(start), end: formatLocalYmd(end) }
+        }
+        case 'all':
+        default: {
+            // Keep realtime viable: previous 12 months through next 90 days
+            const start = new Date(now)
+            start.setFullYear(start.getFullYear() - 1)
+            const end = new Date(now)
+            end.setDate(end.getDate() + 90)
+            return { start: formatLocalYmd(start), end: formatLocalYmd(end) }
+        }
+    }
+}
+
 export default function AppoinmentManagement({
     disableAdminGuard = true,
     receptionistBranchId = null,
@@ -49,6 +92,7 @@ export default function AppoinmentManagement({
 }: AppoinmentManagementProps = {}) {
     const [appointments, setAppointments] = useState<Appointment[]>([])
     const [loading, setLoading] = useState(false)
+    const hasLoadedAppointmentsRef = useRef(false)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const debouncedSearch = useDebounce(search, 300)
@@ -58,7 +102,7 @@ export default function AppoinmentManagement({
     const [sortField, setSortField] = useState<string>('')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
     const [selectedDoctorId, setSelectedDoctorId] = useState<string>('all')
-    const [timeRange, setTimeRange] = useState<'all' | 'today' | 'last10' | 'month' | 'year'>('all')
+    const [timeRange, setTimeRange] = useState<AppointmentTimeRange>('month')
     const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'confirmed' | 'waiting' | 'in_consultation' | 'completed' | 'not_attended' | 'cancelled'>('all')
     // Derived from appointments + search/filters (single source of truth so search always applies)
     const filteredAppointments = useMemo(() => {
@@ -400,6 +444,7 @@ export default function AppoinmentManagement({
         setExportOpen(false)
     }
     const exportExcel = async () => {
+        const ExcelJS = (await import('exceljs')).default
         const wb = new ExcelJS.Workbook()
         const ws = wb.addWorksheet('Appointments')
         ws.columns = [
@@ -566,15 +611,35 @@ export default function AppoinmentManagement({
         if (!activeHospitalId) return () => {}
         
         try {
-            setLoading(true)
+            if (!hasLoadedAppointmentsRef.current) {
+              setLoading(true)
+            }
             setError(null)
             const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
+            const { start, end } = getAppointmentDateBounds(timeRange)
+
+            // Scoped realtime query — never subscribe to the entire hospital collection
+            const appointmentsQuery =
+                selectedDoctorId !== 'all'
+                    ? query(
+                        appointmentsRef,
+                        where('doctorId', '==', selectedDoctorId),
+                        where('appointmentDate', '>=', start),
+                        where('appointmentDate', '<=', end),
+                        orderBy('appointmentDate', 'desc')
+                    )
+                    : query(
+                        appointmentsRef,
+                        where('appointmentDate', '>=', start),
+                        where('appointmentDate', '<=', end),
+                        orderBy('appointmentDate', 'desc')
+                    )
             
-            const unsubscribe = onSnapshot(appointmentsRef, (snapshot) => {
+            const unsubscribe = onSnapshot(appointmentsQuery, (snapshot) => {
                 let appointmentsList = snapshot.docs
-                    .map((doc) => ({
-                        id: doc.id,
-                        ...doc.data()
+                    .map((docSnap) => ({
+                        id: docSnap.id,
+                        ...docSnap.data()
                     })) as Appointment[]
 
                 // When used from receptionist dashboard, apply unified branch visibility
@@ -605,6 +670,10 @@ export default function AppoinmentManagement({
                     filters: {
                         receptionistBranchId: receptionistBranchId || null,
                         selectedBranchId: effectiveSelectedBranchId,
+                        timeRange,
+                        appointmentDateStart: start,
+                        appointmentDateEnd: end,
+                        doctorId: selectedDoctorId !== 'all' ? selectedDoctorId : null,
                     },
                     count: appointmentsList.length,
                     empty: appointmentsList.length === 0,
@@ -612,10 +681,11 @@ export default function AppoinmentManagement({
 
                 setAppointments(appointmentsList)
                 setLastUpdated(new Date())
+                hasLoadedAppointmentsRef.current = true
                 setLoading(false)
-            }, (error) => {
+            }, (listenerError) => {
 
-                setError(error.message)
+                setError(listenerError.message)
                 setLoading(false)
             })
             
@@ -626,16 +696,19 @@ export default function AppoinmentManagement({
             setLoading(false)
             return () => {}
         }
-    }, [activeHospitalId, receptionistBranchId, effectiveSelectedBranchId])
+    }, [activeHospitalId, receptionistBranchId, effectiveSelectedBranchId, timeRange, selectedDoctorId])
     useEffect(() => {
-        let unsubscribeAppointments: (() => void) | null = null
+        const unsubscribeAppointments = setupRealtimeListener()
+        return () => {
+            unsubscribeAppointments()
+        }
+    }, [setupRealtimeListener])
 
-        // Set up real-time listener for appointments
-        unsubscribeAppointments = setupRealtimeListener()
-        
-        // Fetch limited doctors list for dropdown (active doctors) - use hospital-scoped collection
+    useEffect(() => {
+        if (!activeHospitalId) return
+
+        // Fetch doctors list for dropdown (hospital-scoped)
         ;(async () => {
-            if (!activeHospitalId) return
             try {
                 const snap = await getDocs(getHospitalCollection(activeHospitalId, 'doctors'))
                 const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as any[]
@@ -648,7 +721,6 @@ export default function AppoinmentManagement({
 
         // Fetch branches
         ;(async () => {
-            if (!activeHospitalId) return
             try {
                 const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`)
                 const data = await response.json()
@@ -656,17 +728,10 @@ export default function AppoinmentManagement({
                     setBranches(data.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
                 }
             } catch {
-
+                // ignore
             }
         })()
-
-        // Cleanup function
-        return () => {
-            if (unsubscribeAppointments) {
-                unsubscribeAppointments()
-            }
-        }
-    }, [activeHospitalId, user, authLoading, setupRealtimeListener, effectiveSelectedBranchId])
+    }, [activeHospitalId])
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -895,7 +960,7 @@ export default function AppoinmentManagement({
 
     // Protect component - only allow admins (moved after all hooks)
     if (authLoading) {
-        return <LoadingSpinner message="Loading appointment management..." />
+        return <TabSkeleton variant="table" />
     }
 
     if (!user) {
@@ -994,7 +1059,7 @@ export default function AppoinmentManagement({
                             <select value={timeRange} onChange={(e) => setTimeRange(e.target.value as any)}
                                 className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                             >
-                                <option value="all">All Time</option>
+                                <option value="all">Last 12 months</option>
                                 <option value="today">Today</option>
                                 <option value="last10">Last 10 days</option>
                                 <option value="month">This month</option>
@@ -1061,7 +1126,8 @@ export default function AppoinmentManagement({
                     <EnterpriseDataTable
                         data={paginatedAppointments}
                         columns={appointmentColumns}
-                        loading={loading}
+                        loading={loading && appointments.length === 0}
+                        loadingVariant="skeleton"
                         loadingMessage="Loading appointments…"
                         error={error}
                         emptyTitle={search ? 'No appointments found' : 'No appointments yet'}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendMissedAppointmentWhatsApp } from "@/server/missedAppointmentNotify"
-import { getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 
@@ -32,13 +32,24 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}))
     const appointmentId =
       typeof body?.appointmentId === "string" ? body.appointmentId.trim() : ""
-    const hospitalId =
+    const requestedHospitalId =
       typeof body?.hospitalId === "string" ? body.hospitalId.trim() : ""
 
-    if (!appointmentId || !hospitalId) {
+    if (!appointmentId) {
       return NextResponse.json(
-        { error: "appointmentId and hospitalId are required" },
+        { error: "appointmentId is required" },
         { status: 400 }
+      )
+    }
+
+    const hospitalId = await resolveAuthorizedHospitalId(
+      auth.user!.uid,
+      requestedHospitalId || null
+    )
+    if (!hospitalId) {
+      return NextResponse.json(
+        { error: "Hospital access denied or hospital context missing" },
+        { status: 403 }
       )
     }
 
@@ -53,6 +64,13 @@ export async function POST(request: Request) {
     }
 
     const appointment = appointmentSnap.data()!
+    if (String(appointment.doctorId || "") !== auth.user!.uid) {
+      return NextResponse.json(
+        { error: "You can only skip your own appointments" },
+        { status: 403 }
+      )
+    }
+
     const currentStatus = appointment.status || ""
 
     if (currentStatus === "completed") {

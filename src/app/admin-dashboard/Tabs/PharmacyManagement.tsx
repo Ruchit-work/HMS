@@ -11,7 +11,7 @@ import GroupedNav from '@/components/ui/navigation/GroupedNav'
 import { Button } from '@/components/ui/Button'
 import { buildPharmacyAdminNavSections } from '@/app/pharmacy/pharmacyNavConfig'
 import Notification from '@/components/ui/feedback/Notification'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import Pagination from '@/components/ui/navigation/Pagination'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import { RevealModal } from '@/components/ui/overlays/RevealModal'
@@ -690,15 +690,19 @@ export default function PharmacyManagement() {
     fetchBranches()
   }, [fetchBranches])
 
+  // Full pharmacy bootstrap only on mount / branch change — not on every sub-tab switch
   useEffect(() => {
     const isInitial = !hasLoadedOnceRef.current
     if (isInitial) hasLoadedOnceRef.current = true
     fetchPharmacy(isInitial ? false : true)
     fetchCashSessions()
+  }, [fetchPharmacy, fetchCashSessions, branchFilter])
+
+  useEffect(() => {
     if (subTab === 'cash_and_expenses') {
       fetchExpensesAndCategories()
     }
-  }, [fetchPharmacy, fetchCashSessions, fetchExpensesAndCategories, branchFilter, subTab])
+  }, [subTab, fetchExpensesAndCategories, branchFilter])
 
   /** Overview dashboard date range: today, 7d, 30d, 6m, year, all */
   const [overviewDateRange, setOverviewDateRange] = useState<OverviewDateRange>('7d')
@@ -2041,7 +2045,7 @@ export default function PharmacyManagement() {
                   </div>
                 </div>
                 {loading ? (
-                  <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
+                  <TabSkeleton variant="table" />
                 ) : returnsInnerTab === 'by_sale' ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs sm:text-sm">

@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
 import {
   ClinicalAlertCard,
-  ClinicalLoadingState,
   ClinicalPageFrame,
   ClinicalPageHeader,
 } from "@/components/doctor/clinical"
@@ -37,7 +36,9 @@ export default function DoctorSettingsPage() {
   const { user, loading } = useAuth("doctor")
   const items = getSettingsHubItems()
 
-  if (loading) return <ClinicalLoadingState message="Loading settings…" inline />
+  if (loading) {
+    return <div className="min-h-[40vh]" aria-busy="true" />
+  }
   if (!user) return null
 
   const groups = (["account", "practice", "scheduling"] as const).map((group) => ({

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/firebase/serverHospitalQueries"
+import { getUserActiveHospitalId, getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
 import { buildMissedAppointmentMessage, sendMissedAppointmentWhatsApp } from "@/server/missedAppointmentNotify"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
 
@@ -58,20 +58,26 @@ export async function POST(
 
     const firestore = admin.firestore()
 
-    // Try to find the appointment - first check user's active hospital, then search all hospitals
+    // Only search within hospitals the caller is authorized to access
     let appointmentRef: FirebaseFirestore.DocumentReference | null = null
     let appointmentData: FirebaseFirestore.DocumentData | null = null
     let hospitalId: string | null = null
 
-    // First, try request hospital context or user's active hospital (preferred path)
-    const preferredHospitalIds: string[] = []
-    if (requestedHospitalId) preferredHospitalIds.push(requestedHospitalId)
+    const authorizedHospitalId = auth.user?.uid
+      ? await resolveAuthorizedHospitalId(auth.user.uid, requestedHospitalId)
+      : null
 
-    if (auth.user?.uid) {
-      const userHospitalId = await getUserActiveHospitalId(auth.user.uid)
-      if (userHospitalId && !preferredHospitalIds.includes(userHospitalId)) {
-        preferredHospitalIds.push(userHospitalId)
-      }
+    if (!authorizedHospitalId) {
+      return NextResponse.json(
+        { error: "Hospital access denied or hospital context missing" },
+        { status: 403 }
+      )
+    }
+
+    const preferredHospitalIds = [authorizedHospitalId]
+    const userHospitalId = auth.user?.uid ? await getUserActiveHospitalId(auth.user.uid) : null
+    if (userHospitalId && !preferredHospitalIds.includes(userHospitalId)) {
+      preferredHospitalIds.push(userHospitalId)
     }
 
     for (const preferredHospitalId of preferredHospitalIds) {
@@ -87,23 +93,7 @@ export async function POST(
       }
     }
 
-    // If not found, search all active hospitals
-    if (!appointmentRef) {
-      const activeHospitals = await getAllActiveHospitals()
-      for (const hospital of activeHospitals) {
-        const ref = firestore
-          .collection(getHospitalCollectionPath(hospital.id, "appointments"))
-          .doc(appointmentId)
-        const doc = await ref.get()
-        if (doc.exists) {
-          appointmentRef = ref
-          appointmentData = doc.data()!
-          hospitalId = hospital.id
-          break
-        }
-      }
-    }
-
+    // Do NOT scan other hospitals — prevents cross-tenant discovery
     if (!appointmentRef || !appointmentData) {
       return NextResponse.json(
         { error: "Appointment not found" },

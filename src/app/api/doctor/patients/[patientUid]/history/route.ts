@@ -1,10 +1,10 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import {
-  getAllActiveHospitals,
   getDoctorHospitalId,
   getHospitalCollectionPath,
   getUserActiveHospitalId,
+  resolveAdmissionHospitalId,
 } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
@@ -49,14 +49,37 @@ export async function GET(req: Request, context: { params: Promise<Params> }) {
       }
     }
 
+    if (
+      patientProfile &&
+      hospitalId &&
+      typeof patientProfile.hospitalId === "string" &&
+      patientProfile.hospitalId.trim() &&
+      patientProfile.hospitalId.trim() !== hospitalId
+    ) {
+      return Response.json({ error: "Forbidden: patient belongs to another hospital" }, { status: 403 })
+    }
+
     const admissionsSnap = await firestore
       .collection("admissions")
       .where("patientUid", "==", patientUid)
       .limit(25)
       .get()
 
-    const admissions = admissionsSnap.docs
-      .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }))
+    const admissions = (
+      await Promise.all(
+        admissionsSnap.docs.map(async (docSnap) => {
+          const data = docSnap.data() || {}
+          if (hospitalId) {
+            const docHospital =
+              (typeof data.hospitalId === "string" && data.hospitalId.trim()) ||
+              (await resolveAdmissionHospitalId(data))
+            if (docHospital && docHospital !== hospitalId) return null
+          }
+          return { id: docSnap.id, ...data }
+        })
+      )
+    )
+      .filter(Boolean)
       .filter((entry: any) => !currentAdmissionId || String(entry.id) !== currentAdmissionId)
       .sort((a: any, b: any) => {
         const aTime = new Date(String(a.createdAt || a.checkInAt || 0)).getTime()
@@ -105,29 +128,7 @@ export async function GET(req: Request, context: { params: Promise<Params> }) {
       }
     })
 
-    // Fallback: if historical appointments were stored under a different hospital scope,
-    // scan active hospitals (limited) and merge matches by patientId/patientUid.
-    if (appointmentMap.size === 0 && (patientId || patientUid)) {
-      const hospitals = await getAllActiveHospitals().catch(() => [])
-      for (const hospital of hospitals.slice(0, 20)) {
-        const hospAppointmentsRef = firestore.collection(getHospitalCollectionPath(hospital.id, "appointments"))
-        if (patientId) {
-          const byPid = await hospAppointmentsRef.where("patientId", "==", patientId).limit(10).get()
-          byPid.docs.forEach((docSnap) => {
-            if (!appointmentMap.has(docSnap.id)) {
-              appointmentMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() || {}) })
-            }
-          })
-        }
-        const byUid = await hospAppointmentsRef.where("patientUid", "==", patientUid).limit(10).get()
-        byUid.docs.forEach((docSnap) => {
-          if (!appointmentMap.has(docSnap.id)) {
-            appointmentMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() || {}) })
-          }
-        })
-        if (appointmentMap.size >= 25) break
-      }
-    }
+    // Fallback removed: do not scan other hospitals (tenant isolation).
 
     let appointments = Array.from(appointmentMap.values())
     appointments = appointments

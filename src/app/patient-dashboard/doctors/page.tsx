@@ -6,7 +6,7 @@ import { query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import PageHeader from "@/components/ui/layout/PageHeader"
 import Footer from "@/components/ui/layout/Footer"
 
@@ -81,7 +81,7 @@ export default function DoctorsPage() {
   }, [searchTerm, selectedSpecialization, doctors])
 
   if (authLoading || loading) {
-    return <LoadingSpinner message="Loading Doctors..." />
+    return <TabSkeleton variant="table" />
   }
 
   if (!user) {

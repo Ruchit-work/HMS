@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { auth } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import Notification from "@/components/ui/feedback/Notification"
 import { generatePrescriptionPDF } from "@/utils/documents/pdfGenerators"
 import { completeAppointment } from "@/utils/appointmentHelpers"
@@ -1544,7 +1544,7 @@ function DoctorAppointmentsContent() {
   ])
 
   if (loading) {
-    return <LoadingSpinner message="Loading appointments..." />
+    return <TabSkeleton variant="table" />
   }
 
   if (!user || !userData) {

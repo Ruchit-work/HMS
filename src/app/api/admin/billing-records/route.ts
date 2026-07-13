@@ -1,5 +1,10 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import {
+  getUserActiveHospitalId,
+  isPlatformSuperAdmin,
+  getHospitalCollectionPath,
+} from "@/utils/firebase/serverHospitalQueries"
 
 interface UnifiedBillingRecord {
   id: string
@@ -48,12 +53,43 @@ export async function GET(request: Request) {
     const records: UnifiedBillingRecord[] = []
     const billedAppointmentIds = new Set<string>()
 
-    // Fetch billing records from admissions
-    const billingSnapshot = await firestore
-      .collection("billing_records")
-      .orderBy("generatedAt", "desc")
-      .limit(100)
-      .get()
+    const uid = auth.user!.uid
+    const superAdmin = await isPlatformSuperAdmin(uid)
+    const scopedHospitalId = await getUserActiveHospitalId(uid)
+    if (!superAdmin && !scopedHospitalId) {
+      return Response.json({ error: "Hospital context required" }, { status: 400 })
+    }
+
+    // Fetch billing records — tenant-scoped for hospital admins
+    let billingSnapshot
+    try {
+      if (scopedHospitalId) {
+        billingSnapshot = await firestore
+          .collection("billing_records")
+          .where("hospitalId", "==", scopedHospitalId)
+          .orderBy("generatedAt", "desc")
+          .limit(100)
+          .get()
+      } else {
+        // Super admin with no active hospital: platform view (limited)
+        billingSnapshot = await firestore
+          .collection("billing_records")
+          .orderBy("generatedAt", "desc")
+          .limit(100)
+          .get()
+      }
+    } catch {
+      // Fallback if composite index missing: filter in memory
+      const snap = await firestore
+        .collection("billing_records")
+        .orderBy("generatedAt", "desc")
+        .limit(300)
+        .get()
+      const filtered = scopedHospitalId
+        ? snap.docs.filter((d) => String(d.data()?.hospitalId || "") === scopedHospitalId)
+        : snap.docs
+      billingSnapshot = { docs: filtered.slice(0, 100) } as FirebaseFirestore.QuerySnapshot
+    }
 
     for (const docSnap of billingSnapshot.docs) {
       const data = docSnap.data() || {}
@@ -154,16 +190,16 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch appointments with payments
-    // Use a simpler query that doesn't require composite index
-    // Fetch recent appointments and filter/sort in memory
+    // Fetch appointments with payments — scoped to caller's hospital when set
     let appointmentsDocs: any[] = []
     const seenAppointmentIds = new Set<string>()
     try {
-      // Optimized: Query appointments that have payments - use Firestore queries instead of client-side filtering
-      // First, try to get paid appointments ordered by paidAt
-      const paidAppointmentsQuery = firestore
-        .collection("appointments")
+      const appointmentsCol = scopedHospitalId
+        ? firestore.collection(getHospitalCollectionPath(scopedHospitalId, "appointments"))
+        : firestore.collection("appointments")
+
+      // Optimized: Query appointments that have payments
+      const paidAppointmentsQuery = appointmentsCol
         .where("paidAt", ">", "")
         .orderBy("paidAt", "desc")
         .limit(100)
@@ -172,8 +208,7 @@ export async function GET(request: Request) {
       appointmentsDocs = paidSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
       
       // Also get pending cash appointments (those with consultation fee but not paid)
-      const pendingCashQuery = firestore
-        .collection("appointments")
+      const pendingCashQuery = appointmentsCol
         .where("totalConsultationFee", ">", 0)
         .where("paymentStatus", "in", ["pending", "unpaid"])
         .orderBy("totalConsultationFee", "desc")
@@ -216,9 +251,11 @@ export async function GET(request: Request) {
     } catch {
       // Final fallback: fetch without orderBy (reduced limit)
       try {
-        const allAppointmentsSnapshot = await firestore
-          .collection("appointments")
-          .limit(100) // Reduced from 500
+        const appointmentsCol = scopedHospitalId
+          ? firestore.collection(getHospitalCollectionPath(scopedHospitalId, "appointments"))
+          : firestore.collection("appointments")
+        const allAppointmentsSnapshot = await appointmentsCol
+          .limit(100)
           .get()
         appointmentsDocs = allAppointmentsSnapshot.docs
           .filter((doc) => {
@@ -247,21 +284,35 @@ export async function GET(request: Request) {
       }
     }
 
-    // Also include hospital-scoped appointments (hospitals/{id}/appointments)
+    // Include hospital-scoped appointments only for the caller's hospital (or all for SA without scope)
     try {
-      const hospitalsSnap = await firestore.collection("hospitals").where("status", "==", "active").limit(20).get()
-      for (const hospDoc of hospitalsSnap.docs) {
-        const hospId = hospDoc.id
+      if (scopedHospitalId) {
         const hospAppointmentsSnap = await firestore
-          .collection(`hospitals/${hospId}/appointments`)
+          .collection(getHospitalCollectionPath(scopedHospitalId, "appointments"))
           .orderBy("createdAt", "desc")
-          .limit(50) // Reduced from 200 to 50 for better performance
+          .limit(50)
           .get()
 
         for (const doc of hospAppointmentsSnap.docs) {
           if (seenAppointmentIds.has(doc.id)) continue
           appointmentsDocs.push(doc)
           seenAppointmentIds.add(doc.id)
+        }
+      } else if (superAdmin) {
+        const hospitalsSnap = await firestore.collection("hospitals").where("status", "==", "active").limit(20).get()
+        for (const hospDoc of hospitalsSnap.docs) {
+          const hospId = hospDoc.id
+          const hospAppointmentsSnap = await firestore
+            .collection(`hospitals/${hospId}/appointments`)
+            .orderBy("createdAt", "desc")
+            .limit(50)
+            .get()
+
+          for (const doc of hospAppointmentsSnap.docs) {
+            if (seenAppointmentIds.has(doc.id)) continue
+            appointmentsDocs.push(doc)
+            seenAppointmentIds.add(doc.id)
+          }
         }
       }
     } catch {

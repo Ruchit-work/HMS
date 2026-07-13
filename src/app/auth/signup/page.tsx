@@ -14,6 +14,7 @@ import { getHospitalCollection } from "@/utils/firebase/hospital-queries";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePublicRoute } from "@/hooks/useAuth";
+import { useDeferredVisible } from "@/hooks/useDeferredVisible";
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents";
 import OTPVerificationModal from "@/components/forms/OTPVerificationModal";
 import Notification from "@/components/ui/feedback/Notification";
@@ -23,6 +24,8 @@ import PatientProfileForm, {
 
 function SignUpContent() {
   const searchParams = useSearchParams();
+  const { loading: checking } = usePublicRoute();
+  const showAuthGate = useDeferredVisible(checking, 400);
 
   const roleFromUrl = searchParams.get("role") as "patient" | "doctor" | null;
 
@@ -53,8 +56,6 @@ function SignUpContent() {
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [loadingBranches, setLoadingBranches] = useState(false);
-
-  const { loading: checking } = usePublicRoute();
 
   useEffect(() => {
     // Redirect if someone tries to access signup with doctor role
@@ -408,7 +409,10 @@ Thank you for choosing Harmony Medical Services! 🏥`;
   };
 
   if (checking) {
-    return <LoadingSpinner />;
+    if (!showAuthGate) {
+      return <div className="min-h-screen bg-slate-50" aria-busy="true" />;
+    }
+    return <LoadingSpinner message="Checking session…" />;
   }
 
   return (
@@ -516,8 +520,9 @@ Thank you for choosing Harmony Medical Services! 🏥`;
                         Select Hospital *
                       </label>
                       {loadingHospitals ? (
-                        <div className="text-center py-4">
-                          <LoadingSpinner message="Loading hospitals..." />
+                        <div className="space-y-2 py-2 animate-pulse" aria-busy="true">
+                          <div className="h-12 w-full rounded-lg bg-slate-100" />
+                          <div className="h-12 w-full rounded-lg bg-slate-100" />
                         </div>
                       ) : hospitals.length === 0 ? (
                         <div className="text-center py-4 text-red-600">
@@ -566,8 +571,9 @@ Thank you for choosing Harmony Medical Services! 🏥`;
                   Select Branch {branches.length > 0 && <span className="text-red-500">*</span>}
                 </label>
                 {loadingBranches ? (
-                  <div className="text-center py-3">
-                    <LoadingSpinner message="Loading branches..." />
+                  <div className="space-y-2 py-2 animate-pulse" aria-busy="true">
+                    <div className="h-10 w-full rounded-lg bg-slate-100" />
+                    <div className="h-10 w-full rounded-lg bg-slate-100" />
                   </div>
                 ) : branches.length === 0 ? (
                   <p className="text-xs text-slate-500">
@@ -740,7 +746,7 @@ Thank you for choosing Harmony Medical Services! 🏥`;
 
 export default function SignUp() {
   return (
-    <Suspense fallback={<LoadingSpinner message="Loading signup page..." />}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" aria-busy="true" />}>
       <SignUpContent />
     </Suspense>
   );

@@ -1,5 +1,10 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import {
+  getDoctorHospitalId,
+  getUserActiveHospitalId,
+  resolveAdmissionHospitalId,
+} from "@/utils/firebase/serverHospitalQueries"
 
 export async function GET(req: Request) {
   const auth = await authenticateRequest(req)
@@ -13,14 +18,32 @@ export async function GET(req: Request) {
     if (!initResult.ok) return Response.json({ error: "Server not configured for admin" }, { status: 500 })
 
     const firestore = admin.firestore()
-    const baseRef = firestore.collection("admissions").where("doctorId", "==", auth.user.uid)
+    const doctorUid = auth.user.uid
+    const hospitalId =
+      (await getUserActiveHospitalId(doctorUid).catch(() => null)) ||
+      (await getDoctorHospitalId(doctorUid).catch(() => null))
+
+    const baseRef = firestore.collection("admissions").where("doctorId", "==", doctorUid)
     const [admittedSnap, scheduledSnap] = await Promise.all([
       baseRef.where("status", "==", "admitted").get(),
       baseRef.where("status", "==", "scheduled").get(),
     ])
 
-    const admissions = [...admittedSnap.docs, ...scheduledSnap.docs]
-      .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() || {}) }))
+    const admissions = (
+      await Promise.all(
+        [...admittedSnap.docs, ...scheduledSnap.docs].map(async (docSnap) => {
+          const data = docSnap.data() || {}
+          if (hospitalId) {
+            const docHospital =
+              (typeof data.hospitalId === "string" && data.hospitalId.trim()) ||
+              (await resolveAdmissionHospitalId(data))
+            if (docHospital && docHospital !== hospitalId) return null
+          }
+          return { id: docSnap.id, ...data }
+        })
+      )
+    )
+      .filter(Boolean)
       .sort((a: any, b: any) => {
         const aDate = new Date(String(a.checkInAt || "")).getTime()
         const bDate = new Date(String(b.checkInAt || "")).getTime()
@@ -32,4 +55,3 @@ export async function GET(req: Request) {
     return Response.json({ error: error?.message || "Failed to load inpatients" }, { status: 500 })
   }
 }
-

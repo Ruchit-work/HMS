@@ -103,7 +103,7 @@ function EnterpriseDataTableInner<T extends { id: string }>({
   keyExtractor,
   loading = false,
   loadingMessage = "Loading…",
-  loadingVariant = "spinner",
+  loadingVariant = "skeleton",
   error = null,
   onRetry,
   emptyTitle = "No records found",

@@ -6,6 +6,7 @@ import { getDocs } from "firebase/firestore"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import VoiceInput from "@/components/ui/VoiceInput"
+import { useDebounce } from "@/hooks/useDebounce"
 
 interface Patient {
   id: string
@@ -23,12 +24,17 @@ interface PatientSelectorProps {
   className?: string
 }
 
+/** Per-hospital cache to avoid re-downloading the full patients collection on every search. */
+const patientsCacheByHospital = new Map<string, { fetchedAt: number; docs: Array<{ id: string; data: Record<string, unknown> }> }>()
+const PATIENTS_CACHE_TTL_MS = 60_000
+
 export default function PatientSelector({
   onPatientSelect,
   selectedPatient,
   className = "",
 }: PatientSelectorProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(false)
@@ -49,43 +55,49 @@ export default function PatientSelector({
       }
 
       const searchTermLower = searchTerm.toLowerCase()
+      const now = Date.now()
+      let cached = patientsCacheByHospital.get(activeHospitalId)
+      if (!cached || now - cached.fetchedAt > PATIENTS_CACHE_TTL_MS) {
+        const patientsRef = getHospitalCollection(activeHospitalId, "patients")
+        const allPatientsSnapshot = await getDocs(patientsRef)
+        cached = {
+          fetchedAt: now,
+          docs: allPatientsSnapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            data: docSnap.data() as Record<string, unknown>,
+          })),
+        }
+        patientsCacheByHospital.set(activeHospitalId, cached)
+      }
 
-      // Search patients from hospital collection
-      const patientsRef = getHospitalCollection(activeHospitalId, "patients")
-      
-      // Fetch all patients and filter client-side (more flexible than Firestore queries)
-      // This allows searching across multiple fields
-      const allPatientsSnapshot = await getDocs(patientsRef)
       const patientMap = new Map<string, Patient>()
 
-      allPatientsSnapshot.forEach((doc) => {
-        const data = doc.data()
-        const patientId = data.patientId || doc.id
+      for (const entry of cached.docs) {
+        if (patientMap.size >= 20) break
+        const data = entry.data
+        const patientId = String(data.patientId || entry.id)
         const fullName = `${data.firstName || ""} ${data.lastName || ""}`.trim().toLowerCase()
-        const email = (data.email || "").toLowerCase()
-        const phone = (data.phone || "").toLowerCase()
-        const patientIdLower = (patientId || "").toLowerCase()
+        const email = String(data.email || "").toLowerCase()
+        const phone = String(data.phone || "").toLowerCase()
+        const patientIdLower = patientId.toLowerCase()
 
-        // Client-side filter for better matching
         if (
           fullName.includes(searchTermLower) ||
           email.includes(searchTermLower) ||
           phone.includes(searchTermLower) ||
           patientIdLower.includes(searchTermLower)
         ) {
-          if (!patientMap.has(doc.id) && patientMap.size < 20) {
-            patientMap.set(doc.id, {
-              id: doc.id,
-              uid: doc.id,
-              patientId: patientId,
-              firstName: data.firstName || "",
-              lastName: data.lastName || "",
-              email: data.email || "",
-              phone: data.phone || "",
-            })
-          }
+          patientMap.set(entry.id, {
+            id: entry.id,
+            uid: entry.id,
+            patientId,
+            firstName: String(data.firstName || ""),
+            lastName: String(data.lastName || ""),
+            email: String(data.email || ""),
+            phone: String(data.phone || ""),
+          })
         }
-      })
+      }
 
       const patientList = Array.from(patientMap.values())
       setPatients(patientList)
@@ -99,13 +111,13 @@ export default function PatientSelector({
   }, [activeHospitalId])
 
   useEffect(() => {
-    if (searchQuery.trim().length >= 2) {
-      searchPatients(searchQuery.trim())
+    if (debouncedSearchQuery.trim().length >= 2) {
+      searchPatients(debouncedSearchQuery.trim())
     } else {
       setPatients([])
       setShowSuggestions(false)
     }
-  }, [searchQuery, activeHospitalId, searchPatients])
+  }, [debouncedSearchQuery, activeHospitalId, searchPatients])
 
   const handleSelectPatient = (patient: Patient) => {
     setSearchQuery(`${patient.firstName} ${patient.lastName}`.trim())

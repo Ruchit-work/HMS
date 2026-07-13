@@ -185,12 +185,13 @@ export default function DateTimeSelectionStep({
             )}
 
             {loadingSlots ? (
-              <div className="text-center py-8">
-                <svg className="animate-spin h-8 w-8 mx-auto text-cyan-600" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <p className="text-sm text-slate-500 mt-2">Checking availability...</p>
+              <div className="space-y-2 py-6 animate-pulse" aria-busy="true">
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-10 rounded-lg bg-slate-100" />
+                  ))}
+                </div>
+                <p className="text-center text-xs text-slate-400 pt-2">Checking availability…</p>
               </div>
             ) : hasDuplicateAppointment ? (
               <div className="text-center py-8 bg-red-50 rounded-lg border-2 border-red-200">

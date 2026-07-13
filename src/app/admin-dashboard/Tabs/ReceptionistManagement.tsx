@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import Notification from '@/components/ui/feedback/Notification'
 import { auth, db } from '@/firebase/config'
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore'
@@ -512,8 +512,8 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
     }
   }
 
-  if (authLoading || loading || hospitalLoading) {
-    return <LoadingSpinner message="Loading receptionists..." />
+  if (authLoading || (loading && !hospitalLoading) || hospitalLoading) {
+    return <TabSkeleton variant="table" />
   }
 
   // Block super admins

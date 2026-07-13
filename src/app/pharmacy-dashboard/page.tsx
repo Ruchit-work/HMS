@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
 
 /**
  * Legacy route: pharmacy portal lives at /pharmacy.
@@ -13,9 +12,5 @@ export default function PharmacyDashboardRedirect() {
   useEffect(() => {
     router.replace('/pharmacy')
   }, [router])
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <LoadingSpinner message="Redirecting to Pharmacy Portal..." />
-    </div>
-  )
+  return <div className="min-h-screen bg-slate-50" aria-busy="true" />
 }

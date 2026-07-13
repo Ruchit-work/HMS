@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-import ClinicalLoadingState from "./ClinicalLoadingState"
 import ClinicalEmptyState from "./ClinicalEmptyState"
 
 interface ClinicalDataTableColumn<T> {
@@ -31,7 +30,7 @@ export default function ClinicalDataTable<T>({
   data,
   keyExtractor,
   loading = false,
-  loadingMessage = "Loading records…",
+  loadingMessage: _loadingMessage = "Loading records…",
   emptyTitle = "No records found",
   emptyDescription,
   onRowClick,
@@ -55,11 +54,20 @@ export default function ClinicalDataTable<T>({
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={columns.length}>
-                  <ClinicalLoadingState message={loadingMessage} inline size="sm" />
-                </td>
-              </tr>
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`sk-${i}`} className="animate-pulse">
+                  <td colSpan={columns.length} className="px-3 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-slate-100" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 w-1/3 rounded bg-slate-100" />
+                        <div className="h-2.5 w-1/4 rounded bg-slate-50" />
+                      </div>
+                      <div className="h-6 w-16 rounded-full bg-slate-100" />
+                    </div>
+                  </td>
+                </tr>
+              ))
             ) : data.length === 0 ? (
               <tr>
                 <td colSpan={columns.length}>

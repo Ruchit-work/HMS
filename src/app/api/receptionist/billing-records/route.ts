@@ -1,6 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
 import {
   getAppointmentsCollectionPath,
   isAppointmentVisibleToReceptionist,
@@ -70,6 +70,11 @@ export async function GET(request: Request) {
     const enrichPatientDetails = searchParams.get("enrich") !== "0"
 
     const firestore = admin.firestore()
+
+    const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
+    if (!hospitalId) {
+      return Response.json({ error: "Hospital context required" }, { status: 400 })
+    }
     
     // Get receptionist's branchId if user is a receptionist
     let receptionistBranchId: string | null = null
@@ -87,14 +92,28 @@ export async function GET(request: Request) {
     const records: UnifiedBillingRecord[] = []
     const billedAppointmentIds = new Set<string>()
 
-    // Fetch billing records from admissions
-    const billingSnapshot = await firestore
-      .collection("billing_records")
-      .orderBy("generatedAt", "desc")
-      .limit(100)
-      .get()
+    // Fetch billing records — hospital-scoped (never global)
+    let billingDocs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+    try {
+      const billingSnapshot = await firestore
+        .collection("billing_records")
+        .where("hospitalId", "==", hospitalId)
+        .orderBy("generatedAt", "desc")
+        .limit(100)
+        .get()
+      billingDocs = billingSnapshot.docs
+    } catch {
+      const snap = await firestore
+        .collection("billing_records")
+        .orderBy("generatedAt", "desc")
+        .limit(300)
+        .get()
+      billingDocs = snap.docs
+        .filter((d) => String(d.data()?.hospitalId || "") === hospitalId)
+        .slice(0, 100)
+    }
 
-    for (const docSnap of billingSnapshot.docs) {
+    for (const docSnap of billingDocs) {
       const data = docSnap.data() || {}
       
       // Filter by branch for receptionists
@@ -104,26 +123,23 @@ export async function GET(request: Request) {
           continue // Skip this billing record - not for receptionist's branch
         }
         
-        // If no direct branchId, check via appointmentId
+        // If no direct branchId, check via appointmentId within this hospital only
         if (!data.branchId && data.appointmentId) {
           try {
-            // Try to get appointment from hospital-scoped collections first
             let appointmentData: any = null
-            const hospitalsSnap = await firestore.collection("hospitals").where("status", "==", "active").limit(10).get()
-            for (const hospDoc of hospitalsSnap.docs) {
-              const hospId = hospDoc.id
-              const aptDoc = await firestore.collection(`hospitals/${hospId}/appointments`).doc(String(data.appointmentId)).get()
-              if (aptDoc.exists) {
-                appointmentData = aptDoc.data()
-                break
-              }
-            }
-            
-            // Fallback to root appointments collection
-            if (!appointmentData) {
-              const aptDoc = await firestore.collection("appointments").doc(String(data.appointmentId)).get()
-              if (aptDoc.exists) {
-                appointmentData = aptDoc.data()
+            const aptDoc = await firestore
+              .collection(getHospitalCollectionPath(hospitalId, "appointments"))
+              .doc(String(data.appointmentId))
+              .get()
+            if (aptDoc.exists) {
+              appointmentData = aptDoc.data()
+            } else {
+              const rootApt = await firestore.collection("appointments").doc(String(data.appointmentId)).get()
+              if (rootApt.exists) {
+                const rootData = rootApt.data() || {}
+                if (String(rootData.hospitalId || "") === hospitalId) {
+                  appointmentData = rootData
+                }
               }
             }
             
@@ -161,7 +177,10 @@ export async function GET(request: Request) {
       if (enrichPatientDetails && needsEnrichment) {
         try {
           if (patientUid) {
-            const patientDoc = await firestore.collection("patients").doc(String(patientUid)).get()
+            const patientDoc = await firestore
+              .collection(getHospitalCollectionPath(hospitalId, "patients"))
+              .doc(String(patientUid))
+              .get()
             if (patientDoc.exists) {
               const patient = patientDoc.data() as any
               const composed = [patient?.firstName, patient?.lastName].filter(Boolean).join(" ").trim()
@@ -169,7 +188,7 @@ export async function GET(request: Request) {
             }
           } else if (patientId) {
             const querySnap = await firestore
-              .collection("patients")
+              .collection(getHospitalCollectionPath(hospitalId, "patients"))
               .where("patientId", "==", patientId)
               .limit(1)
               .get()
@@ -234,9 +253,6 @@ export async function GET(request: Request) {
     // that Doctor / Reception / Admin write to: hospitals/{hospitalId}/appointments
     const appointmentsDocs: any[] = []
     const seenAppointmentIds = new Set<string>()
-
-    const hospitalId =
-      (auth.user?.uid ? await getUserActiveHospitalId(auth.user.uid) : null) || null
 
     if (hospitalId) {
       try {

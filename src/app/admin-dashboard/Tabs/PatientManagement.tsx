@@ -8,14 +8,14 @@ import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import AdminProtected from '@/components/AdminProtected'
 import { ViewModal, DeleteModal } from '@/components/ui/overlays/Modals'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 import OTPVerificationModal from '@/components/forms/OTPVerificationModal'
 import PatientProfileForm, { PatientProfileFormValues } from '@/components/forms/PatientProfileForm'
 import { calculateAge, formatDate, formatDateTime } from '@/utils/shared/date'
-import { SuccessToast } from '@/components/ui/feedback/StatusComponents'
 import { useTablePagination } from '@/hooks/useTablePagination'
 import DocumentListCompact from '@/components/documents/DocumentListCompact'
 import {
@@ -1271,7 +1271,7 @@ export default function PatientManagement({
     }, [canDelete])
 
     if (authLoading) {
-        return <LoadingSpinner message="Loading patient management..." />
+        return <TabSkeleton variant="table" />
     }
 
     if (!user) {
@@ -1439,7 +1439,8 @@ export default function PatientManagement({
               <EnterpriseDataTable
                 data={paginatedPatients}
                 columns={patientColumns}
-                loading={loading}
+                loading={loading && filteredPatients.length === 0}
+                loadingVariant="skeleton"
                 loadingMessage="Loading patients…"
                 error={error}
                 emptyTitle={search ? 'No patients found' : 'No patients yet'}

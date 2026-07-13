@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { Button } from "@/components/ui/Button"
 import { FilterChip } from "@/components/ui/FilterChip"
 import { useTablePagination } from "@/hooks/useTablePagination"
+import { useDebounce } from "@/hooks/useDebounce"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { auth, db } from "@/firebase/config"
@@ -205,6 +206,7 @@ export default function StaffManagement({
   const [success, setSuccess] = useState<string | null>(null)
 
   const [searchTerm, setSearchTerm] = useState("")
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
   const [roleFilter, setRoleFilter] = useState<"all" | StaffRole>(initialRoleFilter)
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [branchFilter, setBranchFilter] = useState(selectedBranchId)
@@ -534,7 +536,7 @@ export default function StaffManagement({
     if (statusFilter !== "all") {
       list = list.filter((s) => (s.status || "active") === statusFilter)
     }
-    const q = searchTerm.trim().toLowerCase()
+    const q = debouncedSearchTerm.trim().toLowerCase()
     if (q) {
       list = list.filter((s) => {
         const blob = [
@@ -574,7 +576,7 @@ export default function StaffManagement({
       })
     }
     return list
-  }, [staff, branchFilter, roleFilter, departmentFilter, statusFilter, searchTerm, sortField, sortOrder])
+  }, [staff, branchFilter, roleFilter, departmentFilter, statusFilter, debouncedSearchTerm, sortField, sortOrder])
 
   const {
     currentPage,

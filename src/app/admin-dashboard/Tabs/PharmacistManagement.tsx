@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import type { Branch } from '@/types/branch'
 import Notification from '@/components/ui/feedback/Notification'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import { Button } from '@/components/ui/Button'
 import { RevealModal, useRevealModalClose } from '@/components/ui/overlays/RevealModal'
 
@@ -380,7 +380,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
   }
 
   if (authLoading) {
-    return <LoadingSpinner message="Checking permissions..." />
+    return <TabSkeleton variant="table" />
   }
   if (!activeHospitalId) {
     return <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center"><p className="text-slate-600">Select a hospital to manage pharmacists.</p></div>
@@ -419,7 +419,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
 
         <div className="p-6">
           {loading ? (
-            <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
+            <TabSkeleton variant="table" />
           ) : pharmacists.length === 0 ? (
             <p className="text-slate-500 text-center py-8 text-sm">No pharmacists found. Click &quot;Create Pharmacist&quot; to add one.</p>
           ) : (

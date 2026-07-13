@@ -1,7 +1,7 @@
 import React from 'react'
 import { Button } from '@/components/ui/Button'
 import { TableShell } from '@/components/ui/layout/TableShell'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import Pagination from '@/components/ui/navigation/Pagination'
 import type { PharmacyPurchaseOrder, PharmacySupplier } from '@/types/pharmacy'
 import { ActionEmptyState } from './RealWorldUiBlocks'
@@ -99,7 +99,7 @@ export function SuppliersTabContent(props: {
       />
 
       {loading ? (
-        <div className="flex justify-center py-12"><LoadingSpinner inline /></div>
+        <TabSkeleton variant="table" />
       ) : (
         <TableShell>
             <table className="min-w-[800px] w-full text-sm">

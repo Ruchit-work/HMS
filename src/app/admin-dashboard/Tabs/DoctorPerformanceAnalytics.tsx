@@ -5,7 +5,7 @@ import { getDocs } from 'firebase/firestore'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/contexts/MultiHospitalContext'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 
 interface Appointment {
   id: string
@@ -231,8 +231,8 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
     }
   }
 
-  if (authLoading || hospitalLoading || loading) {
-    return <LoadingSpinner message="Loading doctor analytics..." />
+  if (authLoading || hospitalLoading || (loading && doctorAnalytics.length === 0)) {
+    return <TabSkeleton variant="dashboard" />
   }
 
   if (doctorAnalytics.length === 0) {

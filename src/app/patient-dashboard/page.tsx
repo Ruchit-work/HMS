@@ -6,7 +6,7 @@ import { doc, getDoc, getDocs, collection, query, where, addDoc, updateDoc } fro
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import Notification from "@/components/ui/feedback/Notification"
 import { CancelAppointmentModal } from "@/components/patient/appointments/AppointmentModals"
 import HeroCarousel from "@/components/patient/ui/HeroCarousel"
@@ -15,13 +15,12 @@ import PageHeader from "@/components/ui/layout/PageHeader"
 import Footer from "@/components/ui/layout/Footer"
 import Link from "next/link"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns/campaigns"
-import { UserData, Doctor, Appointment, NotificationData } from "@/types/patient"
+import { UserData, Appointment, NotificationData } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
 import CampaignCarousel from "@/components/patient/ui/CampaignCarousel"
 
 export default function PatientDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [, setDoctors] = useState<Doctor[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [notification, setNotification] = useState<NotificationData | null>(null)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -44,16 +43,7 @@ export default function PatientDashboard() {
         setUserData(patientRecord)
       }
 
-      // Get doctors from active hospital
-      const doctorsQuery = query(getHospitalCollection(activeHospitalId, "doctors"), where("status", "==", "active"))
-      const doctorsSnapshot = await getDocs(doctorsQuery)
-      const doctorsList = doctorsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data()
-      } as Doctor))
-      setDoctors(doctorsList)
-
-      // Get appointments from active hospital
+      // Get appointments from active hospital (parallel identity-key queries)
       const appointmentsCollection = getHospitalCollection(activeHospitalId, "appointments")
       const appointmentQueries: Promise<any>[] = [
         getDocs(query(appointmentsCollection, where("patientUid", "==", user.uid)))
@@ -69,7 +59,11 @@ export default function PatientDashboard() {
         getDocs(query(appointmentsCollection, where("patientId", "==", user.uid)))
       )
 
-      const appointmentSnapshots = await Promise.all(appointmentQueries)
+      const [appointmentSnapshots, published] = await Promise.all([
+        Promise.all(appointmentQueries),
+        fetchPublishedCampaignsForAudience("patients", activeHospitalId),
+      ])
+
       const appointmentMap = new Map<string, Appointment>()
       appointmentSnapshots.forEach((snapshot) => {
         snapshot?.docs.forEach((docSnap: any) => {
@@ -80,8 +74,6 @@ export default function PatientDashboard() {
         })
       })
       setAppointments(Array.from(appointmentMap.values()))
-
-      const published = await fetchPublishedCampaignsForAudience("patients", activeHospitalId)
       setCampaigns(published)
     }
 
@@ -89,7 +81,11 @@ export default function PatientDashboard() {
   }, [user, activeHospitalId])
 
   if (loading || hospitalLoading) {
-    return <LoadingSpinner message="Loading Patient Portal..." />
+    return (
+      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+        <TabSkeleton variant="dashboard" />
+      </div>
+    )
   }
 
   if (!activeHospitalId) {

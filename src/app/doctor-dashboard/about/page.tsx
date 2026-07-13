@@ -2,7 +2,6 @@
 
 import { useAuth } from "@/hooks/useAuth"
 import {
-  ClinicalLoadingState,
   ClinicalFormSection,
   ClinicalPageFrame,
   ClinicalPageHeader,
@@ -14,7 +13,7 @@ export default function DoctorAbout() {
   const { user, loading } = useAuth("doctor")
 
   if (loading) {
-    return <ClinicalLoadingState message="Loading…" inline />
+    return <div className="min-h-[40vh]" aria-busy="true" />
   }
 
   if (!user) {

@@ -6,7 +6,8 @@ import { auth, db } from "@/firebase/config"
 import { signInWithEmailAndPassword, type User } from "firebase/auth"
 import { getDoc, doc, collection, getDocs, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
-import { usePublicRoute } from "@/hooks/useAuth"
+import { usePublicRoute, seedUserRoleCache } from "@/hooks/useAuth"
+import { useDeferredVisible } from "@/hooks/useDeferredVisible"
 import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import { Button } from "@/components/ui/Button"
 
@@ -34,12 +35,45 @@ function LoginContent() {
   const [pendingPhone, setPendingPhone] = useState<string>("")
   const [yatharthOpen, setYatharthOpen] = useState(false)
   const [jivandeepOpen, setJivandeepOpen] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
+  const [redirectBanner, setRedirectBanner] = useState<{
+    title: string
+    helperText: string
+    welcomeLine: string
+    secondsLeft: number
+  } | null>(null)
   const router = useRouter()
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const redirectStartedRef = useRef(false)
+  const pendingRedirectPathRef = useRef<string | null>(null)
   
   // Protect route - redirect if already authenticated
   const { loading: checking } = usePublicRoute()
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const showAuthGate = useDeferredVisible(checking || isCheckingAuth, 400)
+
+  // Warm dashboard route compile while user is still on the login page (dev cold compile is slow)
+  useEffect(() => {
+    const roleToPath: Record<string, string> = {
+      admin: "/admin-dashboard",
+      doctor: "/doctor-dashboard",
+      patient: "/patient-dashboard",
+      receptionist: "/receptionist-dashboard",
+      pharmacy: "/pharmacy",
+    }
+    const preferred = role ? roleToPath[role] : null
+    if (preferred) {
+      router.prefetch(preferred)
+    }
+    const allPaths = Object.values(roleToPath)
+    const idleId = window.setTimeout(() => {
+      for (const path of allPaths) {
+        if (path !== preferred) router.prefetch(path)
+      }
+    }, 800)
+    return () => window.clearTimeout(idleId)
+  }, [role, router])
 
   // Check if user is authenticated but needs MFA
   useEffect(() => {
@@ -146,8 +180,17 @@ function LoginContent() {
   }
 
   const determineUserRole = async (user: User) => {
-    // Check users collection first (multi-hospital support)
-    const userDoc = await getDoc(doc(db, "users", user.uid))
+    // Parallel Firestore reads — previously sequential (~5–7s for non-admin roles)
+    const [userDoc, adminDoc, doctorDoc, patientDoc, receptionistDoc, pharmacistDoc] =
+      await Promise.all([
+        getDoc(doc(db, "users", user.uid)),
+        getDoc(doc(db, "admins", user.uid)),
+        getDoc(doc(db, "doctors", user.uid)),
+        getDoc(doc(db, "patients", user.uid)),
+        getDoc(doc(db, "receptionists", user.uid)),
+        getDoc(doc(db, "pharmacists", user.uid)),
+      ])
+
     let isSuperAdmin = false
     let hospitals: string[] = []
     let activeHospital: string | null = null
@@ -159,32 +202,28 @@ function LoginContent() {
       isSuperAdmin = userData?.role === "super_admin"
     }
 
-    // Check admin collection first
-    const adminDoc = await getDoc(doc(db, "admins", user.uid))
+    // Check admin collection first (same priority as before)
     if (adminDoc.exists()) {
       const adminData = adminDoc.data()
-      // If super admin, redirect to super admin dashboard
       if (isSuperAdmin || adminData?.isSuperAdmin) {
-        return { 
-          role: "admin" as DashboardRole, 
-          data: adminData, 
+        return {
+          role: "admin" as DashboardRole,
+          data: adminData,
           redirect: "/admin-dashboard",
           isSuperAdmin: true,
           hospitals,
-          activeHospital
+          activeHospital,
         }
       }
-      return { 
-        role: "admin" as DashboardRole, 
-        data: adminData, 
+      return {
+        role: "admin" as DashboardRole,
+        data: adminData,
         redirect: "/admin-dashboard",
         hospitals: hospitals.length > 0 ? hospitals : (adminData?.hospitalId ? [adminData.hospitalId] : []),
-        activeHospital: activeHospital || adminData?.hospitalId || null
+        activeHospital: activeHospital || adminData?.hospitalId || null,
       }
     }
 
-    // Check doctor collection
-    const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
     if (doctorDoc.exists()) {
       const doctorData = doctorDoc.data()
       if (doctorData.status === "pending") {
@@ -192,50 +231,54 @@ function LoginContent() {
           "Your account is pending admin approval. Please wait for approval before logging in. You will be notified once your account is approved."
         )
       }
-      return { 
-        role: "doctor" as DashboardRole, 
-        data: doctorData, 
+      return {
+        role: "doctor" as DashboardRole,
+        data: doctorData,
         redirect: "/doctor-dashboard",
         hospitals: hospitals.length > 0 ? hospitals : (doctorData?.hospitalId ? [doctorData.hospitalId] : []),
-        activeHospital: activeHospital || doctorData?.hospitalId || null
+        activeHospital: activeHospital || doctorData?.hospitalId || null,
       }
     }
 
-    // Check patient collection
-    const patientDoc = await getDoc(doc(db, "patients", user.uid))
     if (patientDoc.exists()) {
-      return { 
-        role: "patient" as DashboardRole, 
-        data: patientDoc.data(), 
+      return {
+        role: "patient" as DashboardRole,
+        data: patientDoc.data(),
         redirect: "/patient-dashboard",
         hospitals,
-        activeHospital
+        activeHospital,
       }
     }
 
-    // Check receptionist collection
-    const receptionistDoc = await getDoc(doc(db, "receptionists", user.uid))
     if (receptionistDoc.exists()) {
       const receptionistData = receptionistDoc.data()
       return {
         role: "receptionist" as DashboardRole,
         data: receptionistData,
         redirect: "/receptionist-dashboard",
-        hospitals: hospitals.length > 0 ? hospitals : (receptionistData?.hospitalId ? [receptionistData.hospitalId] : []),
-        activeHospital: activeHospital || receptionistData?.hospitalId || null
+        hospitals:
+          hospitals.length > 0
+            ? hospitals
+            : receptionistData?.hospitalId
+              ? [receptionistData.hospitalId]
+              : [],
+        activeHospital: activeHospital || receptionistData?.hospitalId || null,
       }
     }
 
-    // Check pharmacists collection (pharmacy portal)
-    const pharmacistDoc = await getDoc(doc(db, "pharmacists", user.uid))
     if (pharmacistDoc.exists()) {
       const pharmacistData = pharmacistDoc.data()
       return {
         role: "pharmacy" as DashboardRole,
         data: pharmacistData,
         redirect: "/pharmacy",
-        hospitals: hospitals.length > 0 ? hospitals : (pharmacistData?.hospitalId ? [pharmacistData.hospitalId] : []),
-        activeHospital: activeHospital || pharmacistData?.hospitalId || null
+        hospitals:
+          hospitals.length > 0
+            ? hospitals
+            : pharmacistData?.hospitalId
+              ? [pharmacistData.hospitalId]
+              : [],
+        activeHospital: activeHospital || pharmacistData?.hospitalId || null,
       }
     }
 
@@ -245,6 +288,26 @@ function LoginContent() {
   const checkAndRedirectWithHospital = async (roleInfo: any, user: User) => {
     // Determine redirect path first
     let redirectPath = roleInfo.redirect
+
+    // Seed auth cache so dashboard useAuth skips another multi-collection scan
+    seedUserRoleCache(
+      user.uid,
+      roleInfo.role === "pharmacy" ? "pharmacy" : roleInfo.role,
+      (roleInfo.data || {}) as Record<string, unknown>
+    )
+
+    // Prefetch destination immediately so Next can compile during countdown (dev cold start)
+    pendingRedirectPathRef.current = redirectPath
+    try {
+      router.prefetch(redirectPath)
+    } catch {
+      // ignore prefetch errors
+    }
+    dispatchRedirectBanner(
+      () => router.replace(pendingRedirectPathRef.current || roleInfo.redirect),
+      3,
+      getWelcomeLine(roleInfo)
+    )
     
       // Sync user document in users collection (for multi-hospital support)
       try {
@@ -292,6 +355,35 @@ function LoginContent() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }, { merge: true })
+      } else if (
+        roleInfo.role === "doctor" ||
+        roleInfo.role === "receptionist" ||
+        roleInfo.role === "pharmacy" ||
+        roleInfo.role === "admin"
+      ) {
+        // Ensure hospital membership is on users doc (required by Firestore rules + MultiHospitalContext)
+        const hospitals =
+          (Array.isArray(roleInfo.hospitals) && roleInfo.hospitals.length > 0
+            ? roleInfo.hospitals
+            : null) ||
+          (roleInfo.data?.hospitalId ? [roleInfo.data.hospitalId] : []) ||
+          []
+        const activeHospital = roleInfo.activeHospital || roleInfo.data?.hospitalId || hospitals[0] || null
+        if (hospitals.length > 0) {
+          await setDoc(
+            userDocRef,
+            {
+              uid: user.uid,
+              email: user.email || roleInfo.data?.email || "",
+              role: roleInfo.role === "pharmacy" ? "pharmacy" : roleInfo.role,
+              hospitals,
+              activeHospital,
+              hospitalId: activeHospital,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          )
+        }
       }
     } catch {
       // Don't block login if sync fails
@@ -307,6 +399,7 @@ function LoginContent() {
           clearInterval(countdownIntervalRef.current)
           countdownIntervalRef.current = null
         }
+        setRedirectBanner(null)
         setSuccess("")
         router.replace("/hospital-selection?redirect=" + roleInfo.redirect)
         return
@@ -342,6 +435,7 @@ function LoginContent() {
             clearInterval(countdownIntervalRef.current)
             countdownIntervalRef.current = null
           }
+          setRedirectBanner(null)
           setSuccess("")
           router.replace("/hospital-selection?redirect=" + roleInfo.redirect)
           return
@@ -373,8 +467,7 @@ function LoginContent() {
       redirectPath = roleInfo.redirect
     }
 
-    // Start countdown with the determined redirect path immediately
-    dispatchCountdownMessage("Login successful!", () => router.replace(redirectPath), 3)
+    pendingRedirectPathRef.current = redirectPath
   }
 
   const sendOtpCode = async (phoneOverride?: string) => {
@@ -464,9 +557,11 @@ function LoginContent() {
         if (countdownIntervalRef.current) {
           clearInterval(countdownIntervalRef.current)
         }
-        dispatchCountdownMessage("Login successful!", () =>
-          router.replace(pendingRedirect || "/")
-        , 3)
+        dispatchRedirectBanner(
+          () => router.replace(pendingRedirect || "/"),
+          3,
+          ""
+        )
       }
     } catch (err: any) {
       const message = err?.message || "Failed to verify OTP. Please try again."
@@ -542,17 +637,16 @@ function LoginContent() {
         return
       }
 
-      // Show loading complete
+      // Start compiling the destination route ASAP (overlaps with remaining login work)
+      try {
+        router.prefetch(roleInfo.redirect)
+      } catch {
+        // ignore
+      }
+
+      // Auth succeeded — keep button busy; banner + countdown start immediately inside redirect helper
+      await checkAndRedirectWithHospital(roleInfo, user)
       setLoading(false)
-      
-      // Show success message immediately - this ensures it appears right away
-      setSuccess("Login successful! Redirecting in 3...")
-      
-      // Check hospitals and redirect accordingly (this will update the countdown)
-      // Use setTimeout to ensure the success message is rendered first
-      setTimeout(async () => {
-        await checkAndRedirectWithHospital(roleInfo, user)
-      }, 100)
       return
     } catch (err) {
       const firebaseError = err as { code?: string; message?: string }
@@ -589,225 +683,301 @@ function LoginContent() {
     }
   }
 
-  const dispatchCountdownMessage = (message: string, onComplete: () => void, seconds = 3) => {
-    // Clear any existing countdown interval
+  const getWelcomeLine = (roleInfo: {
+    role?: DashboardRole
+    data?: Record<string, unknown>
+  } | null): string => {
+    if (!roleInfo?.data) return ""
+    const data = roleInfo.data
+    const first = String(data.firstName || "").trim()
+    const last = String(data.lastName || "").trim()
+    const full =
+      `${first} ${last}`.trim() ||
+      String(data.name || data.fullName || "").trim()
+    if (!full) return ""
+    if (roleInfo.role === "doctor") {
+      return /^dr\.?\s/i.test(full) ? full : `Dr. ${full}`
+    }
+    return full
+  }
+
+  const dispatchRedirectBanner = (
+    onComplete: () => void,
+    seconds = 3,
+    welcomeLine = ""
+  ) => {
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current)
       countdownIntervalRef.current = null
     }
-    
-    // Show message immediately
-    setSuccess(`${message} Redirecting in ${seconds}...`)
-    
-    let remaining = seconds
+
+    redirectStartedRef.current = false
+    setSuccess("")
+    setError("")
+
+    const totalSeconds = Math.max(1, seconds)
+    setRedirectBanner({
+      title: "Redirecting...",
+      helperText: welcomeLine
+        ? `Welcome back, ${welcomeLine}. Please wait while we prepare your dashboard.`
+        : "Please wait while we prepare your dashboard.",
+      welcomeLine,
+      secondsLeft: totalSeconds,
+    })
+
+    let remaining = totalSeconds
     const interval = setInterval(() => {
       remaining -= 1
       if (remaining > 0) {
-        setSuccess(`${message} Redirecting in ${remaining}...`)
-      } else {
-        clearInterval(interval)
-        countdownIntervalRef.current = null
-        // Clear success message before redirecting
-        setSuccess("")
-        // Small delay to ensure UI updates
-        setTimeout(() => {
-          onComplete()
-        }, 100)
+        setRedirectBanner((prev) =>
+          prev ? { ...prev, secondsLeft: remaining } : prev
+        )
+        return
+      }
+
+      // Hit 0 — navigate immediately, exactly once
+      clearInterval(interval)
+      countdownIntervalRef.current = null
+      setRedirectBanner((prev) => (prev ? { ...prev, secondsLeft: 0 } : prev))
+      if (!redirectStartedRef.current) {
+        redirectStartedRef.current = true
+        onComplete()
       }
     }, 1000)
-    
+
     countdownIntervalRef.current = interval
   }
 
   if (checking || isCheckingAuth) {
-    return <LoadingSpinner />
+    // Auth init is essential, but avoid flash for fast session checks
+    if (!showAuthGate) {
+      return <div className="min-h-screen bg-slate-50" aria-busy="true" />
+    }
+    return <LoadingSpinner message="Checking session…" />
   }
 
   const otpMaskedPhone = pendingPhone ? maskPhoneNumber(pendingPhone) : ""
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-slate-50">
-        <div className="w-full max-w-sm sm:max-w-md animate-fade-in">
-          <div className="text-center mb-6">
-            <div className="flex flex-col items-center gap-3 mb-2">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-2xl">H</span>
-              </div>
-              <div className="text-center">
-                <h1 className="text-3xl font-bold text-slate-900">HMS</h1>
-                <p className="text-xs text-slate-500 font-medium">Hospital Management System</p>
-              </div>
+    <div className="login-saas min-h-screen flex flex-col lg:flex-row bg-slate-50 text-slate-900">
+      {/* LEFT — Authentication (~45%) */}
+      <div className="relative flex w-full flex-col justify-center px-4 py-8 sm:px-8 lg:w-[45%] lg:px-10 xl:px-14 lg:py-12">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden lg:hidden">
+          <div className="absolute -top-24 right-0 h-64 w-64 rounded-full bg-cyan-200/40 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-teal-200/30 blur-3xl" />
+        </div>
+
+        <div className="relative mx-auto w-full max-w-md">
+          <Link
+            href="/"
+            className="mb-8 inline-flex items-center gap-2 text-xs font-medium text-slate-500 transition hover:text-sky-700"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Back to HMS Cloud
+          </Link>
+
+          <div className="mb-8 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-md shadow-sky-500/40">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M12 3l7 4v5c0 5-3 7-7 9-4-2-7-4-7-9V7l7-4z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M9 12h6M12 9v6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">HMS Cloud</p>
+              <p className="text-sm font-semibold text-slate-900">Hospital Management Platform</p>
+              <p className="mt-0.5 text-xs text-slate-500">Secure access for healthcare professionals.</p>
             </div>
           </div>
 
-          {/* Trust Indicators */}
-          <div className="flex items-center justify-center gap-6 mb-4 py-4 border-y border-slate-200">
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span className="font-medium">Secure Login</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <svg className="w-4 h-4 text-cyan-700" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              <span className="font-medium">HIPAA Compliant</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <svg className="w-4 h-4 text-cyan-600" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" />
-              </svg>
-              <span className="font-medium">Encrypted</span>
-            </div>
+          <div className="mb-6">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2rem]">Welcome Back</h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">Sign in to access your hospital dashboard.</p>
           </div>
 
-          {/* Error Alert */}
-          {error && (
-            <div className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-300 p-4 mb-6 rounded-xl shadow-lg animate-shake-fade-in">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center animate-bounce-in">
-                  <span className="text-white text-lg font-bold">!</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-red-800 font-semibold leading-relaxed">{error}</p>
-                </div>
-                <button
-                  onClick={() => setError("")}
-                  className="flex-shrink-0 text-red-400 hover:text-red-600 transition-colors"
-                  aria-label="Close error"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+          {error && !redirectBanner && (
+            <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 shadow-sm">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">!</div>
+              <p className="flex-1 text-sm font-medium leading-relaxed text-red-800">{error}</p>
+              <button type="button" onClick={() => setError("")} className="text-red-400 transition hover:text-red-600" aria-label="Close error">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
           )}
 
-          {/* Success Alert */}
-          {success && (
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 p-4 mb-6 rounded-xl shadow-lg animate-fade-in">
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center animate-bounce-in">
-                  <span className="text-white text-lg font-bold">✓</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-green-800 font-semibold leading-relaxed">{success}</p>
-                </div>
-                <button
-                  onClick={() => setSuccess("")}
-                  className="flex-shrink-0 text-green-400 hover:text-green-600 transition-colors"
-                  aria-label="Close success message"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+          {success && !redirectBanner && (
+            <div className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 shadow-sm">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3-3A1 1 0 115.757 9.88l2.293 2.293 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
               </div>
+              <p className="flex-1 text-sm font-medium leading-relaxed text-emerald-800">{success}</p>
+              <button type="button" onClick={() => setSuccess("")} className="text-emerald-400 transition hover:text-emerald-600" aria-label="Close success message">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
           )}
-          
-          {/* Login Form */}
-          <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl">
+
+          <div className="rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-lg shadow-slate-200/60 sm:p-7">
             {!mfaRequired ? (
-              <form onSubmit={handleLogin} className="space-y-5">
+              <form onSubmit={handleLogin} className="space-y-5 animate-fade-in">
+                {redirectBanner && (
+                  <div
+                    className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 animate-fade-in"
+                    role="status"
+                    aria-live="polite"
+                    aria-label="Redirecting to dashboard"
+                  >
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3-3A1 1 0 115.757 9.88l2.293 2.293 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-emerald-900">{redirectBanner.title}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-emerald-800/90">
+                        {redirectBanner.helperText}
+                      </p>
+                      <p
+                        key={redirectBanner.secondsLeft}
+                        className="mt-1.5 text-xs font-semibold tabular-nums text-emerald-700 animate-fade-in"
+                      >
+                        {redirectBanner.secondsLeft > 0
+                          ? `Redirecting in ${redirectBanner.secondsLeft} second${redirectBanner.secondsLeft === 1 ? "" : "s"}...`
+                          : "Opening dashboard..."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Email Address or Phone Number
-                    <span className="text-red-500 ml-1">*</span>
+                  <label htmlFor="login-identifier" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Email
+                  </label>
+                  <input
+                    id="login-identifier"
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-500/15 disabled:opacity-60"
+                    placeholder={
+                      role === "doctor"
+                        ? "doctor@hospital.com"
+                        : role === "admin"
+                        ? "admin@hospital.com"
+                        : role === "receptionist"
+                        ? "receptionist@hospital.com"
+                        : role === "pharmacy"
+                        ? "pharmacy@hospital.com"
+                        : role === "patient"
+                        ? "patient@email.com"
+                        : "you@hospital.com"
+                    }
+                    required
+                    autoComplete="username"
+                    disabled={loading || !!redirectBanner}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="login-password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Password
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">📧</span>
                     <input
-                      type="text"
-                      value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 placeholder:text-slate-400 transition-all duration-200"
-                      placeholder={
-                        role === "doctor"
-                          ? "doctor@hospital.com / +91 98765 43210"
-                          : role === "admin"
-                          ? "admin@hospital.com / +91 98765 43210"
-                          : role === "receptionist"
-                          ? "receptionist@hospital.com / +91 98765 43210"
-                          : role === "pharmacy"
-                          ? "pharmacy@hospital.com / +91 98765 43210"
-                          : role === "patient"
-                          ? "patient@email.com / 9876543210"
-                          : "Email or phone"
-                      }
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-slate-700">
-                      Password
-                      <span className="text-red-500 ml-1">*</span>
-                    </label>
-                    <Link
-                      href="/auth/forgot-password"
-                      className="text-xs font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg">🔒</span>
-                    <input
-                      type="password"
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-slate-300 rounded-lg
-                      focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200
-                      bg-white text-slate-900 placeholder:text-slate-400
-                      transition-all duration-200"
-                      placeholder="••••••"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3 pr-11 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-500/15 disabled:opacity-60"
+                      placeholder="Enter your password"
                       minLength={6}
                       required
+                      autoComplete="current-password"
+                      disabled={loading || !!redirectBanner}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      disabled={loading || !!redirectBanner}
+                    >
+                      {showPassword ? (
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                      ) : (
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      )}
+                    </button>
                   </div>
                 </div>
 
-                <Button type="submit" variant="primary" className="w-full" loading={loading} loadingText="Signing in...">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="group inline-flex cursor-pointer items-center gap-2.5 select-none">
+                    <span className="relative flex h-4 w-4 items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="peer sr-only"
+                        disabled={loading || !!redirectBanner}
+                      />
+                      <span className="h-4 w-4 rounded border border-slate-300 bg-white transition peer-checked:border-cyan-600 peer-checked:bg-cyan-600 peer-focus-visible:ring-4 peer-focus-visible:ring-cyan-500/20" />
+                      <svg className="pointer-events-none absolute h-2.5 w-2.5 text-white opacity-0 transition peer-checked:opacity-100" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3-3A1 1 0 115.757 9.88l2.293 2.293 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </span>
+                    <span className="text-sm text-slate-600 group-hover:text-slate-800">Remember Me</span>
+                  </label>
+                  <Link href="/auth/forgot-password" className="text-sm font-medium text-cyan-700 transition hover:text-cyan-800">
+                    Forgot Password
+                  </Link>
+                </div>
+
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="w-full !rounded-full !bg-gradient-to-r !from-cyan-600 !to-teal-600 !py-3 !text-sm !font-semibold !shadow-md !shadow-cyan-600/25 transition hover:!from-cyan-500 hover:!to-teal-500 hover:!shadow-lg hover:!shadow-cyan-600/30 active:!scale-[0.99]"
+                  loading={loading || !!redirectBanner}
+                  loadingText={redirectBanner ? "Preparing Dashboard..." : "Signing in..."}
+                  disabled={loading || !!redirectBanner}
+                >
                   Sign In
                 </Button>
               </form>
             ) : (
-              <form onSubmit={handleOtpSubmit} className="space-y-5">
-                <div className="p-4 bg-slate-100 rounded-xl border border-slate-200">
-                  <p className="text-sm text-slate-700 font-semibold mb-1">Two-Factor Authentication</p>
-                  <p className="text-xs text-slate-600">
+              <form onSubmit={handleOtpSubmit} className="space-y-5 animate-fade-in">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-800">Two-Factor Authentication</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
                     Enter the 6-digit security code we sent to{" "}
-                    <span className="font-semibold">{otpMaskedPhone}</span> to verify your identity.
+                    <span className="font-semibold text-slate-800">{otpMaskedPhone}</span> to verify your identity.
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label htmlFor="login-otp" className="mb-1.5 block text-sm font-medium text-slate-700">
                     Security Code
-                    <span className="text-red-500 ml-1">*</span>
                   </label>
                   <input
+                    id="login-otp"
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     maxLength={6}
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                    className="w-full text-center tracking-widest text-2xl py-3 border-2 border-slate-300 rounded-lg focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 bg-white text-slate-900 transition-all duration-200"
-                    placeholder="••••••"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-3 text-center text-2xl tracking-[0.4em] text-slate-900 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-500/15"
+                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢"
                     required
                   />
                 </div>
 
                 {otpError && (
-                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{otpError}</p>
+                  <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{otpError}</p>
                 )}
 
                 <div className="flex items-center justify-between text-xs text-slate-600">
@@ -815,15 +985,11 @@ function LoginContent() {
                     type="button"
                     onClick={() => sendOtpCode()}
                     disabled={otpSending || otpCountdown > 0}
-                    className="text-cyan-600 font-semibold disabled:opacity-50"
+                    className="font-semibold text-cyan-700 transition hover:text-cyan-800 disabled:opacity-50"
                   >
                     {otpCountdown > 0 ? `Resend in ${otpCountdown}s` : otpSending ? "Sending..." : "Resend Code"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelMfa}
-                    className="text-slate-500 hover:text-slate-700 transition-colors font-medium"
-                  >
+                  <button type="button" onClick={handleCancelMfa} className="font-medium text-slate-500 transition hover:text-slate-700">
                     Cancel &amp; sign out
                   </button>
                 </div>
@@ -831,7 +997,7 @@ function LoginContent() {
                 <Button
                   type="submit"
                   variant="primary"
-                  className="w-full"
+                  className="w-full !rounded-full !bg-gradient-to-r !from-cyan-600 !to-teal-600 !py-3 !text-sm !font-semibold !shadow-md !shadow-cyan-600/25"
                   loading={otpVerifying}
                   loadingText="Verifying..."
                   disabled={otpCode.length !== 6}
@@ -840,118 +1006,122 @@ function LoginContent() {
                 </Button>
               </form>
             )}
-          
-          {/* Sign Up Link - Only show for patient and doctor (admin and receptionist signup is disabled) */}
-          {(role === "patient" || role === "doctor" || !role) && (
-            <div className="mt-6 text-center">
-              <p className="text-sm text-slate-600">
-                Don&apos;t have an account?{" "}
-                <a 
-                  href={role ? `/auth/signup?role=${role}` : "/auth/signup?role=patient"} 
-                  className="font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
-                >
-                  Create {role === "doctor" ? "doctor" : 
-                          role === "patient" ? "patient" :
-                          "account"}
-                </a>
-              </p>
-            </div>
-          )}
 
-            {/* Info Box for Admin/Receptionist/Pharmacy - No signup available */}
-            {(role === "admin" || role === "receptionist" || role === "pharmacy") && (
-              <div className="mt-6 p-4 bg-gradient-to-r from-cyan-50 to-teal-50 border border-cyan-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0">
-                    <svg className="w-5 h-5 text-cyan-700 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-cyan-900 mb-1">
-                      Need an account?
-                    </p>
-                    <p className="text-xs text-cyan-800 leading-relaxed">
-                      {role === "admin" 
-                        ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
-                        : role === "pharmacy"
-                        ? "Pharmacy accounts are created by administrators. Use the credentials provided by your admin or see the table below."
-                        : "Receptionist accounts are created by administrators. Please contact your supervisor or system administrator for access."}
-                    </p>
-                  </div>
-                </div>
+            {(role === "patient" || role === "doctor" || !role) && !redirectBanner && (
+              <div className="mt-6 border-t border-slate-100 pt-5 text-center">
+                <p className="text-sm text-slate-600">
+                  Don&apos;t have an account?{" "}
+                  <a
+                    href={role ? `/auth/signup?role=${role}` : "/auth/signup?role=patient"}
+                    className="font-semibold text-cyan-700 transition hover:text-cyan-800"
+                  >
+                    Create {role === "doctor" ? "doctor" : role === "patient" ? "patient" : "account"}
+                  </a>
+                </p>
+              </div>
+            )}
+
+            {(role === "admin" || role === "receptionist" || role === "pharmacy") && !redirectBanner && (
+              <div className="mt-6 rounded-2xl border border-cyan-100 bg-gradient-to-r from-cyan-50 to-teal-50 p-4">
+                <p className="text-sm font-semibold text-cyan-900">Need an account?</p>
+                <p className="mt-1 text-xs leading-relaxed text-cyan-800">
+                  {role === "admin"
+                    ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
+                    : role === "pharmacy"
+                    ? "Pharmacy accounts are created by administrators. Use the credentials provided by your admin or see the table below."
+                    : "Receptionist accounts are created by administrators. Please contact your supervisor or system administrator for access."}
+                </p>
               </div>
             )}
           </div>
 
-          {/* Test Credentials Table */}
-          <div className="space-y-4 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider text-center mb-3">
+          <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white/70 px-4 py-4 backdrop-blur-sm">
+            <p className="text-sm font-medium text-slate-800">Need Help?</p>
+            <p className="mt-0.5 text-xs text-slate-500">Contact your Hospital Administrator.</p>
+          </div>
+
+          <ul className="mt-5 grid grid-cols-2 gap-2 text-[11px] text-slate-600 sm:text-xs">
+            {["Secure Login", "End-to-End Encryption", "Multi-Branch Support", "Role Based Access"].map((item) => (
+              <li key={item} className="inline-flex items-center gap-2">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <svg className="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3-3A1 1 0 115.757 9.88l2.293 2.293 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-8 space-y-4 border-t border-slate-200 pt-6">
+            <h3 className="mb-1 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Test Credentials
             </h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border border-gray-200 rounded-lg text-left text-xs">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Email ID</th>
-                    <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Password</th>
-                    <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Role</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Patient1@gmail.com"); setPassword("Patient1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Patient</td>
-                  </tr>
-                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Doctor1@gmail.com"); setPassword("Doctor1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Doctor</td>
-                  </tr>
-                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Bardoli)</td>
-                  </tr>
-                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Navsari1@gmail.com"); setPassword("Navsari1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Navsari1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Navsari1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Navsari)</td>
-                  </tr>
-                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Surat1@gmail.com"); setPassword("Surat1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Surat1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Surat1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist (Surat)</td>
-                  </tr>
-                  <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Sardar1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Sardar1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
-                  </tr>
-                  <tr className="hover:bg-emerald-50 cursor-pointer" onClick={() => { setIdentifier("Pharmacy1@gmail.com"); setPassword("Pharmacy1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy1@gmail.com</td>
-                    <td className="px-2 py-2 text-slate-600 border-b border-gray-100 font-medium">Pharmacy (Portal)</td>
-                  </tr>
-                  <tr className="hover:bg-cyan-50 cursor-pointer" hidden={true}  onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
-                    <td className="px-2 py-2 text-slate-600">Admin1@gmail.com</td>
-                      <td className="px-2 py-2 text-slate-600">Admin1@gmail.com</td>
-                      <td className="px-2 py-2 text-slate-600"> Super Admin</td>
-                  </tr>
-                </tbody>
-              </table>
+            <p className="mb-3 text-center text-[11px] text-slate-400">Click a row to autofill</p>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="border-b border-slate-200 px-3 py-2.5 font-semibold text-slate-700">Email ID</th>
+                      <th className="border-b border-slate-200 px-3 py-2.5 font-semibold text-slate-700">Password</th>
+                      <th className="border-b border-slate-200 px-3 py-2.5 font-semibold text-slate-700">Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="cursor-pointer transition hover:bg-cyan-50" onClick={() => { setIdentifier("Patient1@gmail.com"); setPassword("Patient1@gmail.com"); }}>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Patient1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Patient1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Patient</td>
+                    </tr>
+                    <tr className="cursor-pointer transition hover:bg-cyan-50" onClick={() => { setIdentifier("Doctor1@gmail.com"); setPassword("Doctor1@gmail.com"); }}>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Doctor1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Doctor1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Doctor</td>
+                    </tr>
+                    <tr className="cursor-pointer transition hover:bg-cyan-50" onClick={() => { setIdentifier("Receptionist1@gmail.com"); setPassword("Receptionist1@gmail.com"); }}>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Receptionist1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Receptionist1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Receptionist (Bardoli)</td>
+                    </tr>
+                    <tr className="cursor-pointer transition hover:bg-cyan-50" onClick={() => { setIdentifier("Navsari1@gmail.com"); setPassword("Navsari1@gmail.com"); }}>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Navsari1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Navsari1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Receptionist (Navsari)</td>
+                    </tr>
+                    <tr className="cursor-pointer transition hover:bg-cyan-50" onClick={() => { setIdentifier("Surat1@gmail.com"); setPassword("Surat1@gmail.com"); }}>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Surat1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Surat1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Receptionist (Surat)</td>
+                    </tr>
+                    <tr className="cursor-pointer transition hover:bg-cyan-50" onClick={() => { setIdentifier("Sardar1@gmail.com"); setPassword("Sardar1@gmail.com"); }}>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Sardar1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Sardar1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Admin</td>
+                    </tr>
+                    <tr className="cursor-pointer transition hover:bg-emerald-50" onClick={() => { setIdentifier("Pharmacy1@gmail.com"); setPassword("Pharmacy1@gmail.com"); }}>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Pharmacy1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 text-slate-600">Pharmacy1@gmail.com</td>
+                      <td className="border-b border-slate-100 px-3 py-2 font-medium text-slate-600">Pharmacy (Portal)</td>
+                    </tr>
+                    <tr className="cursor-pointer transition hover:bg-cyan-50" hidden={true} onClick={() => { setIdentifier("Admin1@gmail.com"); setPassword("Admin1@gmail.com"); }}>
+                      <td className="px-3 py-2 text-slate-600">Admin1@gmail.com</td>
+                      <td className="px-3 py-2 text-slate-600">Admin1@gmail.com</td>
+                      <td className="px-3 py-2 text-slate-600"> Super Admin</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Yatharth Hospital – separate dropdown */}
-            <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden bg-slate-50/80">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80">
               <button
                 type="button"
                 onClick={() => setYatharthOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100/80 transition-colors"
+                className="flex w-full items-center justify-between px-3.5 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100/80"
               >
                 <span>Yatharth Hospital credentials</span>
-                <svg className={`w-4 h-4 text-slate-500 transition-transform ${yatharthOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`h-4 w-4 text-slate-500 transition-transform ${yatharthOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -960,23 +1130,23 @@ function LoginContent() {
                   <table className="min-w-full text-left text-xs">
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Email ID</th>
-                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Password</th>
-                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Role</th>
+                        <th className="border-b border-gray-200 px-2 py-2 font-semibold text-slate-700">Email ID</th>
+                        <th className="border-b border-gray-200 px-2 py-2 font-semibold text-slate-700">Password</th>
+                        <th className="border-b border-gray-200 px-2 py-2 font-semibold text-slate-700">Role</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Yatharthhospital@gmail.com"); setPassword("Yatharth@123"); }}>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharthhospital@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Yatharth@123</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
+                      <tr className="cursor-pointer hover:bg-cyan-50" onClick={() => { setIdentifier("Yatharthhospital@gmail.com"); setPassword("Yatharth@123"); }}>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Yatharthhospital@gmail.com</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Yatharth@123</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Admin</td>
                       </tr>
-                      <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("YTH1@gmail.com"); setPassword("YTH1@gmail.com"); }}>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">YTH1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">YTH1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Receptionist</td>
+                      <tr className="cursor-pointer hover:bg-cyan-50" onClick={() => { setIdentifier("YTH1@gmail.com"); setPassword("YTH1@gmail.com"); }}>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">YTH1@gmail.com</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">YTH1@gmail.com</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Receptionist</td>
                       </tr>
-                      <tr className="hover:bg-cyan-50 cursor-pointer" onClick={() => { setIdentifier("Shrey1@gmail.com"); setPassword("Shrey1@gmail.com"); }}>
+                      <tr className="cursor-pointer hover:bg-cyan-50" onClick={() => { setIdentifier("Shrey1@gmail.com"); setPassword("Shrey1@gmail.com"); }}>
                         <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600">Shrey1@gmail.com</td>
                         <td className="px-2 py-2 text-slate-600">Doctor</td>
@@ -987,20 +1157,14 @@ function LoginContent() {
               )}
             </div>
 
-            {/* Jivandeep Hospital – separate dropdown */}
-            <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden bg-slate-50/80">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80">
               <button
                 type="button"
                 onClick={() => setJivandeepOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100/80 transition-colors"
+                className="flex w-full items-center justify-between px-3.5 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100/80"
               >
                 <span>Jivandeep Hospital credentials</span>
-                <svg
-                  className={`w-4 h-4 text-slate-500 transition-transform ${jivandeepOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className={`h-4 w-4 text-slate-500 transition-transform ${jivandeepOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -1009,143 +1173,82 @@ function LoginContent() {
                   <table className="min-w-full text-left text-xs">
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Email ID</th>
-                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Password</th>
-                        <th className="px-2 py-2 border-b border-gray-200 text-slate-700 font-semibold">Role / Location</th>
+                        <th className="border-b border-gray-200 px-2 py-2 font-semibold text-slate-700">Email ID</th>
+                        <th className="border-b border-gray-200 px-2 py-2 font-semibold text-slate-700">Password</th>
+                        <th className="border-b border-gray-200 px-2 py-2 font-semibold text-slate-700">Role / Location</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr
-                        className="hover:bg-cyan-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("Jivandeep@gmail.com");
-                          setPassword("Jivandeep@gmail.com");
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Jivandeep@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Jivandeep@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Admin</td>
+                      <tr className="cursor-pointer hover:bg-cyan-50" onClick={() => { setIdentifier("Jivandeep@gmail.com"); setPassword("Jivandeep@gmail.com"); }}>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Jivandeep@gmail.com</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Jivandeep@gmail.com</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Admin</td>
                       </tr>
-                      <tr
-                        className="hover:bg-emerald-50 cursor-pointer"
-                        onClick={() => {
-                          setIdentifier("jivandeeppharma@gmail.com")
-                          setPassword("jivandeeppharma@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">jivandeeppharma@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">jivandeeppharma@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-600 border-b border-gray-100">Pharmacy – Rajpipala</td>
+                      <tr className="cursor-pointer hover:bg-emerald-50" onClick={() => { setIdentifier("jivandeeppharma@gmail.com"); setPassword("jivandeeppharma@gmail.com"); }}>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">jivandeeppharma@gmail.com</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">jivandeeppharma@gmail.com</td>
+                        <td className="border-b border-gray-100 px-2 py-2 text-slate-600">Pharmacy â€“ Rajpipala</td>
                       </tr>
                       <tr className="bg-teal-100/80">
-                        <td colSpan={3} className="px-2 py-1.5 text-teal-800 font-semibold text-[11px] uppercase tracking-wide">Doctors</td>
+                        <td colSpan={3} className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-teal-800">Doctors</td>
                       </tr>
-                      {/* Doctors – teal background for easy identification */}
-                      <tr
-                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
-                        onClick={() => { setIdentifier("Priti1@gmail.com"); setPassword("Priti1@gmail.com"); }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Priti1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Priti1@gmail.com</td>
-                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      <tr className="cursor-pointer border-l-4 border-l-teal-400 bg-teal-50/70 hover:bg-teal-100" onClick={() => { setIdentifier("Priti1@gmail.com"); setPassword("Priti1@gmail.com"); }}>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Priti1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Priti1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 font-semibold text-teal-800">Doctor</td>
                       </tr>
-                      <tr
-                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
-                        onClick={() => { setIdentifier("Ram1@gmail.com"); setPassword("Ram1@gmail.com"); }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Ram1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Ram1@gmail.com</td>
-                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      <tr className="cursor-pointer border-l-4 border-l-teal-400 bg-teal-50/70 hover:bg-teal-100" onClick={() => { setIdentifier("Ram1@gmail.com"); setPassword("Ram1@gmail.com"); }}>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Ram1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Ram1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 font-semibold text-teal-800">Doctor</td>
                       </tr>
-                      <tr
-                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
-                        onClick={() => { setIdentifier("Gaurav1@gmail.com"); setPassword("Gaurav1@gmail.com"); }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Gaurav1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Gaurav1@gmail.com</td>
-                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      <tr className="cursor-pointer border-l-4 border-l-teal-400 bg-teal-50/70 hover:bg-teal-100" onClick={() => { setIdentifier("Gaurav1@gmail.com"); setPassword("Gaurav1@gmail.com"); }}>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Gaurav1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Gaurav1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 font-semibold text-teal-800">Doctor</td>
                       </tr>
-                      <tr
-                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
-                        onClick={() => { setIdentifier("Nikhilmehta1@gmiil.com"); setPassword("Nikhilmehta1@gmiil.com"); }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Nikhilmehta1@gmiil.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Nikhilmehta1@gmiil.com</td>
-                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      <tr className="cursor-pointer border-l-4 border-l-teal-400 bg-teal-50/70 hover:bg-teal-100" onClick={() => { setIdentifier("Nikhilmehta1@gmiil.com"); setPassword("Nikhilmehta1@gmiil.com"); }}>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Nikhilmehta1@gmiil.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Nikhilmehta1@gmiil.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 font-semibold text-teal-800">Doctor</td>
                       </tr>
-                      <tr
-                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
-                        onClick={() => { setIdentifier("Rajsinhrana1@gmail.com"); setPassword("Rajsinhrana1@gmail.com"); }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Rajsinhrana1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Rajsinhrana1@gmail.com</td>
-                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      <tr className="cursor-pointer border-l-4 border-l-teal-400 bg-teal-50/70 hover:bg-teal-100" onClick={() => { setIdentifier("Rajsinhrana1@gmail.com"); setPassword("Rajsinhrana1@gmail.com"); }}>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Rajsinhrana1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Rajsinhrana1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 font-semibold text-teal-800">Doctor</td>
                       </tr>
-                      <tr
-                        className="bg-teal-50/70 hover:bg-teal-100 cursor-pointer border-l-4 border-l-teal-400"
-                        onClick={() => { setIdentifier("Sai1@gmail.com"); setPassword("Sai1@gmail.com"); }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Sai1@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-teal-100">Sai1@gmail.com</td>
-                        <td className="px-2 py-2 text-teal-800 font-semibold border-b border-teal-100">Doctor</td>
+                      <tr className="cursor-pointer border-l-4 border-l-teal-400 bg-teal-50/70 hover:bg-teal-100" onClick={() => { setIdentifier("Sai1@gmail.com"); setPassword("Sai1@gmail.com"); }}>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Sai1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 text-slate-700">Sai1@gmail.com</td>
+                        <td className="border-b border-teal-100 px-2 py-2 font-semibold text-teal-800">Doctor</td>
                       </tr>
                       <tr className="bg-amber-100/80">
-                        <td colSpan={3} className="px-2 py-1.5 text-amber-800 font-semibold text-[11px] uppercase tracking-wide">Receptionists</td>
+                        <td colSpan={3} className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">Receptionists</td>
                       </tr>
-                      <tr
-                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
-                        onClick={() => {
-                          setIdentifier("Rajpipala@gmail.com")
-                          setPassword("Rajpipala@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">Rajpipala@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">Rajpipala@gmail.com</td>
-                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Rajpipala</td>
+                      <tr className="cursor-pointer border-l-4 border-l-amber-400 bg-amber-50/70 hover:bg-amber-100" onClick={() => { setIdentifier("Rajpipala@gmail.com"); setPassword("Rajpipala@gmail.com"); }}>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">Rajpipala@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">Rajpipala@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 font-semibold text-amber-800">Receptionist â€“ Rajpipala</td>
                       </tr>
-                      <tr
-                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
-                        onClick={() => {
-                          setIdentifier("ahm@gmail.com")
-                          setPassword("ahm@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">ahm@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">ahm@gmail.com</td>
-                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Ahmedabad</td>
+                      <tr className="cursor-pointer border-l-4 border-l-amber-400 bg-amber-50/70 hover:bg-amber-100" onClick={() => { setIdentifier("ahm@gmail.com"); setPassword("ahm@gmail.com"); }}>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">ahm@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">ahm@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 font-semibold text-amber-800">Receptionist â€“ Ahmedabad</td>
                       </tr>
-                      <tr
-                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
-                        onClick={() => {
-                          setIdentifier("diyodar@gmail.com")
-                          setPassword("diyodar@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">diyodar@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">diyodar@gmail.com</td>
-                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Diyodar</td>
+                      <tr className="cursor-pointer border-l-4 border-l-amber-400 bg-amber-50/70 hover:bg-amber-100" onClick={() => { setIdentifier("diyodar@gmail.com"); setPassword("diyodar@gmail.com"); }}>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">diyodar@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">diyodar@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 font-semibold text-amber-800">Receptionist â€“ Diyodar</td>
                       </tr>
-                      <tr
-                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
-                        onClick={() => {
-                          setIdentifier("gardeshwar@gmail.com")
-                          setPassword("gardeshwar@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">gardeshwar@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">gardeshwar@gmail.com</td>
-                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Gardeshwar</td>
+                      <tr className="cursor-pointer border-l-4 border-l-amber-400 bg-amber-50/70 hover:bg-amber-100" onClick={() => { setIdentifier("gardeshwar@gmail.com"); setPassword("gardeshwar@gmail.com"); }}>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">gardeshwar@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">gardeshwar@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 font-semibold text-amber-800">Receptionist â€“ Gardeshwar</td>
                       </tr>
-                      <tr
-                        className="bg-amber-50/70 hover:bg-amber-100 cursor-pointer border-l-4 border-l-amber-400"
-                        onClick={() => {
-                          setIdentifier("umalla@gmail.com")
-                          setPassword("umalla@gmail.com")
-                        }}
-                      >
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">umalla@gmail.com</td>
-                        <td className="px-2 py-2 text-slate-700 border-b border-amber-100">umalla@gmail.com</td>
-                        <td className="px-2 py-2 text-amber-800 font-semibold border-b border-amber-100">Receptionist – Umalla</td>
+                      <tr className="cursor-pointer border-l-4 border-l-amber-400 bg-amber-50/70 hover:bg-amber-100" onClick={() => { setIdentifier("umalla@gmail.com"); setPassword("umalla@gmail.com"); }}>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">umalla@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 text-slate-700">umalla@gmail.com</td>
+                        <td className="border-b border-amber-100 px-2 py-2 font-semibold text-amber-800">Receptionist â€“ Umalla</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1153,90 +1256,144 @@ function LoginContent() {
               )}
             </div>
           </div>
-
-          {/* Divider */}
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-slate-50 px-4 text-slate-500 font-medium">Trusted by healthcare professionals</span>
-            </div>
-          </div>
-
-          {/* Footer Trust Badges */}
-          <div className="flex items-center justify-center gap-8 text-slate-400">
-            <div className="text-center">
-              <div className="text-2xl mb-1">🏥</div>
-              <p className="text-xs font-medium">Certified</p>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl mb-1">🔐</div>
-              <p className="text-xs font-medium">Secure</p>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl mb-1">✅</div>
-              <p className="text-xs font-medium">Verified</p>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Right Side - Healthcare Imagery & Info */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-cyan-600 via-teal-600 to-cyan-700 p-12 items-start justify-center relative overflow-hidden">
-        {/* Decorative Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-10 left-10 w-64 h-64 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-10 right-10 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+      {/* RIGHT â€” Brand showcase (~55%) */}
+      <div className="relative hidden overflow-hidden bg-gradient-to-br from-cyan-600 via-teal-600 to-cyan-700 lg:flex lg:w-[55%] lg:flex-col lg:justify-start lg:px-10 lg:pt-10 lg:pb-12 xl:px-14 xl:pt-12">
+        <div className="pointer-events-none absolute inset-0 opacity-30">
+          <div className="absolute -left-16 top-10 h-72 w-72 rounded-full bg-white/20 blur-3xl" />
+          <div className="absolute -right-10 bottom-0 h-96 w-96 rounded-full bg-teal-300/30 blur-3xl" />
+          <div className="absolute left-1/3 top-1/2 h-40 w-40 rounded-full bg-sky-300/20 blur-2xl" />
         </div>
 
-        <div className="relative z-10 text-white max-w-lg pt-8">
-          <div className="mb-8">
-            <div className="inline-block p-4 bg-white/20 backdrop-blur-sm rounded-2xl mb-6">
-              <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+        <div className="relative z-10 mx-auto w-full max-w-xl">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-50 backdrop-blur-sm">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Live hospital overview
+          </div>
+          <h2 className="text-balance text-3xl font-semibold tracking-tight text-white xl:text-4xl">
+            Modern Hospital
+            <span className="mt-1 block text-blue-100">Operations Preview</span>
+          </h2>
+          <p className="mt-3 max-w-md text-sm leading-relaxed text-blue-50/90">
+            The same secure platform your teams use for appointments, billing, pharmacy, and clinical workflows â€” across every branch.
+          </p>
+
+          <div className="mt-8 rounded-[24px] border border-white/25 bg-white/95 p-4 shadow-2xl shadow-cyan-950/20 backdrop-blur-md transition duration-300 hover:-translate-y-0.5 hover:shadow-cyan-950/30">
+            <div className="mb-3 flex items-center justify-between text-[11px] text-slate-700">
+              <span className="inline-flex items-center gap-2 font-medium">
+                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                Command center Â· Today
+              </span>
+              <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">Multi-branch</span>
             </div>
-            <h2 className="text-4xl font-bold mb-4 leading-tight">
-              Your Health, Our Priority
-            </h2>
-            <p className="text-cyan-100 text-lg leading-relaxed">
-              Access secure, professional healthcare management. Connect with trusted doctors, 
-              manage appointments, and take control of your wellness journey.
-            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Today's Appointments", value: "128", badge: "+12%", tone: "text-emerald-600" },
+                { label: "Revenue", value: "â‚¹2.4L", badge: "+8.3%", tone: "text-emerald-600" },
+                { label: "Doctors Online", value: "34", badge: "All active", tone: "text-sky-600" },
+                { label: "Available Beds", value: "86", badge: "62% free", tone: "text-teal-600" },
+              ].map((card) => (
+                <div key={card.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs shadow-sm transition hover:border-cyan-200 hover:bg-white">
+                  <p className="text-[10px] text-slate-500">{card.label}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{card.value}</p>
+                  <p className={`mt-0.5 text-[10px] ${card.tone}`}>{card.badge}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-[1.15fr_0.85fr]">
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <div className="flex items-center justify-between text-[11px] text-slate-800">
+                    <span className="font-medium">Revenue graph</span>
+                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">Monâ€“Sun</span>
+                  </div>
+                  <div className="mt-2 h-28 w-full rounded-xl bg-gradient-to-t from-cyan-100 via-sky-50 to-transparent">
+                    <div className="flex h-full items-end gap-1.5 px-1.5 pb-1">
+                      {[35, 52, 78, 58, 92, 70, 48].map((h, idx) => (
+                        <div
+                          key={idx}
+                          className="flex-1 rounded-full bg-gradient-to-t from-cyan-600 to-sky-400 transition hover:from-teal-600 hover:to-cyan-400"
+                          style={{ height: `${h}%` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-medium text-slate-900">Branch overview</p>
+                  <div className="mt-2 space-y-1.5 text-[11px] text-slate-700">
+                    {[
+                      { name: "Central Hospital", value: "OPD 52 Â· ICU 78%", tone: "text-emerald-600" },
+                      { name: "Navsari Clinic", value: "23 waiting", tone: "text-amber-600" },
+                      { name: "City Diagnostics", value: "14 in progress", tone: "text-sky-600" },
+                    ].map((row) => (
+                      <div key={row.name} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1.5">
+                        <span className="truncate font-medium">{row.name}</span>
+                        <span className={`truncate ${row.tone}`}>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-medium text-slate-900">OPD Queue</p>
+                  <div className="mt-2 space-y-1.5 text-[11px]">
+                    {[
+                      { name: "Token #104 Â· Dr. Mehta", status: "In consult", tone: "bg-emerald-50 text-emerald-700" },
+                      { name: "Token #105 Â· Dr. Shah", status: "Waiting", tone: "bg-amber-50 text-amber-700" },
+                      { name: "Token #106 Â· Labs", status: "Called", tone: "bg-sky-50 text-sky-700" },
+                    ].map((row) => (
+                      <div key={row.name} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1.5">
+                        <span className="truncate text-slate-700">{row.name}</span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${row.tone}`}>{row.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-medium text-slate-900">ICU occupancy</p>
+                  <div className="mt-2">
+                    <div className="flex items-end justify-between text-xs">
+                      <span className="text-2xl font-semibold tracking-tight text-slate-900">78%</span>
+                      <span className="text-[10px] text-amber-600">2 beds nearing capacity</span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-amber-400" style={{ width: "78%" }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[11px] font-medium text-slate-900">Recent activity</p>
+                  <ul className="mt-2 space-y-1.5 text-[11px] text-slate-600">
+                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />Pharmacy dispense Â· Ward B</li>
+                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />Admit request approved</li>
+                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />Lab results ready Â· 3 critical</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Feature Highlights */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-4 bg-white/10 backdrop-blur-sm rounded-lg">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                ✓
+          <div className="mt-6 grid gap-2 text-[11px] text-blue-50/90 sm:grid-cols-2 sm:text-xs">
+            {["Secure & Encrypted", "HIPAA-Ready Security", "Multi-Branch Support", "Role-Based Access"].map((item) => (
+              <div key={item} className="inline-flex items-center gap-2">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/15">
+                  <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.25 7.25a1 1 0 01-1.414 0l-3-3A1 1 0 115.757 9.88l2.293 2.293 6.543-6.543a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                <span>{item}</span>
               </div>
-              <div>
-                <p className="font-semibold">Easy Appointment Booking</p>
-                <p className="text-sm text-cyan-100">Schedule with top doctors in seconds</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3 p-4 bg-white/10 backdrop-blur-sm rounded-lg">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                ✓
-              </div>
-              <div>
-                <p className="font-semibold">Secure & Private</p>
-                <p className="text-sm text-cyan-100">Your data protected with encryption</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3 p-4 bg-white/10 backdrop-blur-sm rounded-lg">
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                ✓
-              </div>
-              <div>
-                <p className="font-semibold">24/7 Access</p>
-                <p className="text-sm text-cyan-100">Manage your health anytime, anywhere</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1246,7 +1403,7 @@ function LoginContent() {
 
 export default function Login() {
   return (
-    <Suspense fallback={<LoadingSpinner message="Loading login page..." />}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" aria-busy="true" />}>
       <LoginContent />
     </Suspense>
   )

@@ -7,7 +7,7 @@ import { signOut } from "firebase/auth"
 import { ChangePasswordSection } from "@/components/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 import Notification from "@/components/ui/feedback/Notification"
 import PageHeader from "@/components/ui/layout/PageHeader"
 import { UserData, NotificationData } from "@/types/patient"
@@ -47,7 +47,7 @@ export default function PatientProfilePage() {
   }, [user])
 
   if (authLoading || loading) {
-    return <LoadingSpinner message="Loading Profile..." />
+    return <TabSkeleton variant="form" />
   }
 
   if (!user || !userData) {

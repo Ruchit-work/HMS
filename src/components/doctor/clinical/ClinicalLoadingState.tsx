@@ -1,25 +1,55 @@
 "use client"
 
 import React from "react"
+import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
 
 interface ClinicalLoadingStateProps {
   message?: string
   size?: "sm" | "md" | "lg"
   inline?: boolean
   className?: string
+  /** Prefer skeleton layout for page-level waits; spinner only for tiny inline cues */
+  variant?: "skeleton" | "spinner"
 }
 
+/**
+ * Page-level waits use soft skeletons (no blocking spinner).
+ * Inline + spinner variant keeps a compact cue for long-running actions.
+ */
 export default function ClinicalLoadingState({
   message = "Loading…",
   size = "md",
   inline = false,
   className = "",
+  variant = "skeleton",
 }: ClinicalLoadingStateProps) {
-  const ringSize = size === "sm" ? "w-6 h-6" : size === "lg" ? "w-10 h-10" : "w-8 h-8"
+  if (!inline && variant !== "spinner") {
+    return (
+      <div className={`clinical-loading ${className}`} role="status" aria-label={message}>
+        <TabSkeleton variant="generic" />
+      </div>
+    )
+  }
+
+  if (inline && variant !== "spinner") {
+    return (
+      <div
+        className={`flex flex-col items-center justify-center gap-3 py-10 ${className}`}
+        role="status"
+        aria-label={message}
+      >
+        <div className="h-2 w-40 animate-pulse rounded-full bg-slate-200" />
+        <div className="h-2 w-28 animate-pulse rounded-full bg-slate-100" />
+        {message ? <p className="text-xs text-slate-400">{message}</p> : null}
+      </div>
+    )
+  }
+
+  const ringSize = size === "sm" ? "w-5 h-5" : size === "lg" ? "w-8 h-8" : "w-6 h-6"
   const textSize = size === "sm" ? "text-xs" : "text-sm"
 
   const content = (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-2">
       <div
         className={`${ringSize} rounded-full border-2 border-slate-200 border-t-[var(--color-primary)] animate-spin`}
         role="status"
@@ -30,7 +60,7 @@ export default function ClinicalLoadingState({
   )
 
   if (inline) {
-    return <div className={`flex items-center justify-center py-12 ${className}`}>{content}</div>
+    return <div className={`flex items-center justify-center py-8 ${className}`}>{content}</div>
   }
 
   return (

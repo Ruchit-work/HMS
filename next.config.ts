@@ -87,7 +87,7 @@ const nextConfig: NextConfig = {
   
   // React compiler for better performance
   experimental: {
-    optimizePackageImports: ['firebase', 'firebase-admin'],
+    optimizePackageImports: ['firebase', 'firebase-admin', 'lucide-react', 'recharts'],
   },
   
   // Reduce initial bundle size

@@ -1,5 +1,5 @@
 import React from 'react'
-import LoadingSpinner from '@/components/ui/feedback/StatusComponents'
+import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
 import Pagination from '@/components/ui/navigation/Pagination'
 import type { PharmacySale } from '@/types/pharmacy'
 import type { OverviewDateRange } from '../overviewDerived'
@@ -215,7 +215,7 @@ export function SalesTabContent(props: {
           </div>
         </div>
         {loading ? (
-          <div className="flex justify-center py-8"><LoadingSpinner inline /></div>
+          <TabSkeleton variant="table" />
         ) : (
           <div className="overflow-x-auto border border-slate-200 rounded-lg">
             <table className="w-full text-sm">

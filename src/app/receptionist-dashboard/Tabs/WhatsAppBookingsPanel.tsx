@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { getDocs, query, where, onSnapshot } from "firebase/firestore"
 import { Appointment } from "@/types/patient"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
 import { SYMPTOM_CATEGORIES } from "@/components/patient/symptoms/SymptomSelector"
 import { useMultiHospital } from "@/contexts/MultiHospitalContext"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"

@@ -2,7 +2,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { NextRequest } from "next/server"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
 
 interface Params {
   appointmentId: string
@@ -52,21 +52,36 @@ export async function PUT(
 
     const firestore = admin.firestore()
 
-    // Prefer hospital-scoped appointment based on provided hospitalId
+    const authorizedHospitalId = await resolveAuthorizedHospitalId(
+      auth.user!.uid,
+      typeof body.hospitalId === "string" ? body.hospitalId : null
+    )
+    if (!authorizedHospitalId) {
+      return Response.json(
+        { error: "Hospital access denied or hospital context missing" },
+        { status: 403 }
+      )
+    }
+
+    // Prefer hospital-scoped appointment based on authorized hospitalId only
     let appointmentRef: FirebaseFirestore.DocumentReference | null = null
     let appointmentDoc = null as FirebaseFirestore.DocumentSnapshot | null
 
-    if (body.hospitalId) {
-      appointmentRef = firestore
-        .collection(getHospitalCollectionPath(body.hospitalId, "appointments"))
-        .doc(appointmentId)
-      appointmentDoc = await appointmentRef.get()
-    }
+    appointmentRef = firestore
+      .collection(getHospitalCollectionPath(authorizedHospitalId, "appointments"))
+      .doc(appointmentId)
+    appointmentDoc = await appointmentRef.get()
 
-    // Fallback to legacy global collection if not found or no hospitalId
+    // Fallback to legacy global collection if not found — but only if hospitalId matches
     if (!appointmentDoc || !appointmentDoc.exists) {
       appointmentRef = firestore.collection("appointments").doc(appointmentId)
       appointmentDoc = await appointmentRef.get()
+      if (appointmentDoc.exists) {
+        const legacyHospitalId = String(appointmentDoc.data()?.hospitalId || "")
+        if (legacyHospitalId && legacyHospitalId !== authorizedHospitalId) {
+          return Response.json({ error: "Appointment belongs to another hospital" }, { status: 403 })
+        }
+      }
     }
 
     if (!appointmentDoc.exists) {
