@@ -1,4 +1,5 @@
 "use client"
+import { fetchBranches } from "@/services/BranchService"
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
@@ -6,21 +7,21 @@ import Link from "next/link"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns/campaigns"
-import CampaignCarousel from "@/components/patient/ui/CampaignCarousel"
+import CampaignCarousel from "@/features/patient/ui/CampaignCarousel"
 import {
   ClinicalFormSection,
   ClinicalPageFrame,
-} from "@/components/doctor/clinical"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import { Button } from "@/components/ui/Button"
-import VisitingHoursEditor from "@/components/doctor/schedule/VisitingHoursEditor"
-import BlockedDatesManager from "@/components/doctor/schedule/BlockedDatesManager"
+} from "@/features/doctor/clinical"
+import { TabSkeleton } from '@/shared/components'
+import { Button } from '@/shared/components'
+import VisitingHoursEditor from "@/features/doctor/schedule/VisitingHoursEditor"
+import BlockedDatesManager from "@/features/doctor/schedule/BlockedDatesManager"
 import { VisitingHours, BlockedDate, Appointment } from "@/types/patient"
 import { DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import Notification from "@/components/ui/feedback/Notification"
+import { Notification } from '@/shared/components'
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import type { Branch } from "@/types/branch"
 import {
@@ -30,8 +31,8 @@ import {
   NextPatientCard,
   QuickClinicalActions,
   TodayScheduleTimeline,
-} from "@/components/doctor/dashboard/MorningClinicSections"
-import { buildMorningClinicSnapshot } from "@/components/doctor/dashboard/morningClinicUtils"
+} from "@/features/doctor/dashboard/MorningClinicSections"
+import { buildMorningClinicSnapshot } from "@/features/doctor/dashboard/morningClinicUtils"
 import { Building2 } from "lucide-react"
 
 interface UserData {
@@ -99,22 +100,15 @@ export default function DoctorDashboard() {
   )
 
   useEffect(() => {
-    const fetchBranches = async () => {
+    const loadBranches = async () => {
       if (loading || !user || !activeHospitalId) return
 
       try {
         setLoadingBranches(true)
-        const currentUser = auth.currentUser
-        if (!currentUser) return
-        const token = await currentUser.getIdToken()
+        const result = await fetchBranches(activeHospitalId)
 
-        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await response.json()
-
-        if (data.success && data.branches) {
-          setBranches(data.branches)
+        if (result.success) {
+          setBranches(result.branches)
         }
       } catch {
         // ignore
@@ -123,7 +117,7 @@ export default function DoctorDashboard() {
       }
     }
 
-    fetchBranches()
+    loadBranches()
   }, [activeHospitalId, user, loading])
 
   useEffect(() => {

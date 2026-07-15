@@ -4,22 +4,22 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import Notification from "@/components/ui/feedback/Notification"
-import { AppointmentsList } from "@/components/patient/appointments/AppointmentCard"
-import DocumentsTab from "@/components/documents/DocumentsTab"
-import { CancelAppointmentModal } from "@/components/patient/appointments/AppointmentModals"
+import { TabSkeleton } from '@/shared/components'
+import { Notification } from '@/shared/components'
+import { AppointmentsList } from "@/features/patient/appointments/AppointmentCard"
+import DocumentsTab from "@/features/documents/DocumentsTab"
+import { CancelAppointmentModal } from "@/features/patient/appointments/AppointmentModals"
 import PaymentMethodSection, {
   PaymentData as PaymentMethodData,
   PaymentMethodOption,
-} from "@/components/payments/PaymentMethodSection"
+} from "@/features/payments/PaymentMethodSection"
 import { UserData, Appointment, NotificationData, BillingRecord } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
-import Footer from "@/components/ui/layout/Footer"
+import { Footer } from '@/shared/components'
 import Link from "next/link"
-import { Button } from "@/components/ui/Button"
+import { Button } from '@/shared/components'
 
 export default function PatientAppointments() {
   const [userData, setUserData] = useState<UserData | null>(null)

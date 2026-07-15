@@ -1,4 +1,5 @@
 "use client";
+import { fetchBranches } from "@/services/BranchService"
 
 import { Suspense, useEffect, useState } from "react";
 import { auth, db } from "@/firebase/config";
@@ -15,12 +16,12 @@ import { getHospitalCollection } from "@/utils/firebase/hospital-queries";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePublicRoute } from "@/hooks/useAuth";
 import { useDeferredVisible } from "@/hooks/useDeferredVisible";
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents";
-import OTPVerificationModal from "@/components/forms/OTPVerificationModal";
-import Notification from "@/components/ui/feedback/Notification";
+import { LoadingSpinner } from '@/shared/components'
+import OTPVerificationModal from "@/features/forms/OTPVerificationModal";
+import { Notification } from '@/shared/components'
 import PatientProfileForm, {
   PatientProfileFormValues,
-} from "@/components/forms/PatientProfileForm";
+} from "@/features/forms/PatientProfileForm";
 
 function SignUpContent() {
   const searchParams = useSearchParams();
@@ -108,11 +109,10 @@ function SignUpContent() {
 
       try {
         setLoadingBranches(true);
-        const response = await fetch(`/api/branches?hospitalId=${selectedHospitalId}`);
-        const data = await response.json();
+        const result = await fetchBranches(selectedHospitalId);
 
-        if (data.success && Array.isArray(data.branches)) {
-          const branchItems = (data.branches as any[]).map((b) => ({
+        if (result.success) {
+          const branchItems = result.branches.map((b) => ({
             id: b.id,
             name: b.name || "Unnamed branch",
           }));

@@ -9,7 +9,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { auth } from '@/firebase/config'
-import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
+import { TabSkeleton } from '@/shared/components'
 import { Hospital } from '@/types/hospital'
 
 function HospitalSelectionContent() {

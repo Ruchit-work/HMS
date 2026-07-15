@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { query, where, getDocs } from "firebase/firestore"
 import { Appointment } from "@/types/patient"
@@ -10,9 +10,9 @@ import {
   ClinicalPageFrame,
   ClinicalPageHeader,
   ClinicalEmptyState,
-} from "@/components/doctor/clinical"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
+} from "@/features/doctor/clinical"
+import { TabSkeleton } from '@/shared/components'
+import DoctorSettingsBackLink from "@/features/doctor/clinical/DoctorSettingsBackLink"
 import { BarChart3 } from "lucide-react"
 
 interface DoctorAnalytics {

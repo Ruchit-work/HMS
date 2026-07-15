@@ -3,16 +3,16 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import DocumentsTab from "@/components/documents/DocumentsTab"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import DocumentsTab from "@/features/documents/DocumentsTab"
 import {
   ClinicalAlertCard,
   ClinicalFormSection,
   ClinicalPageFrame,
   ClinicalPageHeader,
-} from "@/components/doctor/clinical"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
+} from "@/features/doctor/clinical"
+import { TabSkeleton } from '@/shared/components'
+import DoctorSettingsBackLink from "@/features/doctor/clinical/DoctorSettingsBackLink"
 import { FileText } from "lucide-react"
 
 export default function DoctorDocumentsPage() {

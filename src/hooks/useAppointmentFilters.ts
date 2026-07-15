@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react"
 import { Appointment as AppointmentType } from "@/types/patient"
 import { TabKey, QueueView } from "@/types/appointments"
 import { isToday, isTomorrow, isThisWeek, isNextWeek, sortByDateTime, sortByDateTimeDesc } from "@/utils/appointments/appointmentFilters"
-import { isFollowUpAppointment } from "@/components/doctor/dashboard/morningClinicUtils"
+import { isFollowUpAppointment } from "@/features/doctor/dashboard/morningClinicUtils"
 
 export function useAppointmentFilters(
   appointments: AppointmentType[],

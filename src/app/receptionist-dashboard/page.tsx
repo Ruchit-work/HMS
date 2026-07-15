@@ -5,17 +5,17 @@ import { db, auth } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { isAppointmentVisibleToReceptionist } from "@/utils/appointments/appointmentSource"
 import { useRouter } from "next/navigation"
-import Notification from "@/components/ui/feedback/Notification"
+import { Notification } from '@/shared/components'
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import ReceptionistTabPanels, {
   prefetchReceptionistTab,
   type ReceptionistTab,
-} from "@/app/receptionist-dashboard/components/ReceptionistTabPanels"
-import { ConfirmDialog } from "@/components/ui/overlays/Modals"
+} from "@/features/receptionist/components/ReceptionistTabPanels"
+import { ConfirmDialog } from '@/shared/components'
 import {
   LayoutDashboard, Users, Stethoscope, CalendarDays, BedDouble,
   ReceiptText, MessageCircle, FolderOpen, CalendarPlus,
@@ -256,7 +256,7 @@ export default function ReceptionistDashboard() {
     }
   }
 
-  const navigate = (tab: ActiveTab) => {
+  const navigate = useCallback((tab: ActiveTab) => {
     setActiveTab(tab)
     setVisitedTabs((prev) => {
       if (prev.has(tab)) return prev
@@ -265,7 +265,26 @@ export default function ReceptionistDashboard() {
       return next
     })
     setSidebarOpen(false)
-  }
+  }, [])
+
+  const handleNotification = useCallback(
+    (payload: { type: "success" | "error"; message: string } | null) => {
+      setNotification(payload)
+    },
+    []
+  )
+
+  const handleBillingFocusHandled = useCallback(() => {
+    setBillingFocusQuery(null)
+  }, [])
+
+  const handleOpenBilling = useCallback(
+    (admissionId: string) => {
+      setBillingFocusQuery(admissionId)
+      navigate("billing")
+    },
+    [navigate]
+  )
 
   const isShellReady = Boolean(
     user &&
@@ -574,13 +593,10 @@ export default function ReceptionistDashboard() {
             patientMode={patientMode}
             onPatientModeChange={setPatientMode}
             billingFocusQuery={billingFocusQuery}
-            onBillingFocusHandled={() => setBillingFocusQuery(null)}
-            onNotification={(payload) => setNotification(payload)}
-            onTabChange={(tab) => navigate(tab)}
-            onOpenBilling={(admissionId) => {
-              setBillingFocusQuery(admissionId)
-              navigate("billing")
-            }}
+            onBillingFocusHandled={handleBillingFocusHandled}
+            onNotification={handleNotification}
+            onTabChange={navigate}
+            onOpenBilling={handleOpenBilling}
             onWhatsappPendingCountChange={setWhatsappPendingCount}
           />
           )}

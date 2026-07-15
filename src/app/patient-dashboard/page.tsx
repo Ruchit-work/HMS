@@ -4,20 +4,20 @@ import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, collection, query, where, addDoc, updateDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import Notification from "@/components/ui/feedback/Notification"
-import { CancelAppointmentModal } from "@/components/patient/appointments/AppointmentModals"
-import HeroCarousel from "@/components/patient/ui/HeroCarousel"
-import HealthInformationSection from "@/components/patient/forms/HealthInformationSection"
-import PageHeader from "@/components/ui/layout/PageHeader"
-import Footer from "@/components/ui/layout/Footer"
+import { TabSkeleton } from '@/shared/components'
+import { Notification } from '@/shared/components'
+import { CancelAppointmentModal } from "@/features/patient/appointments/AppointmentModals"
+import HeroCarousel from "@/features/patient/ui/HeroCarousel"
+import HealthInformationSection from "@/features/patient/forms/HealthInformationSection"
+import { PageHeader } from '@/shared/components'
+import { Footer } from '@/shared/components'
 import Link from "next/link"
 import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns/campaigns"
 import { UserData, Appointment, NotificationData } from "@/types/patient"
 import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
-import CampaignCarousel from "@/components/patient/ui/CampaignCarousel"
+import CampaignCarousel from "@/features/patient/ui/CampaignCarousel"
 
 export default function PatientDashboard() {
   const [userData, setUserData] = useState<UserData | null>(null)

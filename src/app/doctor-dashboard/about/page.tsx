@@ -5,8 +5,8 @@ import {
   ClinicalFormSection,
   ClinicalPageFrame,
   ClinicalPageHeader,
-} from "@/components/doctor/clinical"
-import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
+} from "@/features/doctor/clinical"
+import DoctorSettingsBackLink from "@/features/doctor/clinical/DoctorSettingsBackLink"
 import { Info } from "lucide-react"
 
 export default function DoctorAbout() {

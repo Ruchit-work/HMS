@@ -1,0 +1,1852 @@
+"use client"
+
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
+import ENTAnatomyViewer from '@/features/doctor/anatomy/ENTAnatomyViewer'
+import InteractiveEarSVG from '@/features/doctor/anatomy/svg/InteractiveEarSVG'
+import InteractiveThroatSVG from '@/features/doctor/anatomy/svg/InteractiveThroatSVG'
+import InteractiveLungsSVG from '@/features/doctor/anatomy/svg/InteractiveLungsSVG'
+import InteractiveMouthSVG from '@/features/doctor/anatomy/svg/InteractiveMouthSVG'
+import InteractiveFemaleReproductiveSVG from '@/features/doctor/anatomy/svg/InteractiveFemaleReproductiveSVG'
+import { earPartsData, type Disease } from '@/constants/earDiseases'
+import { nosePartsData } from '@/constants/noseDiseases'
+import { throatPartsData } from '@/constants/throatDiseases'
+import { dentalPartsData } from '@/constants/dentalDiseases'
+import { lungsPartsData } from '@/constants/lungsDiseases'
+import { kidneyPartsData } from '@/constants/kidneyDiseases'
+import { skeletonPartsData } from '@/constants/skeletonDiseases'
+import { lymphNodesPartsData } from '@/constants/lymphNodesDiseases'
+import { femaleReproductivePartsData } from '@/constants/femaleReproductiveDiseases'
+import { completeAppointment } from '@/utils/appointmentHelpers'
+import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useAuth } from '@/hooks/useAuth'
+import { auth } from '@/firebase/config'
+import { ENT_DIAGNOSES, CUSTOM_DIAGNOSIS_OPTION } from '@/constants/entDiagnoses'
+import { doc, getDoc } from 'firebase/firestore'
+import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import VoiceInput from '@/components/ui/VoiceInput'
+import { fetchMedicineSuggestions, MedicineSuggestion, sanitizeMedicineName, recordMedicineSuggestions } from '@/utils/medicineSuggestions'
+import InteractiveSkeletonSVG from './svg/InteractiveSkeletonSVG'
+
+const DynamicENTAnatomyViewer = dynamic(
+  () => Promise.resolve(ENTAnatomyViewer),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex items-center justify-center bg-slate-100 rounded-lg">
+        <div className="text-slate-600">Loading 3D Anatomy Model...</div>
+      </div>
+    )
+  }
+)
+
+export interface AnatomyViewerData {
+  anatomyType: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes' | 'female_reproductive'
+  selectedPart?: string
+  selectedPartInfo?: any
+  selectedDisease?: Disease | null
+  medicines: Array<{ name: string; dosage: string; frequency: string; duration: string }>
+  notes: string
+  diagnoses: string[]
+  customDiagnosis?: string
+}
+
+interface InlineAnatomyViewerProps {
+  appointmentId: string
+  patientName: string
+  anatomyType?: 'ear' | 'nose' | 'throat' | 'dental' | 'lungs' | 'kidney' | 'skeleton' | 'lymph_nodes' | 'female_reproductive'
+  initialData?: AnatomyViewerData | null
+  onComplete?: () => void
+  onDataChange?: (data: AnatomyViewerData | null) => void
+  /** Compact embed inside consultation workspace — hides Rx/complete UI */
+  embedMode?: boolean
+  /** Consultation reference drawer — original full viewer, syncs selection, hides standalone Rx/complete */
+  referenceMode?: boolean
+}
+
+export default function InlineAnatomyViewer({ appointmentId, patientName, anatomyType = 'ear', initialData, onComplete, onDataChange, embedMode = false, referenceMode = false }: InlineAnatomyViewerProps) {
+  const FEMALE_REPRODUCTIVE_GLB_PATH = '/3dmodels/reproduction/bony_pelvis_and_pelvic_organs_from_mri.glb'
+  const { activeHospitalId } = useMultiHospital()
+  const { user } = useAuth("doctor")
+  const [completing, setCompleting] = useState(false)
+  const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
+  const [showCompletionModal, setShowCompletionModal] = useState(false)
+  const [finalDiagnosis, setFinalDiagnosis] = useState<string[]>([])
+  const [customDiagnosis, setCustomDiagnosis] = useState('')
+  const [medicineSuggestions, setMedicineSuggestions] = useState<MedicineSuggestion[]>([])
+  const [activeNameSuggestion, setActiveNameSuggestion] = useState<{ section: '3d' | '2d', index: number } | null>(null)
+  const [inlineSuggestion, setInlineSuggestion] = useState<{ section: '3d' | '2d', index: number, suggestion: string } | null>(null)
+  const [activeView, setActiveView] = useState<'3d' | '2d'>('3d')
+
+  // State for 3D model section
+  const [selectedPart, setSelectedPart] = useState<string | null>(null)
+  const [selectedPartInfo, setSelectedPartInfo] = useState<{ name: string; description: string } | null>(null)
+  const [selectedDisease, setSelectedDisease] = useState<Disease | null>(null)
+  const [notes, setNotes] = useState('')
+  const [selectedMedicines, setSelectedMedicines] = useState<Array<{
+    name: string
+    dosage: string
+    frequency: string
+    duration: string
+  }>>([])
+
+  // Separate state for 2D SVG section
+  const [selectedPart2D, setSelectedPart2D] = useState<string | null>(null)
+  const [selectedPartInfo2D, setSelectedPartInfo2D] = useState<{ name: string; description: string } | null>(null)
+  const [selectedDisease2D, setSelectedDisease2D] = useState<Disease | null>(null)
+  const [notes2D, setNotes2D] = useState('')
+  const [selectedMedicines2D, setSelectedMedicines2D] = useState<Array<{
+    name: string
+    dosage: string
+    frequency: string
+    duration: string
+  }>>([])
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
+
+  // Hydrate state from initialData when provided (for tab switching)
+  useEffect(() => {
+    if (!initialData || initialData.anatomyType !== anatomyType) return
+    const meds = initialData.medicines || []
+    const medsFiltered = meds.filter((m) => m?.name?.trim())
+    setSelectedPart(initialData.selectedPart ?? null)
+    setSelectedPartInfo(initialData.selectedPartInfo ?? null)
+    setSelectedDisease(initialData.selectedDisease ?? null)
+    setNotes(initialData.notes ?? '')
+    setSelectedMedicines(medsFiltered)
+    setSelectedPart2D(initialData.selectedPart ?? null)
+    setSelectedPartInfo2D(initialData.selectedPartInfo ?? null)
+    setSelectedDisease2D(initialData.selectedDisease ?? null)
+    setNotes2D(initialData.notes ?? '')
+    setSelectedMedicines2D(medsFiltered)
+    setFinalDiagnosis(initialData.diagnoses ?? [])
+    setCustomDiagnosis(initialData.customDiagnosis ?? '')
+  }, [initialData, anatomyType])
+
+  // Get parts data based on anatomy type
+  const getPartsData = () => {
+    switch (anatomyType) {
+      case 'throat':
+        return throatPartsData
+      case 'dental':
+        return dentalPartsData
+      case 'nose':
+        return nosePartsData
+      case 'lungs':
+        return lungsPartsData
+      case 'kidney':
+        return kidneyPartsData
+      case 'skeleton':
+        return skeletonPartsData
+      case 'lymph_nodes':
+        return lymphNodesPartsData
+      case 'female_reproductive':
+        return femaleReproductivePartsData
+      case 'ear':
+      default:
+        return earPartsData
+    }
+  }
+
+  // Get 3D model path based on anatomy type
+  const getModelPath = () => {
+    switch (anatomyType) {
+      case 'throat':
+        return '/models/thorat/anatomy_of_the_larynx.glb'
+      case 'dental':
+        return '/models/mouth/mandible.glb'
+      case 'nose':
+        return '/models/nose/anatomi_hidung_nose_anatomy.glb'
+      case 'lungs':
+        return '/models/lungs/healthy_heart_and_lungs.glb'
+      case 'kidney':
+        return '/models/kidney/kidney.glb'
+      case 'skeleton':
+        return '/models/skeleton/free_pack_-_human_skeleton.glb'
+      case 'lymph_nodes':
+        return '/3dmodels/thorax_and_abdomen_some_of_the_lymph_nodes/scene.gltf'
+      case 'female_reproductive':
+        return FEMALE_REPRODUCTIVE_GLB_PATH
+      case 'ear':
+      default:
+        return '/models/ear/ear-anatomy.glb'
+    }
+  }
+
+  // Real anatomical name mappings
+  const anatomicalNameMappings: Record<string, Record<string, string>> = {
+    throat: {
+      'Pharynx': 'Pharynx', 'Nasopharynx': 'Pharynx', 'Oropharynx': 'Pharynx', 'Laryngopharynx': 'Pharynx',
+      'Larynx': 'Larynx', 'Voice_Box': 'Larynx', 'Thyroid_Cartilage': 'Larynx',
+      'Cricoid_Cartilage': 'Larynx', 'Arytenoid_Cartilage': 'Larynx',
+      'Epiglottis': 'Epiglottis',
+      'Vocal_Cord': 'Vocal_Cords', 'Vocal_Cords': 'Vocal_Cords', 'Vocal_Fold': 'Vocal_Cords',
+      'Vocal_Folds': 'Vocal_Cords', 'True_Vocal_Cord': 'Vocal_Cords', 'False_Vocal_Cord': 'Vocal_Cords',
+      'Glottis': 'Vocal_Cords',
+      'Trachea': 'Trachea', 'Windpipe': 'Trachea',
+    },
+    dental: {
+      'Teeth': 'Teeth', 'Tooth': 'Teeth', 'Incisor': 'Teeth', 'Canine': 'Teeth', 'Premolar': 'Teeth', 'Molar': 'Teeth',
+      'Gums': 'Gums', 'Gingiva': 'Gums', 'Gingival': 'Gums',
+      'Tongue': 'Tongue',
+      'Mandible': 'Mandible', 'Lower_Jaw': 'Mandible', 'Jaw': 'Mandible',
+      'Palate': 'Palate', 'Hard_Palate': 'Palate', 'Soft_Palate': 'Palate',
+      'Oral_Mucosa': 'Oral_Mucosa', 'Mucosa': 'Oral_Mucosa', 'Lips': 'Oral_Mucosa',
+      'Salivary_Glands': 'Salivary_Glands', 'Salivary_Gland': 'Salivary_Glands',
+      'Wisdom_Teeth': 'Wisdom_Teeth', 'Third_Molars': 'Wisdom_Teeth',
+    },
+    nose: {
+      'Nostrils': 'Nostrils', 'Nasal_Vestibule': 'Nostrils',
+      'Nasal_Cavity': 'Nasal_Cavity',
+      'Nasal_Septum': 'Nasal_Septum', 'Septum': 'Nasal_Septum',
+      'Turbinates': 'Turbinates', 'Nasal_Conchae': 'Turbinates',
+      'Sinuses': 'Sinuses', 'Paranasal_Sinuses': 'Sinuses',
+    },
+    lungs: {
+      'Left_Lung': 'Left_Lung', 'Right_Lung': 'Right_Lung', 'Left_Ventricle': 'Left_Ventricle', 'Right_Ventricle': 'Right_Ventricle',
+      'Right_Atrium': 'Right_Atrium', 'Left_Atrium': 'Left_Atrium', 'Aorta': 'Aorta',
+      'Left_Pulmonary_Artery': 'Left_Pulmonary_Artery', 'Right_Pulmonary_Artery': 'Right_Pulmonary_Artery',
+      'Superior_Caval_Vein': 'Superior_Caval_Vein', 'Inferior_Caval_Vein': 'Inferior_Caval_Vein',
+      'Pulmonary_Trunk': 'Pulmonary_Trunk', 'Right_Pulmonary_Vein': 'Right_Pulmonary_Vein', 'Left_Pulmonary_Vein': 'Left_Pulmonary_Vein',
+      'Trachea': 'Trachea', 'Windpipe': 'Trachea', 'Bronchi': 'Bronchi', 'Bronchus': 'Bronchi',
+    },
+    kidney: {
+      'Kidney': 'Kidney', 'Left_Kidney': 'Kidney', 'Right_Kidney': 'Kidney',
+      'Renal_Pelvis': 'Renal_Pelvis', 'Ureter': 'Ureter',
+      'Cortex': 'Cortex', 'Medulla': 'Medulla',
+    },
+    skeleton: {
+      'Skull': 'Skull', 'Cranium': 'Skull', 'Spine': 'Spine', 'Ribcage': 'Ribcage', 'Sternum': 'Sternum',
+      'Pelvis': 'Pelvis', 'Humerus': 'Humerus', 'Radius': 'Radius', 'Ulna': 'Ulna',
+      'Femur': 'Femur', 'Tibia': 'Tibia', 'Fibula': 'Fibula', 'Clavicle': 'Clavicle', 'Scapula': 'Scapula', 'Patella': 'Patella',
+    },
+    ear: {}
+  }
+
+  // Map generic object names to real part names
+  const mapToRealPartName = (partName: string | null): string | null => {
+    if (!partName) return null
+    
+    const partsData = getPartsData()
+    
+    // Check if it's already a valid part name
+    if (partsData[partName]) return partName
+    
+    // Check case-insensitive match
+    const lowerName = partName.toLowerCase()
+    for (const key in partsData) {
+      if (key.toLowerCase() === lowerName) return key
+    }
+    
+    // Check real anatomical name mappings (exact match)
+    if (anatomicalNameMappings[anatomyType] && anatomicalNameMappings[anatomyType][partName]) {
+      return anatomicalNameMappings[anatomyType][partName]
+    }
+    
+    // Check case-insensitive match for anatomical names
+    if (anatomicalNameMappings[anatomyType]) {
+      for (const [anatomicalName, mappedPart] of Object.entries(anatomicalNameMappings[anatomyType])) {
+        if (anatomicalName.toLowerCase() === lowerName) {
+          return mappedPart
+        }
+      }
+    }
+    
+    // For generic object names, try to map based on anatomy type
+    const objectMatch = partName.match(/^[Oo]bject[_ ]?(\d+)$/i)
+    if (objectMatch) {
+      const objectNumber = parseInt(objectMatch[1], 10)
+      const partMappings: Record<string, Record<number, string>> = {
+        ear: {
+          1: 'Outer_Ear', 2: 'Ear_Canal', 3: 'Eardrum', 4: 'Ossicles',
+          5: 'Cochlea', 6: 'Semicircular_Canals', 7: 'Auditory_Nerve',
+        },
+        nose: {
+          1: 'Nostrils', 2: 'Nasal_Cavity', 3: 'Nasal_Septum', 4: 'Turbinates', 5: 'Sinuses',
+        },
+        lungs: {
+          1: 'Left_Lung', 2: 'Right_Lung', 3: 'Left_Ventricle', 4: 'Right_Ventricle',
+          5: 'Right_Atrium', 6: 'Left_Atrium', 7: 'Aorta', 8: 'Left_Pulmonary_Artery', 9: 'Right_Pulmonary_Artery',
+          10: 'Superior_Caval_Vein', 11: 'Inferior_Caval_Vein', 12: 'Pulmonary_Trunk',
+          13: 'Right_Pulmonary_Vein', 14: 'Left_Pulmonary_Vein', 15: 'Trachea', 16: 'Bronchi',
+        },
+        kidney: {
+          1: 'Kidney', 2: 'Renal_Pelvis', 3: 'Ureter', 4: 'Cortex', 5: 'Medulla',
+        },
+        throat: {
+          1: 'Pharynx', 2: 'Larynx', 3: 'Epiglottis', 4: 'Trachea', 5: 'Vocal_Cords',
+        },
+        dental: {
+          1: 'Teeth', 2: 'Gums', 3: 'Tongue', 4: 'Mandible', 5: 'Palate',
+          6: 'Oral_Mucosa', 7: 'Salivary_Glands', 8: 'Wisdom_Teeth',
+        },
+        skeleton: {
+          1: 'Skull', 2: 'Spine', 3: 'Ribcage', 4: 'Pelvis', 5: 'Humerus', 6: 'Radius', 7: 'Ulna',
+          8: 'Femur', 9: 'Tibia', 10: 'Fibula', 11: 'Clavicle', 12: 'Scapula', 13: 'Sternum', 14: 'Patella',
+        },
+      }
+      if (partMappings[anatomyType] && partMappings[anatomyType][objectNumber]) {
+        return partMappings[anatomyType][objectNumber]
+      }
+    }
+    
+    // Pattern matching for partial matches
+    if (anatomyType === 'throat') {
+      if (lowerName.includes('pharynx')) {
+        return 'Pharynx'
+      } else if (lowerName.includes('larynx') || lowerName.includes('voice box') || lowerName.includes('thyroid') ||
+                 lowerName.includes('cricoid') || lowerName.includes('arytenoid')) {
+        return 'Larynx'
+      } else if (lowerName.includes('epiglottis')) {
+        return 'Epiglottis'
+      } else if (lowerName.includes('trachea') || lowerName.includes('windpipe')) {
+        return 'Trachea'
+      } else if (lowerName.includes('vocal') || lowerName.includes('cord') || lowerName.includes('fold')) {
+        return 'Vocal_Cords'
+      }
+    } else if (anatomyType === 'dental') {
+      if (lowerName.includes('tooth') || lowerName.includes('teeth') || lowerName.includes('incisor') || 
+          lowerName.includes('canine') || lowerName.includes('premolar') || lowerName.includes('molar')) {
+        return 'Teeth'
+      } else if (lowerName.includes('gum') || lowerName.includes('gingiva')) {
+        return 'Gums'
+      } else if (lowerName.includes('tongue')) {
+        return 'Tongue'
+      } else if (lowerName.includes('mandible') || lowerName.includes('jaw')) {
+        return 'Mandible'
+      } else if (lowerName.includes('palate') || lowerName.includes('uvula')) {
+        return 'Palate'
+      } else if (lowerName.includes('mucosa') || lowerName.includes('lip')) {
+        return 'Oral_Mucosa'
+      } else if (lowerName.includes('salivary')) {
+        return 'Salivary_Glands'
+      } else if (lowerName.includes('wisdom') || lowerName.includes('third molar')) {
+        return 'Wisdom_Teeth'
+      }
+    } else if (anatomyType === 'nose') {
+      if (lowerName.includes('nostril') || lowerName.includes('vestibule')) {
+        return 'Nostrils'
+      } else if (lowerName.includes('nasal cavity') || lowerName.includes('nasal_cavity')) {
+        return 'Nasal_Cavity'
+      } else if (lowerName.includes('septum')) {
+        return 'Nasal_Septum'
+      } else if (lowerName.includes('turbinate') || lowerName.includes('conchae')) {
+        return 'Turbinates'
+      } else if (lowerName.includes('sinus')) {
+        return 'Sinuses'
+      }
+    } else if (anatomyType === 'lungs') {
+      if (lowerName.includes('left') && lowerName.includes('lung')) return 'Left_Lung'
+      if (lowerName.includes('right') && lowerName.includes('lung')) return 'Right_Lung'
+      if (lowerName.includes('left') && lowerName.includes('ventricle')) return 'Left_Ventricle'
+      if (lowerName.includes('right') && lowerName.includes('ventricle')) return 'Right_Ventricle'
+      if (lowerName.includes('right') && lowerName.includes('atrium')) return 'Right_Atrium'
+      if (lowerName.includes('left') && lowerName.includes('atrium')) return 'Left_Atrium'
+      if (lowerName.includes('aorta')) return 'Aorta'
+      if (lowerName.includes('left') && lowerName.includes('pulmonary') && lowerName.includes('artery')) return 'Left_Pulmonary_Artery'
+      if (lowerName.includes('right') && lowerName.includes('pulmonary') && lowerName.includes('artery')) return 'Right_Pulmonary_Artery'
+      if (lowerName.includes('superior') && (lowerName.includes('caval') || lowerName.includes('vena'))) return 'Superior_Caval_Vein'
+      if (lowerName.includes('inferior') && (lowerName.includes('caval') || lowerName.includes('vena'))) return 'Inferior_Caval_Vein'
+      if (lowerName.includes('pulmonary') && lowerName.includes('trunk')) return 'Pulmonary_Trunk'
+      if (lowerName.includes('right') && lowerName.includes('pulmonary') && lowerName.includes('vein')) return 'Right_Pulmonary_Vein'
+      if (lowerName.includes('left') && lowerName.includes('pulmonary') && lowerName.includes('vein')) return 'Left_Pulmonary_Vein'
+      if (lowerName.includes('trachea') || lowerName.includes('windpipe')) return 'Trachea'
+      if (lowerName.includes('bronch')) return 'Bronchi'
+      if (lowerName.includes('lung')) return 'Left_Lung'
+      if (lowerName.includes('heart')) return 'Aorta'
+    } else if (anatomyType === 'kidney') {
+      if (lowerName.includes('kidney') || lowerName.includes('renal') && !lowerName.includes('pelvis') && !lowerName.includes('cortex') && !lowerName.includes('medulla')) {
+        return 'Kidney'
+      } else if (lowerName.includes('pelvis')) {
+        return 'Renal_Pelvis'
+      } else if (lowerName.includes('ureter')) {
+        return 'Ureter'
+      } else if (lowerName.includes('cortex')) {
+        return 'Cortex'
+      } else if (lowerName.includes('medulla')) {
+        return 'Medulla'
+      }
+    }
+    
+    // Return as-is if no mapping found
+    return partName
+  }
+
+  const handlePartSelect = (partName: string | null, partInfo?: { name: string; description: string }) => {
+    const realPartName = mapToRealPartName(partName)
+    setSelectedPart(realPartName ?? partName)
+
+    const partsData = getPartsData()
+
+    // For skeleton, prefer the partInfo from the 3D viewer so "Selected Part Information" shows the resolved part name/description per mesh
+    if (anatomyType === 'skeleton' && partInfo?.name) {
+      setSelectedPartInfo({ name: partInfo.name, description: partInfo.description ?? '' })
+    } else if (realPartName && partsData[realPartName]) {
+      setSelectedPartInfo({
+        name: partsData[realPartName].partName,
+        description: partsData[realPartName].description
+      })
+    } else {
+      setSelectedPartInfo(partInfo || null)
+    }
+
+    setSelectedDisease(null)
+    setSelectedMedicines([])
+  }
+
+  const handleDiseaseSelect = (disease: Disease) => {
+    setSelectedDisease(disease)
+    setSelectedMedicines(disease.medicines ? [...disease.medicines] : [])
+  }
+
+  const addMedicine = () => {
+    setSelectedMedicines([...selectedMedicines, { name: "", dosage: "", frequency: "", duration: "" }])
+  }
+
+  const removeMedicine = (index: number) => {
+    setSelectedMedicines(selectedMedicines.filter((_, i) => i !== index))
+  }
+
+  const updateMedicine = (index: number, field: string, value: string) => {
+    const updatedMedicines = [...selectedMedicines]
+    updatedMedicines[index] = { ...updatedMedicines[index], [field]: value }
+    setSelectedMedicines(updatedMedicines)
+    
+    if (field === 'name') {
+      updateInlineSuggestion('3d', index, value)
+    }
+  }
+
+  // Load medicine suggestions
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      try {
+        const suggestions = await fetchMedicineSuggestions(100)
+        setMedicineSuggestions(suggestions)
+      } catch {
+
+      }
+    }
+    loadSuggestions()
+  }, [])
+
+  const getMedicineNameSuggestions = useCallback(
+    (query: string, limitOptions = 5) => {
+      if (!medicineSuggestions.length) return []
+      const cleaned = query.trim().toLowerCase()
+      if (cleaned.length < 1) return []
+
+      const startsWithMatches = medicineSuggestions.filter((suggestion) =>
+        suggestion.name.toLowerCase().startsWith(cleaned)
+      )
+      if (startsWithMatches.length >= limitOptions) {
+        return startsWithMatches.slice(0, limitOptions)
+      }
+
+      const remainingSlots = limitOptions - startsWithMatches.length
+      const containsMatches = medicineSuggestions
+        .filter(
+          (suggestion) =>
+            !suggestion.name.toLowerCase().startsWith(cleaned) &&
+            suggestion.name.toLowerCase().includes(cleaned)
+        )
+        .slice(0, remainingSlots)
+
+      return [...startsWithMatches, ...containsMatches]
+    },
+    [medicineSuggestions]
+  )
+
+  const findSuggestionByName = useCallback(
+    (name?: string) => {
+      if (!name) return undefined
+      const cleaned = name.trim().toLowerCase()
+      if (!cleaned) return undefined
+      return medicineSuggestions.find(
+        (suggestion) =>
+          suggestion.normalizedName === cleaned || suggestion.name.toLowerCase() === cleaned
+      )
+    },
+    [medicineSuggestions]
+  )
+
+  const updateInlineSuggestion = useCallback(
+    (section: '3d' | '2d', index: number, value: string) => {
+      const cleanedValue = value.trim()
+      if (cleanedValue.length < 1) {
+        setInlineSuggestion((prev) =>
+          prev?.section === section && prev.index === index ? null : prev
+        )
+        return
+      }
+
+      const bestMatch = getMedicineNameSuggestions(cleanedValue, 1)[0]
+      if (bestMatch && bestMatch.name.toLowerCase().startsWith(cleanedValue.toLowerCase())) {
+        setInlineSuggestion({
+          section,
+          index,
+          suggestion: bestMatch.name
+        })
+      } else {
+        setInlineSuggestion((prev) =>
+          prev?.section === section && prev.index === index ? null : prev
+        )
+      }
+    },
+    [getMedicineNameSuggestions]
+  )
+
+  const acceptInlineSuggestion = (section: '3d' | '2d', index: number) => {
+    if (inlineSuggestion?.section === section && inlineSuggestion.index === index) {
+      const suggestion = findSuggestionByName(inlineSuggestion.suggestion)
+      if (suggestion) {
+        handleSelectMedicineSuggestion(section, index, suggestion)
+      }
+    }
+  }
+
+  const handleSelectMedicineSuggestion = (section: '3d' | '2d', index: number, suggestion: MedicineSuggestion) => {
+    const sanitizedName = sanitizeMedicineName(suggestion.name)
+    
+    if (section === '3d') {
+      const updatedMedicines = [...selectedMedicines]
+      updatedMedicines[index] = {
+        ...updatedMedicines[index],
+        name: sanitizedName || suggestion.name
+      }
+      
+      if (!updatedMedicines[index].dosage && suggestion.dosageOptions?.length) {
+        updatedMedicines[index].dosage = suggestion.dosageOptions[0].value
+      }
+      if (!updatedMedicines[index].frequency && suggestion.frequencyOptions?.length) {
+        updatedMedicines[index].frequency = suggestion.frequencyOptions[0].value
+      }
+      if (!updatedMedicines[index].duration && suggestion.durationOptions?.length) {
+        updatedMedicines[index].duration = suggestion.durationOptions[0].value
+      }
+      
+      setSelectedMedicines(updatedMedicines)
+    } else {
+      const updatedMedicines = [...selectedMedicines2D]
+      updatedMedicines[index] = {
+        ...updatedMedicines[index],
+        name: sanitizedName || suggestion.name
+      }
+      
+      if (!updatedMedicines[index].dosage && suggestion.dosageOptions?.length) {
+        updatedMedicines[index].dosage = suggestion.dosageOptions[0].value
+      }
+      if (!updatedMedicines[index].frequency && suggestion.frequencyOptions?.length) {
+        updatedMedicines[index].frequency = suggestion.frequencyOptions[0].value
+      }
+      if (!updatedMedicines[index].duration && suggestion.durationOptions?.length) {
+        updatedMedicines[index].duration = suggestion.durationOptions[0].value
+      }
+      
+      setSelectedMedicines2D(updatedMedicines)
+    }
+    
+    setActiveNameSuggestion(null)
+    setInlineSuggestion(null)
+  }
+
+  // Separate handlers for 2D SVG section
+  const handlePartSelect2D = (partName: string | null, partInfo?: { name: string; description: string }) => {
+    const realPartName = mapToRealPartName(partName)
+    setSelectedPart2D(realPartName)
+    const partsData = getPartsData()
+    
+    if (realPartName && partsData[realPartName]) {
+      setSelectedPartInfo2D({
+        name: partsData[realPartName].partName,
+        description: partsData[realPartName].description
+      })
+    } else {
+      setSelectedPartInfo2D(partInfo || null)
+    }
+    
+    setSelectedDisease2D(null)
+    setSelectedMedicines2D([])
+  }
+
+  const handleDiseaseSelect2D = (disease: Disease) => {
+    setSelectedDisease2D(disease)
+    setSelectedMedicines2D(disease.medicines ? [...disease.medicines] : [])
+  }
+
+  const addMedicine2D = () => {
+    setSelectedMedicines2D([...selectedMedicines2D, { name: "", dosage: "", frequency: "", duration: "" }])
+  }
+
+  const removeMedicine2D = (index: number) => {
+    setSelectedMedicines2D(selectedMedicines2D.filter((_, i) => i !== index))
+  }
+
+  const updateMedicine2D = (index: number, field: string, value: string) => {
+    const updatedMedicines = [...selectedMedicines2D]
+    updatedMedicines[index] = { ...updatedMedicines[index], [field]: value }
+    setSelectedMedicines2D(updatedMedicines)
+    
+    if (field === 'name') {
+      updateInlineSuggestion('2d', index, value)
+    }
+  }
+
+  const getNumberEmoji = (num: number): string => {
+    const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+    return num <= 10 ? emojis[num - 1] : `${num}.`
+  }
+
+  const formatMedicinesAsText = (medicines: Array<{name: string, dosage: string, frequency: string, duration: string}>, notes?: string): string => {
+    if (medicines.length === 0) return ""
+    
+    let prescriptionText = "🧾 *Prescription*\n\n"
+    
+    medicines.forEach((med, index) => {
+      const emoji = getNumberEmoji(index + 1)
+      const name = med.name || 'Medicine'
+      const dosage = med.dosage ? ` ${med.dosage}` : ''
+      
+      prescriptionText += `*${emoji} ${name}${dosage}*\n\n`
+      
+      if (med.frequency) {
+        prescriptionText += `• ${med.frequency}\n`
+      }
+      
+      if (med.duration) {
+        const durationText = med.duration.toLowerCase().includes('duration:') ? med.duration : `Duration: ${med.duration}`
+        prescriptionText += `• ${durationText}\n`
+      }
+      
+      prescriptionText += `\n`
+    })
+    
+    if (notes && notes.trim()) {
+      prescriptionText += `📌 *Advice:* ${notes.trim()}\n`
+    }
+    
+    return prescriptionText.trim()
+  }
+
+  const mapDiseaseToDiagnosis = (disease: Disease | null): string[] => {
+    if (!disease) return []
+    
+    const matchingDiagnosis = ENT_DIAGNOSES.find(d => 
+      d.name.toLowerCase() === disease.name.toLowerCase() ||
+      disease.name.toLowerCase().includes(d.name.toLowerCase()) ||
+      d.name.toLowerCase().includes(disease.name.toLowerCase())
+    )
+    
+    if (matchingDiagnosis) {
+      return [matchingDiagnosis.name]
+    }
+    
+    return [disease.name]
+  }
+
+  // Expose current data to parent component
+  // Use useRef to track previous data and prevent unnecessary updates
+  const prevDataRef = useRef<string>('')
+  
+  useEffect(() => {
+    if (!onDataChange) return
+
+    const finalMedicines = selectedMedicines2D.length > 0 ? selectedMedicines2D : selectedMedicines
+    const finalDisease = selectedDisease2D || selectedDisease
+    const finalPartInfo = selectedPartInfo2D || selectedPartInfo
+    const finalNotes = notes2D || notes
+    const finalPart = selectedPart2D || selectedPart
+
+    const diagnoses = finalDiagnosis.length > 0 ? finalDiagnosis : (finalDisease ? mapDiseaseToDiagnosis(finalDisease) : [])
+    const filteredDiagnoses = diagnoses.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION)
+    const finalCustomDiagnosis = diagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? customDiagnosis : undefined
+
+    const hasSelection = Boolean(finalPart || finalPartInfo || finalDisease || filteredDiagnoses.length > 0)
+    const hasMedicines = finalMedicines.length > 0 && finalMedicines.some(med => med.name && med.name.trim())
+
+    const dataPayload = {
+      anatomyType,
+      selectedPart: finalPart || undefined,
+      selectedPartInfo: finalPartInfo,
+      selectedDisease: finalDisease,
+      medicines: finalMedicines.filter(m => m.name && m.name.trim()),
+      notes: finalNotes || '',
+      diagnoses: filteredDiagnoses,
+      customDiagnosis: finalCustomDiagnosis
+    }
+
+    const dataToSend = embedMode || referenceMode
+      ? hasSelection || hasMedicines
+        ? dataPayload
+        : null
+      : hasMedicines
+        ? dataPayload
+        : null
+
+    // Serialize to compare with previous
+    const dataString = JSON.stringify(dataToSend)
+    
+    // Only call onDataChange if data actually changed
+    if (dataString !== prevDataRef.current) {
+      prevDataRef.current = dataString
+      onDataChange(dataToSend)
+    }
+  }, [
+    anatomyType,
+    selectedMedicines,
+    selectedMedicines2D,
+    selectedDisease,
+    selectedDisease2D,
+    selectedPart,
+    selectedPart2D,
+    selectedPartInfo,
+    selectedPartInfo2D,
+    notes,
+    notes2D,
+    finalDiagnosis,
+    customDiagnosis,
+    onDataChange
+  ])
+
+  const hideStandaloneWorkflow = embedMode || referenceMode
+  const useFullAnatomyLayout = referenceMode || !embedMode
+  const modelHeight = referenceMode ? 680 : embedMode ? 280 : 680
+
+  const handleCompleteCheckup = () => {
+    if (!appointmentId) {
+      setNotification({ type: "error", message: "Appointment ID is missing" })
+      return
+    }
+
+    if (!activeHospitalId) {
+      setNotification({ type: "error", message: "Hospital context is not available. Please refresh the page." })
+      return
+    }
+
+    const finalMedicines = selectedMedicines2D.length > 0 ? selectedMedicines2D : selectedMedicines
+    const finalDisease = selectedDisease2D || selectedDisease
+
+    if (finalMedicines.length === 0 || !finalMedicines.some(med => med.name && med.name.trim())) {
+      setNotification({ type: "error", message: "Please add at least one medicine with a name before completing the checkup" })
+      return
+    }
+
+    const diagnoses = finalDiagnosis.length > 0 ? finalDiagnosis : (finalDisease ? mapDiseaseToDiagnosis(finalDisease) : [])
+    const filteredDiagnoses = diagnoses.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION)
+    const finalCustomDiagnosis = diagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? customDiagnosis : undefined
+
+    if (filteredDiagnoses.length === 0 && !finalCustomDiagnosis) {
+      setNotification({ type: "error", message: "Please select at least one diagnosis before completing the consultation." })
+      return
+    }
+
+    // Always show confirmation modal before completing
+    setShowCompletionModal(true)
+  }
+
+  const confirmCompleteCheckup = async () => {
+    setShowCompletionModal(false)
+    setCompleting(true)
+    setShowSuccessAnimation(false)
+    setNotification(null)
+
+    try {
+      const finalMedicines = selectedMedicines2D.length > 0 ? selectedMedicines2D : selectedMedicines
+      const finalDisease = selectedDisease2D || selectedDisease
+      const finalPartInfo = selectedPartInfo2D || selectedPartInfo
+      const finalNotes = notes2D || notes
+
+      const medicineText = formatMedicinesAsText(finalMedicines)
+
+      const notesParts: string[] = []
+      
+      if (finalPartInfo) {
+        notesParts.push(`Selected Anatomy Part: ${finalPartInfo.name}`)
+        if (finalPartInfo.description) {
+          notesParts.push(`Part Description: ${finalPartInfo.description}`)
+        }
+      }
+      
+      if (finalDisease) {
+        notesParts.push(`Diagnosis: ${finalDisease.name}`)
+        if (finalDisease.description) {
+          notesParts.push(`Disease Description: ${finalDisease.description}`)
+        }
+        if (finalDisease.symptoms && finalDisease.symptoms.length > 0) {
+          notesParts.push(`Symptoms: ${finalDisease.symptoms.join(', ')}`)
+        }
+      }
+      
+      if (finalDisease?.prescriptions && finalDisease.prescriptions.length > 0) {
+        notesParts.push(`Prescriptions/Instructions: ${finalDisease.prescriptions.join('; ')}`)
+      }
+      
+      if (finalNotes && finalNotes.trim()) {
+        notesParts.push(`Doctor Notes: ${finalNotes}`)
+      }
+      
+      const comprehensiveNotes = notesParts.join('\n\n')
+
+      const diagnoses = finalDiagnosis.length > 0 ? finalDiagnosis : (finalDisease ? mapDiseaseToDiagnosis(finalDisease) : [])
+      
+      const filteredDiagnoses = diagnoses.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION)
+      const finalCustomDiagnosis = diagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? customDiagnosis : undefined
+
+      await completeAppointment(
+        appointmentId!,
+        medicineText || "", // Ensure never undefined
+        comprehensiveNotes || "", // Ensure never undefined
+        activeHospitalId!,
+        filteredDiagnoses,
+        finalCustomDiagnosis || "",
+        user?.uid || undefined,
+        "doctor"
+      )
+
+      // Save medicines to database for future autocomplete (auto-save after first use)
+      try {
+        await recordMedicineSuggestions(finalMedicines)
+      } catch {
+
+        // Don't block completion if medicine saving fails
+      }
+
+      // Send completion WhatsApp message
+      try {
+        const currentUser = auth.currentUser
+        if (currentUser) {
+          const appointmentsRef = getHospitalCollection(activeHospitalId!, "appointments")
+          const appointmentDoc = await getDoc(doc(appointmentsRef, appointmentId!))
+          
+          if (appointmentDoc.exists()) {
+            const appointmentData = appointmentDoc.data()
+            const token = await currentUser.getIdToken()
+            
+            const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                appointmentId: appointmentId!,
+                patientId: appointmentData.patientId,
+                patientPhone: appointmentData.patientPhone,
+                patientName: appointmentData.patientName,
+                hospitalId: activeHospitalId!,
+              }),
+            })
+
+            await completionResponse.json().catch(() => ({}))
+            
+            if (completionResponse.ok) {
+
+            } else {
+
+            }
+          }
+        }
+      } catch {
+
+      }
+
+      setNotification({
+        type: "success",
+        message: "Checkup completed successfully! Recommended medicines and prescriptions have been added to the appointment."
+      })
+
+      setShowSuccessAnimation(true)
+      setTimeout(() => {
+        setShowSuccessAnimation(false)
+      }, 1500)
+
+      if (onComplete) {
+        setTimeout(() => {
+          onComplete()
+        }, 2000)
+      }
+
+    } catch (error) {
+
+      setNotification({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to complete checkup. Please try again."
+      })
+      setCompleting(false)
+    }
+  }
+
+  const handleCompleteCheckup2D = () => {
+    if (!appointmentId) {
+      setNotification({ type: "error", message: "Appointment ID is missing" })
+      return
+    }
+
+    if (!activeHospitalId) {
+      setNotification({ type: "error", message: "Hospital context is not available. Please refresh the page." })
+      return
+    }
+
+    if (selectedMedicines2D.length === 0 || !selectedMedicines2D.some(med => med.name && med.name.trim())) {
+      setNotification({ type: "error", message: "Please add at least one medicine with a name before completing the checkup" })
+      return
+    }
+
+    const diagnoses = finalDiagnosis.length > 0 ? finalDiagnosis : (selectedDisease2D ? mapDiseaseToDiagnosis(selectedDisease2D) : [])
+    const filteredDiagnoses = diagnoses.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION)
+    const finalCustomDiagnosis = diagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? customDiagnosis : undefined
+
+    if (filteredDiagnoses.length === 0 && !finalCustomDiagnosis) {
+      setNotification({ type: "error", message: "Please select at least one diagnosis before completing the consultation." })
+      return
+    }
+
+    // Show confirmation modal
+    setShowCompletionModal(true)
+  }
+
+  const confirmCompleteCheckup2D = async () => {
+    setShowCompletionModal(false)
+    setCompleting(true)
+    setShowSuccessAnimation(false)
+    setNotification(null)
+
+    try {
+      const medicineText = formatMedicinesAsText(selectedMedicines2D)
+
+      const notesParts: string[] = []
+      
+      if (selectedPartInfo2D) {
+        notesParts.push(`Selected Anatomy Part: ${selectedPartInfo2D.name}`)
+        if (selectedPartInfo2D.description) {
+          notesParts.push(`Part Description: ${selectedPartInfo2D.description}`)
+        }
+      }
+      
+      if (selectedDisease2D) {
+        notesParts.push(`Diagnosis: ${selectedDisease2D.name}`)
+        if (selectedDisease2D.description) {
+          notesParts.push(`Disease Description: ${selectedDisease2D.description}`)
+        }
+        if (selectedDisease2D.symptoms && selectedDisease2D.symptoms.length > 0) {
+          notesParts.push(`Symptoms: ${selectedDisease2D.symptoms.join(', ')}`)
+        }
+      }
+      
+      if (selectedDisease2D?.prescriptions && selectedDisease2D.prescriptions.length > 0) {
+        notesParts.push(`Prescriptions/Instructions: ${selectedDisease2D.prescriptions.join('; ')}`)
+      }
+      
+      if (notes2D && notes2D.trim()) {
+        notesParts.push(`Doctor Notes: ${notes2D}`)
+      }
+      
+      const comprehensiveNotes = notesParts.join('\n\n')
+
+      const diagnoses = finalDiagnosis.length > 0 ? finalDiagnosis : (selectedDisease2D ? mapDiseaseToDiagnosis(selectedDisease2D) : [])
+      
+      const filteredDiagnoses = diagnoses.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION)
+      const finalCustomDiagnosis = diagnoses.includes(CUSTOM_DIAGNOSIS_OPTION) ? customDiagnosis : undefined
+
+      await completeAppointment(
+        appointmentId!,
+        medicineText || "", // Ensure never undefined
+        comprehensiveNotes || "", // Ensure never undefined
+        activeHospitalId!,
+        filteredDiagnoses,
+        finalCustomDiagnosis || "",
+        user?.uid || undefined,
+        "doctor"
+      )
+
+      // Save medicines to database for future autocomplete (auto-save after first use)
+      try {
+        await recordMedicineSuggestions(selectedMedicines2D)
+      } catch {
+
+        // Don't block completion if medicine saving fails
+      }
+
+      // Send completion WhatsApp message
+      try {
+        const currentUser = auth.currentUser
+        if (currentUser) {
+          const appointmentsRef = getHospitalCollection(activeHospitalId!, "appointments")
+          const appointmentDoc = await getDoc(doc(appointmentsRef, appointmentId!))
+          
+          if (appointmentDoc.exists()) {
+            const appointmentData = appointmentDoc.data()
+            const token = await currentUser.getIdToken()
+            
+            const completionResponse = await fetch("/api/doctor/send-completion-whatsapp", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                appointmentId: appointmentId!,
+                patientId: appointmentData.patientId,
+                patientPhone: appointmentData.patientPhone,
+                patientName: appointmentData.patientName,
+                hospitalId: activeHospitalId!,
+              }),
+            })
+
+            await completionResponse.json().catch(() => ({}))
+            
+            if (completionResponse.ok) {
+
+            } else {
+
+            }
+          }
+        }
+      } catch {
+
+      }
+
+      setNotification({
+        type: "success",
+        message: "Checkup completed successfully! Recommended medicines and prescriptions have been added to the appointment."
+      })
+
+      if (onComplete) {
+        setTimeout(() => {
+          onComplete()
+        }, 2000)
+      }
+
+      setShowSuccessAnimation(true)
+      setTimeout(() => {
+        setShowSuccessAnimation(false)
+      }, 1500)
+
+    } catch (error) {
+
+      setNotification({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to complete checkup. Please try again."
+      })
+      setCompleting(false)
+    }
+  }
+
+  const partsData = getPartsData()
+  const currentPartData = selectedPart ? partsData[selectedPart] : null
+
+  const show2DView = anatomyType !== 'kidney' && anatomyType !== 'nose' && anatomyType !== 'lymph_nodes'
+  const effectiveView = show2DView ? activeView : '3d'
+
+  return (
+    <div className={`w-full bg-white ${embedMode && !referenceMode ? "consultation-anatomy-embed" : ""}`}>
+      {notification && (
+        <div className={`mb-4 p-3 rounded-lg ${
+          notification.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+        }`}>
+          {notification.message}
+        </div>
+      )}
+      <div className={useFullAnatomyLayout ? "p-4" : "p-2"}>
+        {/* View Toggle - hidden for kidney and nose (3D only) */}
+        {show2DView && (
+          <div className={useFullAnatomyLayout ? "mb-4" : "mb-2"}>
+            <div className="inline-flex rounded-full bg-slate-100 p-1 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setActiveView('3d')}
+                className={`inline-flex items-center gap-2 px-5 py-1.5 text-xs sm:text-sm font-medium rounded-full transition-all duration-200 ${
+                  activeView === '3d'
+                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <svg
+                  className={`w-4 h-4 ${activeView === '3d' ? 'text-white' : 'text-slate-500'}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                <span>3D Model</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView('2d')}
+                className={`inline-flex items-center gap-2 px-5 py-1.5 text-xs sm:text-sm font-medium rounded-full transition-all duration-200 ${
+                  activeView === '2d'
+                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <svg
+                  className={`w-4 h-4 ${activeView === '2d' ? 'text-white' : 'text-slate-500'}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>2D Diagram</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content - Model and Info Panel */}
+        <div className={`grid grid-cols-1 ${useFullAnatomyLayout ? "lg:grid-cols-12 gap-5 md:gap-6" : "gap-3"}`}>
+          {/* Left: Model Viewer */}
+          <div className={useFullAnatomyLayout ? "lg:col-span-7 space-y-2" : "space-y-1"}>
+            {effectiveView === '3d' ? (
+              <>
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: `${modelHeight}px`, minHeight: `${modelHeight}px`, position: 'relative' }}>
+                  <DynamicENTAnatomyViewer
+                    onPartSelect={handlePartSelect}
+                    selectedPart={selectedPart}
+                    modelPath={getModelPath()}
+                    className="w-full h-full"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 px-1">
+                  {anatomyType === 'female_reproductive'
+                    ? '3D model loaded locally (offline). Use mouse to rotate/zoom.'
+                    : 'Click on any anatomical part to view details and related conditions.'}
+                </p>
+              </>
+            ) : (
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200/90" style={{ height: `${modelHeight}px`, minHeight: `${modelHeight}px` }}>
+                {anatomyType === 'skeleton' ? (
+                  <InteractiveSkeletonSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'lungs' ? (
+                  <InteractiveLungsSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'throat' ? (
+                  <InteractiveThroatSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'dental' ? (
+                  <InteractiveMouthSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : anatomyType === 'female_reproductive' ? (
+                  <InteractiveFemaleReproductiveSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                ) : (
+                  <InteractiveEarSVG
+                    onPartSelect={handlePartSelect2D}
+                    selectedPart={selectedPart2D}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Information Panel */}
+          <div className={useFullAnatomyLayout ? "lg:col-span-5 space-y-4" : "space-y-2 max-h-[220px] overflow-y-auto"}>
+            {/* Selected Part Info Section */}
+            {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D) ? (
+              <div className="relative rounded-xl border border-slate-200 bg-white shadow-sm pl-3.5 pr-4 py-4">
+                <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-gradient-to-b from-cyan-400 via-teal-500 to-cyan-600" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3 2" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Selected Part Information
+                      </p>
+                      <p className="mt-0.5 text-base sm:text-lg font-semibold text-slate-900">
+                        {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (effectiveView === '3d') {
+                        setSelectedPart(null)
+                        setSelectedPartInfo(null)
+                        setSelectedDisease(null)
+                        setSelectedMedicines([])
+                      } else {
+                        setSelectedPart2D(null)
+                        setSelectedPartInfo2D(null)
+                        setSelectedDisease2D(null)
+                        setSelectedMedicines2D([])
+                      }
+                    }}
+                    className="ml-2 text-slate-400 hover:text-slate-700 text-sm font-semibold hover:bg-slate-100 rounded-full p-1 transition-colors"
+                    title="Clear selection"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="mt-3 space-y-2.5">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                      Anatomical name
+                    </label>
+                    <p className="mt-0.5 text-sm text-slate-800 leading-snug">
+                      <span className="font-semibold">
+                        {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                      Description
+                    </label>
+                    <p className="mt-1 text-sm text-slate-700 leading-relaxed">
+                      {(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.description}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-6 text-center">
+                <svg className="w-12 h-12 mx-auto mb-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                </svg>
+                <p className="text-sm font-medium text-slate-600">Click on a part of the {anatomyType === 'throat' ? 'throat' : anatomyType === 'dental' ? 'oral cavity' : anatomyType === 'nose' ? 'nose' : anatomyType === 'lungs' ? 'lungs/heart' : anatomyType === 'kidney' ? 'kidney' : anatomyType === 'skeleton' ? 'skeleton' : anatomyType === 'lymph_nodes' ? 'lymph nodes' : anatomyType === 'female_reproductive' ? 'female reproductive system' : 'ear'} model</p>
+                <p className="text-xs text-slate-500 mt-1">to see its name and description here</p>
+              </div>
+            )}
+
+            {/* Diseases List */}
+            {(() => {
+              const partInfo = effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D
+              const partData = effectiveView === '3d' ? currentPartData : (selectedPart2D ? partsData[selectedPart2D] : null)
+              return partInfo && partData && partData.diseases.length > 0
+            })() && (
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                <h4 className="text-sm font-semibold text-slate-900 mb-2.5 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Related diseases / conditions
+                </h4>
+                <div className="space-y-1.5">
+                  {((effectiveView === '3d' ? currentPartData : (selectedPart2D ? partsData[selectedPart2D] : null))?.diseases || []).map((disease) => {
+                    const isSelected =
+                      (effectiveView === '3d' ? selectedDisease?.id : selectedDisease2D?.id) === disease.id
+                    return (
+                      <button
+                        key={disease.id}
+                        type="button"
+                        onClick={() =>
+                          effectiveView === '3d'
+                            ? handleDiseaseSelect(disease)
+                            : handleDiseaseSelect2D(disease)
+                        }
+                        className={`group w-full text-left rounded-lg border px-3 py-2 flex items-start justify-between gap-3 transition-all ${
+                          isSelected
+                            ? "border-cyan-500 bg-cyan-50/70 shadow-sm"
+                            : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-cyan-50/60"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <svg
+                              className={`w-3.5 h-3.5 ${
+                                isSelected ? "text-cyan-800" : "text-slate-400 group-hover:text-cyan-700"
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" />
+                            </svg>
+                            <span
+                              className={`text-xs sm:text-sm font-semibold truncate ${
+                                isSelected ? "text-cyan-900" : "text-slate-900"
+                              }`}
+                            >
+                              {disease.name}
+                            </span>
+                            {isSelected && (
+                              <span className="ml-1 rounded-full bg-cyan-100 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800">
+                                Selected
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className={`text-[11px] sm:text-xs leading-snug line-clamp-2 ${
+                              isSelected ? "text-cyan-900" : "text-slate-600"
+                            }`}
+                          >
+                            {disease.description}
+                          </p>
+                        </div>
+                        <div className="shrink-0">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                              isSelected
+                                ? "border-[var(--color-primary)] text-cyan-800 bg-white"
+                                : "border-slate-300 text-slate-600 bg-white group-hover:border-cyan-500 group-hover:text-cyan-800"
+                            }`}
+                          >
+                            Select
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Selected Disease Info */}
+            {(effectiveView === '3d' ? selectedDisease : selectedDisease2D) && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3.5">
+                <div className="flex items-start justify-between mb-1.5">
+                  <h3 className="text-sm font-semibold text-green-900">Selected disease</h3>
+                  <button
+                    onClick={() => {
+                      if (effectiveView === '3d') {
+                        setSelectedDisease(null)
+                        setSelectedMedicines([])
+                      } else {
+                        setSelectedDisease2D(null)
+                        setSelectedMedicines2D([])
+                      }
+                    }}
+                    className="text-green-600 hover:text-green-800 text-xs font-semibold"
+                    title="Clear Selection"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <p className="text-sm sm:text-base text-green-900 font-semibold">
+                    {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.name}
+                  </p>
+                  <span className="inline-flex items-center rounded-full border border-green-500 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-green-700">
+                    {((effectiveView === '3d'
+                      ? (selectedDisease as any)
+                      : (selectedDisease2D as any)
+                    )?.severity) || "Moderate"}
+                  </span>
+                </div>
+                <p className="text-xs text-green-800 leading-relaxed mb-2.5">
+                  {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.description}
+                </p>
+                
+                {/* Symptoms */}
+                {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)?.symptoms &&
+                  (effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.symptoms.length > 0 && (
+                    <div className="mt-1.5">
+                      <h4 className="text-[11px] font-semibold text-green-900 mb-1">Symptoms</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.symptoms.map(
+                          (symptom, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center rounded-full bg-white/80 border border-green-200 px-2 py-0.5 text-[11px] text-green-800"
+                            >
+                              {symptom}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+              </div>
+            )}
+
+            {/* Prescriptions */}
+            {(effectiveView === '3d' ? selectedDisease : selectedDisease2D) &&
+              (effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.prescriptions.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <h4 className="text-[11px] font-semibold text-amber-900 mb-1.5">
+                    Prescriptions / instructions
+                  </h4>
+                  <ul className="space-y-1">
+                    {(effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.prescriptions.map(
+                      (prescription, idx) => {
+                        const lower = prescription.toLowerCase()
+                        const isCritical =
+                          lower.includes("immediately") ||
+                          lower.includes("emergency") ||
+                          lower.includes("urgent") ||
+                          lower.includes("stop") ||
+                          lower.includes("bleeding")
+                        return (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 text-[11px] text-amber-900"
+                          >
+                            <span className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white/80 border border-amber-300">
+                              {isCritical ? (
+                                <svg
+                                  className="w-2.5 h-2.5 text-red-500"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M12 9v4" />
+                                  <path d="M12 17h.01" />
+                                  <path d="M10.29 3.86 1.82 18a1 1 0 0 0 .86 1.5h18.64a1 1 0 0 0 .86-1.5L13.71 3.86a1 1 0 0 0-1.72 0Z" />
+                                </svg>
+                              ) : (
+                                <svg
+                                  className="w-2.5 h-2.5 text-amber-600"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </span>
+                            <span className="leading-snug">{prescription}</span>
+                          </li>
+                        )
+                      }
+                    )}
+                  </ul>
+                </div>
+              )}
+
+            {!hideStandaloneWorkflow && (
+              <>
+            {/* Medicines - Editable */}
+            {(
+              <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-cyan-900">
+                      Medicines Prescription
+                    </h4>
+                    <p className="text-[11px] text-cyan-800/80 mt-0.5">
+                      Prescribed medications for the selected condition.
+                    </p>
+                  </div>
+                  <button
+                    onClick={effectiveView === '3d' ? addMedicine : addMedicine2D}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 flex items-center gap-1.5 px-3 py-1.5"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span className="text-xs font-medium">Add medicine</span>
+                  </button>
+                </div>
+                <div className="space-y-2.5">
+                  {(effectiveView === '3d' ? selectedMedicines : selectedMedicines2D).length === 0 ? (
+                    <p className="text-xs text-cyan-800 italic py-1">No medicines. Click "Add" to add one.</p>
+                  ) : (
+                    (effectiveView === '3d' ? selectedMedicines : selectedMedicines2D).map((medicine, idx) => {
+                      const currentSection = effectiveView
+                      const nameSuggestions = getMedicineNameSuggestions(medicine.name || "")
+                      const showNameSuggestions =
+                        activeNameSuggestion?.section === currentSection &&
+                        activeNameSuggestion?.index === idx &&
+                        nameSuggestions.length > 0
+                      
+                      return (
+                      <div key={idx} className="bg-white rounded-lg p-2.5 border border-cyan-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-semibold text-cyan-800">#{idx + 1}</span>
+                          <button
+                            onClick={() => currentSection === '3d' ? removeMedicine(idx) : removeMedicine2D(idx)}
+                            className="text-red-500 hover:text-red-700 text-xs font-bold"
+                            title="Remove medicine"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="space-y-1.5 mt-0.5">
+                            <div className="relative flex items-center">
+                              <input
+                                type="text"
+                                id={`name-anatomy-${currentSection}-${idx}`}
+                                value={medicine.name}
+                                onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "name", e.target.value) : updateMedicine2D(idx, "name", e.target.value)}
+                                onFocus={() => {
+                                  setActiveNameSuggestion({ section: currentSection, index: idx })
+                                  updateInlineSuggestion(currentSection, idx, medicine.name || "")
+                                }}
+                                onBlur={() => {
+                                  setTimeout(() => {
+                                    setActiveNameSuggestion((current) => {
+                                      if (current?.section === currentSection && current.index === idx) {
+                                        return null
+                                      }
+                                      return current
+                                    })
+                                  }, 150)
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Tab" || e.key === "ArrowRight") {
+                                    if (inlineSuggestion?.section === currentSection && inlineSuggestion.index === idx) {
+                                      e.preventDefault()
+                                      acceptInlineSuggestion(currentSection, idx)
+                                    }
+                                  } else if (e.key === "Enter") {
+                                    if (inlineSuggestion?.section === currentSection && inlineSuggestion.index === idx) {
+                                      e.preventDefault()
+                                      acceptInlineSuggestion(currentSection, idx)
+                                    } else if (nameSuggestions.length > 0) {
+                                      e.preventDefault()
+                                      handleSelectMedicineSuggestion(currentSection, idx, nameSuggestions[0])
+                                    }
+                                  } else if (e.key === "ArrowDown") {
+                                    if (nameSuggestions.length > 0) {
+                                      e.preventDefault()
+                                      const firstOption = document.querySelector<HTMLButtonElement>(
+                                        `#suggestion-btn-${currentSection}-${idx}-0`
+                                      )
+                                      firstOption?.focus()
+                                    }
+                                  } else if (e.key === "Escape") {
+                                    setInlineSuggestion((prev) =>
+                                      prev?.section === currentSection && prev.index === idx ? null : prev
+                                    )
+                                  }
+                                }}
+                                placeholder="Medicine name *"
+                                className="w-full pl-2 pr-9 py-1.5 border border-cyan-300 rounded text-xs sm:text-[13px] font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                              />
+                              <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-end">
+                                <div className="pointer-events-auto">
+                                  <VoiceInput
+                                    onTranscript={(text) => {
+                                      if (currentSection === '3d') {
+                                        updateMedicine(idx, "name", text)
+                                      } else {
+                                        updateMedicine2D(idx, "name", text)
+                                      }
+                                      updateInlineSuggestion(currentSection, idx, text)
+                                      setActiveNameSuggestion({ section: currentSection, index: idx })
+                                    }}
+                                    language="en-IN"
+                                    useGoogleCloud={false}
+                                    useMedicalModel={false}
+                                    variant="inline"
+                                  />
+                                </div>
+                              </div>
+                              {inlineSuggestion?.section === currentSection &&
+                              inlineSuggestion?.index === idx &&
+                              inlineSuggestion?.suggestion &&
+                              inlineSuggestion.suggestion.toLowerCase().startsWith((medicine.name || "").toLowerCase()) && (
+                                <div className="pointer-events-none absolute inset-0 flex items-center pl-2 pr-9 text-xs text-gray-400 select-none">
+                                  <span className="opacity-0">
+                                    {(medicine.name || "").split("").map(() => "•").join("")}
+                                  </span>
+                                  <span>
+                                    {
+                                      inlineSuggestion.suggestion.slice(
+                                        (medicine.name || "").length
+                                      )
+                                    }
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            {showNameSuggestions && (
+                              <div className="mt-1 w-full max-h-40 overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                                {nameSuggestions.map((suggestion, sugIdx) => (
+                                  <button
+                                    key={suggestion.name}
+                                    type="button"
+                                    id={`suggestion-btn-${currentSection}-${idx}-${sugIdx}`}
+                                    className="w-full px-3 py-1.5 text-left hover:bg-green-50 transition text-[11px] first:rounded-t-lg last:rounded-b-lg text-gray-800"
+                                    onClick={() => handleSelectMedicineSuggestion(currentSection, idx, suggestion)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault()
+                                        handleSelectMedicineSuggestion(currentSection, idx, suggestion)
+                                      } else if (e.key === "ArrowDown") {
+                                        e.preventDefault()
+                                        const next = document.querySelector<HTMLButtonElement>(
+                                          `#suggestion-btn-${currentSection}-${idx}-${sugIdx + 1}`
+                                        )
+                                        next?.focus()
+                                      } else if (e.key === "ArrowUp") {
+                                        e.preventDefault()
+                                        if (sugIdx === 0) {
+                                          const input = document.querySelector<HTMLInputElement>(
+                                            `#name-anatomy-${currentSection}-${idx}`
+                                          )
+                                          input?.focus()
+                                        } else {
+                                          const prev = document.querySelector<HTMLButtonElement>(
+                                            `#suggestion-btn-${currentSection}-${idx}-${sugIdx - 1}`
+                                          )
+                                          prev?.focus()
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <div className="font-semibold text-xs">{suggestion.name}</div>
+                                    {suggestion.dosageOptions?.length ? (
+                                      <div className="text-[10px] text-gray-500">
+                                        Common dosage: {suggestion.dosageOptions[0].value}
+                                      </div>
+                                    ) : null}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                            <input
+                              type="text"
+                              value={medicine.dosage}
+                              onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "dosage", e.target.value) : updateMedicine2D(idx, "dosage", e.target.value)}
+                              placeholder="Dosage"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                            />
+                            <input
+                              type="text"
+                              value={medicine.frequency}
+                              onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "frequency", e.target.value) : updateMedicine2D(idx, "frequency", e.target.value)}
+                              placeholder="Frequency"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                            />
+                            <input
+                              type="text"
+                              value={medicine.duration}
+                              onChange={(e) => currentSection === '3d' ? updateMedicine(idx, "duration", e.target.value) : updateMedicine2D(idx, "duration", e.target.value)}
+                              placeholder="Duration"
+                              className="w-full px-2 py-1 border border-cyan-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Disease Notes */}
+            {(effectiveView === '3d' ? selectedDisease : selectedDisease2D) && (effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.notes && (
+              <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-4">
+                <h4 className="text-xs font-bold text-cyan-900 mb-2">Clinical Notes:</h4>
+                <p className="text-xs text-cyan-800 leading-relaxed">{(effectiveView === '3d' ? selectedDisease : selectedDisease2D)!.notes}</p>
+              </div>
+            )}
+
+            {/* Notes Section */}
+            <div className="bg-white border border-slate-200 rounded-xl p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block font-semibold text-slate-800 text-sm">
+                  Doctor Notes
+                </label>
+                <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                    <path d="M19 11a7 7 0 0 1-14 0" />
+                    <path d="M12 19v3" />
+                  </svg>
+                  <span>Voice dictation</span>
+                </div>
+              </div>
+              <div className="relative">
+                <textarea
+                  value={effectiveView === '3d' ? notes : notes2D}
+                  onChange={(e) => effectiveView === '3d' ? setNotes(e.target.value) : setNotes2D(e.target.value)}
+                  placeholder="Quick observation from examination..."
+                  className="w-full p-2 pl-2 pr-10 border border-slate-300 rounded-lg text-xs resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  rows={4}
+                />
+                <div className="absolute right-2 top-2 pointer-events-none flex items-end justify-end">
+                  <div className="pointer-events-auto">
+                    <VoiceInput
+                      onTranscript={(text) => {
+                        if (effectiveView === '3d') setNotes(text)
+                        else setNotes2D(text)
+                      }}
+                      language="en-IN"
+                      useGoogleCloud={false}
+                      useMedicalModel={false}
+                      allowGujarati
+                      variant="inline"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-1 flex justify-end">
+                <span className="text-[11px] text-slate-400">Autosave enabled</span>
+              </div>
+            </div>
+
+            {/* Complete Checkup Button */}
+            {((effectiveView === '3d' ? selectedDisease : selectedDisease2D) || (effectiveView === '3d' ? selectedMedicines : selectedMedicines2D).length > 0) && (
+              <button
+                onClick={effectiveView === '3d' ? handleCompleteCheckup : handleCompleteCheckup2D}
+                disabled={completing}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-md hover:opacity-90 transition-shadow"
+              >
+                {completing ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Completing...
+                  </>
+                ) : showSuccessAnimation ? (
+                  <>
+                    <svg className="w-5 h-5 text-white animate-scale" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Completed
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Complete Checkup
+                  </>
+                )}
+              </button>
+            )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+            {/* Completion Confirmation Modal */}
+      {!hideStandaloneWorkflow && showCompletionModal && (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+            <h3 className="text-2xl font-bold text-slate-800">Confirm Completion</h3>
+            <button
+              onClick={() => setShowCompletionModal(false)}
+              className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-full hover:bg-slate-100"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="p-6 space-y-4">
+            {/* Patient Info */}
+            <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+              <h4 className="font-semibold text-cyan-900 mb-2">Patient Information</h4>
+              <p className="text-slate-700">{patientName}</p>
+            </div>
+
+            {/* Selected Part */}
+            {((effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)) && (
+              <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+                <h4 className="font-semibold text-cyan-900 mb-2">Selected Anatomy Part</h4>
+                <p className="text-slate-700">{(effectiveView === '3d' ? selectedPartInfo : selectedPartInfo2D)?.name}</p>
+              </div>
+            )}
+
+            {/* Diagnosis */}
+            {(finalDiagnosis.length > 0 || customDiagnosis) && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h4 className="font-semibold text-green-900 mb-2">Diagnosis</h4>
+                <div className="space-y-1">
+                  {finalDiagnosis.filter(d => d !== CUSTOM_DIAGNOSIS_OPTION).map((diag, idx) => (
+                    <p key={idx} className="text-slate-700">• {diag}</p>
+                  ))}
+                  {customDiagnosis && <p className="text-slate-700">• {customDiagnosis}</p>}
+                </div>
+              </div>
+            )}
+
+            {/* Medicines */}
+            {((effectiveView === '3d' ? selectedMedicines : selectedMedicines2D).length > 0) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <h4 className="font-semibold text-amber-900 mb-2">Medicines ({((effectiveView === '3d' ? selectedMedicines : selectedMedicines2D).filter(m => m.name && m.name.trim()).length)})</h4>
+                <div className="space-y-2">
+                  {((effectiveView === '3d' ? selectedMedicines : selectedMedicines2D).filter(m => m.name && m.name.trim())).map((med, idx) => (
+                    <div key={idx} className="bg-white rounded p-2 border border-amber-300">
+                      <p className="font-medium text-slate-800">{med.name}</p>
+                      {med.dosage && <p className="text-sm text-slate-600">Dosage: {med.dosage}</p>}
+                      {med.frequency && <p className="text-sm text-slate-600">Frequency: {med.frequency}</p>}
+                      {med.duration && <p className="text-sm text-slate-600">Duration: {med.duration}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {((effectiveView === '3d' ? notes : notes2D)) && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <h4 className="font-semibold text-slate-900 mb-2">Doctor Notes</h4>
+                <p className="text-slate-700 whitespace-pre-wrap">{(effectiveView === '3d' ? notes : notes2D)}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex gap-3">
+            <button
+              onClick={() => setShowCompletionModal(false)}
+              className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (effectiveView === '3d') {
+                  confirmCompleteCheckup()
+                } else {
+                  confirmCompleteCheckup2D()
+                }
+              }}
+              disabled={completing}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-md hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-shadow"
+            >
+              {completing ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Completing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Confirm & Complete
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+  )
+}
+

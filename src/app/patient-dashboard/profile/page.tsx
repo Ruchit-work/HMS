@@ -4,16 +4,16 @@ import { useEffect, useState } from "react"
 import { db, auth } from "@/firebase/config"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { signOut } from "firebase/auth"
-import { ChangePasswordSection } from "@/components/forms/PasswordComponents"
+import { ChangePasswordSection } from "@/features/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import Notification from "@/components/ui/feedback/Notification"
-import PageHeader from "@/components/ui/layout/PageHeader"
+import { TabSkeleton } from '@/shared/components'
+import { Notification } from '@/shared/components'
+import { PageHeader } from '@/shared/components'
 import { UserData, NotificationData } from "@/types/patient"
 import { calculateAge } from "@/utils/shared/date"
-import { ConfirmDialog } from "@/components/ui/overlays/Modals"
-import { Button } from "@/components/ui/Button"
+import { ConfirmDialog } from '@/shared/components'
+import { Button } from '@/shared/components'
 
 export default function PatientProfilePage() {
   const { user, loading: authLoading } = useAuth("patient")

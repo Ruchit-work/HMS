@@ -2,17 +2,17 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { auth, db } from "@/firebase/config"
-import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import Notification from "@/components/ui/feedback/Notification"
-import BookAppointmentForm from "@/components/patient/BookAppointmentForm"
-import { AppointmentSuccessModal } from "@/components/patient/appointments/AppointmentModals"
-import PageHeader from "@/components/ui/layout/PageHeader"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import { useDoctors } from "@/hooks/useDoctors"
+import { TabSkeleton } from '@/shared/components'
+import { Notification } from '@/shared/components'
+import BookAppointmentForm from "@/features/patient/BookAppointmentForm"
+import { AppointmentSuccessModal } from "@/features/patient/appointments/AppointmentModals"
+import { PageHeader } from '@/shared/components'
 import { UserData, Doctor, NotificationData } from "@/types/patient"
-import Footer from "@/components/ui/layout/Footer"
+import { Footer } from '@/shared/components'
 import { useSearchParams, useRouter } from "next/navigation"
 import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
@@ -28,7 +28,6 @@ export default function BookAppointmentPage() {
 
 function BookAppointmentContent() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  const [doctors, setDoctors] = useState<Doctor[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState<NotificationData | null>(null)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
@@ -36,6 +35,11 @@ function BookAppointmentContent() {
 
   const { user, loading } = useAuth("patient")
   const { activeHospitalId } = useMultiHospital()
+  const { doctors } = useDoctors(activeHospitalId, {
+    activeOnly: true,
+    realtime: true,
+    enabled: Boolean(user && activeHospitalId),
+  })
   const searchParams = useSearchParams()
   const router = useRouter()
  
@@ -141,23 +145,9 @@ See you soon! 🏥`
         const data = patientDoc.data() as UserData
         setUserData(data)
       }
-
-      // Start doctors listener immediately (non-blocking)
-      const doctorsQuery = query(getHospitalCollection(activeHospitalId, "doctors"), where("status", "==", "active"))
-      const unsub = onSnapshot(doctorsQuery, (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Doctor))
-        setDoctors(list)
-      })
-      return unsub
     }
 
-    const maybeUnsubPromise = fetchData()
-    return () => {
-      // unsubscribe doctors listener if available
-      if (maybeUnsubPromise && typeof (maybeUnsubPromise as any) === 'function') {
-        ;(maybeUnsubPromise as any)()
-      }
-    }
+    void fetchData()
   }, [user, activeHospitalId])
 
   if (loading) {
@@ -430,7 +420,7 @@ See you soon! 🏥`
         <BookAppointmentForm
           user={user}
           userData={userData}
-          doctors={doctors}
+          doctors={doctors as unknown as Doctor[]}
           onSubmit={handleAppointmentSubmit}
           submitting={submitting}
           rescheduleMode={rescheduleMode}

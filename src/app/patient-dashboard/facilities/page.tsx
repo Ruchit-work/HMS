@@ -1,8 +1,7 @@
 "use client"
 
 import { useAuth } from "@/hooks/useAuth"
-import PageHeader from "@/components/ui/layout/PageHeader"
-
+import { PageHeader } from '@/shared/components'
 interface Facility {
   id: string
   icon: string

@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { usePublicRoute } from "@/hooks/useAuth"
 import { useDeferredVisible } from "@/hooks/useDeferredVisible"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
-
+import { LoadingSpinner } from '@/shared/components'
 const MIVS_ABOUT_PATH = "/demo/mivs"
 const MIVS_WEBSITE_URL = "https://www.mivs.in/"
 

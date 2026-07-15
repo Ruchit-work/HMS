@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Button } from "@/components/ui/Button"
+import { Button } from '@/shared/components'
 import { auth } from "@/firebase/config"
 import { Admission } from "@/types/patient"
 import { onAuthStateChanged, type User } from "firebase/auth"
@@ -11,7 +11,7 @@ import {
   ClinicalPageFrame,
   ClinicalPageHeader,
   ClinicalStatusBadge,
-} from "@/components/doctor/clinical"
+} from "@/features/doctor/clinical"
 import { Users } from "lucide-react"
 
 const ROUND_CHARGE_OPTIONS = [

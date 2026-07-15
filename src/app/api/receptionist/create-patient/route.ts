@@ -4,7 +4,8 @@ import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { applyRateLimit } from "@/utils/shared/rateLimit"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { createPatientDualWrite } from "@/services/server/PatientService"
 
 const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
   const friendlyName = firstName?.trim() || "there"
@@ -197,11 +198,8 @@ export async function POST(request: Request) {
       defaultBranchName: defaultBranchName || null,
     }
 
-    // Store patient doc in hospital-scoped subcollection
-    await db.collection(getHospitalCollectionPath(userHospitalId, "patients")).doc(authUid).set(docData, { merge: true })
-    
-    // Also store in legacy collection for backward compatibility (patient dashboard uses user.uid)
-    await db.collection("patients").doc(authUid).set(docData, { merge: true })
+    // Store patient doc in hospital-scoped + legacy root (same id / payload)
+    await createPatientDualWrite(userHospitalId, authUid, docData, { merge: true })
 
     // Create/update user document in users collection for multi-hospital support
     const userDocRef = db.collection("users").doc(authUid)

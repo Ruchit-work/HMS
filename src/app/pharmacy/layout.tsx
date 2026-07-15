@@ -1,6 +1,6 @@
-import PharmacyProtected from '@/components/PharmacyProtected'
-import { PharmacyPortalProvider } from '@/contexts/PharmacyPortalContext'
-import PharmacyPortalShell from './PharmacyPortalShell'
+import PharmacyProtected from '@/features/auth/PharmacyProtected'
+import { PharmacyPortalProvider } from '@/providers/PharmacyPortalProvider'
+import PharmacyPortalShell from '@/features/pharmacy/PharmacyPortalShell'
 
 export default function PharmacyLayout({
   children,

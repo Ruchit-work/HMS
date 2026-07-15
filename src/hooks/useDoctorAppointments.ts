@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
-import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react"
+import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/firebase/config"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { useAppointments } from "@/hooks/useAppointments"
 import { Appointment as AppointmentType } from "@/types/patient"
 import { UserData } from "@/types/appointments"
 
@@ -10,60 +10,33 @@ export function useDoctorAppointments(
   activeHospitalId: string | null,
   selectedBranchId: string | null
 ) {
-  const [appointments, setAppointments] = useState<AppointmentType[]>([])
   const [userData, setUserData] = useState<UserData | null>(null)
 
+  const { appointments, setAppointments } = useAppointments(activeHospitalId, {
+    doctorId: user?.uid ?? null,
+    branchId: selectedBranchId,
+    realtime: true,
+    excludeWhatsAppPending: true,
+    enabled: Boolean(user && activeHospitalId),
+  })
+
   useEffect(() => {
-    if (!user || !activeHospitalId) return
-
-    const setupRealtimeListeners = async () => {
+    if (!user) return
+    let cancelled = false
+    ;(async () => {
       const doctorDoc = await getDoc(doc(db, "doctors", user.uid))
-      if (doctorDoc.exists()) {
-        const data = doctorDoc.data() as UserData
-        setUserData(data)
+      if (!cancelled && doctorDoc.exists()) {
+        setUserData(doctorDoc.data() as UserData)
       }
-
-      const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-      let q
-      if (selectedBranchId) {
-        q = query(appointmentsRef, where("doctorId", "==", user.uid), where("branchId", "==", selectedBranchId))
-      } else {
-        q = query(appointmentsRef, where("doctorId", "==", user.uid))
-      }
-
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          const appointmentsList = snapshot.docs
-            .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as AppointmentType))
-            .filter((appointment) => {
-              const appt = appointment as any
-              return appt.status !== "whatsapp_pending" && !appt.whatsappPending
-            })
-
-          setAppointments(appointmentsList)
-        },
-        () => {}
-      )
-
-      return unsubscribe
-    }
-
-    let unsubscribe: (() => void) | null = null
-
-    const initializeRealtimeData = async () => {
-      unsubscribe = await setupRealtimeListeners()
-    }
-
-    initializeRealtimeData()
-
+    })()
     return () => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
+      cancelled = true
     }
-  }, [user, activeHospitalId, selectedBranchId])
+  }, [user])
 
-  return { appointments, userData, setAppointments }
+  return {
+    appointments: appointments as unknown as AppointmentType[],
+    userData,
+    setAppointments: setAppointments as unknown as Dispatch<SetStateAction<AppointmentType[]>>,
+  }
 }
-

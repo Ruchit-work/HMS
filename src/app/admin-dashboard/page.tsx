@@ -1,4 +1,5 @@
 "use client"
+import { fetchBranches } from "@/services/BranchService"
 
 import { useEffect, useState, useMemo } from "react"
 import dynamic from "next/dynamic"
@@ -7,96 +8,96 @@ import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnaps
 import { signOut } from "firebase/auth"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import { ConfirmDialog } from "@/components/ui/overlays/Modals"
+import { ConfirmDialog } from '@/shared/components'
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
-import Notification from "@/components/ui/feedback/Notification"
+import { Notification } from '@/shared/components'
 import { Appointment as AppointmentType } from "@/types/patient"
 import { Branch } from "@/types/branch"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import AdminProtected from "@/components/AdminProtected"
-import AdminOverviewSkeleton from "./components/AdminOverviewSkeleton"
+import { TabSkeleton } from '@/shared/components'
+import AdminProtected from "@/features/auth/AdminProtected"
+import AdminOverviewSkeleton from "@/features/admin/components/AdminOverviewSkeleton"
 
-const PatientManagement = dynamic(() => import("./Tabs/PatientManagement"), {
+const PatientManagement = dynamic(() => import("@/features/admin/tabs/PatientManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const PatientAnalytics = dynamic(() => import("./Tabs/PatientAnalytics"), {
+const PatientAnalytics = dynamic(() => import("@/features/admin/tabs/PatientAnalytics"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const DoctorManagement = dynamic(() => import("./Tabs/DoctorManagement"), {
+const DoctorManagement = dynamic(() => import("@/features/admin/tabs/DoctorManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const AppoinmentManagement = dynamic(() => import("./Tabs/AppoinmentManagement"), {
+const AppoinmentManagement = dynamic(() => import("@/features/admin/tabs/AppoinmentManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const CampaignManagement = dynamic(() => import("./Tabs/CampaignManagement"), {
+const CampaignManagement = dynamic(() => import("@/features/admin/tabs/CampaignManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const BillingManagement = dynamic(() => import("./Tabs/BillingManagement"), {
+const BillingManagement = dynamic(() => import("@/features/admin/tabs/BillingManagement"), {
   loading: () => <TabSkeleton variant="billing" />,
 })
-const FinancialAnalytics = dynamic(() => import("./Tabs/FinancialAnalytics"), {
+const FinancialAnalytics = dynamic(() => import("@/features/admin/tabs/FinancialAnalytics"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const HospitalManagement = dynamic(() => import("./Tabs/HospitalManagement"), {
+const HospitalManagement = dynamic(() => import("@/features/admin/tabs/HospitalManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const AdminAssignment = dynamic(() => import("./Tabs/AdminAssignment"), {
+const AdminAssignment = dynamic(() => import("@/features/admin/tabs/AdminAssignment"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const PlatformMonitoring = dynamic(() => import("./Tabs/PlatformMonitoring"), {
+const PlatformMonitoring = dynamic(() => import("@/features/admin/tabs/PlatformMonitoring"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const SubscriptionCenter = dynamic(() => import("./Tabs/SubscriptionCenter"), {
+const SubscriptionCenter = dynamic(() => import("@/features/admin/tabs/SubscriptionCenter"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const LiveActivityCenter = dynamic(() => import("./Tabs/LiveActivityCenter"), {
+const LiveActivityCenter = dynamic(() => import("@/features/admin/tabs/LiveActivityCenter"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const BusinessAnalytics = dynamic(() => import("./Tabs/BusinessAnalytics"), {
+const BusinessAnalytics = dynamic(() => import("@/features/admin/tabs/BusinessAnalytics"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const StaffManagement = dynamic(() => import("./Tabs/StaffManagement"), {
+const StaffManagement = dynamic(() => import("@/features/admin/tabs/StaffManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const DoctorPerformanceAnalytics = dynamic(() => import("./Tabs/DoctorPerformanceAnalytics"), {
+const DoctorPerformanceAnalytics = dynamic(() => import("@/features/admin/tabs/DoctorPerformanceAnalytics"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
 const ReceptionistPerformanceAnalytics = dynamic(
-  () => import("./Tabs/ReceptionistPerformanceAnalytics"),
+  () => import("@/features/admin/tabs/ReceptionistPerformanceAnalytics"),
   { loading: () => <TabSkeleton variant="dashboard" /> }
 )
-const BranchManagement = dynamic(() => import("./Tabs/BranchManagement"), {
+const BranchManagement = dynamic(() => import("@/features/admin/tabs/BranchManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const AdminDashboardOverview = dynamic(() => import("./components/AdminDashboardOverview"), {
+const AdminDashboardOverview = dynamic(() => import("@/features/admin/components/AdminDashboardOverview"), {
   loading: () => <AdminOverviewSkeleton />,
 })
-const PlatformCommandCenter = dynamic(() => import("./components/PlatformCommandCenter"), {
+const PlatformCommandCenter = dynamic(() => import("@/features/admin/components/PlatformCommandCenter"), {
   loading: () => <AdminOverviewSkeleton />,
 })
-const AdminAccountPanel = dynamic(() => import("./components/AdminAccountPanel"), {
+const AdminAccountPanel = dynamic(() => import("@/features/admin/components/AdminAccountPanel"), {
   loading: () => <TabSkeleton variant="form" />,
 })
-const GlobalSettingsCenter = dynamic(() => import("./Tabs/GlobalSettingsCenter"), {
+const GlobalSettingsCenter = dynamic(() => import("@/features/admin/tabs/GlobalSettingsCenter"), {
   loading: () => <TabSkeleton variant="form" />,
 })
 const HqTenantLens = dynamic(
-  () => import("@/components/hq").then((m) => ({ default: m.HqTenantLens })),
+  () => import("@/features/admin/hq").then((m) => ({ default: m.HqTenantLens })),
   { ssr: false }
 )
 const HqGlobalSearch = dynamic(
-  () => import("@/components/hq").then((m) => ({ default: m.HqGlobalSearch })),
+  () => import("@/features/admin/hq").then((m) => ({ default: m.HqGlobalSearch })),
   { ssr: false }
 )
 const HqGlobalSearchTrigger = dynamic(
-  () => import("@/components/hq").then((m) => ({ default: m.HqGlobalSearchTrigger })),
+  () => import("@/features/admin/hq").then((m) => ({ default: m.HqGlobalSearchTrigger })),
   { ssr: false }
 )
-import type { HqGlobalSearchNavigate } from "@/components/hq"
-import SidebarAccountButton from "@/components/admin/SidebarAccountButton"
-import AdminPageHeader from "@/components/admin/AdminPageHeader"
+import type { HqGlobalSearchNavigate } from "@/features/admin/hq"
+import SidebarAccountButton from "@/features/admin/chrome/SidebarAccountButton"
+import AdminPageHeader from "@/features/admin/chrome/AdminPageHeader"
 import {
   LayoutDashboard,
   Users,
@@ -117,7 +118,7 @@ import {
   Menu,
   X,
 } from "lucide-react"
-import SubTabNavigation from "@/components/admin/SubTabNavigation"
+import SubTabNavigation from "@/features/admin/chrome/SubTabNavigation"
 import {
   calculateAllTrends,
   calculateRevenue,
@@ -444,31 +445,14 @@ export default function AdminDashboard() {
 
   // Fetch branches on mount
   useEffect(() => {
-    const fetchBranches = async () => {
+    const loadBranches = async () => {
       if (!activeHospitalId) return
       
       try {
-        const currentUser = auth.currentUser
-        if (!currentUser) {
+        const result = await fetchBranches(activeHospitalId)
 
-          return
-        }
-
-        const token = await currentUser.getIdToken()
-        if (!token) {
-
-          return
-        }
-
-        const response = await fetch(`/api/branches?hospitalId=${activeHospitalId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        const data = await response.json()
-        
-        if (data.success && data.branches) {
-          setBranches(data.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
+        if (result.success) {
+          setBranches(result.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
         } else {
 
         }
@@ -477,7 +461,7 @@ export default function AdminDashboard() {
       }
     }
 
-    fetchBranches()
+    void loadBranches()
   }, [activeHospitalId])
 
   // Reset analytics sub-tabs and tab when analytics is disabled for hospital

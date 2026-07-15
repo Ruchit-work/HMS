@@ -4,22 +4,22 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { useDoctorBranches } from "@/hooks/useDoctorBranches"
 import { getAvailableTimeSlots, getDayName, generateTimeSlots, isSlotInPast, normalizeTime, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked } from "@/utils/analytics/blockedDates"
-import Notification from "@/components/ui/feedback/Notification"
+import { Notification } from '@/shared/components'
 import VoiceInput from "@/components/ui/VoiceInput"
-import { ConfirmDialog } from "@/components/ui/overlays/Modals"
-import { Button } from "@/components/ui/Button"
+import { ConfirmDialog } from '@/shared/components'
+import { Button } from '@/shared/components'
 import {
   ClinicalFormSection,
   ClinicalPageFrame,
   ClinicalPageHeader,
-} from "@/components/doctor/clinical"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
+} from "@/features/doctor/clinical"
+import { TabSkeleton } from '@/shared/components'
+import DoctorSettingsBackLink from "@/features/doctor/clinical/DoctorSettingsBackLink"
 import { CalendarPlus } from "lucide-react"
 
 type PatientMode = "existing" | "new"

@@ -4,21 +4,21 @@ import { useEffect, useState } from "react"
 import { db, auth } from "@/firebase/config"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { signOut } from "firebase/auth"
-import { ChangePasswordSection } from "@/components/forms/PasswordComponents"
+import { ChangePasswordSection } from "@/features/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { NotificationData } from "@/types/patient"
-import Notification from "@/components/ui/feedback/Notification"
-import { ConfirmDialog } from "@/components/ui/overlays/Modals"
-import { Button } from "@/components/ui/Button"
+import { Notification } from '@/shared/components'
+import { ConfirmDialog } from '@/shared/components'
+import { Button } from '@/shared/components'
 import {
   ClinicalFormSection,
   ClinicalPageFrame,
   ClinicalPageHeader,
-} from "@/components/doctor/clinical"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import DoctorSettingsBackLink from "@/components/doctor/clinical/DoctorSettingsBackLink"
-import PatientAvatar from "@/components/doctor/clinical/PatientAvatar"
+} from "@/features/doctor/clinical"
+import { TabSkeleton } from '@/shared/components'
+import DoctorSettingsBackLink from "@/features/doctor/clinical/DoctorSettingsBackLink"
+import PatientAvatar from "@/features/doctor/clinical/PatientAvatar"
 import { User } from "lucide-react"
 
 interface DoctorData {

@@ -8,8 +8,8 @@ import { getDoc, doc, collection, getDocs, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePublicRoute, seedUserRoleCache } from "@/hooks/useAuth"
 import { useDeferredVisible } from "@/hooks/useDeferredVisible"
-import LoadingSpinner from "@/components/ui/feedback/StatusComponents"
-import { Button } from "@/components/ui/Button"
+import { LoadingSpinner } from '@/shared/components'
+import { Button } from '@/shared/components'
 
 type DashboardRole = "patient" | "doctor" | "admin" | "receptionist" | "pharmacy"
 const STAFF_ROLES: DashboardRole[] = ["admin", "doctor", "receptionist", "pharmacy"]

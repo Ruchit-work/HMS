@@ -1,4 +1,4 @@
-import ClinicalWorkspaceShell from "@/components/doctor/clinical/ClinicalWorkspaceShell"
+import ClinicalWorkspaceShell from "@/features/doctor/clinical/ClinicalWorkspaceShell"
 
 export default function DoctorDashboardLayout({
   children,

@@ -4,12 +4,11 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { query, where, getDocs } from "firebase/firestore"
 import { useAuth } from "@/hooks/useAuth"
-import { useMultiHospital } from "@/contexts/MultiHospitalContext"
+import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import TabSkeleton from "@/components/ui/feedback/TabSkeleton"
-import PageHeader from "@/components/ui/layout/PageHeader"
-import Footer from "@/components/ui/layout/Footer"
-
+import { TabSkeleton } from '@/shared/components'
+import { PageHeader } from '@/shared/components'
+import { Footer } from '@/shared/components'
 interface Doctor {
   id: string
   firstName: string

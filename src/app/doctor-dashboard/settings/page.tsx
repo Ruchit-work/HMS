@@ -6,7 +6,7 @@ import {
   ClinicalAlertCard,
   ClinicalPageFrame,
   ClinicalPageHeader,
-} from "@/components/doctor/clinical"
+} from "@/features/doctor/clinical"
 import { getSettingsHubItems } from "@/app/doctor-dashboard/doctorNavConfig"
 import {
   BarChart3,

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import PageHeader from "@/components/ui/layout/PageHeader"
+import { PageHeader } from '@/shared/components'
 import { useAuth } from "@/hooks/useAuth"
 
 export default function PatientPortalTutorial() {

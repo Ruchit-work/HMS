@@ -2,7 +2,8 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
 import { NextRequest } from "next/server"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { resolveAppointment } from "@/services/server/AppointmentService"
 
 interface Params {
   appointmentId: string
@@ -64,34 +65,20 @@ export async function PUT(
     }
 
     // Prefer hospital-scoped appointment based on authorized hospitalId only
-    let appointmentRef: FirebaseFirestore.DocumentReference | null = null
-    let appointmentDoc = null as FirebaseFirestore.DocumentSnapshot | null
-
-    appointmentRef = firestore
-      .collection(getHospitalCollectionPath(authorizedHospitalId, "appointments"))
-      .doc(appointmentId)
-    appointmentDoc = await appointmentRef.get()
-
-    // Fallback to legacy global collection if not found — but only if hospitalId matches
-    if (!appointmentDoc || !appointmentDoc.exists) {
-      appointmentRef = firestore.collection("appointments").doc(appointmentId)
-      appointmentDoc = await appointmentRef.get()
-      if (appointmentDoc.exists) {
-        const legacyHospitalId = String(appointmentDoc.data()?.hospitalId || "")
-        if (legacyHospitalId && legacyHospitalId !== authorizedHospitalId) {
-          return Response.json({ error: "Appointment belongs to another hospital" }, { status: 403 })
-        }
+    const resolved = await resolveAppointment(appointmentId, authorizedHospitalId)
+    if (!resolved.ok) {
+      if (resolved.reason === "hospital_mismatch") {
+        return Response.json({ error: "Appointment belongs to another hospital" }, { status: 403 })
       }
-    }
-
-    if (!appointmentDoc.exists) {
       return Response.json(
         { error: "Appointment not found" },
         { status: 404 }
       )
     }
 
-    const appointmentData = appointmentDoc.data()!
+    const appointmentRef = resolved.appointment.ref
+    const appointmentDoc = resolved.appointment.snap
+    const appointmentData = resolved.appointment.data
 
     // Validate that this is a WhatsApp booking
     if (!appointmentData.whatsappPending && appointmentData.status !== "whatsapp_pending") {
@@ -434,33 +421,20 @@ export async function DELETE(
 
     const firestore = admin.firestore()
     const body = await request.json().catch(() => ({}))
-    const hospitalId = body.hospitalId
+    const hospitalId = typeof body.hospitalId === "string" ? body.hospitalId : null
 
-    // Prefer hospital-scoped appointment based on provided hospitalId
-    let appointmentRef: FirebaseFirestore.DocumentReference | null = null
-    let appointmentDoc = null as FirebaseFirestore.DocumentSnapshot | null
-
-    if (hospitalId) {
-      appointmentRef = firestore
-        .collection(getHospitalCollectionPath(hospitalId, "appointments"))
-        .doc(appointmentId)
-      appointmentDoc = await appointmentRef.get()
-    }
-
-    // Fallback to legacy global collection if not found or no hospitalId
-    if (!appointmentDoc || !appointmentDoc.exists) {
-      appointmentRef = firestore.collection("appointments").doc(appointmentId)
-      appointmentDoc = await appointmentRef.get()
-    }
-
-    if (!appointmentDoc.exists) {
+    const resolved = await resolveAppointment(appointmentId, hospitalId, {
+      strictHospitalOnRootFallback: false,
+    })
+    if (!resolved.ok) {
       return Response.json(
         { error: "Appointment not found" },
         { status: 404 }
       )
     }
 
-    const appointmentData = appointmentDoc.data()!
+    const appointmentRef = resolved.appointment.ref
+    const appointmentData = resolved.appointment.data
 
     // Validate that this is a WhatsApp booking
     if (!appointmentData.whatsappPending && appointmentData.status !== "whatsapp_pending") {
@@ -500,10 +474,6 @@ export async function DELETE(
     }
 
     // Delete the appointment
-    if (!appointmentRef) {
-      throw new Error("Internal error: appointmentRef not initialized")
-    }
-
     await appointmentRef.delete()
 
     return Response.json({

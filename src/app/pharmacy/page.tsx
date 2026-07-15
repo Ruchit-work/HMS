@@ -1,10 +1,9 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import TabSkeleton from '@/components/ui/feedback/TabSkeleton'
-
+import { TabSkeleton } from '@/shared/components'
 const PharmacyManagement = dynamic(
-  () => import('@/app/admin-dashboard/Tabs/PharmacyManagement'),
+  () => import('@/features/pharmacy/PharmacyManagement'),
   { loading: () => <TabSkeleton variant="dashboard" />, ssr: false }
 )
 

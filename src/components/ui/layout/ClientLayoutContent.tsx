@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react"
 import GlobalHeader from "@/components/ui/layout/GlobalHeader"
-import { MultiHospitalProvider } from "@/contexts/MultiHospitalContext"
+import { MultiHospitalProvider } from "@/providers/MultiHospitalProvider"
 import ErrorBoundary from "@/components/ui/boundaries/ErrorBoundary"
 import SpeechRecognitionProvider from "@/components/ui/SpeechRecognitionProvider"
 
