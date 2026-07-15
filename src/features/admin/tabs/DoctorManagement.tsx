@@ -1,10 +1,12 @@
 'use client'
-import { fetchBranches } from "@/services/BranchService"
 import { db, auth } from '@/firebase/config'
 import { where, query, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { filterDoctorsByBranch } from '@/utils/branch/branchFilters'
+import { fetchBranches } from '@/services/BranchService'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
 import { useSearch } from '@/hooks/useSearch'
 import { useTablePagination } from '@/hooks/useTablePagination'
@@ -92,7 +94,8 @@ function AddDoctorModalContent({
     )
 }
 
-export default function DoctorManagement({ canDelete = true, canAdd = true, disableAdminGuard = true, selectedBranchId = "all" }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean; selectedBranchId?: string } = {}) {
+export default function DoctorManagement({ canDelete = true, canAdd = true, disableAdminGuard = true }: { canDelete?: boolean; canAdd?: boolean; disableAdminGuard?: boolean } = {}) {
+  const { selectedBranchId, branches: contextBranches, isProvided: branchContextProvided } = useBranchSelection()
     const [doctors, setDoctors] = useState<Doctor[]>([])
     const [pendingDoctors, setPendingDoctors] = useState<Doctor[]>([])
     const [loading, setLoading] = useState(true)
@@ -416,12 +419,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             })) as Doctor[]
             
             // Filter by branch if selected
-            if (selectedBranchId !== "all") {
-                activeList = activeList.filter((doctor: any) => {
-                    const branchIds = doctor.branchIds || []
-                    return Array.isArray(branchIds) && branchIds.includes(selectedBranchId)
-                })
-            }
+            activeList = filterDoctorsByBranch(activeList as any, selectedBranchId) as Doctor[]
             
             setDoctors(activeList)
             setLoading(false)
@@ -439,12 +437,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             })) as Doctor[]
             
             // Filter by branch if selected
-            if (selectedBranchId !== "all") {
-                pendingList = pendingList.filter((doctor: any) => {
-                    const branchIds = doctor.branchIds || []
-                    return Array.isArray(branchIds) && branchIds.includes(selectedBranchId)
-                })
-            }
+            pendingList = filterDoctorsByBranch(pendingList as any, selectedBranchId) as Doctor[]
             
             setPendingDoctors(pendingList)
             setLoading(false)
@@ -600,12 +593,18 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
         }
     }, [user, activeTab])
 
-    // Fetch branches for resolving branch names
+    // Prefer Branch Context; fallback fetch outside provider (receptionist).
     useEffect(() => {
         if (!activeHospitalId) return
         let cancelled = false
         ;(async () => {
             try {
+                if (branchContextProvided) {
+                    if (!cancelled) {
+                        setBranches(contextBranches.map((b) => ({ id: b.id, name: b.name })))
+                    }
+                    return
+                }
                 const result = await fetchBranches(activeHospitalId)
                 if (!cancelled && result.success) {
                     setBranches(result.branches.map((b: { id: string; name: string }) => ({ id: b.id, name: b.name })))
@@ -615,7 +614,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             }
         })()
         return () => { cancelled = true }
-    }, [activeHospitalId])
+    }, [activeHospitalId, branchContextProvided, contextBranches])
 
     const doctorColumns: EnterpriseColumn<Doctor>[] = useMemo(
         () => [

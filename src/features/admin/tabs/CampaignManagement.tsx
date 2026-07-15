@@ -12,6 +12,7 @@ import { db, auth } from "@/firebase/config"
 import { formatDateTime } from "@/utils/shared/date"
 import { sanitizeForInnerHTML } from "@/utils/shared/sanitizeHtml"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import { useBranchSelection } from "@/providers/BranchProvider"
 import { Button } from '@/shared/components'
 import { FilterChip } from '@/shared/components'
 import { useTablePagination } from "@/hooks/useTablePagination"
@@ -31,15 +32,12 @@ type CampaignRow = Campaign & { id: string }
 
 export default function CampaignManagement({
   disableAdminGuard = true,
-  selectedBranchId = "all",
-  branches = [],
 }: {
   disableAdminGuard?: boolean
-  selectedBranchId?: string
-  branches?: Array<{ id: string; name: string }>
 } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId } = useMultiHospital()
+  const { selectedBranchId, branches } = useBranchSelection()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [saving, setSaving] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)

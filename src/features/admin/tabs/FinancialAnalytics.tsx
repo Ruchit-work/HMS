@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { useAdminHospitalDataOptional } from '@/providers/AdminHospitalDataProvider'
+import {
+  filterAppointmentsByBranch,
+  filterBillingByBranchOrAppointmentLink,
+} from '@/utils/branch/branchFilters'
 import { useAppointments } from '@/hooks/useAppointments'
 import { TabSkeleton } from '@/shared/components'
 import { formatDate } from '@/utils/shared/date'
@@ -134,24 +140,35 @@ interface FinancialAnalytics {
   }>
 }
 
-export default function FinancialAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
+export default function FinancialAnalytics() {
+  const { selectedBranchId } = useBranchSelection()
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId } = useMultiHospital()
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<FinancialAnalytics | null>(null)
   const [timeRange, setTimeRange] = useState<'7days' | '30days' | '3months' | '6months' | '1year' | 'all'>('1year')
-  const [billingRecords, setBillingRecords] = useState<UnifiedBillingRecord[]>([])
+  const [fallbackBillingRecords, setFallbackBillingRecords] = useState<UnifiedBillingRecord[]>([])
   const [billingLoaded, setBillingLoaded] = useState(false)
-  const { appointments: rawAppointments, loading: appointmentsLoading } = useAppointments(activeHospitalId, {
-    enabled: Boolean(user && activeHospitalId),
+  const shared = useAdminHospitalDataOptional()
+  const { appointments: fetchedAppointments, loading: appointmentsLoading } = useAppointments(activeHospitalId, {
+    enabled: Boolean(user && activeHospitalId && !shared.isProvided),
   })
+  const rawAppointments = shared.isProvided ? shared.appointments : fetchedAppointments
+  const appointmentsLoadingEffective = shared.isProvided ? shared.loading : appointmentsLoading
+  const billingRecords = (shared.isProvided
+    ? shared.billingRecords
+    : fallbackBillingRecords) as UnifiedBillingRecord[]
   const rawAppointmentsRef = useRef(rawAppointments)
   rawAppointmentsRef.current = rawAppointments
 
-  // Billing API only — do not refetch when appointment list identity changes.
+  // Billing API only when shared admin cache is unavailable.
   useEffect(() => {
+    if (shared.isProvided) {
+      setBillingLoaded(!shared.billingLoading && !shared.loading)
+      return
+    }
     if (!user || !activeHospitalId) {
-      setBillingRecords([])
+      setFallbackBillingRecords([])
       setBillingLoaded(false)
       return
     }
@@ -174,12 +191,12 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
           records = Array.isArray(billingData?.records) ? billingData.records : []
         }
         if (!cancelled) {
-          setBillingRecords(records)
+          setFallbackBillingRecords(records)
           setBillingLoaded(true)
         }
       } catch {
         if (!cancelled) {
-          setBillingRecords([])
+          setFallbackBillingRecords([])
           setBillingLoaded(true)
         }
       }
@@ -188,7 +205,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
     return () => {
       cancelled = true
     }
-  }, [user, activeHospitalId])
+  }, [user, activeHospitalId, shared.isProvided, shared.billingLoading, shared.loading])
 
   const computeFinancialAnalytics = useCallback(() => {
     if (!activeHospitalId) return
@@ -200,17 +217,10 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
       let records = billingRecords
 
       // Filter by branch if selected
-      if (selectedBranchId !== "all") {
-        appointments = appointments.filter((apt: any) => apt.branchId === selectedBranchId)
-        records = records.filter((record: any) => {
-          if (record.branchId && record.branchId === selectedBranchId) return true
-          if (record.appointmentId) {
-            const apt = appointments.find(a => a.id === record.appointmentId)
-            return apt && (apt as any).branchId === selectedBranchId
-          }
-          return false
-        })
-      }
+      appointments = filterAppointmentsByBranch(appointments as any, selectedBranchId, {
+        unassigned: "exclude",
+      }) as Appointment[]
+      records = filterBillingByBranchOrAppointmentLink(records as any, appointments as any, selectedBranchId) as typeof records
 
       // Calculate date ranges
       const now = new Date()
@@ -677,7 +687,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
 
   useEffect(() => {
     if (!user || !activeHospitalId) return
-    if (appointmentsLoading || !billingLoaded) return
+    if (appointmentsLoadingEffective || !billingLoaded) return
     computeFinancialAnalytics()
   }, [
     user,
@@ -685,7 +695,7 @@ export default function FinancialAnalytics({ selectedBranchId = "all" }: { selec
     timeRange,
     selectedBranchId,
     rawAppointments,
-    appointmentsLoading,
+    appointmentsLoadingEffective,
     billingLoaded,
     billingRecords,
     computeFinancialAnalytics,

@@ -36,6 +36,17 @@ interface UnifiedBillingRecord {
   branchId?: string | null
 }
 
+/** Appointments list mixes Firestore snapshots and plain `{ id, ...fields }` objects. */
+function readAppointmentEntry(entry: unknown): { id: string; data: Record<string, any> } {
+  if (entry && typeof (entry as { data?: unknown }).data === "function") {
+    const snap = entry as FirebaseFirestore.QueryDocumentSnapshot
+    return { id: snap.id, data: snap.data() || {} }
+  }
+  const row = (entry || {}) as Record<string, any>
+  const { id, ...rest } = row
+  return { id: String(id || ""), data: rest }
+}
+
 export async function GET(request: Request) {
   // Authenticate request - requires admin role
   const auth = await authenticateRequest(request, "admin")
@@ -320,7 +331,8 @@ export async function GET(request: Request) {
     }
 
     for (const docSnap of appointmentsDocs) {
-      const data = docSnap.data() || {}
+      const { id: appointmentId, data } = readAppointmentEntry(docSnap)
+      if (!appointmentId) continue
       const paymentAmount = Number(data.paymentAmount || 0)
       const totalConsultationFee = Number(data.totalConsultationFee || 0)
       if (paymentAmount <= 0 && totalConsultationFee <= 0) {
@@ -328,7 +340,7 @@ export async function GET(request: Request) {
       }
 
       // Skip if there's already an explicit billing record for this appointment
-      if (billedAppointmentIds.has(docSnap.id)) {
+      if (billedAppointmentIds.has(appointmentId)) {
         continue
       }
 
@@ -377,9 +389,9 @@ export async function GET(request: Request) {
       const billedAmount = paymentAmount > 0 ? paymentAmount : totalConsultationFee
 
       records.push({
-        id: docSnap.id,
+        id: appointmentId,
         type: "appointment",
-        appointmentId: docSnap.id,
+        appointmentId,
         admissionId: data.admissionId ? String(data.admissionId) : undefined,
         patientId: String(patientId || ""),
         patientUid,
@@ -416,6 +428,7 @@ export async function GET(request: Request) {
 
     return Response.json({ records })
   } catch (error: any) {
+    console.error("[admin/billing-records] GET failed:", error)
     return Response.json(
       { error: error?.message || "Failed to load billing records" },
       { status: 500 }

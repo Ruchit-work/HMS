@@ -1,11 +1,12 @@
 "use client"
-import { fetchBranches } from "@/services/BranchService"
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from '@/shared/components'
 import { FilterChip } from '@/shared/components'
 import { useTablePagination } from "@/hooks/useTablePagination"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import { useBranchSelection } from "@/providers/BranchProvider"
+import { filterBranchesBySelection } from "@/utils/branch/branchFilters"
 import { auth, db } from "@/firebase/config"
 import { deleteDoc, doc, serverTimestamp, updateDoc, Timestamp } from "firebase/firestore"
 import type { Branch, BranchTimings } from "@/types/branch"
@@ -74,17 +75,20 @@ function formatBranchDate(value?: Branch["updatedAt"] | Branch["createdAt"]) {
 }
 
 export default function BranchManagement({
-  selectedBranchId = "all",
-  onBranchFilterChange,
   kpi,
 }: {
-  selectedBranchId?: string
-  onBranchFilterChange?: (branchId: string) => void
   kpi?: BranchKpiSnapshot
 } = {}) {
   const { activeHospitalId } = useMultiHospital()
-  const [branches, setBranches] = useState<BranchRow[]>([])
-  const [loading, setLoading] = useState(false)
+  const {
+    selectedBranchId,
+    setSelectedBranchId,
+    branches: contextBranches,
+    loadingBranches,
+    refreshBranches,
+  } = useBranchSelection()
+  const branches = contextBranches as BranchRow[]
+  const loading = loadingBranches
   const [saving, setSaving] = useState(false)
   const [processingBulk, setProcessingBulk] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -101,25 +105,16 @@ export default function BranchManagement({
 
   const loadBranches = async () => {
     if (!activeHospitalId) return
-    setLoading(true)
     setError(null)
-
     try {
-      const result = await fetchBranches(activeHospitalId)
-      if (!result.success) {
-        throw new Error(result.error || "Failed to load branches")
-      }
-
-      setBranches(result.branches.map((b) => ({ ...b, id: b.id })))
+      await refreshBranches()
     } catch (err: any) {
       setError(err.message || "Failed to load branches")
-    } finally {
-      setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadBranches()
+    void loadBranches()
      
   }, [activeHospitalId])
 
@@ -174,9 +169,8 @@ export default function BranchManagement({
 
   const filteredBranches = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
-    let list = branches.filter((b) => {
+    let list = filterBranchesBySelection(branches, selectedBranchId).filter((b) => {
       if (statusFilter !== "all" && b.status !== statusFilter) return false
-      if (selectedBranchId !== "all" && b.id !== selectedBranchId) return false
       if (!q) return true
       const city = parseCity(b.location).toLowerCase()
       return (
@@ -778,7 +772,7 @@ export default function BranchManagement({
                     onClick: () => {
                       setSearchTerm("")
                       setStatusFilter("all")
-                      onBranchFilterChange?.("all")
+                      setSelectedBranchId("all")
                     },
                   }
                 : { label: "Add Branch", onClick: openCreate }

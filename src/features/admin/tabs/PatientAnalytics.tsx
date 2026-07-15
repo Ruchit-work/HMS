@@ -3,7 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { useAdminHospitalDataOptional } from '@/providers/AdminHospitalDataProvider'
 import { useDashboard } from '@/hooks/useDashboard'
+import {
+  filterAppointmentsByBranch,
+  filterPatientsByBranch,
+} from '@/utils/branch/branchFilters'
 import { TabSkeleton } from '@/shared/components'
 import { formatDate, calculateAge } from '@/utils/shared/date'
 
@@ -130,27 +136,36 @@ interface PatientAnalytics {
   }>
 }
 
-export default function PatientAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
+export default function PatientAnalytics() {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId } = useMultiHospital()
+  const { selectedBranchId } = useBranchSelection()
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<PatientAnalytics | null>(null)
   const [timeRange, setTimeRange] = useState<'30days' | '3months' | '6months' | '1year' | 'all'>('1year')
+  const shared = useAdminHospitalDataOptional()
   const {
-    patients: rawPatients,
-    appointments: rawAppointments,
+    patients: fetchedPatients,
+    appointments: fetchedAppointments,
     loading: dashboardLoading,
   } = useDashboard(activeHospitalId, {
     branchId: selectedBranchId,
-    enabled: Boolean(user && activeHospitalId),
+    enabled: Boolean(user && activeHospitalId && !shared.isProvided),
   })
+  const rawPatients = shared.isProvided
+    ? filterPatientsByBranch(shared.patients, selectedBranchId, { unassigned: "exclude" })
+    : fetchedPatients
+  const rawAppointments = shared.isProvided
+    ? filterAppointmentsByBranch(shared.appointments, selectedBranchId, { unassigned: "exclude" })
+    : fetchedAppointments
+  const dataLoading = shared.isProvided ? shared.loading : dashboardLoading
 
   useEffect(() => {
     if (!user || !activeHospitalId) return
-    if (dashboardLoading) return
+    if (dataLoading) return
     computeAnalytics()
      
-  }, [user, activeHospitalId, timeRange, selectedBranchId, rawPatients, rawAppointments, dashboardLoading])
+  }, [user, activeHospitalId, timeRange, selectedBranchId, rawPatients, rawAppointments, dataLoading])
 
   const computeAnalytics = () => {
     if (!activeHospitalId) return

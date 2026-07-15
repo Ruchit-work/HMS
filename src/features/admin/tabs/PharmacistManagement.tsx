@@ -5,13 +5,14 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { filterStaffByBranch } from '@/utils/branch/branchFilters'
 import type { Branch } from '@/types/branch'
 import { Notification } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
 import { Button } from '@/shared/components'
 import { RevealModal, useRevealModalClose } from '@/shared/components'
 import { listPharmacists } from '@/services/StaffService'
-import { useBranches } from '@/hooks/useBranches'
 
 interface Pharmacist {
   id: string
@@ -171,13 +172,11 @@ function AddPharmacistModalContent({
   )
 }
 
-export default function PharmacistManagement({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
+export default function PharmacistManagement() {
+  const { selectedBranchId, branches, loadingBranches: branchesLoading } = useBranchSelection()
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId } = useMultiHospital()
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([])
-  const { branches, loadingBranches: branchesLoading } = useBranches(activeHospitalId, {
-    enabled: Boolean(activeHospitalId),
-  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -202,7 +201,7 @@ export default function PharmacistManagement({ selectedBranchId = "all" }: { sel
       let list: Pharmacist[] = (await listPharmacists(activeHospitalId)) as unknown as Pharmacist[]
 
       if (selectedBranchId !== "all") {
-        list = list.filter(p => p.branchId === selectedBranchId)
+        list = filterStaffByBranch(list, selectedBranchId)
       }
 
       setPharmacists(list)

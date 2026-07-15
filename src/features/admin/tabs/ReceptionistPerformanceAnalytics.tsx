@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { useAdminHospitalDataOptional } from '@/providers/AdminHospitalDataProvider'
+import {
+  filterAppointmentsByBranch,
+  filterPatientsByBranch,
+  filterStaffByBranch,
+} from '@/utils/branch/branchFilters'
 import { listReceptionists } from '@/services/StaffService'
 import { listPatients } from '@/services/PatientService'
 import { listAppointments } from '@/services/AppointmentService'
@@ -68,9 +75,11 @@ interface BookingRatio {
   }
 }
 
-export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
+export default function ReceptionistPerformanceAnalytics() {
+  const { selectedBranchId } = useBranchSelection()
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const sharedHospitalData = useAdminHospitalDataOptional()
   const [loading, setLoading] = useState(true)
   const [receptionists, setReceptionists] = useState<Receptionist[]>([])
   const [receptionistAnalytics, setReceptionistAnalytics] = useState<ReceptionistAnalytics[]>([])
@@ -86,9 +95,10 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
 
   useEffect(() => {
     if (!user || !activeHospitalId) return
+    if (sharedHospitalData.isProvided && sharedHospitalData.loading) return
     fetchReceptionistAnalytics()
      
-  }, [user, activeHospitalId, timeRange, selectedBranchId])
+  }, [user, activeHospitalId, timeRange, selectedBranchId, sharedHospitalData.isProvided, sharedHospitalData.loading, sharedHospitalData.patients, sharedHospitalData.appointments])
 
   const fetchReceptionistAnalytics = async () => {
     if (!activeHospitalId) return
@@ -99,26 +109,30 @@ export default function ReceptionistPerformanceAnalytics({ selectedBranchId = "a
       // Fetch all receptionists for this hospital
       let receptionistsList: Receptionist[] = (await listReceptionists(activeHospitalId, { includeHospitalName: false })) as unknown as Receptionist[]
 
-      // Fetch all patients
-      let patients: Patient[] = (await listPatients(activeHospitalId)) as unknown as Patient[]
-
-      // Filter patients by branch if selected
-      if (selectedBranchId !== "all") {
-        patients = patients.filter((p: any) => p.defaultBranchId === selectedBranchId)
-      }
-
-      // Fetch all appointments
-      let appointments: Appointment[] = (await listAppointments(activeHospitalId)) as unknown as Appointment[]
-
-      // Filter appointments by branch if selected
-      if (selectedBranchId !== "all") {
-        appointments = appointments.filter((apt: any) => apt.branchId === selectedBranchId)
+      let patients: Patient[]
+      let appointments: Appointment[]
+      if (sharedHospitalData.isProvided) {
+        patients = filterPatientsByBranch(sharedHospitalData.patients, selectedBranchId, {
+          unassigned: "exclude",
+        }) as Patient[]
+        appointments = filterAppointmentsByBranch(sharedHospitalData.appointments, selectedBranchId, {
+          unassigned: "exclude",
+        }) as Appointment[]
+      } else {
+        patients = filterPatientsByBranch(
+          (await listPatients(activeHospitalId)) as unknown as Patient[],
+          selectedBranchId,
+          { unassigned: "exclude" }
+        ) as Patient[]
+        appointments = filterAppointmentsByBranch(
+          (await listAppointments(activeHospitalId)) as unknown as Appointment[],
+          selectedBranchId,
+          { unassigned: "exclude" }
+        ) as Appointment[]
       }
 
       // Filter receptionists by branch if selected
-      if (selectedBranchId !== "all") {
-        receptionistsList = receptionistsList.filter((r: any) => r.branchId === selectedBranchId)
-      }
+      receptionistsList = filterStaffByBranch(receptionistsList as any, selectedBranchId) as Receptionist[]
 
       // Set receptionists after filtering
       setReceptionists(receptionistsList)

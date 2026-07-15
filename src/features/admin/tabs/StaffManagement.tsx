@@ -7,6 +7,8 @@ import { useTablePagination } from "@/hooks/useTablePagination"
 import { useSearch } from "@/hooks/useSearch"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import { useBranchSelection } from "@/providers/BranchProvider"
+import { filterStaffByBranch } from "@/utils/branch/branchFilters"
 import { auth, db } from "@/firebase/config"
 import {
   collection,
@@ -21,7 +23,6 @@ import {
   where,
 } from "firebase/firestore"
 import type { Branch } from "@/types/branch"
-import { useBranches } from "@/hooks/useBranches"
 import { listStaff } from "@/services/StaffService"
 import { Notification } from '@/shared/components'
 import {
@@ -187,21 +188,17 @@ function KpiIcon({ children }: { children: ReactNode }) {
 }
 
 export default function StaffManagement({
-  selectedBranchId = "all",
   doctorCount = 0,
   initialRoleFilter = "all",
 }: {
-  selectedBranchId?: string
   doctorCount?: number
   initialRoleFilter?: "all" | StaffRole
 } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, isSuperAdmin, loading: hospitalLoading } = useMultiHospital()
+  const { selectedBranchId, branches, loadingBranches: branchesLoading } = useBranchSelection()
 
   const [staff, setStaff] = useState<StaffRow[]>([])
-  const { branches, loadingBranches: branchesLoading } = useBranches(activeHospitalId, {
-    enabled: Boolean(activeHospitalId),
-  })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [processingBulk, setProcessingBulk] = useState(false)
@@ -497,10 +494,7 @@ export default function StaffManagement({
   }, [toast])
 
   const filteredStaff = useMemo(() => {
-    let list = [...staff]
-    if (branchFilter !== "all") {
-      list = list.filter((s) => s.branchId === branchFilter)
-    }
+    let list = filterStaffByBranch(staff, branchFilter)
     if (roleFilter !== "all") {
       list = list.filter((s) => s.role === roleFilter)
     }

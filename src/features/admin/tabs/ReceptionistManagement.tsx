@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { filterStaffByBranch } from '@/utils/branch/branchFilters'
 import { RevealModal, useRevealModalClose } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
 import { Notification } from '@/shared/components'
@@ -11,7 +13,6 @@ import { doc, getDoc, updateDoc, setDoc, serverTimestamp, deleteDoc } from 'fire
 import type { Branch } from '@/types/branch'
 import { Button } from '@/shared/components'
 import { listReceptionists } from '@/services/StaffService'
-import { useBranches } from '@/hooks/useBranches'
 
 interface Receptionist {
   id: string
@@ -182,13 +183,11 @@ function AddReceptionistModalContent({
   )
 }
 
-export default function ReceptionistManagement({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
+export default function ReceptionistManagement() {
+  const { selectedBranchId, branches, loadingBranches: branchesLoading } = useBranchSelection()
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, isSuperAdmin, loading: hospitalLoading } = useMultiHospital()
   const [receptionists, setReceptionists] = useState<Receptionist[]>([])
-  const { branches, loadingBranches: branchesLoading } = useBranches(activeHospitalId, {
-    enabled: Boolean(activeHospitalId),
-  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -232,7 +231,7 @@ export default function ReceptionistManagement({ selectedBranchId = "all" }: { s
 
       // Filter by branch if selected
       if (selectedBranchId !== "all") {
-        receptionistsList = receptionistsList.filter(r => r.branchId === selectedBranchId)
+        receptionistsList = filterStaffByBranch(receptionistsList, selectedBranchId)
       }
 
       // Sort by createdAt descending (client-side to avoid index requirement)

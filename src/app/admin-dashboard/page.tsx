@@ -1,20 +1,31 @@
 "use client"
-import { fetchBranches } from "@/services/BranchService"
 
 import { useEffect, useState, useMemo } from "react"
 import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, onSnapshot } from "firebase/firestore"
+import { collection, doc, getDoc, limit, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import { auth, db } from "@/firebase/config"
 import { useAuth } from "@/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import { BranchProvider, useBranch } from "@/providers/BranchProvider"
+import {
+  AdminHospitalDataProvider,
+  useAdminHospitalData,
+} from "@/providers/AdminHospitalDataProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import {
+  filterAppointmentsByBranch,
+  filterBillingByBranch,
+  filterDoctorsByBranch,
+  filterPatientsByBranch,
+  isAllBranches,
+  matchesSelectedBranch,
+} from "@/utils/branch/branchFilters"
 import { ConfirmDialog } from '@/shared/components'
 import { useNotificationBadge } from "@/hooks/useNotificationBadge"
 import { Notification } from '@/shared/components'
 import { Appointment as AppointmentType } from "@/types/patient"
-import { Branch } from "@/types/branch"
 import { TabSkeleton } from '@/shared/components'
 import AdminProtected from "@/features/auth/AdminProtected"
 import AdminOverviewSkeleton from "@/features/admin/components/AdminOverviewSkeleton"
@@ -213,7 +224,7 @@ function isPaidBillingInRange(
   if (hospitalId && record.hospitalId && record.hospitalId !== hospitalId) return false
   if (branchId && branchId !== "all") {
     // Keep unassigned branch bills visible (same rule as appointments)
-    if (record.branchId && record.branchId !== branchId) return false
+    if (!matchesSelectedBranch(record.branchId, branchId, "keep")) return false
   }
   const paidAt = new Date(record.paidAt)
   if (Number.isNaN(paidAt.getTime())) return false
@@ -309,42 +320,19 @@ function getTabMeta(tab: AdminTabId, isSuperAdmin: boolean, tenantName?: string 
 }
 
 export default function AdminDashboard() {
+  return (
+    <BranchProvider>
+      <AdminHospitalDataProvider>
+        <AdminDashboardContent />
+      </AdminHospitalDataProvider>
+    </BranchProvider>
+  )
+}
+
+function AdminDashboardContent() {
   const [userData, setUserData] = useState<UserData | null>(null)
-  // Store raw data (unfiltered) for client-side filtering
-  const [rawPatients, setRawPatients] = useState<any[]>([])
-  const [rawAppointments, setRawAppointments] = useState<AppointmentType[]>([])
-  const [rawBillingRecords, setRawBillingRecords] = useState<DashboardBillingRecord[]>([])
-  const [stats, setStats] = useState<DashboardStats>({
-    totalPatients: 0,
-    totalDoctors: 0,
-    totalAppointments: 0,
-    todayAppointments: 0,
-    completedAppointments: 0,
-    pendingAppointments: 0,
-    totalRevenue: 0,
-    monthlyRevenue: 0,
-    weeklyRevenue: 0,
-    todayRevenue: 0,
-    yesterdayRevenue: 0,
-    activeDoctorsToday: 0,
-    appointmentTrends: {
-      weekly: [],
-      monthly: [],
-      yearly: []
-    },
-    appointmentTotals: {
-      weekly: 0,
-      monthly: 0,
-      yearly: 0
-    },
-    commonConditions: [],
-    mostPrescribedMedicines: [],
-    revenueTrend: { weekly: [], monthly: [], yearly: [] },
-    topDepartments: []
-  })
-  const [recentAppointments, setRecentAppointments] = useState<AppointmentType[]>([])
   const [notification, setNotification] = useState<{type: "success" | "error", message: string} | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [adminProfileLoading, setAdminProfileLoading] = useState(true)
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get("tab")
   const [activeTab, setActiveTab] = useState<AdminTabId>("overview")
@@ -363,15 +351,28 @@ export default function AdminDashboard() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutLoading, setLogoutLoading] = useState(false)
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
-  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
 
-  // Notification badge hooks - automatically clear when panels are viewed
-  const overviewBadge = useNotificationBadge({ 
-    badgeKey: 'admin-overview', 
-    rawCount: pendingRefunds.length, 
-    activeTab 
-  })
+  // Protect route — admins only; wrong roles redirect via useAuth('admin')
+  const { user, loading: authLoading } = useAuth("admin")
+  const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
+  const { selectedBranchId, setSelectedBranchId, branches } = useBranch()
+  const {
+    patients: rawPatients,
+    appointments: rawAppointmentsTyped,
+    doctors: hospitalDoctors,
+    billingRecords: rawBillingRecordsTyped,
+    recentAppointments: recentAppointmentsShared,
+    loading: hospitalDataLoading,
+  } = useAdminHospitalData()
+  const rawAppointments = rawAppointmentsTyped as AppointmentType[]
+  const rawBillingRecords = rawBillingRecordsTyped as DashboardBillingRecord[]
+  const recentAppointments = recentAppointmentsShared as AppointmentType[]
+  const loading = authLoading || hospitalLoading || hospitalDataLoading || adminProfileLoading
+  const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
+  const branchManagementEnabled = (activeHospital as any)?.multipleBranchesEnabled !== false
+  const router = useRouter()
+
+  // Notification badge hooks - patients/appointments/billing (hospital-wide realtime counts)
   const patientsBadge = useNotificationBadge({ 
     badgeKey: 'admin-patients', 
     rawCount: newPatientsCount, 
@@ -387,15 +388,6 @@ export default function AdminDashboard() {
     rawCount: pendingBillingCount, 
     activeTab 
   })
-
-  // Trend data will be calculated after displayStats is defined
-
-  // Protect route — admins only; wrong roles redirect via useAuth('admin')
-  const { user, loading: authLoading } = useAuth("admin")
-  const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
-  const analyticsEnabled = (activeHospital as any)?.enableAnalytics === true
-  const branchManagementEnabled = (activeHospital as any)?.multipleBranchesEnabled !== false
-  const router = useRouter()
 
   // Sync activeTab with URL (limited set)
   useEffect(() => {
@@ -443,27 +435,6 @@ export default function AdminDashboard() {
     }
   }, [authLoading, user, router])
 
-  // Fetch branches on mount
-  useEffect(() => {
-    const loadBranches = async () => {
-      if (!activeHospitalId) return
-      
-      try {
-        const result = await fetchBranches(activeHospitalId)
-
-        if (result.success) {
-          setBranches(result.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
-        } else {
-
-        }
-      } catch {
-
-      }
-    }
-
-    void loadBranches()
-  }, [activeHospitalId])
-
   // Reset analytics sub-tabs and tab when analytics is disabled for hospital
   useEffect(() => {
     if (isSuperAdmin) return
@@ -474,17 +445,13 @@ export default function AdminDashboard() {
     }
   }, [analyticsEnabled, isSuperAdmin])
 
-  const fetchDashboardData = async () => {
-    if (!user || !activeHospitalId) return
-
+  const loadAdminProfile = async () => {
+    if (!user) return
     try {
-      setLoading(true)
-
-      // Get admin user data (graceful fallback if document is missing)
+      setAdminProfileLoading(true)
       const adminDoc = await getDoc(doc(db, "admins", user.uid))
       if (adminDoc.exists()) {
-        const data = adminDoc.data() as UserData
-        setUserData(data)
+        setUserData(adminDoc.data() as UserData)
       } else if (user.role === "pharmacy" && user.data) {
         const d = user.data as Record<string, unknown>
         setUserData({
@@ -502,277 +469,49 @@ export default function AdminDashboard() {
           role: user.role || "admin",
         })
       }
-
-      // Load hospital-scoped collections in parallel (same data, faster wall-clock)
-      const [patientsSnapshot, doctorsSnapshot, appointmentsSnapshot] = await Promise.all([
-        getDocs(getHospitalCollection(activeHospitalId, "patients")),
-        getDocs(getHospitalCollection(activeHospitalId, "doctors")),
-        getDocs(getHospitalCollection(activeHospitalId, "appointments")),
-      ])
-
-      const allPatients = patientsSnapshot.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data() 
-      })) as any[]
-      
-      // Store raw data for client-side filtering
-      setRawPatients(allPatients)
-
-      const totalDoctors = doctorsSnapshot.size
-
-      const allAppointments = appointmentsSnapshot.docs.map(docSnap => ({ 
-        id: docSnap.id, 
-        ...docSnap.data() 
-      } as AppointmentType))
-      
-      // Store raw data for client-side filtering
-      setRawAppointments(allAppointments)
-
-      const todayKey = formatLocalYmd(new Date())
-      const todaySample = allAppointments
-        .slice(0, 5)
-        .map((a) => ({
-          id: a.id,
-          appointmentDate: a.appointmentDate,
-          dateKey: revenueDateKey(a) || null,
-          status: a.status,
-          paymentStatus: a.paymentStatus,
-          paymentAmount: a.paymentAmount,
-          totalConsultationFee: a.totalConsultationFee,
-        }))
-
-      if (process.env.NODE_ENV === "development") {
-        console.info("[admin-dashboard] raw fetch", {
-          hospitalId: activeHospitalId,
-          patients: allPatients.length,
-          doctors: totalDoctors,
-          appointments: allAppointments.length,
-          todayKey,
-          todayAppointments: allAppointments.filter((a) => isSameLocalDay(a.appointmentDate)).length,
-          sample: todaySample,
-        })
-      }
-
-      // Calculate basic stats for initialization (filtered stats calculated in useMemo)
-      const totalPatients = allPatients.length
-      const totalAppointments = allAppointments.length
-      const completedAppointments = allAppointments.filter(apt => apt.status === "completed").length
-      const pendingAppointments = allAppointments.filter(apt => apt.status === "confirmed" || (apt as any).status === 'resrescheduled').length
-
-      // Today's appointments — local YYYY-MM-DD (same rule as receptionist dashboard)
-      const todayAppointments = allAppointments.filter(apt =>
-        isSameLocalDay(apt.appointmentDate)
-      ).length
-
-      // Get recent appointments (last 5) — isolated so index/orderBy failures don't wipe dashboard data
-      let recent: AppointmentType[] = []
-      try {
-        const recentAppointmentsQuery = query(
-          getHospitalCollection(activeHospitalId, "appointments"),
-          orderBy("createdAt", "desc"),
-          limit(5)
-        )
-        const recentSnapshot = await getDocs(recentAppointmentsQuery)
-        recent = recentSnapshot.docs.map(docSnap => ({ 
-          id: docSnap.id, 
-          ...docSnap.data() 
-        } as AppointmentType))
-      } catch (recentErr) {
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[admin-dashboard] recent appointments query failed; using client sort fallback", recentErr)
-        }
-        recent = [...allAppointments]
-          .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-          .slice(0, 5)
-      }
-
-      // Calculate trends and analytics using utility functions
-      const trends = calculateAllTrends(allAppointments)
-      const commonConditions = calculateCommonConditions(allAppointments)
-      const mostPrescribedMedicines = calculateMostPrescribedMedicines(allAppointments)
-      const revenueTrend = calculateRevenueTrend(allAppointments)
-      const topDepartments = calculateTopDepartments(allAppointments)
-
-      // Unified billing (admission discharge + appointment payments) — same source as Reception Billing
-      let billingRecords: DashboardBillingRecord[] = []
-      try {
-        const currentUser = auth.currentUser
-        if (currentUser) {
-          const token = await currentUser.getIdToken()
-          const billingRes = await fetch("/api/admin/billing-records", {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          })
-          if (billingRes.ok) {
-            const billingData = await billingRes.json().catch(() => ({}))
-            billingRecords = Array.isArray(billingData?.records) ? billingData.records : []
-          } else if (process.env.NODE_ENV === "development") {
-            console.warn("[admin-dashboard] billing-records fetch failed", billingRes.status)
-          }
-        }
-      } catch (billingErr) {
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[admin-dashboard] billing-records error", billingErr)
-        }
-      }
-      setRawBillingRecords(billingRecords)
-
-      const todayStart = startOfLocalDay()
-      const todayEnd = endOfLocalDay()
-      const yesterdayStart = startOfLocalDay(new Date(Date.now() - 86400000))
-      const yesterdayEnd = endOfLocalDay(new Date(Date.now() - 86400000))
-      const weekStart = startOfLocalDay(new Date(Date.now() - 6 * 86400000))
-      const monthStart = startOfLocalDay(new Date(Date.now() - 29 * 86400000))
-
-      const appointmentTodayRevenue = allAppointments
-        .filter((a) => isPaidAppointment(a) && revenueDateKey(a) === todayKey)
-        .reduce((s, a) => s + getPaidAmount(a), 0)
-
-      // Prefer unified billing totals (includes admission card settlements like ₹82,502)
-      const billingTodayRevenue = sumBillingCollection(
-        billingRecords,
-        todayStart,
-        todayEnd,
-        activeHospitalId
-      )
-      const billingYesterdayRevenue = sumBillingCollection(
-        billingRecords,
-        yesterdayStart,
-        yesterdayEnd,
-        activeHospitalId
-      )
-      const billingWeeklyRevenue = sumBillingCollection(
-        billingRecords,
-        weekStart,
-        todayEnd,
-        activeHospitalId
-      )
-      const billingMonthlyRevenue = sumBillingCollection(
-        billingRecords,
-        monthStart,
-        todayEnd,
-        activeHospitalId
-      )
-      const billingTotalRevenue = billingRecords
-        .filter((r) => String(r.status || "").toLowerCase() === "paid")
-        .filter((r) => !r.hospitalId || r.hospitalId === activeHospitalId)
-        .reduce((s, r) => s + Number(r.totalAmount || 0), 0)
-
-      const todayRevenue = billingRecords.length > 0 ? billingTodayRevenue : appointmentTodayRevenue
-      const yesterdayRevenue = billingRecords.length > 0 ? billingYesterdayRevenue : 0
-      const weeklyRevenue =
-        billingRecords.length > 0 ? billingWeeklyRevenue : calculateRevenue(allAppointments, 7)
-      const monthlyRevenue =
-        billingRecords.length > 0 ? billingMonthlyRevenue : calculateRevenue(allAppointments, 30)
-      const totalRevenue =
-        billingRecords.length > 0 ? billingTotalRevenue : calculateRevenue(allAppointments, Infinity)
-
-      const activeDoctorsToday = new Set(
-        allAppointments
-          .filter((a) => isSameLocalDay(a.appointmentDate) && a.doctorId)
-          .map((a) => a.doctorId)
-      ).size
-
-      if (process.env.NODE_ENV === "development") {
-        console.info("[admin-dashboard] processed stats", {
-          todayKey,
-          todayAppointments,
-          appointmentTodayRevenue,
-          billingTodayRevenue,
-          todayRevenue,
-          yesterdayRevenue,
-          billingRecords: billingRecords.length,
-          paidTodaySample: billingRecords
-            .filter((r) => isPaidBillingInRange(r, todayStart, todayEnd, activeHospitalId))
-            .map((r) => ({
-              id: r.id,
-              type: r.type,
-              totalAmount: r.totalAmount,
-              paidAt: r.paidAt,
-              method: r.paymentMethod,
-            })),
-          activeDoctorsToday,
-          totalRevenue,
-          weeklyRevenue,
-          monthlyRevenue,
-        })
-      }
-
-      setStats({
-        totalPatients,
-        totalDoctors,
-        totalAppointments,
-        todayAppointments,
-        todayRevenue,
-        yesterdayRevenue,
-        completedAppointments,
-        pendingAppointments,
-        totalRevenue,
-        monthlyRevenue,
-        weeklyRevenue,
-        activeDoctorsToday,
-        appointmentTrends: trends,
-        appointmentTotals: trends.totals,
-        commonConditions,
-        mostPrescribedMedicines,
-        revenueTrend,
-        topDepartments
-      })
-
-      setRecentAppointments(recent)
-
     } catch (err) {
       if (process.env.NODE_ENV === "development") {
-        console.error("[admin-dashboard] fetchDashboardData failed", err)
+        console.error("[admin-dashboard] loadAdminProfile failed", err)
       }
-      setNotification({ 
-        type: "error", 
-        message: "Failed to load dashboard data" 
+      setNotification({
+        type: "error",
+        message: "Failed to load admin profile",
       })
     } finally {
-      setLoading(false)
+      setAdminProfileLoading(false)
     }
   }
 
   useEffect(() => {
+    if (!user || authLoading) return
+    void loadAdminProfile()
+  }, [user, authLoading])
+
+  useEffect(() => {
     if (!user || authLoading || hospitalLoading) return
+    if (!activeHospitalId) return
 
-    if (!activeHospitalId) {
-      setLoading(false)
-      return
-    }
-
-    fetchDashboardData()
     const cleanup = setupRealtimeBadgeListeners()
     return () => {
       if (cleanup) cleanup()
     }
   }, [user, activeHospitalId, hospitalLoading, authLoading])
+
   // Note: selectedBranchId removed - filtering happens client-side via useMemo below
 
   // Filter data and recalculate stats based on selectedBranchId
   const filteredStats = useMemo(() => {
     // Filter patients by branch (keep unassigned visible)
-    let filteredPatients = rawPatients
-    if (selectedBranchId !== "all") {
-      filteredPatients = rawPatients.filter((p: any) => {
-        const branch = p.defaultBranchId
-        if (branch == null || branch === "") return true
-        return branch === selectedBranchId
-      })
-    }
+    const filteredPatients = filterPatientsByBranch(rawPatients as Array<{ defaultBranchId?: string | null }>, selectedBranchId, {
+      unassigned: "keep",
+    }) as typeof rawPatients
 
     // Filter appointments by branch (keep unassigned / legacy visible)
-    let filteredAppointments = rawAppointments
-    if (selectedBranchId !== "all") {
-      filteredAppointments = rawAppointments.filter((apt) => {
-        const branch = apt.branchId
-        if (branch == null || branch === "") return true
-        return branch === selectedBranchId
-      })
-    }
+    const filteredAppointments = filterAppointmentsByBranch(rawAppointments, selectedBranchId, {
+      unassigned: "keep",
+    })
+
+    const totalDoctors = filterDoctorsByBranch(hospitalDoctors, selectedBranchId).length
 
     // Recalculate all stats from filtered data
     const totalPatients = filteredPatients.length
@@ -811,15 +550,13 @@ export default function AdminDashboard() {
       ? sumBillingCollection(rawBillingRecords, monthStart, todayEnd, activeHospitalId, selectedBranchId)
       : calculateRevenue(filteredAppointments, 30)
     const totalRevenue = useBilling
-      ? rawBillingRecords
-          .filter((r) => String(r.status || "").toLowerCase() === "paid")
-          .filter((r) => !r.hospitalId || !activeHospitalId || r.hospitalId === activeHospitalId)
-          .filter((r) => {
-            if (selectedBranchId === "all") return true
-            if (!r.branchId) return true
-            return r.branchId === selectedBranchId
-          })
-          .reduce((s, r) => s + Number(r.totalAmount || 0), 0)
+      ? filterBillingByBranch(
+          rawBillingRecords
+            .filter((r) => String(r.status || "").toLowerCase() === "paid")
+            .filter((r) => !r.hospitalId || !activeHospitalId || r.hospitalId === activeHospitalId),
+          selectedBranchId,
+          { unassigned: "keep" }
+        ).reduce((s, r) => s + Number(r.totalAmount || 0), 0)
       : calculateRevenue(filteredAppointments, Infinity)
 
     const activeDoctorsToday = new Set(
@@ -835,7 +572,7 @@ export default function AdminDashboard() {
 
     return {
       totalPatients,
-      totalDoctors: stats.totalDoctors,
+      totalDoctors,
       totalAppointments,
       todayAppointments,
       todayRevenue,
@@ -853,39 +590,46 @@ export default function AdminDashboard() {
       revenueTrend,
       topDepartments
     }
-  }, [rawPatients, rawAppointments, rawBillingRecords, selectedBranchId, stats.totalDoctors, activeHospitalId])
+  }, [rawPatients, rawAppointments, rawBillingRecords, selectedBranchId, hospitalDoctors, activeHospitalId])
 
   // Use filtered stats for display
   const displayStats = filteredStats
 
   // Filter recent appointments by branch
   const filteredRecentAppointments = useMemo(() => {
-    if (selectedBranchId === "all") {
-      return recentAppointments
-    }
-    return recentAppointments.filter((apt) => apt.branchId === selectedBranchId)
+    return filterAppointmentsByBranch(recentAppointments, selectedBranchId, { unassigned: "exclude" })
   }, [recentAppointments, selectedBranchId])
 
   // Filter all appointments by branch (for overview analytics).
   // Include unassigned branch docs (null/empty) so WhatsApp/legacy records remain visible —
   // same visibility rule reception uses for unassigned appointments.
   const filteredAppointmentsForOverview = useMemo(() => {
-    if (selectedBranchId === "all") return rawAppointments
-    return rawAppointments.filter((apt) => {
-      const branch = apt.branchId
-      if (branch == null || branch === "") return true
-      return branch === selectedBranchId
-    })
+    return filterAppointmentsByBranch(rawAppointments, selectedBranchId, { unassigned: "keep" })
   }, [rawAppointments, selectedBranchId])
 
   const filteredPatientsForOverview = useMemo(() => {
-    if (selectedBranchId === "all") return rawPatients
-    return rawPatients.filter((p: any) => {
-      const branch = p.defaultBranchId
-      if (branch == null || branch === "") return true
-      return branch === selectedBranchId
-    })
+    return filterPatientsByBranch(rawPatients as Array<{ defaultBranchId?: string | null }>, selectedBranchId, {
+      unassigned: "keep",
+    }) as typeof rawPatients
   }, [rawPatients, selectedBranchId])
+
+  // Refund widget / alerts: prefer refund.branchId; else link via appointment already in branch scope.
+  const filteredPendingRefunds = useMemo(() => {
+    if (isAllBranches(selectedBranchId)) return pendingRefunds
+    const aptIds = new Set(filteredAppointmentsForOverview.map((a) => a.id))
+    return pendingRefunds.filter((r) => {
+      if (!matchesSelectedBranch(r?.branchId, selectedBranchId, "keep")) return false
+      if (r?.branchId != null && r.branchId !== "") return true
+      if (r?.appointmentId) return aptIds.has(String(r.appointmentId))
+      return true
+    })
+  }, [pendingRefunds, selectedBranchId, filteredAppointmentsForOverview])
+
+  const overviewBadge = useNotificationBadge({
+    badgeKey: "admin-overview",
+    rawCount: filteredPendingRefunds.length,
+    activeTab,
+  })
 
   // Setup real-time listeners for badge counts
   const setupRealtimeBadgeListeners = () => {
@@ -1542,11 +1286,10 @@ export default function AdminDashboard() {
                 filteredAppointments={filteredAppointmentsForOverview}
                 filteredPatients={filteredPatientsForOverview}
                 branches={branches}
-                selectedBranchId={selectedBranchId}
                 filteredRecentAppointments={filteredRecentAppointments}
                 showRecentAppointments={showRecentAppointments}
                 setShowRecentAppointments={setShowRecentAppointments}
-                pendingRefunds={pendingRefunds}
+                pendingRefunds={filteredPendingRefunds}
                 onApproveRefund={approveRefund}
                 processingRefundId={processingRefundId}
                 setActiveTab={setActiveTab}
@@ -1559,8 +1302,6 @@ export default function AdminDashboard() {
             branchManagementEnabled ? (
               <div className="hms-content-card rounded-xl p-2.5 sm:p-3">
                 <BranchManagement
-                  selectedBranchId={selectedBranchId}
-                  onBranchFilterChange={setSelectedBranchId}
                   kpi={{
                     doctors: displayStats.totalDoctors,
                     staff: null,
@@ -1590,27 +1331,27 @@ export default function AdminDashboard() {
                 onTabChange={setPatientSubTab}
               />
               <div className="p-6">
-                {patientSubTab === "all" && <PatientManagement selectedBranchId={selectedBranchId} />}
-                {patientSubTab === "analytics" && analyticsEnabled && <PatientAnalytics selectedBranchId={selectedBranchId} />}
+                {patientSubTab === "all" && <PatientManagement />}
+                {patientSubTab === "analytics" && analyticsEnabled && <PatientAnalytics />}
               </div>
             </div>
           )}
 
           {activeTab === "doctors" && (
             <div className="hms-content-card rounded-2xl p-6">
-              <DoctorManagement selectedBranchId={selectedBranchId} />
+              <DoctorManagement />
             </div>
           )}
 
           {activeTab === "campaigns" && !isSuperAdmin && (
             <div className="hms-content-card rounded-xl p-3 sm:p-3.5">
-              <CampaignManagement selectedBranchId={selectedBranchId} branches={branches} />
+              <CampaignManagement />
             </div>
           )}
 
           {activeTab === "appointments" && (
             <div className="hms-content-card rounded-2xl p-6">
-              <AppoinmentManagement selectedBranchId={selectedBranchId} />
+              <AppoinmentManagement />
             </div>
           )}
 
@@ -1625,8 +1366,8 @@ export default function AdminDashboard() {
                 onTabChange={setBillingSubTab}
               />
               <div className="p-6">
-                {billingSubTab === "all" && <BillingManagement selectedBranchId={selectedBranchId} />}
-                {billingSubTab === "analytics" && analyticsEnabled && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
+                {billingSubTab === "all" && <BillingManagement />}
+                {billingSubTab === "analytics" && analyticsEnabled && <FinancialAnalytics />}
               </div>
             </div>
           )}
@@ -1634,7 +1375,6 @@ export default function AdminDashboard() {
           {activeTab === "staff" && !isSuperAdmin && (
             <div className="hms-content-card rounded-xl p-2.5 sm:p-3">
               <StaffManagement
-                selectedBranchId={selectedBranchId}
                 doctorCount={displayStats.totalDoctors}
                 initialRoleFilter={staffSubTab === "pharmacists" ? "pharmacist" : "all"}
               />
@@ -1782,10 +1522,10 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
-                {analyticsSubTab === "patients" && <PatientAnalytics selectedBranchId={selectedBranchId} />}
-                {analyticsSubTab === "financial" && <FinancialAnalytics selectedBranchId={selectedBranchId} />}
-                {analyticsSubTab === "doctors" && <DoctorPerformanceAnalytics selectedBranchId={selectedBranchId} />}
-                {analyticsSubTab === "receptionists" && <ReceptionistPerformanceAnalytics selectedBranchId={selectedBranchId} />}
+                {analyticsSubTab === "patients" && <PatientAnalytics />}
+                {analyticsSubTab === "financial" && <FinancialAnalytics />}
+                {analyticsSubTab === "doctors" && <DoctorPerformanceAnalytics />}
+                {analyticsSubTab === "receptionists" && <ReceptionistPerformanceAnalytics />}
               </div>
             </div>
           )}

@@ -1,13 +1,16 @@
 'use client'
-import { fetchBranches } from "@/services/BranchService"
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearch } from '@/hooks/useSearch'
-import { getDocs, doc, deleteDoc, onSnapshot, updateDoc, query, where, orderBy } from 'firebase/firestore'
+import { doc, deleteDoc, onSnapshot, updateDoc, query, where, orderBy, getDocs } from 'firebase/firestore'
 import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { useAdminHospitalDataOptional } from '@/providers/AdminHospitalDataProvider'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
+import { filterAppointmentsByBranch } from '@/utils/branch/branchFilters'
+import { fetchBranches } from '@/services/BranchService'
 import {
   getAppointmentsCollectionPath,
   isAppointmentVisibleToReceptionist,
@@ -38,8 +41,6 @@ interface AppoinmentManagementProps {
     disableAdminGuard?: boolean
     /** When provided (receptionist dashboard), restrict view to this branch */
     receptionistBranchId?: string | null
-    /** When provided (admin dashboard), filter appointments by this branch */
-    selectedBranchId?: string
 }
 
 type AppointmentTimeRange = 'all' | 'today' | 'last10' | 'month' | 'year'
@@ -89,8 +90,9 @@ function getAppointmentDateBounds(timeRange: AppointmentTimeRange): { start: str
 export default function AppoinmentManagement({
     disableAdminGuard = true,
     receptionistBranchId = null,
-    selectedBranchId = "all"
 }: AppoinmentManagementProps = {}) {
+    const { selectedBranchId, branches: contextBranches, isProvided: branchContextProvided } = useBranchSelection()
+    const sharedHospitalData = useAdminHospitalDataOptional()
     const [appointments, setAppointments] = useState<Appointment[]>([])
     const [loading, setLoading] = useState(false)
     const hasLoadedAppointmentsRef = useRef(false)
@@ -189,9 +191,8 @@ export default function AppoinmentManagement({
     const [doctors, setDoctors] = useState<Array<{ id: string; firstName?: string; lastName?: string }>>([])
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
     const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
-    // Use prop if provided (from admin dashboard), otherwise use local state (for backward compatibility)
-    const [localSelectedBranchId, setLocalSelectedBranchId] = useState<string>('all')
-    const effectiveSelectedBranchId = selectedBranchId !== undefined ? selectedBranchId : localSelectedBranchId
+    // Branch Context (admin) or default "all" outside provider — same as prior prop default.
+    const effectiveSelectedBranchId = selectedBranchId
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [processingBulk, setProcessingBulk] = useState(false)
     const [exportOpen, setExportOpen] = useState(false)
@@ -200,7 +201,6 @@ export default function AppoinmentManagement({
         setSelectedDoctorId('all')
         setTimeRange('all')
         setStatusFilter('all')
-        setLocalSelectedBranchId('all')
         setSearch('')
         setSortField('')
         setSortOrder('asc')
@@ -652,7 +652,11 @@ export default function AppoinmentManagement({
 
                 // Additional branch filter from admin UI
                 if (!receptionistBranchId && effectiveSelectedBranchId !== 'all') {
-                    appointmentsList = appointmentsList.filter(apt => apt.branchId === effectiveSelectedBranchId)
+                    appointmentsList = filterAppointmentsByBranch(
+                        appointmentsList,
+                        effectiveSelectedBranchId,
+                        { unassigned: "exclude" }
+                    )
                 }
 
                 // Sort by newest first (createdAt descending, fallback to updatedAt)
@@ -707,30 +711,49 @@ export default function AppoinmentManagement({
     useEffect(() => {
         if (!activeHospitalId) return
 
-        // Fetch doctors list for dropdown (hospital-scoped)
-        ;(async () => {
-            try {
-                const snap = await getDocs(getHospitalCollection(activeHospitalId, 'doctors'))
-                const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as any[]
-                const mapped = list.map(d => ({ id: d.id, firstName: d.firstName, lastName: d.lastName }))
-                setDoctors(mapped)
-            } catch {
-                setDoctors([])
-            }
-        })()
-
-        // Fetch branches
-        ;(async () => {
-            try {
-                const result = await fetchBranches(activeHospitalId)
-                if (result.success) {
-                    setBranches(result.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
+        // Prefer shared admin hospital doctors; fallback fetch outside provider (receptionist).
+        if (sharedHospitalData.isProvided) {
+            setDoctors(
+                sharedHospitalData.doctors.map((d) => ({
+                    id: d.id,
+                    firstName: d.firstName,
+                    lastName: d.lastName,
+                }))
+            )
+        } else {
+            ;(async () => {
+                try {
+                    const snap = await getDocs(getHospitalCollection(activeHospitalId, 'doctors'))
+                    const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as any[]
+                    setDoctors(list.map((d) => ({ id: d.id, firstName: d.firstName, lastName: d.lastName })))
+                } catch {
+                    setDoctors([])
                 }
-            } catch {
-                // ignore
-            }
-        })()
-    }, [activeHospitalId])
+            })()
+        }
+
+        // Prefer Branch Context; fallback fetch outside provider.
+        if (branchContextProvided) {
+            setBranches(contextBranches.map((b) => ({ id: b.id, name: b.name })))
+        } else {
+            ;(async () => {
+                try {
+                    const result = await fetchBranches(activeHospitalId)
+                    if (result.success) {
+                        setBranches(result.branches.map((b: Branch) => ({ id: b.id, name: b.name })))
+                    }
+                } catch {
+                    // ignore
+                }
+            })()
+        }
+    }, [
+        activeHospitalId,
+        sharedHospitalData.isProvided,
+        sharedHospitalData.doctors,
+        branchContextProvided,
+        contextBranches,
+    ])
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -1065,7 +1088,7 @@ export default function AppoinmentManagement({
                                 <option value="year">This year</option>
                             </select>
                             {branches.length > 0 && !receptionistBranchId && (
-                                <select value={effectiveSelectedBranchId} onChange={(e) => setLocalSelectedBranchId(e.target.value)} disabled={selectedBranchId !== undefined}
+                                <select value={effectiveSelectedBranchId} onChange={() => {}} disabled
                                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:opacity-50"
                                 >
                                     <option value="all">All Branches</option>

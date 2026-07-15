@@ -1,5 +1,4 @@
 "use client"
-import { fetchBranches } from "@/services/BranchService"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 // import { PageHeader } from '@/components/ui/PageHeader'
@@ -7,6 +6,9 @@ import { where, query, doc, deleteDoc, onSnapshot, collection, getDocs, type Doc
 import { db, auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { filterPatientsByBranch } from '@/utils/branch/branchFilters'
+import { fetchBranches } from '@/services/BranchService'
 import { useSearch } from '@/hooks/useSearch'
 import { getHospitalCollection } from '@/utils/firebase/hospital-queries'
 import { SuccessToast } from '@/shared/components'
@@ -73,8 +75,6 @@ interface PatientManagementProps {
     disableAdminGuard?: boolean
     /** When provided, receptionist views will be filtered to this branch */
     receptionistBranchId?: string | null
-    /** When provided (admin dashboard), filter patients by this branch */
-    selectedBranchId?: string
 }
 
 type BranchOption = { id: string; name: string }
@@ -293,8 +293,8 @@ export default function PatientManagement({
     canAdd = true,
     disableAdminGuard = true,
     receptionistBranchId = null,
-    selectedBranchId = "all"
 }: PatientManagementProps = {}) {
+    const { selectedBranchId, branches: contextBranches, isProvided: branchContextProvided } = useBranchSelection()
     const [patients, setPatients] = useState<Patient[]>([])
     const [legacyPatients, setLegacyPatients] = useState<Patient[]>([])
     const legacyPatientsRef = useRef<Patient[]>([])
@@ -575,22 +575,16 @@ export default function PatientManagement({
                 // If used from receptionist dashboard, restrict to their branch.
                 // Include patients with no branch (legacy / IPD auto-register before branch was set) so they stay visible.
                 if (receptionistBranchId) {
-                    patientsList = patientsList.filter(
-                        (p) =>
-                            p.defaultBranchId === receptionistBranchId ||
-                            p.defaultBranchId == null ||
-                            p.defaultBranchId === ""
-                    )
+                    patientsList = filterPatientsByBranch(patientsList, receptionistBranchId, {
+                        unassigned: "keep",
+                    })
                 }
                 
                 // Admin branch filter: match branch or patients with no branch (same as receptionist list)
                 if (!receptionistBranchId && selectedBranchId !== "all") {
-                    patientsList = patientsList.filter(
-                        (p) =>
-                            p.defaultBranchId === selectedBranchId ||
-                            p.defaultBranchId == null ||
-                            p.defaultBranchId === ""
-                    )
+                    patientsList = filterPatientsByBranch(patientsList, selectedBranchId, {
+                        unassigned: "keep",
+                    })
                 }
                 
                 // Appointment stats are loaded on-demand when View modal opens.
@@ -1100,20 +1094,24 @@ export default function PatientManagement({
         setBranchOptionsLoading(true)
         ;(async () => {
             try {
-                const result = await fetchBranches(activeHospitalId)
-                if (!result.success) {
-                    throw new Error(result.error || "Failed to load branches")
+                let rows: Array<{ id: string; name: string }> = []
+                if (branchContextProvided) {
+                    rows = contextBranches.map((b) => ({
+                        id: String(b?.id || "").trim(),
+                        name: String(b?.name || "Branch").trim(),
+                    }))
+                } else {
+                    const result = await fetchBranches(activeHospitalId)
+                    if (!result.success) {
+                        throw new Error(result.error || "Failed to load branches")
+                    }
+                    rows = result.branches.map((b: any) => ({
+                        id: String(b?.id || "").trim(),
+                        name: String(b?.name || "Branch").trim(),
+                    }))
                 }
-                const rows = result.branches
                 if (cancelled) return
-                setBranchOptions(
-                    rows
-                        .map((b: any) => ({
-                            id: String(b?.id || "").trim(),
-                            name: String(b?.name || "Branch").trim(),
-                        }))
-                        .filter((b: BranchOption) => b.id)
-                )
+                setBranchOptions(rows.filter((b: BranchOption) => b.id))
             } catch (e: unknown) {
                 if (!cancelled) {
                     setBranchEditError((e as Error)?.message || "Failed to load branches")
@@ -1126,7 +1124,7 @@ export default function PatientManagement({
         return () => {
             cancelled = true
         }
-    }, [branchEditModalOpen, activeHospitalId])
+    }, [branchEditModalOpen, activeHospitalId, branchContextProvided, contextBranches])
 
     const handleSavePatientBranch = async () => {
         if (!branchEditPatient) return

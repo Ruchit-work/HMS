@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { auth } from "@/firebase/config"
+import { useBranchSelection } from "@/providers/BranchProvider"
+import { useAdminHospitalDataOptional } from "@/providers/AdminHospitalDataProvider"
+import { filterBillingByBranch } from "@/utils/branch/branchFilters"
 import BillingCollectionAnalytics from "@/features/billing/BillingCollectionAnalytics"
 import {
   computeCollectionTrend,
@@ -41,9 +44,16 @@ interface UnifiedBillingRecord {
   branchId?: string | null
 }
 
-export default function BillingManagement({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
-  const [billingRecords, setBillingRecords] = useState<UnifiedBillingRecord[]>([])
-  const [billingLoading, setBillingLoading] = useState(false)
+export default function BillingManagement() {
+  const { selectedBranchId } = useBranchSelection()
+  const {
+    billingRecords: sharedBilling,
+    billingLoading: sharedBillingLoading,
+    refreshBilling,
+    isProvided,
+  } = useAdminHospitalDataOptional()
+  const [fallbackRecords, setFallbackRecords] = useState<UnifiedBillingRecord[]>([])
+  const [fallbackLoading, setFallbackLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
   const [billingSearchTerm, setBillingSearchTerm] = useState("")
   const [billingDateFilter, setBillingDateFilter] = useState("")
@@ -53,16 +63,19 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
 
   const fetchBillingRecords = useCallback(async () => {
     try {
-      setBillingLoading(true)
       setBillingError(null)
+      if (isProvided) {
+        await refreshBilling()
+        return
+      }
 
+      setFallbackLoading(true)
       const currentUser = auth.currentUser
       if (!currentUser) {
         throw new Error("You must be logged in to access billing records")
       }
 
       const token = await currentUser.getIdToken()
-
       const res = await fetch("/api/admin/billing-records", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -75,23 +88,15 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
         throw new Error(data?.error || "Failed to load billing records")
       }
       const data = await res.json().catch(() => ({}))
-      let records = Array.isArray(data?.records) ? data.records : []
-
-      if (selectedBranchId !== "all") {
-        records = records.filter((record: UnifiedBillingRecord) => {
-          if (!record.branchId) return true
-          return record.branchId === selectedBranchId
-        })
-      }
-
-      setBillingRecords(records as UnifiedBillingRecord[])
+      const records = Array.isArray(data?.records) ? data.records : []
+      setFallbackRecords(records as UnifiedBillingRecord[])
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load billing records"
       setBillingError(message)
     } finally {
-      setBillingLoading(false)
+      setFallbackLoading(false)
     }
-  }, [selectedBranchId])
+  }, [isProvided, refreshBilling])
 
   useEffect(() => {
     fetchBillingRecords()
@@ -100,6 +105,17 @@ export default function BillingManagement({ selectedBranchId = "all" }: { select
     }, 30000)
     return () => clearInterval(interval)
   }, [fetchBillingRecords])
+
+  const billingRecords = useMemo(
+    () =>
+      filterBillingByBranch(
+        (isProvided ? sharedBilling : fallbackRecords) as UnifiedBillingRecord[],
+        selectedBranchId,
+        { unassigned: "keep" }
+      ),
+    [isProvided, sharedBilling, fallbackRecords, selectedBranchId]
+  )
+  const billingLoading = isProvided ? sharedBillingLoading : fallbackLoading
 
   const billingSearchValue = billingSearchTerm.trim().toLowerCase()
   const typeFilteredRecords = useMemo(() => {

@@ -41,6 +41,13 @@ import {
 import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "@/firebase/config"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import { useBranchSelection } from "@/providers/BranchProvider"
+import {
+  filterByBranchField,
+  filterBranchesBySelection,
+  isAllBranches,
+  isUnassignedBranchValue,
+} from "@/utils/branch/branchFilters"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import type { Appointment, Room } from "@/types/patient"
 import type { TrendPoint } from "@/utils/analytics/dashboardCalculations"
@@ -52,7 +59,11 @@ import {
   isSameLocalDay,
   revenueDateKey,
 } from "@/utils/analytics/dashboardCalculations"
-import { NotificationBadge } from '@/shared/components'
+import { NotificationBadge, EnterpriseDataTable, StatusPill } from '@/shared/components'
+import type { EnterpriseColumn } from '@/shared/components'
+import { useAdminHospitalDataOptional } from "@/providers/AdminHospitalDataProvider"
+import { useSearch } from "@/hooks/useSearch"
+import { useTablePagination } from "@/hooks/useTablePagination"
 export interface DashboardStatsForOverview {
   totalPatients: number
   totalDoctors: number
@@ -99,7 +110,6 @@ interface AdminDashboardOverviewProps {
   /** Already-loaded patients for insight cards (branch-filtered). */
   filteredPatients?: Array<Record<string, unknown> & { id?: string; createdAt?: string }>
   branches: Array<{ id: string; name: string }>
-  selectedBranchId: string
   filteredRecentAppointments: Appointment[]
   showRecentAppointments: boolean
   setShowRecentAppointments: (v: boolean) => void
@@ -311,6 +321,89 @@ function FinanceTooltip({
   )
 }
 
+function BranchMetricTooltip({
+  active,
+  payload,
+  label,
+  formatValue,
+}: {
+  active?: boolean
+  payload?: Array<{ value?: number }>
+  label?: string
+  formatValue?: (value: number) => string
+}) {
+  if (!active || !payload?.length) return null
+  const value = Number(payload[0]?.value || 0)
+  const display = formatValue ? formatValue(value) : value.toLocaleString("en-IN")
+  return (
+    <div className="admin-ov-fin-tooltip">
+      <p className="admin-ov-fin-tooltip-label">{label}</p>
+      <p className="admin-ov-fin-tooltip-value">{display}</p>
+    </div>
+  )
+}
+
+type BranchChartPoint = { name: string; value: number }
+
+/** Compact bar chart panel — reuses existing Recharts BarChart (no new libs). */
+function BranchAnalyticsChart({
+  title,
+  subtitle,
+  data,
+  color,
+  formatValue,
+  emptyTitle,
+}: {
+  title: string
+  subtitle: string
+  data: BranchChartPoint[]
+  color: string
+  formatValue?: (value: number) => string
+  emptyTitle?: string
+}) {
+  const hasPositive = data.some((d) => d.value > 0)
+  const showEmpty = data.length === 0 || (Boolean(emptyTitle) && !hasPositive)
+  return (
+    <Panel title={title} subtitle={subtitle}>
+      <div className="admin-ov-fin-chart admin-ov-fin-chart--sm">
+        {showEmpty ? (
+          <EmptyBlock
+            title={emptyTitle || "No data yet"}
+            description="Metrics appear once branch activity is recorded."
+          />
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis
+                dataKey="name"
+                tick={{ fill: "#64748b", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+                angle={data.length > 4 ? -20 : 0}
+                textAnchor={data.length > 4 ? "end" : "middle"}
+                height={data.length > 4 ? 48 : 28}
+              />
+              <YAxis
+                tick={{ fill: "#64748b", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                width={40}
+                tickFormatter={(v) =>
+                  formatValue ? formatValue(Number(v)).replace(/^₹/, "") : String(v)
+                }
+              />
+              <Tooltip content={<BranchMetricTooltip formatValue={formatValue} />} />
+              <Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} maxBarSize={40} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </Panel>
+  )
+}
+
 function isIcuRoom(room: Room): boolean {
   const custom = String(room.customRoomTypeName || "").toLowerCase()
   const attrs = room.attributes || {}
@@ -362,6 +455,193 @@ function ResourceCard({
       ) : null}
     </div>
   )
+}
+
+type BranchOverallStatus = "healthy" | "busy" | "critical"
+
+type BranchPerformanceCardData = {
+  branchId: string
+  branchName: string
+  /** Unique patients with appointments today (OPD + other). */
+  todayPatients: number
+  opdToday: number
+  ipdCurrent: number | null
+  revenueToday: number | null
+  bedOccupancy: string
+  bedOccupancyPct: number | null
+  availableDoctors: number | null
+  waitingQueue: number
+  emergencyCases: number
+  status: BranchOverallStatus
+}
+
+type BranchComparisonRow = {
+  id: string
+  branchName: string
+  todayPatients: number
+  revenueToday: number | null
+  availableDoctors: number | null
+  bedOccupancy: string
+  bedOccupancyPct: number | null
+  waitingQueue: number
+  emergencyCases: number
+  status: BranchOverallStatus
+}
+
+function branchStatusLabel(status: BranchOverallStatus): string {
+  if (status === "critical") return "🔴 Critical"
+  if (status === "busy") return "🟡 Busy"
+  return "🟢 Healthy"
+}
+
+function branchStatusTone(status: BranchOverallStatus): "green" | "amber" | "rose" {
+  if (status === "critical") return "rose"
+  if (status === "busy") return "amber"
+  return "green"
+}
+
+function deriveBranchOverallStatus(input: {
+  waitingQueue: number
+  emergencyCases: number
+  bedOccupancyPct: number | null
+}): BranchOverallStatus {
+  const { waitingQueue, emergencyCases, bedOccupancyPct } = input
+  if (
+    (emergencyCases > 0 && waitingQueue >= 3) ||
+    waitingQueue >= 8 ||
+    (bedOccupancyPct != null && bedOccupancyPct >= 90)
+  ) {
+    return "critical"
+  }
+  if (
+    waitingQueue >= 4 ||
+    emergencyCases > 0 ||
+    (bedOccupancyPct != null && bedOccupancyPct >= 70)
+  ) {
+    return "busy"
+  }
+  return "healthy"
+}
+
+/** Compact enterprise card for one branch — reuses admin Panel card shell. */
+function BranchPerformanceCard({ data }: { data: BranchPerformanceCardData }) {
+  const metrics: Array<{ label: string; value: string }> = [
+    { label: "Today's OPD", value: String(data.opdToday) },
+    {
+      label: "Current IPD",
+      value: data.ipdCurrent == null ? "—" : String(data.ipdCurrent),
+    },
+    {
+      label: "Today's Revenue",
+      value: data.revenueToday == null ? "—" : formatCompactInr(data.revenueToday),
+    },
+    { label: "Bed Occupancy", value: data.bedOccupancy },
+    {
+      label: "Available Doctors",
+      value: data.availableDoctors == null ? "—" : String(data.availableDoctors),
+    },
+    { label: "Waiting Queue", value: String(data.waitingQueue) },
+    { label: "Emergency Cases", value: String(data.emergencyCases) },
+  ]
+
+  return (
+    <Panel
+      title={data.branchName}
+      subtitle="Branch performance"
+      action={<OpsStatusBadge label={branchStatusLabel(data.status)} tone={branchStatusTone(data.status)} />}
+      className="admin-ov-branch-card h-full"
+      bodyClassName="!pt-2"
+    >
+      <div className="admin-ov-branch-metrics">
+        {metrics.map((m) => (
+          <div key={m.label} className="admin-ov-branch-metric">
+            <span className="admin-ov-branch-metric-label">{m.label}</span>
+            <span className="admin-ov-branch-metric-value">{m.value}</span>
+          </div>
+        ))}
+        <div className="admin-ov-branch-metric admin-ov-branch-metric--status">
+          <span className="admin-ov-branch-metric-label">Overall Status</span>
+          <span className="admin-ov-branch-metric-value">{branchStatusLabel(data.status)}</span>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+type BranchRankingEntry = {
+  rank: number
+  branchName: string
+  value: string
+}
+
+/** Compact top-N ranking card — reuses admin Panel shell. */
+function BranchRankingCard({
+  title,
+  subtitle,
+  icon: Icon,
+  tone,
+  items,
+}: {
+  title: string
+  subtitle?: string
+  icon: LucideIcon
+  tone: KpiTone
+  items: BranchRankingEntry[]
+}) {
+  return (
+    <Panel
+      title={title}
+      subtitle={subtitle}
+      action={
+        <span className={`admin-ov-res-card-icon admin-ov-kpi-icon admin-ov-kpi--${tone}`} aria-hidden>
+          <Icon className="w-4 h-4" strokeWidth={2} />
+        </span>
+      }
+      className="admin-ov-branch-rank h-full"
+      bodyClassName="!pt-1"
+    >
+      {items.length === 0 ? (
+        <OpsEmpty title="No ranking data yet" />
+      ) : (
+        <ol className="admin-ov-branch-rank-list">
+          {items.map((item) => (
+            <li key={`${title}-${item.rank}-${item.branchName}`} className="admin-ov-branch-rank-item">
+              <span className="admin-ov-branch-rank-pos">{item.rank}</span>
+              <span className="admin-ov-branch-rank-name">{item.branchName}</span>
+              <span className="admin-ov-branch-rank-value">{item.value}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Panel>
+  )
+}
+
+function topBranchRankings(
+  rows: BranchComparisonRow[],
+  getValue: (row: BranchComparisonRow) => number | null,
+  order: "asc" | "desc",
+  formatValue: (value: number) => string,
+  limit = 5
+): BranchRankingEntry[] {
+  const sorted = [...rows].sort((a, b) => {
+    const av = getValue(a)
+    const bv = getValue(b)
+    if (av == null && bv == null) return a.branchName.localeCompare(b.branchName)
+    if (av == null) return 1
+    if (bv == null) return -1
+    const delta = order === "desc" ? bv - av : av - bv
+    return delta !== 0 ? delta : a.branchName.localeCompare(b.branchName)
+  })
+
+  return sorted
+    .filter((row) => getValue(row) != null)
+    .slice(0, limit)
+    .map((row, index) => ({
+      rank: index + 1,
+      branchName: row.branchName,
+      value: formatValue(getValue(row) as number),
+    }))
 }
 
 function formatRelativeTime(timestamp: string): string {
@@ -469,7 +749,6 @@ export default function AdminDashboardOverview({
   filteredAppointments,
   filteredPatients = [],
   branches,
-  selectedBranchId: _selectedBranchId,
   filteredRecentAppointments: _filteredRecentAppointments,
   showRecentAppointments: _showRecentAppointments,
   setShowRecentAppointments: _setShowRecentAppointments,
@@ -482,8 +761,20 @@ export default function AdminDashboardOverview({
   systemAlerts = {},
 }: AdminDashboardOverviewProps) {
   const { activeHospitalId } = useMultiHospital()
-  const [roomsInventory, setRoomsInventory] = useState<Room[]>([])
-  const [activeAdmissionsCount, setActiveAdmissionsCount] = useState(0)
+  const { selectedBranchId, branches: contextBranches } = useBranchSelection()
+  const branchList = branches.length > 0 ? branches : contextBranches
+  const sharedHospitalData = useAdminHospitalDataOptional()
+  const {
+    searchTerm: branchCompareSearch,
+    setSearchTerm: setBranchCompareSearch,
+    debouncedSearchTerm: branchCompareDebouncedSearch,
+  } = useSearch()
+  const [branchCompareSortField, setBranchCompareSortField] = useState("branchName")
+  const [branchCompareSortOrder, setBranchCompareSortOrder] = useState<"asc" | "desc">("asc")
+  const [roomsInventory, setRoomsInventory] = useState<Array<Room & { branchId?: string | null }>>([])
+  const [activeAdmissions, setActiveAdmissions] = useState<
+    Array<{ id: string; branchId?: string | null }>
+  >([])
 
   // Read-only rooms inventory for resource widgets (no seed / no mutations).
   useEffect(() => {
@@ -497,8 +788,16 @@ export default function AdminDashboardOverview({
         if (cancelled) return
         const rooms = snap.docs
           .map((docSnap) => {
-            const data = docSnap.data() as Omit<Room, "id"> & Partial<Room> & { isArchived?: boolean; hospitalId?: string }
-            return { ...data, id: docSnap.id } as Room & { isArchived?: boolean; hospitalId?: string }
+            const data = docSnap.data() as Omit<Room, "id"> & Partial<Room> & {
+              isArchived?: boolean
+              hospitalId?: string
+              branchId?: string | null
+            }
+            return { ...data, id: docSnap.id } as Room & {
+              isArchived?: boolean
+              hospitalId?: string
+              branchId?: string | null
+            }
           })
           .filter((room) => !(room as Room & { isArchived?: boolean }).isArchived)
         setRoomsInventory(rooms)
@@ -525,7 +824,7 @@ export default function AdminDashboardOverview({
   // Live IPD occupancy from hospital-scoped admissions (status admitted).
   useEffect(() => {
     if (!activeHospitalId) {
-      setActiveAdmissionsCount(0)
+      setActiveAdmissions([])
       return
     }
     let cancelled = false
@@ -537,7 +836,12 @@ export default function AdminDashboardOverview({
     )
       .then((snap) => {
         if (cancelled) return
-        setActiveAdmissionsCount(snap.size)
+        setActiveAdmissions(
+          snap.docs.map((d) => {
+            const data = d.data() as { branchId?: string | null }
+            return { id: d.id, branchId: data.branchId ?? null }
+          })
+        )
         if (process.env.NODE_ENV === "development") {
           console.info("[admin-dashboard] admissions", {
             hospitalId: activeHospitalId,
@@ -549,23 +853,399 @@ export default function AdminDashboardOverview({
         if (process.env.NODE_ENV === "development") {
           console.warn("[admin-dashboard] admissions query failed", err)
         }
-        if (!cancelled) setActiveAdmissionsCount(0)
+        if (!cancelled) setActiveAdmissions([])
       })
     return () => {
       cancelled = true
     }
   }, [activeHospitalId])
 
-  const branchPerformance = useMemo(() => {
-    if (branches.length === 0) return []
-    return branches.map((branch) => {
-      const apts = filteredAppointments.filter((a) => (a as Appointment & { branchId?: string }).branchId === branch.id)
-      const revenue = apts
-        .filter((a) => isPaidAppointment(a))
-        .reduce((s, a) => s + getPaidAmount(a), 0)
-      return { branchId: branch.id, branchName: branch.name, visits: apts.length, revenue }
+  /** Scope rooms/admissions to Branch Context without re-querying. */
+  const scopedRoomsInventory = useMemo(() => {
+    const roomsHaveBranch = roomsInventory.some((r) => !isUnassignedBranchValue(r.branchId))
+    if (roomsHaveBranch) {
+      return filterByBranchField(roomsInventory, selectedBranchId, (r) => r.branchId, "keep")
+    }
+    // Untagged room inventory is hospital-wide — use only for "All Branches".
+    if (isAllBranches(selectedBranchId)) return roomsInventory
+    return []
+  }, [roomsInventory, selectedBranchId])
+
+  const activeAdmissionsCount = useMemo(
+    () => filterByBranchField(activeAdmissions, selectedBranchId, (a) => a.branchId, "keep").length,
+    [activeAdmissions, selectedBranchId]
+  )
+
+  const branchPerformanceCards = useMemo((): BranchPerformanceCardData[] => {
+    const scopedBranches = filterBranchesBySelection(branchList, selectedBranchId)
+    if (scopedBranches.length === 0) return []
+
+    const today = new Date()
+    const waitingStatuses = new Set(["confirmed", "pending", "rescheduled", "resrescheduled"])
+    const roomsHaveBranch = roomsInventory.some((r) => !isUnassignedBranchValue(r.branchId))
+    const admissionsHaveBranch = activeAdmissions.some((a) => !isUnassignedBranchValue(a.branchId))
+    const doctors = sharedHospitalData.isProvided ? sharedHospitalData.doctors : []
+    const billingRecords = sharedHospitalData.isProvided ? sharedHospitalData.billingRecords : []
+    const doctorsLoaded = sharedHospitalData.isProvided && !sharedHospitalData.loading
+    const billingLoaded =
+      sharedHospitalData.isProvided && !sharedHospitalData.billingLoading && !sharedHospitalData.loading
+
+    return scopedBranches.map((branch) => {
+      const branchApts = filteredAppointments.filter(
+        (a) => (a as Appointment & { branchId?: string | null }).branchId === branch.id
+      )
+      const todayApts = branchApts.filter(
+        (a) =>
+          isSameDay(a.appointmentDate, today) &&
+          a.status !== "cancelled" &&
+          a.status !== "whatsapp_pending" &&
+          !(a as Appointment & { whatsappPending?: boolean }).whatsappPending
+      )
+
+      const opdToday = todayApts
+        .filter((a) => !a.admissionId)
+        .reduce((set, a) => {
+          if (a.patientId) set.add(a.patientId)
+          return set
+        }, new Set<string>()).size
+
+      const todayPatients = todayApts.reduce((set, a) => {
+        if (a.patientId) set.add(a.patientId)
+        return set
+      }, new Set<string>()).size
+
+      let ipdCurrent: number | null = null
+      if (admissionsHaveBranch) {
+        ipdCurrent = activeAdmissions.filter((a) => a.branchId === branch.id).length
+      } else {
+        const fromApts = branchApts.filter(
+          (a) => Boolean(a.admissionId) && a.status !== "cancelled" && a.status !== "completed"
+        ).length
+        ipdCurrent = fromApts > 0 ? fromApts : filteredAppointments.length === 0 ? null : 0
+      }
+
+      let revenueToday: number | null = null
+      if (billingLoaded && billingRecords.length > 0) {
+        revenueToday = billingRecords
+          .filter((r) => {
+            if (String(r.status || "").toLowerCase() !== "paid") return false
+            if (r.branchId !== branch.id) return false
+            return isSameLocalDay(r.paidAt, today)
+          })
+          .reduce((sum, r) => sum + Number(r.totalAmount || 0), 0)
+      } else if (branchApts.length > 0 || filteredAppointments.length > 0) {
+        revenueToday = todayApts
+          .filter((a) => isPaidAppointment(a))
+          .reduce((sum, a) => sum + getPaidAmount(a), 0)
+      }
+
+      let bedOccupancy = "—"
+      let bedOccupancyPct: number | null = null
+      if (roomsHaveBranch) {
+        const branchRooms = roomsInventory.filter((r) => r.branchId === branch.id)
+        if (branchRooms.length > 0) {
+          const occupied = branchRooms.filter((r) => r.status === "occupied").length
+          bedOccupancyPct = Math.round((occupied / branchRooms.length) * 100)
+          bedOccupancy = `${bedOccupancyPct}%`
+        }
+      }
+
+      let availableDoctors: number | null = null
+      if (doctorsLoaded) {
+        availableDoctors = doctors.filter((d) => {
+          const branchIds = (d as { branchIds?: string[] | null }).branchIds || []
+          if (!Array.isArray(branchIds) || !branchIds.includes(branch.id)) return false
+          const status = String((d as { status?: string }).status || "").toLowerCase()
+          return status === "" || status === "active" || status === "approved"
+        }).length
+      }
+
+      const waitingQueue = todayApts.filter((a) =>
+        waitingStatuses.has(String(a.status || "").toLowerCase())
+      ).length
+      const emergencyCases = todayApts.filter(isEmergencyAppointment).length
+      const status = deriveBranchOverallStatus({
+        waitingQueue,
+        emergencyCases,
+        bedOccupancyPct,
+      })
+
+      return {
+        branchId: branch.id,
+        branchName: branch.name,
+        todayPatients,
+        opdToday,
+        ipdCurrent,
+        revenueToday,
+        bedOccupancy,
+        bedOccupancyPct,
+        availableDoctors,
+        waitingQueue,
+        emergencyCases,
+        status,
+      }
     })
-  }, [branches, filteredAppointments])
+  }, [
+    branchList,
+    selectedBranchId,
+    filteredAppointments,
+    roomsInventory,
+    activeAdmissions,
+    sharedHospitalData.isProvided,
+    sharedHospitalData.loading,
+    sharedHospitalData.billingLoading,
+    sharedHospitalData.doctors,
+    sharedHospitalData.billingRecords,
+  ])
+
+  const branchComparisonRows = useMemo((): BranchComparisonRow[] => {
+    return branchPerformanceCards.map((card) => ({
+      id: card.branchId,
+      branchName: card.branchName,
+      todayPatients: card.todayPatients,
+      revenueToday: card.revenueToday,
+      availableDoctors: card.availableDoctors,
+      bedOccupancy: card.bedOccupancy,
+      bedOccupancyPct: card.bedOccupancyPct,
+      waitingQueue: card.waitingQueue,
+      emergencyCases: card.emergencyCases,
+      status: card.status,
+    }))
+  }, [branchPerformanceCards])
+
+  const filteredBranchComparisonRows = useMemo(() => {
+    const q = branchCompareDebouncedSearch.trim().toLowerCase()
+    let rows = branchComparisonRows
+    if (q) {
+      rows = rows.filter(
+        (r) =>
+          r.branchName.toLowerCase().includes(q) ||
+          branchStatusLabel(r.status).toLowerCase().includes(q)
+      )
+    }
+
+    const dir = branchCompareSortOrder === "asc" ? 1 : -1
+    const cmpNullable = (a: number | null, b: number | null) => {
+      if (a == null && b == null) return 0
+      if (a == null) return 1
+      if (b == null) return -1
+      return (a - b) * dir
+    }
+
+    return [...rows].sort((a, b) => {
+      switch (branchCompareSortField) {
+        case "todayPatients":
+          return (a.todayPatients - b.todayPatients) * dir
+        case "revenueToday":
+          return cmpNullable(a.revenueToday, b.revenueToday)
+        case "availableDoctors":
+          return cmpNullable(a.availableDoctors, b.availableDoctors)
+        case "bedOccupancy":
+          return cmpNullable(a.bedOccupancyPct, b.bedOccupancyPct)
+        case "waitingQueue":
+          return (a.waitingQueue - b.waitingQueue) * dir
+        case "emergencyCases":
+          return (a.emergencyCases - b.emergencyCases) * dir
+        case "status": {
+          const rank = { healthy: 0, busy: 1, critical: 2 }
+          return (rank[a.status] - rank[b.status]) * dir
+        }
+        case "branchName":
+        default:
+          return a.branchName.localeCompare(b.branchName) * dir
+      }
+    })
+  }, [
+    branchComparisonRows,
+    branchCompareDebouncedSearch,
+    branchCompareSortField,
+    branchCompareSortOrder,
+  ])
+
+  const {
+    currentPage: branchComparePage,
+    pageSize: branchComparePageSize,
+    totalPages: branchCompareTotalPages,
+    paginatedItems: paginatedBranchComparisonRows,
+    goToPage: goToBranchComparePage,
+    setPageSize: setBranchComparePageSize,
+  } = useTablePagination(filteredBranchComparisonRows, {
+    initialPageSize: 10,
+    resetOnFilterChange: true,
+  })
+
+  const handleBranchCompareSort = (field: string) => {
+    if (branchCompareSortField === field) {
+      setBranchCompareSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+    } else {
+      setBranchCompareSortField(field)
+      setBranchCompareSortOrder(field === "branchName" ? "asc" : "desc")
+    }
+  }
+
+  const branchComparisonColumns = useMemo((): EnterpriseColumn<BranchComparisonRow>[] => {
+    return [
+      {
+        key: "branchName",
+        header: "Branch",
+        sortable: true,
+        width: "w-[16%]",
+        render: (row) => (
+          <span className="font-semibold text-slate-900">{row.branchName}</span>
+        ),
+      },
+      {
+        key: "todayPatients",
+        header: "Today's Patients",
+        sortable: true,
+        align: "right",
+        width: "w-[11%]",
+        render: (row) => (
+          <span className="tabular-nums text-slate-800">{row.todayPatients}</span>
+        ),
+      },
+      {
+        key: "revenueToday",
+        header: "Today's Revenue",
+        sortable: true,
+        align: "right",
+        width: "w-[12%]",
+        hideBelow: "sm",
+        render: (row) => (
+          <span className="tabular-nums font-medium text-slate-900">
+            {row.revenueToday == null ? "—" : formatCompactInr(row.revenueToday)}
+          </span>
+        ),
+      },
+      {
+        key: "availableDoctors",
+        header: "Doctors Available",
+        sortable: true,
+        align: "right",
+        width: "w-[11%]",
+        hideBelow: "md",
+        render: (row) => (
+          <span className="tabular-nums text-slate-800">
+            {row.availableDoctors == null ? "—" : row.availableDoctors}
+          </span>
+        ),
+      },
+      {
+        key: "bedOccupancy",
+        header: "Bed Occupancy",
+        sortable: true,
+        align: "right",
+        width: "w-[11%]",
+        hideBelow: "md",
+        render: (row) => (
+          <span className="tabular-nums text-slate-800">{row.bedOccupancy}</span>
+        ),
+      },
+      {
+        key: "waitingQueue",
+        header: "Waiting Queue",
+        sortable: true,
+        align: "right",
+        width: "w-[11%]",
+        hideBelow: "lg",
+        render: (row) => (
+          <span className="tabular-nums text-slate-800">{row.waitingQueue}</span>
+        ),
+      },
+      {
+        key: "emergencyCases",
+        header: "Emergency Cases",
+        sortable: true,
+        align: "right",
+        width: "w-[11%]",
+        hideBelow: "lg",
+        render: (row) => (
+          <span className="tabular-nums text-slate-800">{row.emergencyCases}</span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Overall Status",
+        sortable: true,
+        width: "w-[14%]",
+        render: (row) => (
+          <StatusPill
+            label={branchStatusLabel(row.status)}
+            variant={
+              row.status === "critical"
+                ? "danger"
+                : row.status === "busy"
+                  ? "warning"
+                  : "success"
+            }
+          />
+        ),
+      },
+    ]
+  }, [])
+
+  const branchRankings = useMemo(() => {
+    const rows = branchComparisonRows
+    return {
+      highestRevenue: topBranchRankings(
+        rows,
+        (r) => r.revenueToday,
+        "desc",
+        (v) => formatCompactInr(v)
+      ),
+      highestPatientVolume: topBranchRankings(
+        rows,
+        (r) => r.todayPatients,
+        "desc",
+        (v) => `${v} patient${v === 1 ? "" : "s"}`
+      ),
+      bestBedUtilization: topBranchRankings(
+        rows,
+        (r) => r.bedOccupancyPct,
+        "desc",
+        (v) => `${v}%`
+      ),
+      fastestQueue: topBranchRankings(
+        rows,
+        (r) => r.waitingQueue,
+        "asc",
+        (v) => (v === 0 ? "Queue clear" : `${v} waiting`)
+      ),
+    }
+  }, [branchComparisonRows])
+
+  /** Executive charts — same cached branch metrics; reacts to Branch Context selection. */
+  const executiveBranchCharts = useMemo(() => {
+    const rows = branchComparisonRows
+    const shortName = (name: string) =>
+      name.length > 12 ? `${name.slice(0, 11)}…` : name
+
+    return {
+      revenueByBranch: rows.map((r) => ({
+        name: shortName(r.branchName),
+        value: r.revenueToday ?? 0,
+      })),
+      patientsByBranch: rows.map((r) => ({
+        name: shortName(r.branchName),
+        value: r.todayPatients,
+      })),
+      bedOccupancyByBranch: rows.map((r) => ({
+        name: shortName(r.branchName),
+        value: r.bedOccupancyPct ?? 0,
+      })),
+      waitingQueueByBranch: rows.map((r) => ({
+        name: shortName(r.branchName),
+        value: r.waitingQueue,
+      })),
+      doctorsByBranch: rows.map((r) => ({
+        name: shortName(r.branchName),
+        value: r.availableDoctors ?? 0,
+      })),
+      hasBedData: rows.some((r) => r.bedOccupancyPct != null),
+      hasDoctorData: rows.some((r) => r.availableDoctors != null),
+      hasRevenueData: rows.some((r) => (r.revenueToday ?? 0) > 0),
+    }
+  }, [branchComparisonRows])
 
   /** KPI metrics derived only from already-loaded appointment data (no API changes). */
   const hospitalKpis = useMemo(() => {
@@ -863,17 +1543,17 @@ export default function AdminDashboardOverview({
       activeAdmissionsCount
     )
 
-    const hasRoomInventory = roomsInventory.length > 0
-    const totalBeds = hasRoomInventory ? roomsInventory.length : occupiedFromAdmissions
+    const hasRoomInventory = scopedRoomsInventory.length > 0
+    const totalBeds = hasRoomInventory ? scopedRoomsInventory.length : occupiedFromAdmissions
     const occupiedBeds = hasRoomInventory
-      ? roomsInventory.filter((r) => r.status === "occupied").length
+      ? scopedRoomsInventory.filter((r) => r.status === "occupied").length
       : occupiedFromAdmissions
     const availableRooms = hasRoomInventory
-      ? roomsInventory.filter((r) => r.status === "available").length
+      ? scopedRoomsInventory.filter((r) => r.status === "available").length
       : null
-    const maintenanceRooms = roomsInventory.filter((r) => r.status === "maintenance").length
+    const maintenanceRooms = scopedRoomsInventory.filter((r) => r.status === "maintenance").length
 
-    const icuRooms = roomsInventory.filter(isIcuRoom)
+    const icuRooms = scopedRoomsInventory.filter(isIcuRoom)
     const icuTotal = icuRooms.length
     const icuOccupied = icuRooms.filter((r) => r.status === "occupied").length
     const icuPct = icuTotal > 0 ? (icuOccupied / icuTotal) * 100 : 0
@@ -911,7 +1591,7 @@ export default function AdminDashboardOverview({
       ambulanceStatus,
       hasRoomInventory,
     }
-  }, [filteredAppointments, roomsInventory, activeAdmissionsCount])
+  }, [filteredAppointments, scopedRoomsInventory, activeAdmissionsCount])
 
   /** Doctor & patient insights — presentation from already-loaded appointments/patients. */
   const doctorPatientInsights = useMemo(() => {
@@ -1390,6 +2070,183 @@ export default function AdminDashboardOverview({
           />
         </div>
       </div>
+
+      {/* Branch Performance — compact cards directly below KPIs */}
+      {branchPerformanceCards.length > 0 && (
+        <div className="admin-ov-grid">
+          <SectionLabel>Branch Performance</SectionLabel>
+          {branchPerformanceCards.map((card) => (
+            <div
+              key={card.branchId}
+              className="col-span-12 sm:col-span-6 xl:col-span-4"
+            >
+              <BranchPerformanceCard data={card} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Branch Comparison — reusable DataTable below performance cards */}
+      {branchComparisonRows.length > 0 && (
+        <div className="admin-ov-grid">
+          <SectionLabel>Branch Comparison</SectionLabel>
+          <div className="col-span-12">
+            <Panel
+              title="Branch Comparison"
+              subtitle="Side-by-side operational metrics across locations"
+              bodyClassName="!p-0"
+            >
+              <EnterpriseDataTable
+                data={paginatedBranchComparisonRows}
+                columns={branchComparisonColumns}
+                emptyTitle={
+                  branchCompareDebouncedSearch.trim()
+                    ? "No matching branches"
+                    : "No branches to compare"
+                }
+                emptyDescription={
+                  branchCompareDebouncedSearch.trim()
+                    ? "Try a different search term."
+                    : "Branch metrics appear once locations are configured."
+                }
+                search={{
+                  value: branchCompareSearch,
+                  onChange: setBranchCompareSearch,
+                  placeholder: "Search branches…",
+                }}
+                enableSearch
+                enableSorting
+                enablePagination
+                enableBulkSelection={false}
+                enableRowActions={false}
+                sortField={branchCompareSortField}
+                sortOrder={branchCompareSortOrder}
+                onSort={handleBranchCompareSort}
+                currentPage={branchComparePage}
+                totalPages={branchCompareTotalPages}
+                pageSize={branchComparePageSize}
+                totalItems={filteredBranchComparisonRows.length}
+                onPageChange={goToBranchComparePage}
+                onPageSizeChange={setBranchComparePageSize}
+                pageSizeOptions={[5, 10, 15]}
+                itemLabel="branches"
+                minWidth="720px"
+                variant="flat"
+              />
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {/* Branch Rankings — top 5 lists from already-loaded branch metrics */}
+      {branchComparisonRows.length > 0 && (
+        <div className="admin-ov-grid">
+          <SectionLabel>Branch Rankings</SectionLabel>
+          <div className="col-span-12 sm:col-span-6 xl:col-span-3">
+            <BranchRankingCard
+              title="Highest Revenue"
+              subtitle="Today's collections"
+              icon={IndianRupee}
+              tone="teal"
+              items={branchRankings.highestRevenue}
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 xl:col-span-3">
+            <BranchRankingCard
+              title="Highest Patient Volume"
+              subtitle="Unique patients today"
+              icon={CalendarDays}
+              tone="cyan"
+              items={branchRankings.highestPatientVolume}
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 xl:col-span-3">
+            <BranchRankingCard
+              title="Best Bed Utilization"
+              subtitle="Occupied vs inventory"
+              icon={BedDouble}
+              tone="violet"
+              items={branchRankings.bestBedUtilization}
+            />
+          </div>
+          <div className="col-span-12 sm:col-span-6 xl:col-span-3">
+            <BranchRankingCard
+              title="Fastest Queue"
+              subtitle="Lowest waiting count"
+              icon={Clock}
+              tone="emerald"
+              items={branchRankings.fastestQueue}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Executive Branch Analytics — existing Recharts; cached branch data only */}
+      {branchComparisonRows.length > 0 && (
+        <div className="admin-ov-grid">
+          <SectionLabel>Executive Branch Analytics</SectionLabel>
+          <div className="col-span-12 lg:col-span-6 xl:col-span-4">
+            <BranchAnalyticsChart
+              title="Revenue by Branch"
+              subtitle="Today's paid collections"
+              data={executiveBranchCharts.revenueByBranch}
+              color="#0d9488"
+              formatValue={(v) => formatCompactInr(v)}
+              emptyTitle={
+                executiveBranchCharts.hasRevenueData
+                  ? undefined
+                  : "No revenue attributed to branches yet"
+              }
+            />
+          </div>
+          <div className="col-span-12 lg:col-span-6 xl:col-span-4">
+            <BranchAnalyticsChart
+              title="Patients by Branch"
+              subtitle="Unique patients today"
+              data={executiveBranchCharts.patientsByBranch}
+              color="#0891b2"
+              formatValue={(v) => v.toLocaleString("en-IN")}
+            />
+          </div>
+          <div className="col-span-12 lg:col-span-6 xl:col-span-4">
+            <BranchAnalyticsChart
+              title="Bed Occupancy by Branch"
+              subtitle="Occupied share of inventory"
+              data={executiveBranchCharts.bedOccupancyByBranch}
+              color="#7c3aed"
+              formatValue={(v) => `${v}%`}
+              emptyTitle={
+                executiveBranchCharts.hasBedData
+                  ? undefined
+                  : "Bed occupancy not available by branch"
+              }
+            />
+          </div>
+          <div className="col-span-12 lg:col-span-6 xl:col-span-6">
+            <BranchAnalyticsChart
+              title="Waiting Queue by Branch"
+              subtitle="Patients waiting today"
+              data={executiveBranchCharts.waitingQueueByBranch}
+              color="#d97706"
+              formatValue={(v) => v.toLocaleString("en-IN")}
+            />
+          </div>
+          <div className="col-span-12 lg:col-span-6 xl:col-span-6">
+            <BranchAnalyticsChart
+              title="Doctors Available by Branch"
+              subtitle="Active clinicians assigned"
+              data={executiveBranchCharts.doctorsByBranch}
+              color="#059669"
+              formatValue={(v) => v.toLocaleString("en-IN")}
+              emptyTitle={
+                executiveBranchCharts.hasDoctorData
+                  ? undefined
+                  : "Doctor availability not loaded yet"
+              }
+            />
+          </div>
+        </div>
+      )}
 
       {/* 2. Quick actions */}
       <div className="admin-ov-grid">
@@ -1870,41 +2727,6 @@ export default function AdminDashboardOverview({
           </Panel>
         </div>
       </div>
-
-      {/* 6. Branches (only when relevant) */}
-      {branches.length > 0 && (
-        <div className="admin-ov-grid">
-          <SectionLabel>Branch performance</SectionLabel>
-          <div className="col-span-12">
-            <Panel title="Branches" subtitle="Visits and revenue by location">
-              {branchPerformance.length === 0 ? (
-                <EmptyBlock title="No branch activity" description="Metrics appear once appointments are booked." />
-              ) : (
-                <div className="overflow-x-auto -mx-1">
-                  <table className="admin-ov-table">
-                    <thead>
-                      <tr>
-                        <th>Branch</th>
-                        <th className="text-right">Visits</th>
-                        <th className="text-right">Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {branchPerformance.map((b) => (
-                        <tr key={b.branchId}>
-                          <td className="font-medium text-slate-900">{b.branchName}</td>
-                          <td className="text-right tabular-nums">{b.visits}</td>
-                          <td className="text-right tabular-nums font-medium text-slate-900">₹{b.revenue.toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Panel>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

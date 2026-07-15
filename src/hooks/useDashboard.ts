@@ -5,6 +5,10 @@ import { listAppointments } from "@/services/AppointmentService"
 import { listPatients } from "@/services/PatientService"
 import type { AppointmentRecord } from "@/services/AppointmentService"
 import type { PatientRecord } from "@/services/PatientService"
+import {
+  filterAppointmentsByBranch,
+  filterPatientsByBranch,
+} from "@/utils/branch/branchFilters"
 
 export type UseDashboardOptions = {
   includePatients?: boolean
@@ -51,17 +55,16 @@ export function useDashboard(
           : Promise.resolve([] as AppointmentRecord[]),
       ])
 
-      let nextPatients = patientList
-      let nextAppointments = appointmentList
-
-      if (branchId && branchId !== "all") {
-        nextPatients = nextPatients.filter(
-          (p) => (p as PatientRecord & { defaultBranchId?: string }).defaultBranchId === branchId
-        )
-        nextAppointments = nextAppointments.filter(
-          (a) => (a as AppointmentRecord & { branchId?: string }).branchId === branchId
-        )
-      }
+      let nextPatients = filterPatientsByBranch(
+        patientList as Array<PatientRecord & { defaultBranchId?: string }>,
+        branchId,
+        { unassigned: "exclude" }
+      ) as PatientRecord[]
+      let nextAppointments = filterAppointmentsByBranch(
+        appointmentList as Array<AppointmentRecord & { branchId?: string }>,
+        branchId,
+        { unassigned: "exclude" }
+      ) as AppointmentRecord[]
 
       setPatients(nextPatients)
       setAppointments(nextAppointments)

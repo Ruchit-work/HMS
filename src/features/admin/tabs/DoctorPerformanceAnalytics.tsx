@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { useAdminHospitalDataOptional } from '@/providers/AdminHospitalDataProvider'
+import { filterAppointmentsByBranch } from '@/utils/branch/branchFilters'
 import { useAppointments } from '@/hooks/useAppointments'
 import { TabSkeleton } from '@/shared/components'
 interface Appointment {
@@ -41,22 +44,26 @@ interface DoctorAnalytics {
   availabilityDays: number
 }
 
-export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }: { selectedBranchId?: string } = {}) {
+export default function DoctorPerformanceAnalytics() {
+  const { selectedBranchId } = useBranchSelection()
   const { user, loading: authLoading } = useAuth()
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
   const [loading, setLoading] = useState(true)
   const [doctorAnalytics, setDoctorAnalytics] = useState<DoctorAnalytics[]>([])
   const [timeRange, setTimeRange] = useState<'30days' | '3months' | '6months' | '1year' | 'all'>('1year')
-  const { appointments: rawAppointments, loading: appointmentsLoading } = useAppointments(activeHospitalId, {
-    enabled: Boolean(user && activeHospitalId),
+  const shared = useAdminHospitalDataOptional()
+  const { appointments: fetchedAppointments, loading: appointmentsLoading } = useAppointments(activeHospitalId, {
+    enabled: Boolean(user && activeHospitalId && !shared.isProvided),
   })
+  const rawAppointments = shared.isProvided ? shared.appointments : fetchedAppointments
+  const appointmentsLoadingEffective = shared.isProvided ? shared.loading : appointmentsLoading
 
   useEffect(() => {
     if (!user || !activeHospitalId) return
-    if (appointmentsLoading) return
+    if (appointmentsLoadingEffective) return
     computeDoctorAnalytics()
      
-  }, [user, activeHospitalId, timeRange, selectedBranchId, rawAppointments, appointmentsLoading])
+  }, [user, activeHospitalId, timeRange, selectedBranchId, rawAppointments, appointmentsLoadingEffective])
 
   const formatHour12 = (hour: number): string => {
     if (hour === 0) return '12 AM'
@@ -72,12 +79,12 @@ export default function DoctorPerformanceAnalytics({ selectedBranchId = "all" }:
       setLoading(true)
 
       // Fetch all appointments - use hospital-scoped collection
-      let appointments: Appointment[] = rawAppointments as unknown as Appointment[]
-
       // Filter by branch if selected
-      if (selectedBranchId !== "all") {
-        appointments = appointments.filter((apt: any) => apt.branchId === selectedBranchId)
-      }
+      let appointments: Appointment[] = filterAppointmentsByBranch(
+        rawAppointments as unknown as Appointment[],
+        selectedBranchId,
+        { unassigned: "exclude" }
+      ) as Appointment[]
 
       // Calculate date ranges
       const now = new Date()
