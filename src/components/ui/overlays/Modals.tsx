@@ -283,13 +283,6 @@ const viewModalTextColorClasses = {
   purple: 'text-cyan-100',
   orange: 'text-orange-100',
 }
-const viewModalHoverClasses = {
-  blue: 'hover:text-cyan-200 hover:bg-white hover:bg-opacity-20',
-  green: 'hover:text-green-200 hover:bg-white hover:bg-opacity-20',
-  purple: 'hover:text-cyan-200 hover:bg-white hover:bg-opacity-20',
-  orange: 'hover:text-orange-200 hover:bg-white hover:bg-opacity-20',
-}
-
 function ViewModalContent({
   title,
   subtitle,

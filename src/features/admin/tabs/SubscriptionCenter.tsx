@@ -366,7 +366,6 @@ export default function SubscriptionCenter() {
 
   useEffect(() => {
     if (isSuperAdmin) void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuperAdmin])
 
   const rows: SubscriptionRow[] = useMemo(() => {

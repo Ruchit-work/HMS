@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { getDocs, query, where, onSnapshot } from "firebase/firestore"
+import { onSnapshot } from "firebase/firestore"
 import { Appointment } from "@/types/patient"
 import { SYMPTOM_CATEGORIES } from "@/features/patient/symptoms/SymptomSelector"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
@@ -18,14 +18,6 @@ interface WhatsAppBookingsPanelProps {
   receptionistBranchId?: string | null
   /** When false, pause appointments listener and doctor fetch (keep-alive tab). Default true. */
   isActive?: boolean
-}
-
-interface Doctor {
-  id: string
-  firstName: string
-  lastName: string
-  specialization: string
-  consultationFee?: number
 }
 
 export default function WhatsAppBookingsPanel({
@@ -46,7 +38,7 @@ export default function WhatsAppBookingsPanel({
     enabled: Boolean(isActive && activeHospitalId),
   })
   const [updateLoading, setUpdateLoading] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
+  const [, setDeleteLoading] = useState<string | null>(null)
 
   // Form state
   const [formDoctorId, setFormDoctorId] = useState("")

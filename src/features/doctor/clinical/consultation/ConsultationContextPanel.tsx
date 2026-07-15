@@ -47,7 +47,7 @@ export default function ConsultationContextPanel({
   historyDocuments,
   onDocumentClick,
   latestRecommendation,
-  onLastVisitClick,
+  onLastVisitClick: _onLastVisitClick,
   isReturningPatient,
   extraBottom,
 }: ConsultationContextPanelProps) {

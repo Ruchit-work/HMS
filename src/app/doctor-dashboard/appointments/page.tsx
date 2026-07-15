@@ -74,7 +74,6 @@ function DoctorAppointmentsContent() {
   const [selectedAnatomyTypes, setSelectedAnatomyTypes] = useState<{ [key: string]: ("ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive")[] }>({})
   const [activeAnatomyTab, setActiveAnatomyTab] = useState<{ [key: string]: "ear" | "nose" | "throat" | "dental" | "lungs" | "kidney" | "skeleton" | "lymph_nodes" | "female_reproductive" }>({})
   const [anatomyViewerData, setAnatomyViewerData] = useState<{ [key: string]: { [anatomyType: string]: AnatomyViewerData | null } }>({})
-  const appointmentCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const appointmentDetailsRef = useRef<HTMLDivElement | null>(null)
   const completionFormRef = useRef<HTMLDivElement | null>(null)
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -456,10 +455,6 @@ function DoctorAppointmentsContent() {
         })
       }
     }, 300)
-  }
-
-  const handleAddAnotherAnatomy = (appointmentId: string) => {
-    setShowConsultationModeModal({ open: true, appointmentId })
   }
 
   const openNormalConsultation = (appointmentId: string) => {

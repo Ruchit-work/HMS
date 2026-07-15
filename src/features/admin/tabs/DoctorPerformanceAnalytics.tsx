@@ -80,7 +80,7 @@ export default function DoctorPerformanceAnalytics() {
 
       // Fetch all appointments - use hospital-scoped collection
       // Filter by branch if selected
-      let appointments: Appointment[] = filterAppointmentsByBranch(
+      const appointments: Appointment[] = filterAppointmentsByBranch(
         rawAppointments as unknown as Appointment[],
         selectedBranchId,
         { unassigned: "exclude" }

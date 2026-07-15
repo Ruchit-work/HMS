@@ -293,7 +293,6 @@ export default function PlatformCommandCenter({
   useEffect(() => {
     void loadPlatformSnapshot()
     // Re-load when the header tenant selection changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeHospitalId])
   const focusedTenant = useMemo(() => {
     if (!activeHospitalId) return null

@@ -879,12 +879,6 @@ export default function PatientManagement({
         { key: 'inactive' as const, label: 'Inactive' },
     ]
 
-    const headerHighlights = [
-        { label: 'Total Patients', value: metrics.total.toLocaleString() },
-        { label: 'Active Patients', value: metrics.active.toLocaleString() },
-        { label: 'Inactive Patients', value: metrics.inactive.toLocaleString() },
-    ]
-
     const handleSort = (field: string) => {
         if (sortField === field) {
             setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')

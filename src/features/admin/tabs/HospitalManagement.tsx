@@ -631,7 +631,6 @@ export default function HospitalManagement() {
       /* ignore */
     }
     // open once when landing with a plan preset from Subscription Center
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isSuperAdmin])
 
   const openEdit = (

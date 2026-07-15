@@ -77,7 +77,6 @@ export async function PUT(
     }
 
     const appointmentRef = resolved.appointment.ref
-    const appointmentDoc = resolved.appointment.snap
     const appointmentData = resolved.appointment.data
 
     // Validate that this is a WhatsApp booking

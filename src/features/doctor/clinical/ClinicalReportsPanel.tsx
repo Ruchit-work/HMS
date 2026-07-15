@@ -14,7 +14,7 @@ import {
   type ClinicalReportCategory,
   type ClinicalReportEntry,
 } from "@/utils/clinicalReportUtils"
-import { AlertTriangle, Eye, FileText } from "lucide-react"
+import { AlertTriangle, Eye } from "lucide-react"
 
 interface ClinicalReportsPanelProps {
   documents: DocumentMetadata[]

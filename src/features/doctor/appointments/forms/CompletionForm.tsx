@@ -230,94 +230,6 @@ export default function CompletionForm({
       historyItem.medicine
   )
 
-  const notesSection = (
-    <section>
-      <div className="consultation-workspace__panel-header">
-        <h3>Diagnosis &amp; clinical notes</h3>
-      </div>
-      <div className="consultation-workspace__panel-scroll p-4 space-y-4">
-        <div>
-          <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
-            Clinical notes <span className="text-red-500">*</span>
-          </label>
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-400">
-            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/60">
-              <span className="text-xs text-slate-500 flex items-center gap-1.5">
-                {draftStatus === "saving" && (
-                  <>
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    Saving...
-                  </>
-                )}
-                {draftStatus === "saved" && (
-                  <>
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    Saved
-                  </>
-                )}
-                {draftStatus === "idle" && <span className="text-slate-400">Draft</span>}
-              </span>
-              <VoiceInput
-                onTranscript={(text) => handleNotesChange(text)}
-                language="en-IN"
-                useGoogleCloud={false}
-                useMedicalModel={false}
-                allowGujarati
-                variant="inline"
-              />
-            </div>
-            {suggestionApplied && (
-              <p className="mx-3 mb-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                Suggestion added to consultation notes above.
-              </p>
-            )}
-            <textarea
-              ref={notesTextareaRef}
-              value={completionData.notes || ""}
-              onChange={(e) => handleNotesChange(e.target.value)}
-              rows={layout === "workspace" ? 8 : 3}
-              style={{ minHeight: layout === "workspace" ? "160px" : "90px" }}
-              placeholder="Enter diagnosis, assessment, symptoms, or doctor observations..."
-              className="w-full rounded-b-xl border-0 p-4 pt-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 resize-y"
-              required
-            />
-          </div>
-        </div>
-
-        <div>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-            <div>
-              <h4 className="text-sm font-semibold text-slate-900">Assessment</h4>
-              <p className="text-xs text-slate-500 mt-0.5">AI suggestion from complaint, history, and profile</p>
-            </div>
-            {!showAiDiagnosisSuggestion && !loadingAiDiagnosis && !aiDiagnosisText && (
-              <button
-                type="button"
-                onClick={onGenerateAiDiagnosis}
-                className="inline-flex items-center justify-center gap-2 h-8 px-3 rounded-lg border border-slate-300 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Generate
-              </button>
-            )}
-          </div>
-          {(showAiDiagnosisSuggestion || loadingAiDiagnosis) && (
-            <AIDiagnosisSuggestion
-              appointment={appointment}
-              aiDiagnosisText={aiDiagnosisText}
-              isLoading={loadingAiDiagnosis}
-              showCompletionForm={Boolean(formId)}
-              updating={updating}
-              onClose={onDeclineAiDiagnosis}
-              onRegenerate={onAiDiagnosisRegenerate}
-              onApplyToNotes={aiDiagnosisText?.trim() ? handleApplyDiagnosisToNotes : undefined}
-              onCompleteConsultation={() => onSubmit({} as React.FormEvent)}
-            />
-          )}
-        </div>
-      </div>
-    </section>
-  )
-
   const documentUploadBlock = showDocumentUpload && (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
       <DocumentUpload
@@ -331,8 +243,6 @@ export default function CompletionForm({
       />
     </div>
   )
-
-  const anatomyBlock = null
 
   if (layout === "workspace") {
     const leftExtraBottom = (

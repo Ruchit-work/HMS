@@ -12,7 +12,6 @@ import { Notification } from '@/shared/components'
 import { ConfirmDialog } from '@/shared/components'
 import { Button } from '@/shared/components'
 import {
-  ClinicalFormSection,
   ClinicalPageFrame,
   ClinicalPageHeader,
 } from "@/features/doctor/clinical"

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from "react"
 import { createPortal } from "react-dom"
-import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore"
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { db } from "@/firebase/config"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
@@ -284,62 +284,6 @@ export default function BookAppointmentPanel({
       (p.patientId ? String(p.patientId).toLowerCase().includes(s) : false)
     )
   }, [patients, searchPatient])
-
-  const summaryStats = useMemo(
-    () => {
-      const doctorsValue = new Intl.NumberFormat("en-US").format(doctors.length)
-      const patientsModeCount = patientMode === "existing" ? filteredPatients.length : patients.length
-      const patientsValue = new Intl.NumberFormat("en-US").format(patientsModeCount)
-      const openSlots = appointmentDate && selectedDoctorId ? availableSlots.length : 0
-      const slotsValue = appointmentDate && selectedDoctorId ? `${openSlots}` : "—"
-      const slotsCaption = appointmentDate && selectedDoctorId ? "Slots ready for this doctor" : "Select doctor & date"
-      const paymentValue = paymentAmount ? `₹${new Intl.NumberFormat("en-IN").format(paymentAmount)}` : "₹0"
-      const paymentCaption = selectedDoctorFee ? "Estimated consultation fee" : "Select doctor to estimate"
-
-      return [
-        {
-          title: "Active Doctors",
-          value: doctorsValue,
-          caption: "Available to schedule",
-          iconPath: "M19 11H5m7-7v14",
-          iconBg: "bg-cyan-100 text-cyan-700",
-        },
-        {
-          title: "Patients",
-          value: patientsValue,
-          caption:
-            patientMode === "existing" ? "Search active records" : "New profile form",
-          iconPath: "M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 8 8s1.79 4 4 4zm0 0c-3.33 0-6 2.24-6 5v1h12v-1c0-2.76-2.67-5-6-5z",
-          iconBg: "bg-amber-100 text-amber-600",
-        },
-        {
-          title: "Open Slots",
-          value: slotsValue,
-          caption: slotsCaption,
-          iconPath: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-          iconBg: "bg-sky-100 text-sky-600",
-        },
-        {
-          title: "Payment Preview",
-          value: paymentValue,
-          caption: paymentCaption,
-          iconPath: "M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0-6C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z",
-          iconBg: "bg-rose-100 text-rose-600",
-        },
-      ]
-    },
-    [
-      doctors.length,
-      patients.length,
-      filteredPatients.length,
-      patientMode,
-      appointmentDate,
-      selectedDoctorId,
-      availableSlots.length,
-      paymentAmount,
-      selectedDoctorFee,
-    ]
-  )
 
   // Filter doctors based on symptom category (same logic as patient side)
   const filteredDoctors = useMemo(() => {

@@ -12,7 +12,6 @@ import DateTimeSelectionStep from "./appointments/steps/DateTimeSelectionStep"
 import { isSlotInPast, getDayName, generateTimeSlots, isTimeSlotAvailable, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
 import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blockedDates"
 import { query, where, getDocs } from "firebase/firestore"
-import { auth } from "@/firebase/config"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
 import { Button } from '@/shared/components'

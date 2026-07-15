@@ -16,7 +16,7 @@ interface ConsultationLayoutProps {
 export default function ConsultationLayout({
   queue,
   workspace,
-  emptyWorkspace = {
+  emptyWorkspace: _emptyWorkspace = {
     title: "Select a patient",
     description: "Choose an appointment from the queue to begin consultation.",
   },

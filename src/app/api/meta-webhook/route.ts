@@ -2429,7 +2429,7 @@ async function handleLanguageSelection(
   normalizedPhone: string,
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
-  session: BookingSession
+  _session: BookingSession
 ): Promise<boolean> {
   const freshDoc = await sessionRef.get()
   if (!freshDoc.exists) return false

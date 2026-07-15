@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { doc, getDoc } from 'firebase/firestore'
-import { auth, db } from '@/firebase/config'
+import { auth } from '@/firebase/config'
 import { useAuth } from '@/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
 import { useBranchSelection } from '@/providers/BranchProvider'

@@ -10,7 +10,6 @@ import {
   ClinicalFormSection,
   ClinicalPageFrame,
   ClinicalPageHeader,
-  ClinicalStatusBadge,
 } from "@/features/doctor/clinical"
 import { Users } from "lucide-react"
 

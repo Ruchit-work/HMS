@@ -11,18 +11,12 @@ import { useBranchSelection } from "@/providers/BranchProvider"
 import { filterStaffByBranch } from "@/utils/branch/branchFilters"
 import { auth, db } from "@/firebase/config"
 import {
-  collection,
   deleteDoc,
   doc,
-  getDoc,
-  getDocs,
-  query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
 } from "firebase/firestore"
-import type { Branch } from "@/types/branch"
 import { listStaff } from "@/services/StaffService"
 import { Notification } from '@/shared/components'
 import {

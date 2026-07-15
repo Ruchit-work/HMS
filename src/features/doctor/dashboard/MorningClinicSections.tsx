@@ -9,7 +9,6 @@ import type { Appointment } from "@/types/patient"
 import {
   AlertTriangle,
   ArrowRight,
-  Calendar,
   Clock,
   Stethoscope,
   User,

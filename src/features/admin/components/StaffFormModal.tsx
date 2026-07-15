@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, type FormEvent, type ReactNode } from "react"
 import { Button } from '@/shared/components'
 import { RevealModal, useRevealModalClose } from '@/shared/components'
 import type { Branch } from "@/types/branch"

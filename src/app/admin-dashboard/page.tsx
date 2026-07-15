@@ -143,8 +143,6 @@ import {
   isSameLocalDay,
   revenueDateKey,
 } from "@/utils/analytics/dashboardCalculations"
-import type { TrendPoint } from "@/utils/analytics/dashboardCalculations"
-import type { RevenueTrendPoint } from "@/utils/analytics/dashboardCalculations"
 
 interface UserData {
   id: string;
@@ -152,43 +150,6 @@ interface UserData {
   firstName?: string;
   email: string;
   role: string;
-}
-
-interface DashboardStats {
-  totalPatients: number;
-  totalDoctors: number;
-  totalAppointments: number;
-  todayAppointments: number;
-  todayRevenue: number;
-  yesterdayRevenue: number;
-  completedAppointments: number;
-  pendingAppointments: number;
-  totalRevenue: number;
-  monthlyRevenue: number;
-  weeklyRevenue: number;
-  activeDoctorsToday: number;
-  appointmentTrends: {
-    weekly: TrendPoint[];
-    monthly: TrendPoint[];
-    yearly: TrendPoint[];
-  };
-  appointmentTotals: {
-    weekly: number;
-    monthly: number;
-    yearly: number;
-  };
-  commonConditions: { condition: string; count: number }[];
-  mostPrescribedMedicines: Array<{
-    medicineName: string;
-    prescriptionCount: number;
-    percentage: number;
-  }>;
-  revenueTrend: {
-    weekly: RevenueTrendPoint[];
-    monthly: RevenueTrendPoint[];
-    yearly: RevenueTrendPoint[];
-  };
-  topDepartments: Array<{ department: string; count: number }>;
 }
 
 /** Unified billing row from /api/admin/billing-records (admissions + appointments). */

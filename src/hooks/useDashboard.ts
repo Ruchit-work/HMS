@@ -55,12 +55,12 @@ export function useDashboard(
           : Promise.resolve([] as AppointmentRecord[]),
       ])
 
-      let nextPatients = filterPatientsByBranch(
+      const nextPatients = filterPatientsByBranch(
         patientList as Array<PatientRecord & { defaultBranchId?: string }>,
         branchId,
         { unassigned: "exclude" }
       ) as PatientRecord[]
-      let nextAppointments = filterAppointmentsByBranch(
+      const nextAppointments = filterAppointmentsByBranch(
         appointmentList as Array<AppointmentRecord & { branchId?: string }>,
         branchId,
         { unassigned: "exclude" }
