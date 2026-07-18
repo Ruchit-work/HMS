@@ -1,6 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 
 interface Params {
   roomId: string

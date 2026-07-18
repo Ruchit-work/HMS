@@ -3,7 +3,7 @@
  */
 
 import { admin } from "@/server/firebaseAdmin"
-import { getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
 
 export type ResolvedAppointment = {
   ref: FirebaseFirestore.DocumentReference

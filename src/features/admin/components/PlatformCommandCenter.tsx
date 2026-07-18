@@ -37,7 +37,7 @@ import {
 } from "firebase/firestore"
 import { auth, db } from "@/firebase/config"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import type { Hospital } from "@/types/hospital"
 import { Button } from '@/shared/components'
 import { StatusPill } from '@/shared/components'
@@ -56,7 +56,7 @@ import {
   HqHealthCard,
   HqActivityItem,
   type HqHealthLevel,
-} from "@/features/admin/hq"
+} from "@/features/admin/components/hq"
 
 type PlatformTab =
   | "overview"

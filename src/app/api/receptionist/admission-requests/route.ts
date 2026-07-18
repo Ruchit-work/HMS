@@ -1,5 +1,5 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 
 export async function GET(request: Request) {
   // Authenticate request - requires receptionist or admin role

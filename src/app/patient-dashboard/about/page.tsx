@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc } from "firebase/firestore"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { Notification } from '@/shared/components'
 import { Footer } from '@/shared/components'
 export default function PatientAboutSupport() {

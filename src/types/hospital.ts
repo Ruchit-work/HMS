@@ -4,6 +4,7 @@
  */
 
 import { Timestamp } from 'firebase/firestore'
+import type { HospitalBillingSettings } from '@/shared/utils/billingSettings'
 
 export interface Hospital {
   id: string
@@ -19,6 +20,10 @@ export interface Hospital {
   enableAnalytics?: boolean
   /** When true, pharmacy module (pharmacy tab + pharmacists) is enabled for this hospital. */
   enablePharmacy?: boolean
+  settings?: {
+    billing?: HospitalBillingSettings
+    [key: string]: unknown
+  }
   createdAt: Timestamp | string
   updatedAt: Timestamp | string
 }

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 import { buildMissedAppointmentMessage, sendMissedAppointmentWhatsApp } from "@/server/missedAppointmentNotify"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 
 interface Params {
   appointmentId: string

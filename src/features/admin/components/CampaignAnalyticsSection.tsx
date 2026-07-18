@@ -14,7 +14,7 @@ import {
   YAxis,
 } from "recharts"
 import { Timestamp } from "firebase/firestore"
-import type { Campaign } from "@/utils/campaigns/campaigns"
+import type { Campaign } from "@/shared/utils/campaigns/campaigns"
 
 const CHART = {
   delivery: "#0e7490",

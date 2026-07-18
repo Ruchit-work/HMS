@@ -2,7 +2,7 @@ import {
   bhashSendConfirmationUtilityTemplate,
   shouldUseBhashSms,
 } from "@/server/bhashWhatsApp"
-import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
+import { formatWhatsAppRecipient } from "@/shared/utils/campaigns/whatsapp"
 
 /**
  * Bhash utility confirmation template (Templates WA → name: confirmation).

@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from "react"
 import type { Branch } from "@/types/branch"
-import { useBranches } from "@/hooks/useBranches"
+import { useBranches } from "@/shared/hooks/useBranches"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 
 export type BranchContextValue = {

@@ -6,13 +6,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
-import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
-import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
-import { acquireIdempotencyKey, clearIdempotencyKey, completeIdempotencyKey, sanitizeIdempotencyKey } from '@/utils/pharmacy/idempotency'
-import { writePharmacyAuditEvent } from '@/utils/pharmacy/audit'
-import { pharmacyError } from '@/utils/pharmacy/apiResponse'
+import { authenticateRequest, createAuthErrorResponse } from '@/shared/utils/firebase/apiAuth'
+import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/shared/utils/pharmacy/serverPharmacy'
+import { acquireIdempotencyKey, clearIdempotencyKey, completeIdempotencyKey, sanitizeIdempotencyKey } from '@/shared/utils/pharmacy/idempotency'
+import { writePharmacyAuditEvent } from '@/shared/utils/pharmacy/audit'
+import { pharmacyError } from '@/shared/utils/pharmacy/apiResponse'
 import type { MedicineBatch } from '@/types/pharmacy'
-import type { ParsedMedicineRow } from '@/utils/pharmacy/parseMedicineFile'
+import type { ParsedMedicineRow } from '@/shared/utils/pharmacy/parseMedicineFile'
 
 function getStockDocId(branchId: string, medicineId: string): string {
   return `${branchId}_${medicineId}`

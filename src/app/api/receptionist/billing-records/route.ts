@@ -1,11 +1,11 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
 import {
   getAppointmentsCollectionPath,
   isAppointmentVisibleToReceptionist,
   logAppointmentQuery,
-} from "@/utils/appointments/appointmentSource"
+} from "@/shared/utils/appointments/appointmentSource"
 
 interface UnifiedBillingRecord {
   id: string
@@ -325,9 +325,16 @@ export async function GET(request: Request) {
         continue
       }
 
+      // Unconfirmed WhatsApp bookings are not appointments yet — no invoice exists
+      // until the front desk confirms them in the WhatsApp Bookings panel.
+      if (data.status === "whatsapp_pending" || data.whatsappPending === true) {
+        continue
+      }
+
       const paymentAmount = Number(data.paymentAmount || 0)
       const totalConsultationFee = Number(data.totalConsultationFee || 0)
-      if (paymentAmount <= 0 && totalConsultationFee <= 0) {
+      const remainingAmount = Number(data.remainingAmount || 0)
+      if (paymentAmount <= 0 && totalConsultationFee <= 0 && remainingAmount <= 0) {
         continue
       }
 
@@ -371,7 +378,14 @@ export async function GET(request: Request) {
         }
       }
 
-      const isPaid = data.paymentStatus === "paid" || Boolean(data.paidAt)
+      const paymentStatus = String(data.paymentStatus || "").toLowerCase()
+      const hasPaidAt = Boolean(data.paidAt) && String(data.paidAt).trim() !== ""
+      // Refunded / cancelled appointments are neither collected revenue nor outstanding.
+      const isCancelled =
+        data.status === "cancelled" ||
+        data.status === "doctor_cancelled" ||
+        paymentStatus === "refunded"
+      const isPaid = !isCancelled && (paymentStatus === "paid" || hasPaidAt)
       const consultationFee = totalConsultationFee || paymentAmount
 
       records.push({
@@ -386,9 +400,9 @@ export async function GET(request: Request) {
         consultationFee,
         totalAmount: paymentAmount || consultationFee,
         generatedAt: data.createdAt || data.paidAt || new Date().toISOString(),
-        status: isPaid ? "paid" : "pending",
+        status: isCancelled ? "cancelled" : isPaid ? "paid" : "pending",
         paymentMethod: data.paymentMethod,
-        paidAt: data.paidAt || null,
+        paidAt: isPaid ? data.paidAt || null : null,
         paymentReference: data.transactionId || null,
         transactionId: data.transactionId || null,
         paidAtFrontDesk: data.createdBy === "receptionist",

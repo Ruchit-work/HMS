@@ -1,11 +1,12 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import {
   getHospitalCollectionPath,
   getReceptionistDefaultBranch,
   getUserActiveHospitalId,
   resolveAdmissionHospitalId,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 const DOB_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const IPD_START_NUMBER = 1000
@@ -314,6 +315,17 @@ export async function POST(req: Request) {
       resolvedPatientUid = patientRef.id
       resolvedPatientId = generatedPatientId
       resolvedPatientName = `${firstName}${lastName ? ` ${lastName}` : ""}`.trim()
+
+      void auditLogger.logForUser(auth.user, {
+        hospitalId,
+        branchId: defaultBranchId,
+        module: "Patient",
+        entityType: "patient",
+        entityId: patientRef.id,
+        action: AUDIT_ACTIONS.PATIENT_CREATED,
+        summary: `Patient ${resolvedPatientName} was registered.`,
+        metadata: { patientId: generatedPatientId, registrationSource: "direct_admission" },
+      })
     } else {
       const patientUpdates: Record<string, unknown> = { updatedAt: nowIso }
       if (patientPhone) patientUpdates.phone = patientPhone
@@ -330,6 +342,17 @@ export async function POST(req: Request) {
           .doc(resolvedPatientUid)
         await rootPatientRef.set(patientUpdates, { merge: true })
         await hospitalPatientRef.set(patientUpdates, { merge: true })
+
+        void auditLogger.logForUser(auth.user, {
+          hospitalId,
+          branchId: defaultBranchId,
+          module: "Patient",
+          entityType: "patient",
+          entityId: resolvedPatientUid,
+          action: AUDIT_ACTIONS.PATIENT_UPDATED,
+          summary: `Patient ${resolvedPatientName || resolvedPatientId || resolvedPatientUid} was updated.`,
+          metadata: { fields: keys },
+        })
       }
     }
 
@@ -462,6 +485,17 @@ export async function POST(req: Request) {
         })
       }
       tx.set(admissionRef, admissionPayload)
+    })
+
+    void auditLogger.logForUser(auth.user, {
+      hospitalId,
+      branchId: defaultBranchId,
+      module: "Admission",
+      entityType: "admission",
+      entityId: admissionRef.id,
+      action: AUDIT_ACTIONS.ADMISSION_CREATED,
+      summary: `Admission ${ipdNo} was created for ${resolvedPatientName || "patient"}.`,
+      metadata: { ipdNo, patientId: resolvedPatientId, roomId, admitType },
     })
 
     return Response.json({ success: true, admissionId: admissionRef.id })

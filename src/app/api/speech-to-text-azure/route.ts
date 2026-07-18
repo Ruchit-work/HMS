@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { applyRateLimit } from '@/utils/shared/rateLimit'
+import { applyRateLimit } from '@/shared/utils/shared/rateLimit'
 
 /**
  * Azure Speech Services API endpoint

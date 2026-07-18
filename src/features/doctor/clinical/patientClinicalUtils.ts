@@ -1,6 +1,6 @@
 import type { Appointment } from "@/types/patient"
 import type { DocumentMetadata } from "@/types/document"
-import { parsePrescription as parsePrescriptionUtil } from "@/utils/appointments/prescriptionParsers"
+import { parsePrescription as parsePrescriptionUtil } from "@/shared/utils/appointments/prescriptionParsers"
 
 export function getPatientAge(dateOfBirth?: string): number | null {
   if (!dateOfBirth) return null

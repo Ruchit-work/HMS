@@ -1,7 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 interface Params {
   admissionId: string
@@ -239,6 +240,23 @@ export async function PATCH(req: NextRequest, context: { params: Promise<Params>
     }
 
     await admissionRef.update(updates)
+    const existingData = existingSnap.data() || {}
+    const billingFields = ["charges", "paymentTerms", "operationPackage"].filter(
+      (field) => Object.prototype.hasOwnProperty.call(updates, field)
+    )
+    if (billingFields.length > 0 && typeof existingData.hospitalId === "string") {
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: existingData.hospitalId,
+        branchId:
+          typeof existingData.branchId === "string" ? existingData.branchId : null,
+        module: "Billing",
+        entityType: "admission",
+        entityId: admissionId,
+        action: AUDIT_ACTIONS.BILL_EDITED,
+        summary: `Bill details for admission ${existingData.ipdNo || admissionId} were edited.`,
+        metadata: { fields: billingFields },
+      })
+    }
     return Response.json({ success: true })
   } catch (error: any) {
     return Response.json(

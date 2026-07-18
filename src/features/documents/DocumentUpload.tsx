@@ -2,7 +2,7 @@
 
 import { useState, useRef, DragEvent } from "react"
 import { DocumentType, DocumentMetadata } from "@/types/document"
-import { validateFileType, validateFileSize } from "@/utils/documents/documentDetection"
+import { validateFileType, validateFileSize } from "@/shared/utils/documents/documentDetection"
 import { auth } from "@/firebase/config"
 
 interface DocumentUploadProps {

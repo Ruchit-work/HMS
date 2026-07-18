@@ -5,7 +5,7 @@
 
 import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "@/firebase/config"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 
 export type BillingRecord = Record<string, unknown> & { id: string }
 

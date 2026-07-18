@@ -1,16 +1,24 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { normalizeTime } from "@/utils/timeSlots"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { normalizeTime } from "@/shared/utils/timeSlots"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
-import { isDateBlocked } from "@/utils/analytics/blockedDates"
-import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
-import { getString, isRecord, type UnknownRecord } from "@/utils/api/typeGuards"
-import { safeJson, ValidationError, requireString, optionalString } from "@/utils/api/validation"
+import { getDoctorHospitalId, getAppointmentHospitalId, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
+import { isDateBlocked } from "@/shared/utils/analytics/blockedDates"
+import { logApiError, createErrorResponse } from "@/shared/utils/errors/errorLogger"
+import {
+  getString,
+  isRecord,
+  optionalString,
+  requireString,
+  safeJson,
+  ValidationError,
+  type UnknownRecord,
+} from "@/shared/utils/api/validation"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 const SLOT_COLLECTION = "appointmentSlots"
 
@@ -281,6 +289,21 @@ See you soon! 🏥`
         // Don't fail the appointment booking if WhatsApp fails
       }
 
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: doctorHospitalId,
+        branchId: appointmentData.branchId || null,
+        module: "Appointment",
+        entityType: "appointment",
+        entityId: appointmentId,
+        action: AUDIT_ACTIONS.APPOINTMENT_CREATED,
+        summary: `Appointment ${appointmentId} was created.`,
+        metadata: {
+          doctorId: appointmentData.doctorId,
+          appointmentDate: appointmentData.appointmentDate,
+          appointmentTime: appointmentData.appointmentTime,
+        },
+      })
+
       return NextResponse.json({ success: true, id: appointmentId })
     }
 
@@ -371,6 +394,23 @@ See you soon! 🏥`
           createdAt: new Date().toISOString(),
           hospitalId: appointmentHospitalId,
         })
+      })
+
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: appointmentHospitalId,
+        branchId:
+          typeof appointment?.branchId === "string" ? appointment.branchId : null,
+        module: "Appointment",
+        entityType: "appointment",
+        entityId: appointmentId,
+        action: AUDIT_ACTIONS.APPOINTMENT_RESCHEDULED,
+        summary: `Appointment ${appointmentId} was rescheduled.`,
+        metadata: {
+          fromDate: appointment?.appointmentDate || null,
+          fromTime: appointment?.appointmentTime || null,
+          toDate: appointmentDate,
+          toTime: normalizedNewTime,
+        },
       })
 
       return NextResponse.json({ success: true })

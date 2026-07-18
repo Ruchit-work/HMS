@@ -2,8 +2,8 @@
 
 import { Doctor, AppointmentFormData } from "@/types/patient"
 import { Branch } from "@/types/branch"
-import { formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText } from "@/utils/timeSlots"
-import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blockedDates"
+import { formatTimeDisplay, isDoctorAvailableOnDate, getDayName, getVisitingHoursText } from "@/shared/utils/timeSlots"
+import { isDateBlocked as isDateBlockedFromRaw } from "@/shared/utils/analytics/blockedDates"
 
 interface DateTimeSelectionStepProps {
   appointmentData: AppointmentFormData

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { getDoctorHospitalId, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
 
 export async function PUT(req: NextRequest) {
   const auth = await authenticateRequest(req, "doctor")

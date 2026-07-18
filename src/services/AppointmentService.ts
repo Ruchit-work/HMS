@@ -11,7 +11,7 @@ import {
   type Unsubscribe,
   type QueryConstraint,
 } from "firebase/firestore"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import {
   cancelAppointment,
   completeAppointment,
@@ -19,7 +19,7 @@ import {
   releaseAppointmentSlot,
   getHoursUntilAppointment,
   getStatusColor,
-} from "@/utils/appointmentHelpers"
+} from "@/shared/utils/appointmentHelpers"
 
 export type AppointmentRecord = { id: string; [key: string]: any }
 

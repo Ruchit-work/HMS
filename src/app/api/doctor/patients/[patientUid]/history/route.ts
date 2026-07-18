@@ -1,11 +1,11 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import {
   getDoctorHospitalId,
   getHospitalCollectionPath,
   getUserActiveHospitalId,
   resolveAdmissionHospitalId,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
 
 interface Params {
   patientUid: string

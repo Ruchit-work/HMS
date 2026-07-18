@@ -3,7 +3,7 @@ import { Button } from '@/shared/components'
 
 import React, { useRef, useState } from 'react'
 import type { PharmacyMedicine, PharmacyPurchaseOrder } from '@/types/pharmacy'
-import type { ParsedMedicineRow } from '@/utils/pharmacy/parseMedicineFile'
+import type { ParsedMedicineRow } from '@/shared/utils/pharmacy/parseMedicineFile'
 import { MedicineSearchSelect } from './SearchInputs'
 
 export function TransferStockForm({

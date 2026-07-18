@@ -10,7 +10,7 @@ import { AddStockForm } from './InventoryForms'
 import { ReceiveByFileForm } from './StockTransferAndImportForms'
 import { BarcodeScanInput } from './SearchInputs'
 import { MedicineFileUploader } from './Uploaders'
-import type { InventoryExpiryFilter, InventoryStatusFilter } from '../inventoryFilters'
+import type { InventoryExpiryFilter, InventoryStatusFilter } from '@/features/pharmacy/utils/inventoryFilters'
 import {
   PhOpsShell,
   PhOpsPageHeader,
@@ -20,7 +20,7 @@ import {
   PhOpsFilterToolbar,
   PhOpsPanel,
   PhOpsStatusBadge,
-} from '@/features/pharmacy/ui/ops'
+} from '@/features/pharmacy/ui/PhOps'
 
 type BranchOption = { id: string; name: string }
 

@@ -5,8 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
-import { authenticateRequest } from '@/utils/firebase/apiAuth'
-import { getUserActiveHospitalId } from '@/utils/firebase/serverHospitalQueries'
+import { authenticateRequest } from '@/shared/utils/firebase/apiAuth'
+import { getUserActiveHospitalId } from '@/shared/utils/firebase/serverHospitalQueries'
 
 export async function GET(request: NextRequest) {
   try {

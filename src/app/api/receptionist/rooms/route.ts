@@ -1,6 +1,6 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { getUserActiveHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 
 export async function POST(req: Request) {
   const auth = await authenticateRequest(req)

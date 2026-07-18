@@ -1,11 +1,11 @@
 "use client"
 
-import React, { useCallback, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import type { Appointment } from "@/types/patient"
 import type { CompletionFormEntry } from "@/types/appointments"
 import AIDiagnosisSuggestion from "@/features/doctor/appointments/ai/AIDiagnosisSuggestion"
-import { formatAIDiagnosisForNotes } from "@/utils/appointments/diagnosisParsers"
-import VoiceInput from "@/components/ui/VoiceInput"
+import { formatAIDiagnosisForNotes } from "@/shared/utils/appointments/diagnosisParsers"
+import VoiceInput from "@/shared/ui/VoiceInput"
 import ClinicalPanel from "@/features/doctor/clinical/ClinicalPanel"
 import { ClipboardList, FileText, Microscope, Stethoscope } from "lucide-react"
 import { mergeConsultationNotes, splitConsultationNotes } from "./consultationNotesUtils"
@@ -58,7 +58,31 @@ export default function ConsultationClinicalPanel({
   const completionDataRef = useRef(completionData)
   completionDataRef.current = completionData
 
-  const { clinicalNotes, examinationFindings } = splitConsultationNotes(completionData.notes || "")
+  // Keep the two note fields in LOCAL state so typing is native.
+  // Deriving them from the merged `notes` string on every keystroke trims
+  // trailing spaces/newlines, which breaks normal typing (spaces between
+  // words, Enter for paragraphs).
+  const [clinicalNotes, setClinicalNotes] = useState(
+    () => splitConsultationNotes(completionData.notes || "").clinicalNotes
+  )
+  const [examinationFindings, setExaminationFindings] = useState(
+    () => splitConsultationNotes(completionData.notes || "").examinationFindings
+  )
+  const localNotesRef = useRef({ clinicalNotes, examinationFindings })
+  localNotesRef.current = { clinicalNotes, examinationFindings }
+
+  // Resync local fields when notes change externally (draft restore,
+  // AI suggestion applied, switching patient) without clobbering typing.
+  useEffect(() => {
+    const incoming = completionData.notes || ""
+    const local = localNotesRef.current
+    const localMerged = mergeConsultationNotes(local.clinicalNotes, local.examinationFindings)
+    if (incoming !== localMerged) {
+      const next = splitConsultationNotes(incoming)
+      setClinicalNotes(next.clinicalNotes)
+      setExaminationFindings(next.examinationFindings)
+    }
+  }, [completionData.notes])
 
   const markDraftSaved = useCallback(() => {
     setDraftStatus("saving")
@@ -82,11 +106,13 @@ export default function ConsultationClinicalPanel({
   )
 
   const handleClinicalNotesChange = (value: string) => {
-    updateNotes(value, examinationFindings)
+    setClinicalNotes(value)
+    updateNotes(value, localNotesRef.current.examinationFindings)
   }
 
   const handleExaminationChange = (value: string) => {
-    updateNotes(clinicalNotes, value)
+    setExaminationFindings(value)
+    updateNotes(localNotesRef.current.clinicalNotes, value)
   }
 
   const appendTemplate = (text: string) => {
@@ -226,10 +252,9 @@ export default function ConsultationClinicalPanel({
             ref={notesTextareaRef}
             value={clinicalNotes}
             onChange={(e) => handleClinicalNotesChange(e.target.value)}
-            rows={5}
+            rows={3}
             placeholder="History, assessment, plan, and clinical observations…"
-            className="w-full rounded-lg border border-slate-200 p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 resize-y min-h-[120px]"
-            required
+            className="w-full rounded-lg border border-slate-200 p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 resize-y min-h-[72px]"
           />
         </ClinicalPanel>
 
@@ -237,9 +262,9 @@ export default function ConsultationClinicalPanel({
           <textarea
             value={completionData.customDiagnosis || ""}
             onChange={(e) => handleDiagnosisChange(e.target.value)}
-            rows={3}
+            rows={2}
             placeholder="Primary and differential diagnosis…"
-            className="w-full rounded-lg border border-slate-200 p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 resize-y min-h-[72px]"
+            className="w-full rounded-lg border border-slate-200 p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 resize-y min-h-[52px]"
           />
           <div className="mt-2">
             {(showAiDiagnosisSuggestion || loadingAiDiagnosis) && (
@@ -275,9 +300,9 @@ export default function ConsultationClinicalPanel({
           <textarea
             value={examinationFindings}
             onChange={(e) => handleExaminationChange(e.target.value)}
-            rows={4}
+            rows={2}
             placeholder="Physical examination, ENT findings, systemic exam…"
-            className="w-full rounded-lg border border-slate-200 p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 resize-y min-h-[96px]"
+            className="w-full rounded-lg border border-slate-200 p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-400 resize-y min-h-[52px]"
           />
         </ClinicalPanel>
 

@@ -1,0 +1,535 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import { auth } from '@/firebase/config'
+import { useAuth } from '@/shared/hooks/useAuth'
+import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useBranchSelection } from '@/providers/BranchProvider'
+import { filterStaffByBranch } from '@/shared/utils/branch/branchFilters'
+import type { Branch } from '@/types/branch'
+import { Notification } from '@/shared/components'
+import { TabSkeleton } from '@/shared/components'
+import { Button } from '@/shared/components'
+import { RevealModal, useRevealModalClose } from '@/shared/components'
+import { listPharmacists } from '@/services/StaffService'
+
+interface Pharmacist {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  phone?: string
+  hospitalId: string
+  branchId?: string
+  branchName?: string
+  hospitalName?: string
+  createdAt?: any
+}
+
+interface PharmacistFormData {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  password: string
+  branchId: string
+}
+
+function AddPharmacistModalContent({
+  formData,
+  setFormData,
+  onSubmit,
+  branches,
+  saving,
+}: {
+  formData: PharmacistFormData
+  setFormData: React.Dispatch<React.SetStateAction<PharmacistFormData>>
+  onSubmit: (e: React.FormEvent) => void
+  branches: Branch[]
+  saving: boolean
+}) {
+  const requestClose = useRevealModalClose()
+  return (
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl min-w-[360px] max-h-[95vh] overflow-hidden flex flex-col border border-slate-200/80">
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-8 sm:px-10 pt-7 pb-5 rounded-t-2xl shrink-0">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5h4.01M7 20h4c1.103 0 2-.897 2-2V6c0-1.103-.897-2-2-2h-4c-1.103 0-2 .897-2 2v12c0 1.103.897 2 2 2zM7 6V4c0-1.103.897-2 2-2h4c1.103 0 2 .897 2 2v2" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Create New Pharmacist</h3>
+              <p className="text-base text-slate-500 mt-1">Add a new pharmacist login for a branch of this hospital</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={requestClose}
+            className="p-2.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+            aria-label="Close"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <form onSubmit={onSubmit} className="flex-1 overflow-y-auto p-8 sm:p-10 space-y-6 min-h-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">First Name *</label>
+            <input
+              type="text"
+              required
+              value={formData.firstName}
+              onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+              placeholder="Enter first name"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Last Name *</label>
+            <input
+              type="text"
+              required
+              value={formData.lastName}
+              onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+              placeholder="Enter last name"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Email *</label>
+            <input
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+              placeholder="Enter email address"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Phone (optional)</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+              placeholder="Enter phone number"
+            />
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">Password *</label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={formData.password}
+              onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+              className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+              placeholder="Min 6 characters"
+            />
+            <p className="text-sm text-slate-500 mt-1.5">Password must be at least 6 characters</p>
+          </div>
+          <div>
+            <label className="block text-base font-semibold text-slate-700 mb-2">
+              Branch{branches.length > 1 ? ' *' : ''}
+            </label>
+            {branches.length <= 1 ? (
+              <div className="px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-sm text-slate-700">
+                {branches.length === 1 ? branches[0].name : 'Main'}
+                <p className="text-xs text-slate-500 mt-1">This hospital uses a single branch. The pharmacist will be assigned here automatically.</p>
+              </div>
+            ) : (
+              <select
+                required
+                value={formData.branchId}
+                onChange={(e) => setFormData(prev => ({ ...prev, branchId: e.target.value }))}
+                className="w-full px-4 py-3 text-base border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-white"
+              >
+                <option value="">{branches.length === 0 ? 'No branches configured' : 'Select a branch'}</option>
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">
+          <Button type="button" variant="outline" size="lg" onClick={requestClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="submit" size="lg" loading={saving} loadingText="Creating...">
+            Create Pharmacist
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+export default function PharmacistManagement() {
+  const { selectedBranchId, branches, loadingBranches: branchesLoading } = useBranchSelection()
+  const { user, loading: authLoading } = useAuth()
+  const { activeHospitalId } = useMultiHospital()
+  const [pharmacists, setPharmacists] = useState<Pharmacist[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editingPharmacist, setEditingPharmacist] = useState<Pharmacist | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [formData, setFormData] = useState<PharmacistFormData>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    password: '',
+    branchId: ''
+  })
+
+  const loadData = useCallback(async () => {
+    if (!activeHospitalId) return
+
+    setLoading(true)
+    setError(null)
+    try {
+      let list: Pharmacist[] = (await listPharmacists(activeHospitalId)) as unknown as Pharmacist[]
+
+      if (selectedBranchId !== "all") {
+        list = filterStaffByBranch(list, selectedBranchId)
+      }
+
+      setPharmacists(list)
+    } catch {
+      setError('Failed to load pharmacists. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [activeHospitalId, selectedBranchId])
+
+  useEffect(() => {
+    if (user && activeHospitalId) {
+      loadData()
+    }
+  }, [user, activeHospitalId, loadData])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+    setSaving(true)
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error('You must be logged in')
+      const token = await currentUser.getIdToken()
+      if (!token) throw new Error('Authentication token not found')
+      if (branches.length > 0 && !formData.branchId) {
+        throw new Error('Please select a branch for this pharmacist')
+      }
+
+      const res = await fetch('/api/admin/create-pharmacist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          phone: formData.phone.trim() || undefined,
+          branchId: formData.branchId || undefined,
+        }),
+      })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || 'Failed to create pharmacist')
+      }
+
+      setSuccess('Pharmacist created successfully!')
+      setShowAddModal(false)
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        password: '',
+        branchId: '',
+      })
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create pharmacist. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (pharmacistId: string) => {
+    if (!window.confirm('Delete this pharmacist? They will no longer be able to log in.')) return
+    try {
+      setError(null)
+      setSuccess(null)
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error('You must be logged in')
+      const token = await currentUser.getIdToken()
+      if (!token) throw new Error('Authentication token not found')
+      const res = await fetch(`/api/admin/pharmacists/${pharmacistId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete pharmacist')
+      setSuccess('Pharmacist deleted.')
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete pharmacist. Please try again.')
+    }
+  }
+
+  const handleEditSave = async () => {
+    if (!editingPharmacist) return
+    try {
+      setSaving(true)
+      setError(null)
+      setSuccess(null)
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error('You must be logged in')
+      const token = await currentUser.getIdToken()
+      if (!token) throw new Error('Authentication token not found')
+      const res = await fetch(`/api/admin/pharmacists/${editingPharmacist.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          firstName: editingPharmacist.firstName,
+          lastName: editingPharmacist.lastName,
+          phone: editingPharmacist.phone ?? '',
+          branchId: editingPharmacist.branchId ?? undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update pharmacist')
+      setSuccess('Pharmacist updated.')
+      setEditingPharmacist(null)
+      await loadData()
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update pharmacist. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCancel = () => {
+    setShowAddModal(false)
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      password: '',
+      branchId: '',
+    })
+    setError(null)
+    setSuccess(null)
+  }
+
+  if (authLoading) {
+    return <TabSkeleton variant="table" />
+  }
+  if (!activeHospitalId) {
+    return <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center"><p className="text-slate-600">Select a hospital to manage pharmacists.</p></div>
+  }
+
+  return (
+    <div className="space-y-6">
+      {error && <Notification type="error" message={error} onClose={() => setError(null)} />}
+      {success && <Notification type="success" message={success} onClose={() => setSuccess(null)} />}
+
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/80">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Pharmacist Management</h2>
+            <p className="text-sm text-slate-600 mt-1">Create and manage pharmacists for your hospital</p>
+          </div>
+          <button
+            type="button"
+          onClick={() => {
+            setFormData({
+              firstName: '',
+              lastName: '',
+              email: '',
+              phone: '',
+              password: '',
+              branchId: branches.length === 1 ? branches[0].id : '',
+            })
+            setShowAddModal(true)
+          }}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          >
+            <span className="text-lg leading-none">+</span>
+            <span>Create Pharmacist</span>
+          </button>
+        </div>
+
+        <div className="p-6">
+          {loading ? (
+            <TabSkeleton variant="table" />
+          ) : pharmacists.length === 0 ? (
+            <p className="text-slate-500 text-center py-8 text-sm">No pharmacists found. Click &quot;Create Pharmacist&quot; to add one.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Name</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Email</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Phone</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Branch</th>
+                    <th className="px-4 py-2 text-left font-semibold text-slate-700">Hospital</th>
+                    <th className="px-4 py-2 text-right font-semibold text-slate-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pharmacists.map((p) => (
+                    <tr key={p.id} className="border-t border-slate-200 hover:bg-slate-50/60">
+                      <td className="px-4 py-2">{[p.firstName, p.lastName].filter(Boolean).join(' ') || '—'}</td>
+                      <td className="px-4 py-2">{p.email}</td>
+                      <td className="px-4 py-2">{p.phone || '—'}</td>
+                      <td className="px-4 py-2">{p.branchName || '—'}</td>
+                      <td className="px-4 py-2">{p.hospitalName || '—'}</td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingPharmacist(p)}
+                            className="px-3 py-1 rounded-full border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(p.id)}
+                            className="px-3 py-1 rounded-full border border-rose-300 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showAddModal && (
+        <RevealModal
+          isOpen={true}
+          onClose={handleCancel}
+          contentClassName="p-0"
+          overlayClassName="mt-30 pt-20 sm:pt-24"
+        >
+          <AddPharmacistModalContent
+            formData={formData}
+            setFormData={setFormData}
+            onSubmit={saving ? () => {} : handleSubmit}
+            branches={branches}
+            saving={saving || branchesLoading}
+          />
+        </RevealModal>
+      )}
+
+      {editingPharmacist && (
+        <RevealModal
+          isOpen={true}
+          onClose={() => setEditingPharmacist(null)}
+          contentClassName="p-0"
+          overlayClassName="mt-30 pt-20 sm:pt-24"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl min-w-[360px] max-h-[90vh] overflow-hidden flex flex-col border border-slate-200/80">
+            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-4 rounded-t-2xl shrink-0 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Edit Pharmacist</h3>
+                <p className="text-sm text-slate-500 mt-1">Update name, phone and branch. Email and password stay the same.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPharmacist(null)}
+                className="p-2.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">First name</label>
+                  <input
+                    type="text"
+                    value={editingPharmacist.firstName}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, firstName: e.target.value } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Last name</label>
+                  <input
+                    type="text"
+                    value={editingPharmacist.lastName}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, lastName: e.target.value } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={editingPharmacist.phone ?? ''}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, phone: e.target.value } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Branch</label>
+                  <select
+                    value={editingPharmacist.branchId ?? ''}
+                    onChange={(e) => setEditingPharmacist(prev => prev ? { ...prev, branchId: e.target.value, branchName: branches.find(b => b.id === e.target.value)?.name ?? prev.branchName } : prev)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] bg-white"
+                  >
+                    <option value="">Select branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-slate-200 px-6 py-4 flex justify-end gap-3 shrink-0">
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingPharmacist(null)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={handleEditSave} loading={saving} loadingText="Saving…">
+                Save changes
+              </Button>
+            </div>
+          </div>
+        </RevealModal>
+      )}
+    </div>
+  )
+}
+

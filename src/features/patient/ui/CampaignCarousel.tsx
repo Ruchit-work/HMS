@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Campaign, getContentPreview, shouldTruncate } from "@/utils/campaigns/campaigns"
-import { sanitizeForInnerHTML } from "@/utils/shared/sanitizeHtml"
+import { Campaign, getContentPreview, shouldTruncate } from "@/shared/utils/campaigns/campaigns"
+import { sanitizeForInnerHTML } from "@/shared/utils/shared/sanitizeHtml"
 
 interface CampaignCarouselProps {
   campaigns: Campaign[]

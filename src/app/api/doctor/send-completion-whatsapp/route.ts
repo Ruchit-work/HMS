@@ -12,10 +12,10 @@ import {
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
 import { sendDocumentMessage } from "@/server/metaWhatsApp"
-import { getPrescriptionPDFBuffer } from "@/utils/documents/pdfGenerators"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/utils/firebase/serverHospitalQueries"
-import { createPdfAccessToken } from "@/utils/security/pdfAccessToken"
+import { getPrescriptionPDFBuffer } from "@/shared/utils/documents/pdfGenerators"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { getHospitalCollectionPath, getAppointmentHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
+import { createPdfAccessToken } from "@/shared/utils/pdfAccessToken"
 
 export async function POST(request: Request) {
   // Authenticate request - requires doctor role

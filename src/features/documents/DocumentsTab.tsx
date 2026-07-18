@@ -9,7 +9,7 @@ import { ConfirmDialog } from '@/shared/components'
 import { auth } from "@/firebase/config"
 import { doc, getDoc, query, where, getDocs, orderBy, limit } from "firebase/firestore"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import PatientSelector from "./PatientSelector"
 import { Notification } from '@/shared/components'
 interface DocumentsTabProps {

@@ -6,7 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
-import { authenticateRequest } from '@/utils/firebase/apiAuth'
+import { authenticateRequest } from '@/shared/utils/firebase/apiAuth'
+import { auditLogger, AUDIT_ACTIONS } from '@/server/auditLogger'
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -158,6 +159,16 @@ export async function POST(request: NextRequest) {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true })
+
+    void auditLogger.logForUser(auth.user, {
+      hospitalId,
+      module: 'Administration',
+      entityType: 'user',
+      entityId: adminUid,
+      action: AUDIT_ACTIONS.USER_CREATED,
+      summary: `User ${adminData.firstName} ${adminData.lastName} was created as Admin.`,
+      metadata: { role: 'admin' },
+    })
 
     return NextResponse.json({
       success: true,

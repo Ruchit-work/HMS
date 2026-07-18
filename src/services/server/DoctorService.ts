@@ -6,7 +6,7 @@ import { admin } from "@/server/firebaseAdmin"
 import {
   getDoctorHospitalId,
   getHospitalCollectionPath,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
 
 export async function getDoctor(doctorId: string): Promise<{
   id: string

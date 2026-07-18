@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { auth } from "@/firebase/config"
 import { getDocs } from "firebase/firestore"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import VoiceInput from "@/components/ui/VoiceInput"
-import { useDebounce } from "@/hooks/useDebounce"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
+import VoiceInput from "@/shared/ui/VoiceInput"
+import { useDebounce } from "@/shared/hooks/useDebounce"
 
 interface Patient {
   id: string

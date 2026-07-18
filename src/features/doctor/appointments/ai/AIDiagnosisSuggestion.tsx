@@ -2,7 +2,7 @@
 
 import React from "react"
 import { Appointment as AppointmentType } from "@/types/patient"
-import { parseAIDiagnosis as parseAIDiagnosisUtil } from "@/utils/appointments/diagnosisParsers"
+import { parseAIDiagnosis as parseAIDiagnosisUtil } from "@/shared/utils/appointments/diagnosisParsers"
 import { RefreshCw, Sparkles, X } from "lucide-react"
 
 interface AIDiagnosisSuggestionProps {

@@ -1,7 +1,7 @@
 'use client'
 
 import RouteGuard from '@/features/auth/RouteGuard'
-import type { UserRole } from '@/utils/auth/roleRouting'
+import type { UserRole } from '@/shared/utils/auth/roleRouting'
 
 interface AdminProtectedProps {
   children: React.ReactNode

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import DocumentsTab from "@/features/documents/DocumentsTab"
 import {

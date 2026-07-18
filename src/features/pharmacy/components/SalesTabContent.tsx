@@ -2,7 +2,7 @@ import React from 'react'
 import { TabSkeleton } from '@/shared/components'
 import { Pagination } from '@/shared/components'
 import type { PharmacySale } from '@/types/pharmacy'
-import type { OverviewDateRange } from '../overviewDerived'
+import type { OverviewDateRange } from '@/features/pharmacy/utils/overviewDerived'
 
 type PaymentModeSummary = Record<string, { count: number; amount: number }>
 

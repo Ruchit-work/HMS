@@ -4,8 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
-import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
-import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
+import { authenticateRequest, createAuthErrorResponse } from '@/shared/utils/firebase/apiAuth'
+import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/shared/utils/pharmacy/serverPharmacy'
 import type { PharmacySupplier } from '@/types/pharmacy'
 
 export async function GET(request: NextRequest) {

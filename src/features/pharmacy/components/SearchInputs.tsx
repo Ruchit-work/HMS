@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BranchMedicineStock, PharmacyMedicine } from '@/types/pharmacy'
-import { playScanBeep } from '@/utils/scanBeep'
+import { playScanBeep } from '@/shared/utils/scanBeep'
 import { Button } from '@/shared/components'
 
 /** Format: "Name strength – Manufacturer" for PO dropdown; otherwise "Name (generic)" */

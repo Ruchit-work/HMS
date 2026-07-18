@@ -4,16 +4,15 @@ import { fetchBranches } from "@/services/BranchService"
 import { useState, useEffect } from "react"
 import { Doctor, UserData, AppointmentFormData, PaymentData, Appointment } from "@/types/patient"
 import { Branch } from "@/types/branch"
-import { SYMPTOM_CATEGORIES } from "./symptoms/SymptomSelector"
+import { SYMPTOM_CATEGORIES } from "./SymptomSelector"
 import PatientInfoStep from "./appointments/steps/PatientInfoStep"
 import SymptomsStep from "./appointments/steps/SymptomsStep"
 import DoctorSelectionStep from "./appointments/steps/DoctorSelectionStep"
 import DateTimeSelectionStep from "./appointments/steps/DateTimeSelectionStep"
-import { isSlotInPast, getDayName, generateTimeSlots, isTimeSlotAvailable, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blockedDates"
 import { query, where, getDocs } from "firebase/firestore"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
+import { computeAvailableSlots } from "@/shared/utils/computeAvailableSlots"
 import { Button } from '@/shared/components'
 
 interface BookAppointmentFormProps {
@@ -143,60 +142,47 @@ export default function BookAppointmentForm({
 
       setLoadingSlots(true)
       try {
-        if (!activeHospitalId) {
+        const doctor = doctors.find((d) => d.id === selectedDoctor)
+        if (!activeHospitalId || !doctor) {
           setAvailableTimeSlots([])
           setBookedTimeSlots([])
+          setAllTimeSlots([])
+          setPastTimeSlots([])
           setLoadingSlots(false)
           return
         }
 
-        // Single source of truth: hospitals/{hospitalId}/appointments
         const appointmentsRef = getHospitalCollection(activeHospitalId, "appointments")
-        const appointmentsQuery = selectedBranchId
-          ? query(
-              appointmentsRef,
-              where("doctorId", "==", selectedDoctor),
-              where("appointmentDate", "==", appointmentData.date),
-              where("branchId", "==", selectedBranchId),
-              where("status", "==", "confirmed")
-            )
-          : query(
-              appointmentsRef,
-              where("doctorId", "==", selectedDoctor),
-              where("appointmentDate", "==", appointmentData.date),
-              where("status", "==", "confirmed")
-            )
-        
-        const snapshot = await getDocs(appointmentsQuery)
-        const existingAppointments: Appointment[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Appointment))
-
-        // Fetch all confirmed appointments for this patient on this date   
-        const baseCollection = appointmentsRef
         const patientAppointmentsByUidQuery = query(
-          baseCollection,
+          appointmentsRef,
           where("patientUid", "==", user.uid),
           where("doctorId", "==", selectedDoctor),
           where("appointmentDate", "==", appointmentData.date),
           where("status", "==", "confirmed")
         )
         const patientAppointmentsLegacyQuery = query(
-          baseCollection,
+          appointmentsRef,
           where("patientId", "==", user.uid),
           where("doctorId", "==", selectedDoctor),
           where("appointmentDate", "==", appointmentData.date),
           where("status", "==", "confirmed")
         )
 
-        const [patientAppointmentsByUid, patientAppointmentsLegacy] = await Promise.all([
+        const [patientAppointmentsByUid, patientAppointmentsLegacy, slotResult] = await Promise.all([
           getDocs(patientAppointmentsByUidQuery),
-          getDocs(patientAppointmentsLegacyQuery)
+          getDocs(patientAppointmentsLegacyQuery),
+          computeAvailableSlots({
+            hospitalId: activeHospitalId,
+            doctorId: selectedDoctor,
+            appointmentDate: appointmentData.date,
+            doctor,
+            branchId: selectedBranchId || null,
+            branchTimings: selectedBranch?.timings || null,
+          }),
         ])
 
         const patientAppointmentsMap = new Map<string, Appointment>()
-        ;[...patientAppointmentsByUid.docs, ...patientAppointmentsLegacy.docs].forEach(docSnap => {
+        ;[...patientAppointmentsByUid.docs, ...patientAppointmentsLegacy.docs].forEach((docSnap) => {
           patientAppointmentsMap.set(
             docSnap.id,
             { id: docSnap.id, ...docSnap.data() } as Appointment
@@ -207,97 +193,17 @@ export default function BookAppointmentForm({
         if (patientAppointmentsList.length > 0) {
           setHasDuplicateAppointment(true)
           setDuplicateAppointmentTime(patientAppointmentsList[0].appointmentTime)
-        }else{
-          setHasDuplicateAppointment(false)
-          setDuplicateAppointmentTime("")
-        }
-
-
-        // Get doctor's visiting hours for the selected date (use branch timings if available)
-        const selectedDate = new Date(appointmentData.date)
-        // Use branch timings if branch is selected, otherwise use doctor's visiting hours
-        let visitingHours = (selectedDoctorData?.visitingHours || DEFAULT_VISITING_HOURS)
-        if (selectedBranch && selectedBranch.timings) {
-          // Convert branch timings to VisitingHours format
-          const branchVisitingHours = {
-            monday: selectedBranch.timings.monday 
-              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.monday.start, end: selectedBranch.timings.monday.end }] }
-              : { isAvailable: false, slots: [] },
-            tuesday: selectedBranch.timings.tuesday 
-              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.tuesday.start, end: selectedBranch.timings.tuesday.end }] }
-              : { isAvailable: false, slots: [] },
-            wednesday: selectedBranch.timings.wednesday 
-              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.wednesday.start, end: selectedBranch.timings.wednesday.end }] }
-              : { isAvailable: false, slots: [] },
-            thursday: selectedBranch.timings.thursday 
-              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.thursday.start, end: selectedBranch.timings.thursday.end }] }
-              : { isAvailable: false, slots: [] },
-            friday: selectedBranch.timings.friday 
-              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.friday.start, end: selectedBranch.timings.friday.end }] }
-              : { isAvailable: false, slots: [] },
-            saturday: selectedBranch.timings.saturday 
-              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.saturday.start, end: selectedBranch.timings.saturday.end }] }
-              : { isAvailable: false, slots: [] },
-            sunday: selectedBranch.timings.sunday 
-              ? { isAvailable: true, slots: [{ start: selectedBranch.timings.sunday.start, end: selectedBranch.timings.sunday.end }] }
-              : { isAvailable: false, slots: [] },
-          }
-          // Check if doctor has branch-specific timings for this branch
-          if (selectedDoctorData?.branchTimings && selectedBranchId && selectedDoctorData.branchTimings[selectedBranchId]) {
-            visitingHours = selectedDoctorData.branchTimings[selectedBranchId]
-          } else {
-            visitingHours = branchVisitingHours
-          }
-        }
-        const dayName = getDayName(selectedDate)
-        const daySchedule = visitingHours[dayName]
-
-        // Respect blocked dates (normalize to YYYY-MM-DD; support string/Timestamp/object with date)
-        const blockedDates: any[] = Array.isArray((selectedDoctorData as any)?.blockedDates) ? (selectedDoctorData as any).blockedDates : []
-        if (blockedDates.length > 0 && isDateBlockedFromRaw(appointmentData.date, blockedDates)) {
-          // Date is blocked - clear all slots
-          setAllTimeSlots([])
-          setBookedTimeSlots([])
-          setPastTimeSlots([])
-          setAvailableTimeSlots([])
-          setHasDuplicateAppointment(false)
-          setDuplicateAppointmentTime("")
-          return
-        }
-
-        // Generate ALL possible time slots for this day
-        if (daySchedule && daySchedule.isAvailable && daySchedule.slots.length > 0) {
-          const allSlots = generateTimeSlots(daySchedule)
-          setAllTimeSlots(allSlots)
-
-          // Identify which slots are booked
-          const booked = allSlots.filter(slot => {
-            return existingAppointments.some(apt => apt.appointmentTime === slot)
-          })
-          setBookedTimeSlots(booked)
-
-          // Identify which slots are in the past
-          const past = allSlots.filter(slot => {
-            return isSlotInPast(slot, appointmentData.date)
-          })
-          setPastTimeSlots(past)
-
-          // Identify available slots (NOT booked AND NOT in past)
-          const available = allSlots.filter(slot => {
-            const notBooked = isTimeSlotAvailable(slot, existingAppointments)
-            const notPast = !isSlotInPast(slot, appointmentData.date)
-            return notBooked && notPast
-          })
-          setAvailableTimeSlots(available)
         } else {
-          setAllTimeSlots([])
-          setBookedTimeSlots([])
-          setPastTimeSlots([])
-          setAvailableTimeSlots([])
-           setHasDuplicateAppointment(false)
-           setDuplicateAppointmentTime("")
+          setHasDuplicateAppointment(false)
+          setDuplicateAppointmentTime("")
         }
-      } catch {
+
+        setAllTimeSlots(slotResult.all)
+        setBookedTimeSlots(slotResult.booked)
+        setPastTimeSlots(slotResult.past)
+        setAvailableTimeSlots(slotResult.available)
+      } catch (error) {
+        console.error("[BookAppointmentForm] Failed to compute available slots:", error)
         setAvailableTimeSlots([])
         setBookedTimeSlots([])
         setAllTimeSlots([])
@@ -310,8 +216,15 @@ export default function BookAppointmentForm({
     }
 
     fetchAvailableSlots()
-     
-  }, [selectedDoctor, appointmentData.date, selectedBranchId, selectedBranch, activeHospitalId, user.uid])
+  }, [
+    selectedDoctor,
+    doctors,
+    appointmentData.date,
+    selectedBranchId,
+    selectedBranch,
+    activeHospitalId,
+    user.uid,
+  ])
 
   const nextStep = () => {
     if (currentStep < totalSteps && canProceedToNextStep()) {

@@ -3,7 +3,7 @@ import { Button } from '@/shared/components'
 import { FilterChip } from '@/shared/components'
 import { TableShell } from '@/shared/components'
 import type { ExpiryAlert, LowStockAlert, PharmacySale } from '@/types/pharmacy'
-import type { OverviewDateRange } from '../overviewDerived'
+import type { OverviewDateRange } from '@/features/pharmacy/utils/overviewDerived'
 import {
   PhOpsShell,
   PhOpsPageHeader,
@@ -19,7 +19,7 @@ import {
   PhOpsEmptyState,
   PhOpsStatusBadge,
   PhOpsBillingSummaryCard,
-} from '@/features/pharmacy/ui/ops'
+} from '@/features/pharmacy/ui/PhOps'
 
 type BranchOption = { id: string; name: string }
 type AnalyticsSummary = {

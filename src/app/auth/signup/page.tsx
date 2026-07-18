@@ -11,11 +11,11 @@ import {
   setDoc,
   getDoc,
 } from "firebase/firestore";
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries";
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { usePublicRoute } from "@/hooks/useAuth";
-import { useDeferredVisible } from "@/hooks/useDeferredVisible";
+import { usePublicRoute } from "@/shared/hooks/useAuth";
+import { useDeferredVisible } from "@/shared/hooks/useDeferredVisible";
 import { LoadingSpinner } from '@/shared/components'
 import OTPVerificationModal from "@/features/forms/OTPVerificationModal";
 import { Notification } from '@/shared/components'

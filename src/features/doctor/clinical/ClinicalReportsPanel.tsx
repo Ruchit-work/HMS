@@ -13,7 +13,7 @@ import {
   getReportCategoryLabel,
   type ClinicalReportCategory,
   type ClinicalReportEntry,
-} from "@/utils/clinicalReportUtils"
+} from "@/shared/utils/clinicalReportUtils"
 import { AlertTriangle, Eye } from "lucide-react"
 
 interface ClinicalReportsPanelProps {

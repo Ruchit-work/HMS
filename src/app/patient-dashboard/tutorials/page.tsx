@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { PageHeader } from '@/shared/components'
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 
 export default function PatientPortalTutorial() {
   // Protect route - only allow patients

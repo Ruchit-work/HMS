@@ -7,7 +7,7 @@ import {
   buildClinicalReportEntries,
   formatReportDate,
   getReportDoctor,
-} from "@/utils/clinicalReportUtils"
+} from "@/shared/utils/clinicalReportUtils"
 
 interface HistoryDocumentViewerProps {
   document: DocumentMetadata | null

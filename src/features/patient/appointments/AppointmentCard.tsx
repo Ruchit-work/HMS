@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Appointment } from "@/types/patient"
-import { generateAppointmentConfirmationPDF } from "@/utils/documents/pdfGenerators"
+import { generateAppointmentConfirmationPDF } from "@/shared/utils/documents/pdfGenerators"
 import PrescriptionDisplay from "@/features/prescription/PrescriptionDisplay"
 import AppointmentDocuments from "@/features/documents/AppointmentDocuments"
 

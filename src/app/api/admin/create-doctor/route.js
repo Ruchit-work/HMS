@@ -1,6 +1,7 @@
 import admin from 'firebase-admin'
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { getUserActiveHospitalId, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -23,7 +24,7 @@ if (!admin.apps.length) {
 
 export async function POST(request) {
   // Apply rate limiting first
-  const { applyRateLimit } = await import("@/utils/shared/rateLimit")
+  const { applyRateLimit } = await import("@/shared/utils/shared/rateLimit")
   const rateLimitResult = await applyRateLimit(request, "USER_CREATION")
   if (rateLimitResult instanceof Response) {
     return rateLimitResult // Rate limited
@@ -147,7 +148,16 @@ export async function POST(request) {
       updatedAt: new Date().toISOString(),
     }, { merge: true })
     
-    // Audit logging disabled
+    void auditLogger.logForUser(auth.user, {
+      hospitalId: adminHospitalId,
+      branchId: Array.isArray(doctorData.branchIds) ? doctorData.branchIds[0] || null : null,
+      module: "Administration",
+      entityType: "user",
+      entityId: userRecord.uid,
+      action: AUDIT_ACTIONS.USER_CREATED,
+      summary: `User ${doctorData.firstName} ${doctorData.lastName} was created as Doctor.`,
+      metadata: { role: "doctor" },
+    })
     
     return Response.json({ 
       success: true, 

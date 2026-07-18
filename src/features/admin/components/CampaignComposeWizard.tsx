@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import type { Dispatch, FormEvent, ReactNode, SetStateAction } from "react"
 import { Button } from '@/shared/components'
-import type { Campaign, CampaignAudience } from "@/utils/campaigns/campaigns"
-import { sanitizeForInnerHTML } from "@/utils/shared/sanitizeHtml"
+import type { Campaign, CampaignAudience } from "@/shared/utils/campaigns/campaigns"
+import { sanitizeForInnerHTML } from "@/shared/utils/shared/sanitizeHtml"
 
 type WizardStep = 1 | 2 | 3 | 4
 type CampaignType = "announcement" | "health_day" | "reminder" | "promo"

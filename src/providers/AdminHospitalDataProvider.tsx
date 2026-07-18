@@ -3,7 +3,7 @@
  * Loads patients / doctors / appointments / billing once per hospital and exposes them
  * so tabs/analytics can reuse instead of re-fetching.
  *
- * Realtime management listeners (PatientManagement, AppoinmentManagement badges) stay separate.
+ * Realtime management listeners (PatientManagement, AppointmentManagement badges) stay separate.
  */
 
 "use client"
@@ -21,7 +21,7 @@ import {
 import { getDocs } from "firebase/firestore"
 import { auth } from "@/firebase/config"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 
 export type AdminHospitalRecord = { id: string; [key: string]: any }
 

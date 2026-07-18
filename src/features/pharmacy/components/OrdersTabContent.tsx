@@ -4,7 +4,7 @@ import { TableShell } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
 import { Pagination } from '@/shared/components'
 import type { LowStockAlert, PharmacyMedicine, PharmacyPurchaseOrder, PharmacySupplier, PurchaseOrderLine } from '@/types/pharmacy'
-import { downloadPurchaseOrderPDF, printPurchaseOrderPDF } from '../purchaseOrderPdf'
+import { downloadPurchaseOrderPDF, printPurchaseOrderPDF } from '@/features/pharmacy/utils/purchaseOrderPdf'
 import { ActionEmptyState, getPurchaseOrderStatusMeta } from './RealWorldUiBlocks'
 import { PlaceOrderForm } from './PlaceOrderForm'
 import {
@@ -14,7 +14,7 @@ import {
   PhOpsPanel,
   PhOpsMetricGrid,
   PhOpsMetricCard,
-} from '@/features/pharmacy/ui/ops'
+} from '@/features/pharmacy/ui/PhOps'
 
 type BranchOption = { id: string; name: string }
 
@@ -258,7 +258,7 @@ export function OrdersTabContent(props: {
                   try {
                     const token = await getToken()
                     if (!token) { onError('Not signed in'); setReceiveSubmitting(false); return }
-                    const result = await (await import('../api/pharmacyApiClient')).createPharmacyApiClient(token).patchPurchaseOrder(receiveOrder.id, {
+                    const result = await (await import('../pharmacyApiClient')).createPharmacyApiClient(token).patchPurchaseOrder(receiveOrder.id, {
                       supplierInvoiceNumber: receiveSupplierInvoice.trim() || undefined,
                       receiveDetails: receiveDetailsForm.map((d) => ({
                         batchNumber: d.batchNumber.trim() || undefined,
@@ -319,7 +319,7 @@ export function OrdersTabContent(props: {
                       try {
                         const token = await getToken()
                         if (!token) { onError('Not signed in'); return }
-                        const result = await (await import('../api/pharmacyApiClient')).createPharmacyApiClient(token).patchPurchaseOrder(selectedOrderDetail.id, { cancel: true })
+                        const result = await (await import('../pharmacyApiClient')).createPharmacyApiClient(token).patchPurchaseOrder(selectedOrderDetail.id, { cancel: true })
                         if (!result.ok || !result.data.success) throw new Error((result.data.error as string) || 'Failed to cancel')
                         onSuccess('Order cancelled.')
                         setSelectedOrderDetail(null)

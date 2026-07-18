@@ -6,14 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { collection, doc, getDoc, limit, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import { auth, db } from "@/firebase/config"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { BranchProvider, useBranch } from "@/providers/BranchProvider"
 import {
   AdminHospitalDataProvider,
   useAdminHospitalData,
 } from "@/providers/AdminHospitalDataProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import {
   filterAppointmentsByBranch,
   filterBillingByBranch,
@@ -21,65 +21,66 @@ import {
   filterPatientsByBranch,
   isAllBranches,
   matchesSelectedBranch,
-} from "@/utils/branch/branchFilters"
+} from "@/shared/utils/branch/branchFilters"
 import { ConfirmDialog } from '@/shared/components'
-import { useNotificationBadge } from "@/hooks/useNotificationBadge"
+import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
+import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
 import { Notification } from '@/shared/components'
 import { Appointment as AppointmentType } from "@/types/patient"
 import { TabSkeleton } from '@/shared/components'
 import AdminProtected from "@/features/auth/AdminProtected"
 import AdminOverviewSkeleton from "@/features/admin/components/AdminOverviewSkeleton"
 
-const PatientManagement = dynamic(() => import("@/features/admin/tabs/PatientManagement"), {
+const PatientManagement = dynamic(() => import("@/features/admin/screens/PatientManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const PatientAnalytics = dynamic(() => import("@/features/admin/tabs/PatientAnalytics"), {
+const PatientAnalytics = dynamic(() => import("@/features/admin/screens/PatientAnalytics"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const DoctorManagement = dynamic(() => import("@/features/admin/tabs/DoctorManagement"), {
+const DoctorManagement = dynamic(() => import("@/features/admin/screens/DoctorManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const AppoinmentManagement = dynamic(() => import("@/features/admin/tabs/AppoinmentManagement"), {
+const AppointmentManagement = dynamic(() => import("@/features/admin/screens/AppointmentManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const CampaignManagement = dynamic(() => import("@/features/admin/tabs/CampaignManagement"), {
+const CampaignManagement = dynamic(() => import("@/features/admin/screens/CampaignManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const BillingManagement = dynamic(() => import("@/features/admin/tabs/BillingManagement"), {
+const BillingManagement = dynamic(() => import("@/features/admin/screens/BillingManagement"), {
   loading: () => <TabSkeleton variant="billing" />,
 })
-const FinancialAnalytics = dynamic(() => import("@/features/admin/tabs/FinancialAnalytics"), {
+const FinancialAnalytics = dynamic(() => import("@/features/admin/screens/FinancialAnalytics"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const HospitalManagement = dynamic(() => import("@/features/admin/tabs/HospitalManagement"), {
+const HospitalManagement = dynamic(() => import("@/features/admin/screens/HospitalManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const AdminAssignment = dynamic(() => import("@/features/admin/tabs/AdminAssignment"), {
+const AdminAssignment = dynamic(() => import("@/features/admin/screens/AdminAssignment"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const PlatformMonitoring = dynamic(() => import("@/features/admin/tabs/PlatformMonitoring"), {
+const PlatformMonitoring = dynamic(() => import("@/features/admin/screens/PlatformMonitoring"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const SubscriptionCenter = dynamic(() => import("@/features/admin/tabs/SubscriptionCenter"), {
+const SubscriptionCenter = dynamic(() => import("@/features/admin/screens/SubscriptionCenter"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const LiveActivityCenter = dynamic(() => import("@/features/admin/tabs/LiveActivityCenter"), {
+const LiveActivityCenter = dynamic(() => import("@/features/admin/screens/LiveActivityCenter"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const BusinessAnalytics = dynamic(() => import("@/features/admin/tabs/BusinessAnalytics"), {
+const BusinessAnalytics = dynamic(() => import("@/features/admin/screens/BusinessAnalytics"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
-const StaffManagement = dynamic(() => import("@/features/admin/tabs/StaffManagement"), {
+const StaffManagement = dynamic(() => import("@/features/admin/screens/StaffManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
-const DoctorPerformanceAnalytics = dynamic(() => import("@/features/admin/tabs/DoctorPerformanceAnalytics"), {
+const DoctorPerformanceAnalytics = dynamic(() => import("@/features/admin/screens/DoctorPerformanceAnalytics"), {
   loading: () => <TabSkeleton variant="dashboard" />,
 })
 const ReceptionistPerformanceAnalytics = dynamic(
-  () => import("@/features/admin/tabs/ReceptionistPerformanceAnalytics"),
+  () => import("@/features/admin/screens/ReceptionistPerformanceAnalytics"),
   { loading: () => <TabSkeleton variant="dashboard" /> }
 )
-const BranchManagement = dynamic(() => import("@/features/admin/tabs/BranchManagement"), {
+const BranchManagement = dynamic(() => import("@/features/admin/screens/BranchManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
 const AdminDashboardOverview = dynamic(() => import("@/features/admin/components/AdminDashboardOverview"), {
@@ -91,24 +92,30 @@ const PlatformCommandCenter = dynamic(() => import("@/features/admin/components/
 const AdminAccountPanel = dynamic(() => import("@/features/admin/components/AdminAccountPanel"), {
   loading: () => <TabSkeleton variant="form" />,
 })
-const GlobalSettingsCenter = dynamic(() => import("@/features/admin/tabs/GlobalSettingsCenter"), {
+const GlobalSettingsCenter = dynamic(() => import("@/features/admin/screens/GlobalSettingsCenter"), {
   loading: () => <TabSkeleton variant="form" />,
 })
+const HospitalSettingsCenter = dynamic(() => import("@/features/admin/screens/HospitalSettingsCenter"), {
+  loading: () => <TabSkeleton variant="form" />,
+})
+const AuditLogs = dynamic(() => import("@/features/admin/screens/AuditLogs"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
 const HqTenantLens = dynamic(
-  () => import("@/features/admin/hq").then((m) => ({ default: m.HqTenantLens })),
+  () => import("@/features/admin/components/hq").then((m) => ({ default: m.HqTenantLens })),
   { ssr: false }
 )
 const HqGlobalSearch = dynamic(
-  () => import("@/features/admin/hq").then((m) => ({ default: m.HqGlobalSearch })),
+  () => import("@/features/admin/components/hq").then((m) => ({ default: m.HqGlobalSearch })),
   { ssr: false }
 )
 const HqGlobalSearchTrigger = dynamic(
-  () => import("@/features/admin/hq").then((m) => ({ default: m.HqGlobalSearchTrigger })),
+  () => import("@/features/admin/components/hq").then((m) => ({ default: m.HqGlobalSearchTrigger })),
   { ssr: false }
 )
-import type { HqGlobalSearchNavigate } from "@/features/admin/hq"
-import SidebarAccountButton from "@/features/admin/chrome/SidebarAccountButton"
-import AdminPageHeader from "@/features/admin/chrome/AdminPageHeader"
+import type { HqGlobalSearchNavigate } from "@/features/admin/components/hq"
+import SidebarAccountButton from "@/features/admin/navigation/SidebarAccountButton"
+import AdminPageHeader from "@/features/admin/navigation/AdminPageHeader"
 import {
   LayoutDashboard,
   Users,
@@ -128,8 +135,9 @@ import {
   LogOut,
   Menu,
   X,
+  ShieldCheck,
 } from "lucide-react"
-import SubTabNavigation from "@/features/admin/chrome/SubTabNavigation"
+import SubTabNavigation from "@/features/admin/navigation/SubTabNavigation"
 import {
   calculateAllTrends,
   calculateRevenue,
@@ -142,7 +150,7 @@ import {
   isPaidAppointment,
   isSameLocalDay,
   revenueDateKey,
-} from "@/utils/analytics/dashboardCalculations"
+} from "@/shared/utils/analytics/dashboardCalculations"
 
 interface UserData {
   id: string;
@@ -219,6 +227,8 @@ const TAB_IDS = [
   "activity",
   "branches",
   "staff",
+  "settings",
+  "audit",
   "account",
 ] as const
 type AdminTabId = (typeof TAB_IDS)[number]
@@ -240,6 +250,8 @@ const TAB_META: Record<AdminTabId, { title: string; description: string }> = {
   activity: { title: "Live Activity Center", description: "Real-time platform activity feed sorted by severity — hospitals, clinical, billing, messaging, and ops" },
   branches: { title: "Branch Management", description: "Multi-site operations · capacity · staffing control" },
   staff: { title: "Staff Management", description: "Workforce directory · roles · shifts · access control" },
+  settings: { title: "Hospital Settings", description: "Billing, payment, and operational policies for this hospital" },
+  audit: { title: "Audit Logs", description: "Immutable history of critical business events for this hospital" },
   account: { title: "My Account", description: "View your profile and update your login password" },
 }
 
@@ -267,7 +279,7 @@ function getTabMeta(tab: AdminTabId, isSuperAdmin: boolean, tenantName?: string 
     }
   }
 
-  const inspectTabs: AdminTabId[] = ["patients", "doctors", "appointments", "billing"]
+  const inspectTabs: AdminTabId[] = ["patients", "doctors", "appointments", "billing", "settings", "audit"]
   if (inspectTabs.includes(tab)) {
     const lens = tenantName ? ` · ${tenantName}` : ""
     const base = TAB_META[tab]
@@ -317,6 +329,7 @@ function AdminDashboardContent() {
   const { user, loading: authLoading } = useAuth("admin")
   const { activeHospitalId, activeHospital, loading: hospitalLoading, userHospitals, isSuperAdmin, hasMultipleHospitals, setActiveHospital } = useMultiHospital()
   const { selectedBranchId, setSelectedBranchId, branches } = useBranch()
+  const { refundsEnabled } = useHospitalBillingSettings()
   const {
     patients: rawPatients,
     appointments: rawAppointmentsTyped,
@@ -576,6 +589,7 @@ function AdminDashboardContent() {
 
   // Refund widget / alerts: prefer refund.branchId; else link via appointment already in branch scope.
   const filteredPendingRefunds = useMemo(() => {
+    if (!refundsEnabled) return []
     if (isAllBranches(selectedBranchId)) return pendingRefunds
     const aptIds = new Set(filteredAppointmentsForOverview.map((a) => a.id))
     return pendingRefunds.filter((r) => {
@@ -584,7 +598,7 @@ function AdminDashboardContent() {
       if (r?.appointmentId) return aptIds.has(String(r.appointmentId))
       return true
     })
-  }, [pendingRefunds, selectedBranchId, filteredAppointmentsForOverview])
+  }, [pendingRefunds, selectedBranchId, filteredAppointmentsForOverview, refundsEnabled])
 
   const overviewBadge = useNotificationBadge({
     badgeKey: "admin-overview",
@@ -629,16 +643,33 @@ function AdminDashboardContent() {
       setNewPatientsCount(snapshot.size)
     })
 
-    // Listen for pending billing (unpaid appointments)
+    // Listen for pending billing (unpaid appointments awaiting collection).
+    // Include confirmed (e.g. auto-created recheckups) as well as completed —
+    // recheckups are created as status=confirmed + paymentStatus=unpaid.
     const billingQuery = query(
       getHospitalCollection(activeHospitalId, "appointments"),
-      where("status", "==", "completed"),
       where("paymentStatus", "in", ["pending", "unpaid"])
     )
 
-    const unsubscribeBilling = onSnapshot(billingQuery, (snapshot) => {
-      setPendingBillingCount(snapshot.size)
-    })
+    const unsubscribeBilling = onSnapshot(
+      billingQuery,
+      (snapshot) => {
+        const count = snapshot.docs.filter((d) => {
+          const data = d.data() || {}
+          const status = String(data.status || "").toLowerCase()
+          if (status !== "confirmed" && status !== "completed") return false
+          // Evidence of a completed collection wins over a stale unpaid flag.
+          const hasPaidAt = Boolean(data.paidAt) && String(data.paidAt).trim() !== ""
+          if (hasPaidAt && Number(data.remainingAmount || 0) <= 0) return false
+          return true
+        }).length
+        setPendingBillingCount(count)
+      },
+      () => {
+        // Composite index may be missing — fall back to counting from already-loaded appointments
+        setPendingBillingCount(0)
+      }
+    )
 
     // Return cleanup function
     return () => {
@@ -650,7 +681,10 @@ function AdminDashboardContent() {
 
   // Real-time listener for refund requests (tenant-scoped)
   useEffect(() => {
-    if (!user || !activeHospitalId) return
+    if (!user || !activeHospitalId || !refundsEnabled) {
+      setPendingRefunds([])
+      return
+    }
 
     const refundQuery = query(
       collection(db, 'refund_requests'),
@@ -692,7 +726,7 @@ function AdminDashboardContent() {
     return () => {
       unsubscribeRefunds()
     }
-  }, [user, activeHospitalId])
+  }, [user, activeHospitalId, refundsEnabled])
   useEffect(() => {
     if (isSuperAdmin && activeTab === "campaigns") {
       setActiveTab("overview")
@@ -700,6 +734,10 @@ function AdminDashboardContent() {
   }, [isSuperAdmin, activeTab])
 
   const approveRefund = async (refund: any) => {
+    if (!refundsEnabled) {
+      setNotification({ type: 'error', message: 'This hospital does not provide refunds.' })
+      return
+    }
     setProcessingRefundId(refund.id)
     try {
       // Get Firebase Auth token
@@ -965,6 +1003,22 @@ function AdminDashboardContent() {
                     <ReceiptText className="w-4 h-4 shrink-0" />
                     <span>Inspect · Billing</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("settings"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "settings" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Settings className="w-4 h-4 shrink-0" />
+                    <span>Inspect · Billing Settings</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("audit"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "audit" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span>Inspect · Audit Logs</span>
+                  </button>
                 </div>
               </div>
             </>
@@ -1087,6 +1141,22 @@ function AdminDashboardContent() {
                     <UsersRound className="w-4 h-4 shrink-0" />
                     <span>Staff</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("settings"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "settings" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <Settings className="w-4 h-4 shrink-0" />
+                    <span>Hospital Settings</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab("audit"); setSidebarOpen(false) }}
+                    className={`rx-nav-item ${activeTab === "audit" ? "rx-nav-item--active" : ""}`}
+                  >
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span>Audit Logs</span>
+                  </button>
                 </div>
               </div>
             </>
@@ -1137,6 +1207,7 @@ function AdminDashboardContent() {
               activeTab === "campaigns" ||
               activeTab === "branches" ||
               activeTab === "staff" ||
+              activeTab === "settings" ||
               activeTab === "hospitals" ||
               activeTab === "admins" ||
               activeTab === "monitoring" ||
@@ -1312,7 +1383,7 @@ function AdminDashboardContent() {
 
           {activeTab === "appointments" && (
             <div className="hms-content-card rounded-2xl p-6">
-              <AppoinmentManagement />
+              <AppointmentManagement />
             </div>
           )}
 
@@ -1500,6 +1571,14 @@ function AdminDashboardContent() {
           {activeTab === "subscriptions" && isSuperAdmin && <SubscriptionCenter />}
 
           {activeTab === "activity" && isSuperAdmin && <LiveActivityCenter />}
+
+          {activeTab === "settings" && (
+            <HospitalSettingsCenter
+              onNotify={(type, message) => setNotification({ type, message })}
+            />
+          )}
+
+          {activeTab === "audit" && <AuditLogs />}
 
           {activeTab === "account" && user?.email && (
             isSuperAdmin ? (

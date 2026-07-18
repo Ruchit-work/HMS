@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { admin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse, UserRole } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse, UserRole } from "@/shared/utils/firebase/apiAuth"
 
 const STAFF_ROLES: UserRole[] = ["admin", "doctor", "receptionist"]
 

@@ -37,29 +37,29 @@ interface ReceptionistTabPanelsProps {
 export const prefetchReceptionistTab = (tab: ReceptionistTab) => {
   switch (tab) {
     case "dashboard":
-      void import("@/features/receptionist/tabs/DashboardOverview")
+      void import("@/features/receptionist/screens/DashboardOverview")
       break
     case "patients":
-      void import("@/features/admin/tabs/PatientManagement")
-      void import("@/features/admin/tabs/PatientAnalytics")
+      void import("@/features/admin/screens/PatientManagement")
+      void import("@/features/admin/screens/PatientAnalytics")
       break
     case "doctors":
-      void import("@/features/admin/tabs/DoctorManagement")
+      void import("@/features/admin/screens/DoctorManagement")
       break
     case "appointments":
-      void import("@/features/admin/tabs/AppoinmentManagement")
+      void import("@/features/admin/screens/AppointmentManagement")
       break
     case "admit-requests":
-      void import("@/features/receptionist/tabs/AdmitRequestsPanel")
+      void import("@/features/receptionist/screens/AdmitRequestsPanel")
       break
     case "billing":
-      void import("@/features/receptionist/tabs/BillingHistoryPanel")
+      void import("@/features/receptionist/screens/BillingHistoryPanel")
       break
     case "book-appointment":
-      void import("@/features/receptionist/tabs/BookAppointmentPanel")
+      void import("@/features/receptionist/screens/BookAppointmentPanel")
       break
     case "whatsapp-bookings":
-      void import("@/features/receptionist/tabs/WhatsAppBookingsPanel")
+      void import("@/features/receptionist/screens/WhatsAppBookingsPanel")
       break
     case "documents":
       void import("@/features/documents/DocumentsTab")
@@ -68,39 +68,39 @@ export const prefetchReceptionistTab = (tab: ReceptionistTab) => {
 }
 
 const DashboardOverview = dynamic(
-  () => import("@/features/receptionist/tabs/DashboardOverview"),
+  () => import("@/features/receptionist/screens/DashboardOverview"),
   { loading: () => <TabSkeleton variant="dashboard" /> }
 )
 const PatientManagement = dynamic(
-  () => import("@/features/admin/tabs/PatientManagement"),
+  () => import("@/features/admin/screens/PatientManagement"),
   { loading: () => <TabSkeleton variant="table" /> }
 )
 const PatientAnalytics = dynamic(
-  () => import("@/features/admin/tabs/PatientAnalytics"),
+  () => import("@/features/admin/screens/PatientAnalytics"),
   { loading: () => <TabSkeleton variant="table" /> }
 )
 const DoctorManagement = dynamic(
-  () => import("@/features/admin/tabs/DoctorManagement"),
+  () => import("@/features/admin/screens/DoctorManagement"),
   { loading: () => <TabSkeleton variant="table" /> }
 )
-const AppoinmentManagement = dynamic(
-  () => import("@/features/admin/tabs/AppoinmentManagement"),
+const AppointmentManagement = dynamic(
+  () => import("@/features/admin/screens/AppointmentManagement"),
   { loading: () => <TabSkeleton variant="table" /> }
 )
 const AdmitRequestsPanel = dynamic(
-  () => import("@/features/receptionist/tabs/AdmitRequestsPanel"),
+  () => import("@/features/receptionist/screens/AdmitRequestsPanel"),
   { loading: () => <TabSkeleton variant="ipd" /> }
 )
 const BillingHistoryPanel = dynamic(
-  () => import("@/features/receptionist/tabs/BillingHistoryPanel"),
+  () => import("@/features/receptionist/screens/BillingHistoryPanel"),
   { loading: () => <TabSkeleton variant="billing" /> }
 )
 const BookAppointmentPanel = dynamic(
-  () => import("@/features/receptionist/tabs/BookAppointmentPanel"),
+  () => import("@/features/receptionist/screens/BookAppointmentPanel"),
   { loading: () => <TabSkeleton variant="form" /> }
 )
 const WhatsAppBookingsPanel = dynamic(
-  () => import("@/features/receptionist/tabs/WhatsAppBookingsPanel"),
+  () => import("@/features/receptionist/screens/WhatsAppBookingsPanel"),
   { loading: () => <TabSkeleton variant="table" /> }
 )
 const DocumentsTab = dynamic(
@@ -244,7 +244,7 @@ export default function ReceptionistTabPanels({
         <TabPanel tab="appointments" activeTab={activeTab}>
           <div className="rx-section-card p-6">
             <PanelSuspense tab="appointments">
-              <AppoinmentManagement
+              <AppointmentManagement
                 disableAdminGuard={true}
                 receptionistBranchId={receptionistBranchId}
               />

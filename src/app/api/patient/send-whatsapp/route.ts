@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { sendTextMessage } from "@/server/metaWhatsApp"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 
 /**
  * Public API route for sending WhatsApp messages during patient signup

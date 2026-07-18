@@ -1,7 +1,7 @@
 "use client"
 
 import { AppointmentFormData, UserData } from "@/types/patient"
-import SymptomSelector from "../../symptoms/SymptomSelector"
+import SymptomSelector from "../../SymptomSelector"
 import SmartQuestions from "../../forms/SmartQuestions"
 import MedicalHistoryChecklist from "../../forms/MedicalHistoryChecklist"
 

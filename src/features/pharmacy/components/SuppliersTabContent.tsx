@@ -11,7 +11,7 @@ import {
   PhOpsMetricGrid,
   PhOpsMetricCard,
   PhOpsSearchToolbar,
-} from '@/features/pharmacy/ui/ops'
+} from '@/features/pharmacy/ui/PhOps'
 
 export function SuppliersTabContent(props: {
   suppliers: PharmacySupplier[]

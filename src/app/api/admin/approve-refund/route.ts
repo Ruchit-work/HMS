@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import {
   assertUserHospitalAccess,
   getHospitalCollectionPath,
   getUserActiveHospitalId,
   isPlatformSuperAdmin,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 export async function POST(req: Request) {
   const rateLimitResult = await applyRateLimit(req, "ADMIN")
@@ -96,6 +97,15 @@ export async function POST(req: Request) {
       }
     }
 
+    const { getHospitalBillingSettings } = await import('@/server/hospitalBillingSettings')
+    const billingSettings = await getHospitalBillingSettings(aptHospitalId || hospitalForApt)
+    if (billingSettings.refundPolicy === 'disabled') {
+      return NextResponse.json(
+        { error: 'This hospital does not provide refunds.' },
+        { status: 403 }
+      )
+    }
+
     const amount = Number(refund?.paymentAmount ?? apt?.paymentAmount ?? apt?.totalConsultationFee ?? 0)
     const patientId = String(refund?.patientId || apt?.patientId || "")
 
@@ -103,21 +113,66 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Patient ID missing on refund request" }, { status: 400 })
     }
 
+    const nowIso = new Date().toISOString()
     await aptRef.update({
       paymentStatus: 'refunded',
       refundApproved: true,
       refundRequested: false,
       paymentRefundedAmount: amount,
-      paymentRefundedAt: new Date().toISOString(),
-      status: 'doctor_cancelled',
-      updatedAt: new Date().toISOString(),
+      paymentRefundedAt: nowIso,
+      status: 'cancelled',
+      billingStatus: 'cancelled',
+      remainingAmount: 0,
+      cancelledAt: nowIso,
+      cancelledBy: adminUser.uid,
+      cancelledByRole: 'admin_refund',
+      updatedAt: nowIso,
     })
 
     await refundRef.update({
       status: 'approved',
-      approvedAt: new Date().toISOString(),
+      approvedAt: nowIso,
       approvedBy: adminUser.uid,
     })
+
+    // Release the doctor's booked slot so the time becomes available again.
+    try {
+      const doctorId = String(apt?.doctorId || '')
+      const date = String(apt?.appointmentDate || '')
+      const rawTime = String(apt?.appointmentTime || '')
+      if (doctorId && date && rawTime) {
+        const { normalizeTime } = await import('@/shared/utils/timeSlots')
+        const slotIds = new Set<string>()
+        for (const time of [rawTime, normalizeTime(rawTime)]) {
+          if (time) slotIds.add(`${doctorId}_${date}_${time.replace(/[:\s]/g, '-')}`)
+        }
+        for (const slotId of slotIds) {
+          const slotRef = firestore.collection('appointmentSlots').doc(slotId)
+          const slotSnap = await slotRef.get()
+          if (!slotSnap.exists) continue
+          const slotAppointmentId = slotSnap.data()?.appointmentId
+          if (!slotAppointmentId || String(slotAppointmentId) === appointmentId) {
+            await slotRef.delete()
+          }
+        }
+      }
+    } catch {
+      // Slot cleanup is best-effort; the refund itself already succeeded.
+    }
+
+    const auditHospitalId = aptHospitalId || hospitalForApt
+    if (auditHospitalId) {
+      void auditLogger.logForUser(adminUser, {
+        hospitalId: auditHospitalId,
+        branchId: typeof apt?.branchId === "string" ? apt.branchId : null,
+        module: "Billing",
+        entityType: "refund_request",
+        entityId: String(refundRequestId),
+        action: AUDIT_ACTIONS.REFUND_APPROVED,
+        summary: `Refund of ₹${amount.toLocaleString("en-IN")} approved.`,
+        metadata: { appointmentId, patientId, amount },
+      })
+    }
 
     return NextResponse.json({ ok: true, amountRefunded: amount })
   } catch (e: any) {

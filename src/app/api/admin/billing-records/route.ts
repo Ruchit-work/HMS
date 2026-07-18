@@ -1,10 +1,10 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import {
   getUserActiveHospitalId,
   isPlatformSuperAdmin,
   getHospitalCollectionPath,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
 
 interface UnifiedBillingRecord {
   id: string
@@ -201,110 +201,39 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch appointments with payments — scoped to caller's hospital when set
-    let appointmentsDocs: any[] = []
+    // Fetch appointments with billable amounts — paid AND unpaid/pending.
+    // Auto-created recheckups are saved as paymentStatus="unpaid" with remainingAmount > 0
+    // and must appear as outstanding dues. Avoid composite index queries that silently fail
+    // and drop those unpaid rows (same pattern as receptionist/billing-records).
+    const appointmentsDocs: any[] = []
     const seenAppointmentIds = new Set<string>()
-    try {
-      const appointmentsCol = scopedHospitalId
-        ? firestore.collection(getHospitalCollectionPath(scopedHospitalId, "appointments"))
-        : firestore.collection("appointments")
 
-      // Optimized: Query appointments that have payments
-      const paidAppointmentsQuery = appointmentsCol
-        .where("paidAt", ">", "")
-        .orderBy("paidAt", "desc")
-        .limit(100)
-      
-      const paidSnapshot = await paidAppointmentsQuery.get()
-      appointmentsDocs = paidSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      
-      // Also get pending cash appointments (those with consultation fee but not paid)
-      const pendingCashQuery = appointmentsCol
-        .where("totalConsultationFee", ">", 0)
-        .where("paymentStatus", "in", ["pending", "unpaid"])
-        .orderBy("totalConsultationFee", "desc")
-        .orderBy("createdAt", "desc")
-        .limit(50)
-      
-      try {
-        const pendingSnapshot = await pendingCashQuery.get()
-        const pendingDocs = pendingSnapshot.docs
-          .filter(doc => {
-            const data = doc.data()
-            return !data.paidAt && (!data.paymentMethod || data.paymentMethod === "cash")
-          })
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-        
-        // Merge and deduplicate
-        const allDocs = [...appointmentsDocs, ...pendingDocs]
-        const uniqueDocs = new Map()
-        allDocs.forEach(doc => {
-          if (!uniqueDocs.has(doc.id)) {
-            uniqueDocs.set(doc.id, doc)
-          }
-        })
-        appointmentsDocs = Array.from(uniqueDocs.values())
-          .sort((a: any, b: any) => {
-            const aDate = a.paidAt || a.createdAt || ""
-            const bDate = b.paidAt || b.createdAt || ""
-            return bDate.localeCompare(aDate)
-          })
-          .slice(0, 100)
-      } catch {
-        // If composite query fails, just use paid appointments
-        appointmentsDocs = appointmentsDocs.slice(0, 100)
-      }
-
-      // Track IDs we've already included so we don't duplicate when we add hospital-scoped appointments
-      for (const doc of appointmentsDocs) {
-        seenAppointmentIds.add(doc.id)
-      }
-    } catch {
-      // Final fallback: fetch without orderBy (reduced limit)
-      try {
-        const appointmentsCol = scopedHospitalId
-          ? firestore.collection(getHospitalCollectionPath(scopedHospitalId, "appointments"))
-          : firestore.collection("appointments")
-        const allAppointmentsSnapshot = await appointmentsCol
-          .limit(100)
-          .get()
-        appointmentsDocs = allAppointmentsSnapshot.docs
-          .filter((doc) => {
-            const data = doc.data()
-            const paymentAmount = Number(data?.paymentAmount || 0)
-            const totalConsultationFee = Number(data?.totalConsultationFee || 0)
-            const isPending =
-              (data?.paymentStatus && data.paymentStatus !== "paid") ||
-              (!data?.paidAt && paymentAmount <= 0)
-            const isCashPending =
-              isPending && totalConsultationFee > 0 && (data?.paymentMethod === "cash" || !data?.paymentMethod)
-            return paymentAmount > 0 || isCashPending
-          })
-          .sort((a, b) => {
-            const aData = a.data()
-            const bData = b.data()
-            const aDate = aData?.paidAt || aData?.createdAt || ""
-            const bDate = bData?.paidAt || bData?.createdAt || ""
-            return bDate.localeCompare(aDate)
-          })
-          .slice(0, 100)
-        for (const doc of appointmentsDocs) {
-          seenAppointmentIds.add(doc.id)
-        }
-      } catch {
-      }
+    const isBillableAppointment = (data: Record<string, any>) => {
+      // Unconfirmed WhatsApp bookings are not appointments yet — no invoice exists
+      // until the front desk confirms them.
+      if (data?.status === "whatsapp_pending" || data?.whatsappPending === true) return false
+      const paymentAmount = Number(data?.paymentAmount || 0)
+      const totalConsultationFee = Number(data?.totalConsultationFee || 0)
+      const remainingAmount = Number(data?.remainingAmount || 0)
+      const paymentStatus = String(data?.paymentStatus || "").toLowerCase()
+      const hasFee = paymentAmount > 0 || totalConsultationFee > 0 || remainingAmount > 0
+      if (!hasFee) return false
+      // Include unpaid / pending dues even when paymentAmount is still 0
+      if (paymentStatus === "unpaid" || paymentStatus === "pending" || remainingAmount > 0) return true
+      return paymentAmount > 0 || Boolean(data?.paidAt)
     }
 
-    // Include hospital-scoped appointments only for the caller's hospital (or all for SA without scope)
     try {
       if (scopedHospitalId) {
-        const hospAppointmentsSnap = await firestore
+        const hospSnap = await firestore
           .collection(getHospitalCollectionPath(scopedHospitalId, "appointments"))
           .orderBy("createdAt", "desc")
-          .limit(50)
+          .limit(150)
           .get()
 
-        for (const doc of hospAppointmentsSnap.docs) {
+        for (const doc of hospSnap.docs) {
+          const data = doc.data() || {}
+          if (!isBillableAppointment(data)) continue
           if (seenAppointmentIds.has(doc.id)) continue
           appointmentsDocs.push(doc)
           seenAppointmentIds.add(doc.id)
@@ -312,22 +241,50 @@ export async function GET(request: Request) {
       } else if (superAdmin) {
         const hospitalsSnap = await firestore.collection("hospitals").where("status", "==", "active").limit(20).get()
         for (const hospDoc of hospitalsSnap.docs) {
-          const hospId = hospDoc.id
-          const hospAppointmentsSnap = await firestore
-            .collection(`hospitals/${hospId}/appointments`)
+          const hospSnap = await firestore
+            .collection(`hospitals/${hospDoc.id}/appointments`)
             .orderBy("createdAt", "desc")
             .limit(50)
             .get()
-
-          for (const doc of hospAppointmentsSnap.docs) {
+          for (const doc of hospSnap.docs) {
+            const data = doc.data() || {}
+            if (!isBillableAppointment(data)) continue
             if (seenAppointmentIds.has(doc.id)) continue
             appointmentsDocs.push(doc)
             seenAppointmentIds.add(doc.id)
           }
         }
+      } else {
+        const rootSnap = await firestore
+          .collection("appointments")
+          .orderBy("createdAt", "desc")
+          .limit(150)
+          .get()
+        for (const doc of rootSnap.docs) {
+          const data = doc.data() || {}
+          if (!isBillableAppointment(data)) continue
+          if (seenAppointmentIds.has(doc.id)) continue
+          appointmentsDocs.push(doc)
+          seenAppointmentIds.add(doc.id)
+        }
       }
     } catch {
-      // Error grouping appointments by branch
+      // Final fallback: unordered sample
+      try {
+        const appointmentsCol = scopedHospitalId
+          ? firestore.collection(getHospitalCollectionPath(scopedHospitalId, "appointments"))
+          : firestore.collection("appointments")
+        const allAppointmentsSnapshot = await appointmentsCol.limit(150).get()
+        for (const doc of allAppointmentsSnapshot.docs) {
+          const data = doc.data() || {}
+          if (!isBillableAppointment(data)) continue
+          if (seenAppointmentIds.has(doc.id)) continue
+          appointmentsDocs.push(doc)
+          seenAppointmentIds.add(doc.id)
+        }
+      } catch {
+        // ignore
+      }
     }
 
     for (const docSnap of appointmentsDocs) {
@@ -376,17 +333,39 @@ export async function GET(request: Request) {
         }
       }
 
-      // Determine status
+      // Determine status. Evidence of payment (paymentStatus="paid" or a paidAt
+      // timestamp) must always win over pending heuristics — legacy paid rows can
+      // have paymentAmount = 0 and would otherwise surface as bogus pending dues
+      // that reject collection with "Appointment already paid".
       let status: "pending" | "paid" | "void" | "cancelled" = "paid"
-      if (data.status === "cancelled") {
+      const paymentStatus = String(data.paymentStatus || "").toLowerCase()
+      const hasPaidAt = Boolean(data.paidAt) && String(data.paidAt).trim() !== ""
+      if (
+        data.status === "cancelled" ||
+        data.status === "doctor_cancelled" ||
+        // Refunded payments are not collected revenue and are not outstanding —
+        // exclude them from both paid and pending buckets.
+        paymentStatus === "refunded"
+      ) {
         status = "cancelled"
-      } else if (data.paymentStatus === "pending" || !data.paidAt || paymentAmount <= 0) {
-        status = "pending"
-      } else if (data.paymentStatus === "paid" || data.paidAt) {
+      } else if (paymentStatus === "paid" || hasPaidAt) {
         status = "paid"
+      } else {
+        // Recheckups are created as paymentStatus="unpaid" with remainingAmount set —
+        // treat them as outstanding until front-desk / patient payment clears them.
+        status = "pending"
       }
 
-      const billedAmount = paymentAmount > 0 ? paymentAmount : totalConsultationFee
+      const billedAmount =
+        status === "pending"
+          ? Number(data.remainingAmount || 0) > 0
+            ? Number(data.remainingAmount)
+            : paymentAmount > 0
+              ? paymentAmount
+              : totalConsultationFee
+          : paymentAmount > 0
+            ? paymentAmount
+            : totalConsultationFee
 
       records.push({
         id: appointmentId,
@@ -403,7 +382,7 @@ export async function GET(request: Request) {
         generatedAt: data.paidAt || data.createdAt || new Date().toISOString(),
         status,
         paymentMethod: data.paymentMethod || undefined,
-        paidAt: data.paidAt || null,
+        paidAt: hasPaidAt ? data.paidAt : null,
         paymentReference: data.transactionId || null,
         transactionId: data.transactionId || null,
         hospitalId: data.hospitalId || null,
@@ -412,8 +391,8 @@ export async function GET(request: Request) {
         paymentType: data.paymentType || "full",
         remainingAmount:
           status === "pending"
-            ? billedAmount - paymentAmount > 0
-              ? billedAmount - paymentAmount
+            ? billedAmount - (hasPaidAt ? paymentAmount : 0) > 0
+              ? billedAmount - (hasPaidAt ? paymentAmount : 0)
               : billedAmount || totalConsultationFee
             : Number(data.remainingAmount || 0),
       })

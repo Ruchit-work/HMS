@@ -7,7 +7,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth } from '@/shared/hooks/useAuth'
 import { auth } from '@/firebase/config'
 import { TabSkeleton } from '@/shared/components'
 import { Hospital } from '@/types/hospital'

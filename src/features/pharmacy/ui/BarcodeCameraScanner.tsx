@@ -19,7 +19,7 @@ function isAbortOrRemovedError(err: unknown): boolean {
   return false
 }
 
-import { playScanBeep } from '@/utils/scanBeep'
+import { playScanBeep } from '@/shared/utils/scanBeep'
 
 export function BarcodeCameraScanner({
   onScan,

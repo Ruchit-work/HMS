@@ -6,8 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
-import { authenticateRequest } from '@/utils/firebase/apiAuth'
-import { getUserActiveHospitalId } from '@/utils/firebase/serverHospitalQueries'
+import { authenticateRequest } from '@/shared/utils/firebase/apiAuth'
+import { getUserActiveHospitalId } from '@/shared/utils/firebase/serverHospitalQueries'
+import { auditLogger, AUDIT_ACTIONS } from '@/server/auditLogger'
 if (!admin.apps.length) {
   const projectId = process.env.FIREBASE_PROJECT_ID
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
@@ -153,6 +154,18 @@ export async function POST(request: NextRequest) {
       },
       { merge: true }
     )
+
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || emailNorm
+    void auditLogger.logForUser(auth.user, {
+      hospitalId: adminHospitalId,
+      branchId: branchIdToUse || null,
+      module: 'Administration',
+      entityType: 'user',
+      entityId: uid,
+      action: AUDIT_ACTIONS.USER_CREATED,
+      summary: `User ${fullName} was created as Pharmacist.`,
+      metadata: { role: 'pharmacy' },
+    })
 
     return NextResponse.json({
       success: true,

@@ -184,7 +184,7 @@ export function DaysCoverBadge({ daysCover }: { daysCover: number | null }) {
   )
 }
 
-import { REQUIRE_SHIFT_HANDOVER_NOTE } from '../constants'
+import { REQUIRE_SHIFT_HANDOVER_NOTE } from '@/features/pharmacy/constants'
 
 type CloseChecklistState = {
   countedCash: boolean

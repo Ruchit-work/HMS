@@ -3,7 +3,7 @@
 import React, { useState } from "react"
 import { Appointment as AppointmentType } from "@/types/patient"
 import { DocumentMetadata } from "@/types/document"
-import { parsePrescription as parsePrescriptionUtil } from "@/utils/appointments/prescriptionParsers"
+import { parsePrescription as parsePrescriptionUtil } from "@/shared/utils/appointments/prescriptionParsers"
 
 interface PatientHistorySectionProps {
   appointment: AppointmentType

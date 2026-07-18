@@ -1,11 +1,12 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import {
   getBranchIfBelongsToHospital,
   getHospitalCollectionPath,
   getReceptionistDefaultBranch,
   getUserActiveHospitalId,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 type RouteContext = {
   params: Promise<{ patientId: string }>
@@ -80,6 +81,22 @@ export async function PATCH(req: Request, context: RouteContext) {
     rootRef.set({ ...updates }, { merge: true }),
     hospitalRef.set({ ...seed, ...updates }, { merge: true }),
   ])
+
+  const patientName = [seed.firstName, seed.lastName].filter(Boolean).join(" ").trim()
+  void auditLogger.logForUser(auth.user, {
+    hospitalId,
+    branchId: branch.id,
+    module: "Patient",
+    entityType: "patient",
+    entityId: patientDocId,
+    action: AUDIT_ACTIONS.PATIENT_UPDATED,
+    summary: `Patient ${patientName || patientDocId} was updated.`,
+    metadata: {
+      field: "defaultBranchId",
+      previousBranchId: seed.defaultBranchId || null,
+      branchId: branch.id,
+    },
+  })
 
   return Response.json({
     success: true,

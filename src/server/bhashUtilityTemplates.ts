@@ -7,7 +7,7 @@ import {
   sanitizeBhashParam,
   type BhashConfirmationTemplateParams,
 } from "@/server/bhashAppointmentTemplate"
-import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
+import { formatWhatsAppRecipient } from "@/shared/utils/campaigns/whatsapp"
 
 function resolveRecipientPhone(
   to?: string | null,

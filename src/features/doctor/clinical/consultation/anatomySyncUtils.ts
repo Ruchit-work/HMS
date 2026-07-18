@@ -1,6 +1,6 @@
 import type { CompletionFormEntry } from "@/types/appointments"
 import type { AnatomyViewerData } from "@/features/doctor/anatomy/InlineAnatomyViewer"
-import { mergeMedicines } from "@/utils/prescriptionWorkspace"
+import { mergeMedicines } from "@/shared/utils/prescriptionWorkspace"
 import { mergeConsultationNotes, splitConsultationNotes } from "./consultationNotesUtils"
 
 function appendUniqueLine(existing: string, line: string): string {

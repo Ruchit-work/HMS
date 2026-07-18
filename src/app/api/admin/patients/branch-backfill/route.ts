@@ -1,5 +1,5 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import {
   getBranchIfBelongsToHospital,
   getFirstActiveBranchForHospital,
@@ -7,7 +7,7 @@ import {
   getReceptionistDefaultBranch,
   getUserActiveHospitalId,
   resolveAuthorizedHospitalId,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
 
 type TargetBranch = { id: string; name: string }
 

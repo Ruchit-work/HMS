@@ -13,7 +13,7 @@ import {
   flattenHistoryDocuments,
   getVitalsList,
 } from "@/features/doctor/clinical/patientClinicalUtils"
-import { calculateAge } from "@/utils/shared/date"
+import { calculateAge } from "@/shared/utils/shared/date"
 import { AlertTriangle, FileText, Heart, History, User } from "lucide-react"
 
 interface LatestRecommendation {

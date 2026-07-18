@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/utils/firebase/apiAuth"
-import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
-import { generatePatientReportExcel } from "@/utils/documents/excelGenerators"
+import { authenticateRequest, createAuthErrorResponse, type UserRole } from "@/shared/utils/firebase/apiAuth"
+import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
+import { generatePatientReportExcel } from "@/shared/utils/documents/excelGenerators"
 
 interface AppointmentData {
   id: string

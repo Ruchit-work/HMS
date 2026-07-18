@@ -1,7 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/shared/utils/firebase/serverHospitalQueries"
 
 interface Params {
   admissionId: string

@@ -3,8 +3,8 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { usePublicRoute } from "@/hooks/useAuth"
-import { useDeferredVisible } from "@/hooks/useDeferredVisible"
+import { usePublicRoute } from "@/shared/hooks/useAuth"
+import { useDeferredVisible } from "@/shared/hooks/useDeferredVisible"
 import { LoadingSpinner } from '@/shared/components'
 const MIVS_ABOUT_PATH = "/demo/mivs"
 const MIVS_WEBSITE_URL = "https://www.mivs.in/"

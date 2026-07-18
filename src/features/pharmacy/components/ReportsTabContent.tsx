@@ -1,5 +1,5 @@
 import React from 'react'
-import { exportToExcel, exportToPdf } from '@/utils/pharmacy/exportReports'
+import { exportToExcel, exportToPdf } from '@/shared/utils/pharmacy/exportReports'
 
 type ReportType = 'expiry' | 'valuation' | 'sales' | 'over_under' | 'reorder' | 'stock_sold'
 

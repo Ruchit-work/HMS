@@ -1,13 +1,14 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getDoctorHospitalId, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
 import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { normalizeTime } from "@/utils/timeSlots"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
-import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
-import { getString, isRecord, type UnknownRecord } from "@/utils/api/typeGuards"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { normalizeTime } from "@/shared/utils/timeSlots"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
+import { logApiError, createErrorResponse } from "@/shared/utils/errors/errorLogger"
+import { getString, isRecord, type UnknownRecord } from "@/shared/utils/api/validation"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 const sendDoctorBookingWhatsApp = async (
   appointmentData: UnknownRecord,
@@ -171,21 +172,38 @@ export async function POST(request: Request) {
       return Response.json({ error: "Doctor's hospital not found" }, { status: 400 })
     }
 
+    const { getHospitalBillingSettings } = await import("@/server/hospitalBillingSettings")
+    const billingSettings = await getHospitalBillingSettings(doctorHospitalId)
+
+    if (isRecheck && !billingSettings.autoCreateRecheckup) {
+      return Response.json(
+        { error: "Auto-create recheckup is disabled for this hospital." },
+        { status: 403 }
+      )
+    }
+
     const additionalFeesArray = Array.isArray(appointmentData.additionalFees) ? appointmentData.additionalFees : []
     const totalAdditionalFees = additionalFeesArray.reduce((sum: number, fee: unknown) => {
       const amount = isRecord(fee) ? Number(fee.amount) || 0 : 0
       return sum + amount
     }, 0)
+    const recheckupFee =
+      Number(billingSettings.defaultRecheckupFee) > 0
+        ? Number(billingSettings.defaultRecheckupFee)
+        : Number(consultationFee) || 0
     const totalPaymentAmount =
       isRecheck
-        ? Number(consultationFee) || 0
+        ? recheckupFee
         : typeof appointmentData.paymentAmount === "number"
           ? appointmentData.paymentAmount
           : consultationFee + totalAdditionalFees
 
-    const paymentStatus = isRecheck ? "unpaid" : "paid"
-    const remainingAmount = isRecheck ? totalPaymentAmount : 0
-    const paidAt = isRecheck ? "" : nowIso
+    const recheckupUnpaid = isRecheck && billingSettings.recheckupStartsUnpaid
+    const paymentStatus = recheckupUnpaid ? "unpaid" : isRecheck ? "paid" : "paid"
+    const remainingAmount = recheckupUnpaid ? totalPaymentAmount : 0
+    // Omit paidAt for unpaid rechecks (empty string breaks pending filters that treat
+    // any paidAt value as settled). Front desk / patient pay sets it on collection.
+    const paidAt = recheckupUnpaid ? null : nowIso
     const slotOverbooking = isEmergency || isRecheck
 
     // Derive branchId/branchName when missing (doctor-booked or recheck from doctor-booked)
@@ -246,14 +264,19 @@ export async function POST(request: Request) {
               }
             })
           : undefined,
-      paymentMethod: safeValue(appointmentData.paymentMethod, "cash"),
+      // Rechecks carry no payment method until reception actually collects —
+      // storing "cash" here would make an uncollected due look like a settled payment.
+      paymentMethod: recheckupUnpaid ? undefined : safeValue(appointmentData.paymentMethod, "cash"),
       paymentType: safeValue(appointmentData.paymentType, "full"),
       durationMinutes: typeof appointmentData.durationMinutes === "number" ? appointmentData.durationMinutes : 15,
       paymentStatus,
       billingStatus: paymentStatus,
       remainingAmount,
-      paidAt,
-      transactionId: `DOC${Date.now()}`,
+      ...(paidAt ? { paidAt } : {}),
+      transactionId:
+        recheckupUnpaid || !billingSettings.billingOptions.generateTransactionIds
+          ? undefined
+          : `DOC${Date.now()}`,
       createdAt: safeValue(appointmentData.createdAt, nowIso),
       updatedAt: nowIso,
       createdBy: "doctor",
@@ -349,6 +372,25 @@ export async function POST(request: Request) {
       } catch {
         // ignore
       }
+    }
+
+    if (appointmentId) {
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: doctorHospitalId,
+        branchId: effectiveBranchId,
+        module: "Appointment",
+        entityType: "appointment",
+        entityId: appointmentId,
+        action: AUDIT_ACTIONS.APPOINTMENT_CREATED,
+        summary: `Appointment ${appointmentId} was created.`,
+        metadata: {
+          patientId: docData.patientId,
+          doctorId,
+          appointmentDate: docData.appointmentDate,
+          appointmentTime: docData.appointmentTime,
+          appointmentType: docData.appointmentType,
+        },
+      })
     }
 
     return Response.json({ success: true, id: appointmentId })

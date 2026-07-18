@@ -4,10 +4,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
-import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
-import { getPharmacyAuthContext, getPharmacyCollectionPath } from '@/utils/pharmacy/serverPharmacy'
-import { getHospitalCollectionPath } from '@/utils/firebase/serverHospitalQueries'
-import { parsePrescription } from '@/utils/appointments/prescriptionParsers'
+import { authenticateRequest, createAuthErrorResponse } from '@/shared/utils/firebase/apiAuth'
+import { getPharmacyAuthContext, getPharmacyCollectionPath } from '@/shared/utils/pharmacy/serverPharmacy'
+import { getHospitalCollectionPath } from '@/shared/utils/firebase/serverHospitalQueries'
+import { parsePrescription } from '@/shared/utils/appointments/prescriptionParsers'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest(request)

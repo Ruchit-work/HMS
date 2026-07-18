@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import type { CompletionFormEntry } from "@/types/appointments"
 import type { Appointment } from "@/types/patient"
-import type { MedicineSuggestion } from "@/utils/medicineSuggestions"
+import type { MedicineSuggestion } from "@/shared/utils/medicineSuggestions"
 import {
   deletePrescriptionTemplate,
   getFavoriteMedicines,
@@ -15,7 +15,7 @@ import {
   toggleFavoriteMedicine,
   type FavoriteMedicine,
   type PrescriptionTemplate,
-} from "@/utils/prescriptionWorkspace"
+} from "@/shared/utils/prescriptionWorkspace"
 import { Bookmark, Clock, FileStack, Star, Trash2 } from "lucide-react"
 
 type MedicineRow = CompletionFormEntry["medicines"][number]

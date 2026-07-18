@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendMissedAppointmentWhatsApp } from "@/server/missedAppointmentNotify"
-import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getAllActiveHospitals, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
 
 const ACTIVE_STATUSES = new Set(["confirmed", "waiting", "in_consultation"])
 
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   const isCronTrigger = isCronTriggerRequest(request)
 
   if (!isCronTrigger) {
-    const { authenticateRequest, createAuthErrorResponse } = await import("@/utils/firebase/apiAuth")
+    const { authenticateRequest, createAuthErrorResponse } = await import("@/shared/utils/firebase/apiAuth")
     const auth = await authenticateRequest(request, "admin")
     if (!auth.success) {
       return createAuthErrorResponse(auth)

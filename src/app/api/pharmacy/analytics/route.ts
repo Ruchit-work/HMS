@@ -4,8 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
-import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
-import { getPharmacyAuthContext, getPharmacyCollectionPath } from '@/utils/pharmacy/serverPharmacy'
+import { authenticateRequest, createAuthErrorResponse } from '@/shared/utils/firebase/apiAuth'
+import { getPharmacyAuthContext, getPharmacyCollectionPath } from '@/shared/utils/pharmacy/serverPharmacy'
 
 function daysUntilExpiry(expiryDate: string): number {
   const exp = new Date(expiryDate)

@@ -399,7 +399,7 @@ export interface BillingRecord {
   totalAmount: number
   generatedAt: string
   status: "pending" | "paid" | "void" | "cancelled"
-  paymentMethod?: "card" | "upi" | "cash"
+  paymentMethod?: "card" | "upi" | "cash" | "bank_transfer" | "cheque"
   paidAt?: string | null
   paymentReference?: string | null
   transactionId?: string | null

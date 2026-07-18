@@ -3,7 +3,7 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendBhashReminderTemplateIfConfigured } from "@/server/bhashUtilityTemplates"
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { getAllActiveHospitals, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getAllActiveHospitals, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
 
 function isCronTriggerRequest(request: Request): boolean {
   if (request.headers.get("x-vercel-cron") !== null) return true
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   
   // Allow cron or admin access
   if (!isCronTrigger) {
-    const { authenticateRequest, createAuthErrorResponse } = await import("@/utils/firebase/apiAuth")
+    const { authenticateRequest, createAuthErrorResponse } = await import("@/shared/utils/firebase/apiAuth")
     const auth = await authenticateRequest(request, "admin")
     if (!auth.success) {
       return createAuthErrorResponse(auth)

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { DocumentMetadata } from "@/types/document"
 import { auth } from "@/firebase/config"
-import { detectCriticalFindings, formatReportDate, getReportDoctor } from "@/utils/clinicalReportUtils"
+import { detectCriticalFindings, formatReportDate, getReportDoctor } from "@/shared/utils/clinicalReportUtils"
 
 interface DocumentViewerProps {
   document: DocumentMetadata

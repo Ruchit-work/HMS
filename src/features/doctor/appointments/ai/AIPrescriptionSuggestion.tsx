@@ -1,6 +1,6 @@
 "use client"
 
-import { parseAiPrescription } from "@/utils/appointments/prescriptionParsers"
+import { parseAiPrescription } from "@/shared/utils/appointments/prescriptionParsers"
 
 interface AIPrescriptionSuggestionProps {
   isLoading: boolean

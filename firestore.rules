@@ -258,6 +258,11 @@ service cloud.firestore {
       allow write: if isSuperAdmin() || staffRole();
     }
 
+    // Learned medicine autocomplete for doctor prescriptions
+    match /medicineSuggestions/{docId} {
+      allow read, write: if isSignedIn() && staffRole();
+    }
+
     // Sensitive / internal — Admin SDK only
     match /prescriptionPDFs/{docId} {
       allow read, write: if false;
@@ -271,6 +276,18 @@ service cloud.firestore {
     match /errorLogs/{docId} {
       allow create: if isSignedIn();
       allow read, update, delete: if isSuperAdmin();
+    }
+    match /audit_logs/{docId} {
+      allow read: if isSuperAdmin() || (
+        isSignedIn() &&
+        docBelongsToCallerHospital() &&
+        (
+          roleHasHospital('admins', resource.data.hospitalId) ||
+          (exists(userPath()) && userData().role in ['admin', 'super_admin'])
+        )
+      );
+      // Audit records are written only by trusted server APIs and are immutable.
+      allow create, update, delete: if false;
     }
 
     // Default deny for anything else

@@ -15,7 +15,7 @@ import {
   type QueryConstraint,
 } from "firebase/firestore"
 import { db } from "@/firebase/config"
-import { getHospitalCollection, getHospitalDocument } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection, getHospitalDocument } from "@/shared/utils/firebase/hospital-queries"
 
 export type PatientRecord = { id: string; [key: string]: any }
 

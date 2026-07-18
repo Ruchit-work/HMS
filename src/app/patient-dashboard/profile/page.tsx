@@ -6,12 +6,12 @@ import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { signOut } from "firebase/auth"
 import { ChangePasswordSection } from "@/features/forms/PasswordComponents"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { TabSkeleton } from '@/shared/components'
 import { Notification } from '@/shared/components'
 import { PageHeader } from '@/shared/components'
 import { UserData, NotificationData } from "@/types/patient"
-import { calculateAge } from "@/utils/shared/date"
+import { calculateAge } from "@/shared/utils/shared/date"
 import { ConfirmDialog } from '@/shared/components'
 import { Button } from '@/shared/components'
 

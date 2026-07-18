@@ -47,22 +47,22 @@ import {
   filterBranchesBySelection,
   isAllBranches,
   isUnassignedBranchValue,
-} from "@/utils/branch/branchFilters"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+} from "@/shared/utils/branch/branchFilters"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import type { Appointment, Room } from "@/types/patient"
-import type { TrendPoint } from "@/utils/analytics/dashboardCalculations"
-import type { RevenueTrendPoint } from "@/utils/analytics/dashboardCalculations"
+import type { TrendPoint } from "@/shared/utils/analytics/dashboardCalculations"
+import type { RevenueTrendPoint } from "@/shared/utils/analytics/dashboardCalculations"
 import {
   formatLocalYmd,
   getPaidAmount,
   isPaidAppointment,
   isSameLocalDay,
-} from "@/utils/analytics/dashboardCalculations"
+} from "@/shared/utils/analytics/dashboardCalculations"
 import { NotificationBadge, EnterpriseDataTable, StatusPill } from '@/shared/components'
 import type { EnterpriseColumn } from '@/shared/components'
 import { useAdminHospitalDataOptional } from "@/providers/AdminHospitalDataProvider"
-import { useSearch } from "@/hooks/useSearch"
-import { useTablePagination } from "@/hooks/useTablePagination"
+import { useSearch } from "@/shared/hooks/useSearch"
+import { useTablePagination } from "@/shared/hooks/useTablePagination"
 export interface DashboardStatsForOverview {
   totalPatients: number
   totalDoctors: number
@@ -91,6 +91,8 @@ type AdminTabId =
   | "campaigns"
   | "appointments"
   | "billing"
+  | "settings"
+  | "audit"
   | "analytics"
   | "hospitals"
   | "admins"
@@ -1280,14 +1282,21 @@ export default function AdminDashboardOverview({
     const ipdYesterday = yesterdayApts.filter((a) => Boolean(a.admissionId)).length
 
     const pendingBills = filteredAppointments.filter((a) => {
-      const unpaid = a.paymentStatus === "unpaid" || a.paymentStatus === "pending"
+      const paymentStatus = String(a.paymentStatus || "").toLowerCase()
+      if (paymentStatus === "refunded" || paymentStatus === "paid") return false
       const remaining = (a.remainingAmount || 0) > 0
+      // A recorded collection with nothing left to pay is settled — never pending.
+      if (a.paidAt && String(a.paidAt).trim() !== "" && !remaining) return false
+      const unpaid = paymentStatus === "unpaid" || paymentStatus === "pending"
       return (unpaid || remaining) && (a.status === "confirmed" || a.status === "completed")
     }).length
 
     const pendingBillsYesterday = yesterdayApts.filter((a) => {
-      const unpaid = a.paymentStatus === "unpaid" || a.paymentStatus === "pending"
+      const paymentStatus = String(a.paymentStatus || "").toLowerCase()
+      if (paymentStatus === "refunded" || paymentStatus === "paid") return false
       const remaining = (a.remainingAmount || 0) > 0
+      if (a.paidAt && String(a.paidAt).trim() !== "" && !remaining) return false
+      const unpaid = paymentStatus === "unpaid" || paymentStatus === "pending"
       return unpaid || remaining
     }).length
 
@@ -1492,15 +1501,23 @@ export default function AdminDashboardOverview({
   /** Financial overview — presentation of already-loaded revenue / billing / refund data. */
   const financialOverview = useMemo(() => {
     const pendingBills = filteredAppointments.filter((a) => {
-      const unpaid = a.paymentStatus === "unpaid" || a.paymentStatus === "pending"
+      const paymentStatus = String(a.paymentStatus || "").toLowerCase()
+      if (paymentStatus === "refunded" || paymentStatus === "paid") return false
       const remaining = (a.remainingAmount || 0) > 0
+      // A recorded collection with nothing left to pay is settled — never pending.
+      if (a.paidAt && String(a.paidAt).trim() !== "" && !remaining) return false
+      const unpaid = paymentStatus === "unpaid" || paymentStatus === "pending"
       return (unpaid || remaining) && (a.status === "confirmed" || a.status === "completed")
     })
 
-    const pendingBillAmount = pendingBills.reduce(
-      (sum, a) => sum + (a.remainingAmount || getPaidAmount(a) || 0),
-      0
-    )
+    const pendingBillAmount = pendingBills.reduce((sum, a) => {
+      const owed =
+        Number(a.remainingAmount || 0) ||
+        getPaidAmount(a) ||
+        Number((a as Appointment & { totalConsultationFee?: number }).totalConsultationFee || 0) ||
+        0
+      return sum + owed
+    }, 0)
 
     const insuranceClaims = filteredAppointments.filter((a) => {
       const method = String(a.paymentMethod || "").toLowerCase()

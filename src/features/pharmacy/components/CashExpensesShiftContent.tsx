@@ -11,8 +11,8 @@ import type {
   PharmacyExpenseCategory,
   PharmacySale,
 } from '@/types/pharmacy'
-import type { CloseShiftPreview, PeriodSummaries } from '../cashExpenseSummaries'
-import { CASH_DENOMS } from '../constants'
+import type { CloseShiftPreview, PeriodSummaries } from '@/features/pharmacy/utils/cashExpenseSummaries'
+import { CASH_DENOMS } from '@/features/pharmacy/constants'
 
 type BranchOption = { id: string; name: string }
 type CashExpensePeriod = 'today' | 'week' | 'month' | 'year'

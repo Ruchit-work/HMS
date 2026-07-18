@@ -5,7 +5,7 @@ import type { Dispatch, SetStateAction } from "react"
 import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "@/firebase/config"
 import type { Admission, AdmissionRequest, Room } from "@/types/patient"
-import { authedFetchJson } from "@/utils/client/authedFetch"
+import { authedFetchJson } from "@/shared/utils/authedFetch"
 
 type DoctorOption = {
   uid: string
@@ -76,13 +76,19 @@ export function useIpdBootstrapData({
       }
 
       if (roomsSnap.empty && hospitalId) {
-        await authedFetchJson("/api/admin/rooms/seed", { method: "POST" }, "Failed to seed rooms")
+        // Seeding is admin-only; receptionists get a 403 here. Ignore the
+        // failure and fall through to the local demo-room fallback below.
         try {
-          roomsSnap = await getDocs(
-            query(collection(db, "rooms"), where("hospitalId", "==", hospitalId))
-          )
+          await authedFetchJson("/api/admin/rooms/seed", { method: "POST" }, "Failed to seed rooms")
+          try {
+            roomsSnap = await getDocs(
+              query(collection(db, "rooms"), where("hospitalId", "==", hospitalId))
+            )
+          } catch {
+            roomsSnap = await getDocs(collection(db, "rooms"))
+          }
         } catch {
-          roomsSnap = await getDocs(collection(db, "rooms"))
+          // Not authorized to seed (or seed failed) — keep the empty snapshot.
         }
       }
 

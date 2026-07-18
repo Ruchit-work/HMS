@@ -6,18 +6,18 @@ import { usePathname } from "next/navigation"
 import { signOut } from "firebase/auth"
 import { auth } from "@/firebase/config"
 import { onSnapshot, query, where } from "firebase/firestore"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import { ConfirmDialog } from '@/shared/components'
 import { NotificationBadge } from '@/shared/components'
-import { useNotificationBadge } from "@/hooks/useNotificationBadge"
+import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
 import {
   getActiveDoctorNavId,
   getDoctorNavSections,
   getDoctorPageMeta,
   type DoctorNavId,
-} from "@/app/doctor-dashboard/doctorNavConfig"
+} from "@/features/doctor/nav"
 import {
   Home,
   Settings,

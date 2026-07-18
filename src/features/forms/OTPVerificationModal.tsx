@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { RevealModal, useRevealModalClose } from '@/shared/components'
-import { sendOTP, verifyOTP } from "@/utils/campaigns/metaOTP"
+import { sendOTP, verifyOTP } from "@/shared/utils/campaigns/metaOTP"
 
 interface OTPVerificationModalProps {
   isOpen: boolean

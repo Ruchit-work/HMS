@@ -6,8 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
-import { authenticateRequest } from '@/utils/firebase/apiAuth'
-import { getUserActiveHospitalId } from '@/utils/firebase/serverHospitalQueries'
+import { authenticateRequest } from '@/shared/utils/firebase/apiAuth'
+import { getUserActiveHospitalId } from '@/shared/utils/firebase/serverHospitalQueries'
+import { auditLogger, AUDIT_ACTIONS } from '@/server/auditLogger'
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -256,6 +257,17 @@ export async function POST(request: NextRequest) {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true })
+
+    void auditLogger.logForUser(auth.user, {
+      hospitalId: adminHospitalId,
+      branchId: branchIdToUse,
+      module: 'Administration',
+      entityType: 'user',
+      entityId: receptionistUid,
+      action: AUDIT_ACTIONS.USER_CREATED,
+      summary: `User ${receptionistData.firstName} ${receptionistData.lastName} was created as Receptionist.`,
+      metadata: { role: 'receptionist' },
+    })
 
     return NextResponse.json({
       success: true,

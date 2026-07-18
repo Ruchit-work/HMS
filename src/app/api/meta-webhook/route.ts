@@ -3,16 +3,18 @@ import { sendTextMessage, sendButtonMessage, sendMultiButtonMessage, sendListMes
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { normalizeTime, getDayName, DEFAULT_VISITING_HOURS } from "@/utils/timeSlots"
-import { isDateBlocked as isDateBlockedFromRaw } from "@/utils/analytics/blockedDates"
-import { generateAppointmentConfirmationPDFBase64 } from "@/utils/documents/pdfGenerators"
+import { normalizeTime, getDayName, DEFAULT_VISITING_HOURS } from "@/shared/utils/timeSlots"
+import { isDateBlocked as isDateBlockedFromRaw } from "@/shared/utils/analytics/blockedDates"
+import { generateAppointmentConfirmationPDFBase64 } from "@/shared/utils/documents/pdfGenerators"
 import { Appointment } from "@/types/patient"
-import { getDoctorHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/utils/firebase/serverHospitalQueries"
-import { detectDocumentType, detectDocumentTypeFromText, detectDocumentTypeEnhanced, detectSpecialty } from "@/utils/documents/documentDetection"
+import { getDoctorHospitalId, getHospitalCollectionPath, getAllActiveHospitals } from "@/shared/utils/firebase/serverHospitalQueries"
+import { getHospitalBillingSettings } from "@/server/hospitalBillingSettings"
+import { computeAdvanceAmount } from "@/shared/utils/billingSettings"
+import { detectDocumentType, detectDocumentTypeFromText, detectDocumentTypeEnhanced, detectSpecialty } from "@/shared/utils/documents/documentDetection"
 import { getStorage } from "firebase-admin/storage"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import crypto from "crypto"
-import { createPdfAccessToken } from "@/utils/security/pdfAccessToken"
+import { createPdfAccessToken } from "@/shared/utils/pdfAccessToken"
 
 type BookingState =
   | "idle"
@@ -2116,9 +2118,34 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   }
   
   const consultationFee = doctorData.consultationFee || 500
-  const PARTIAL_PAYMENT_AMOUNT = Math.ceil(consultationFee * 0.1)
-  const amountToPay = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
-  const isCash = paymentMethod === "cash"
+  const hospitalIdForBilling =
+    (typeof doctorData.hospitalId === "string" && doctorData.hospitalId.trim()) ||
+    (await getDoctorHospitalId(doctorId))
+  const billingSettings = hospitalIdForBilling
+    ? await getHospitalBillingSettings(hospitalIdForBilling)
+    : null
+  const allowPartial = billingSettings?.allowPartialPayment !== false
+  const effectivePaymentType =
+    paymentType === "partial" && allowPartial ? "partial" : "full"
+  const PARTIAL_PAYMENT_AMOUNT = billingSettings
+    ? computeAdvanceAmount(consultationFee, billingSettings)
+    : Math.ceil(consultationFee * 0.2)
+  const amountToPay =
+    effectivePaymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : consultationFee
+  const normalizedPaymentMethod = String(paymentMethod || "cash").toLowerCase()
+  if (
+    billingSettings &&
+    !billingSettings.paymentMethods[
+      normalizedPaymentMethod as keyof typeof billingSettings.paymentMethods
+    ]
+  ) {
+    await sendTextMessage(
+      from,
+      `❌ Payment method "${normalizedPaymentMethod}" is not accepted by this hospital. Please try booking again with an enabled method.`
+    )
+    return NextResponse.json({ success: true })
+  }
+  const isCash = normalizedPaymentMethod === "cash"
   const collectedAmount = isCash ? 0 : amountToPay
   const remainingAmount = Math.max(consultationFee - collectedAmount, 0)
   const paymentStatus: "pending" | "paid" =
@@ -2206,9 +2233,9 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         appointmentDate: appointmentDate,
         appointmentTime: normalizedTime,
         medicalHistory: "",
-        paymentOption: paymentMethod,
+        paymentOption: normalizedPaymentMethod,
         paymentStatus,
-        paymentType: paymentType as "full" | "partial",
+        paymentType: effectivePaymentType as "full" | "partial",
         consultationFee,
         paymentAmount: collectedAmount,
         remainingAmount,
@@ -2229,8 +2256,8 @@ async function handleFlowCompletion(value: any): Promise<Response> {
         appointmentDate: appointmentDate,
         appointmentTime: normalizedTime,
         symptoms: symptoms,
-        paymentMethod: paymentMethod as "card" | "upi" | "cash",
-        paymentType: paymentType as "full" | "partial",
+        paymentMethod: normalizedPaymentMethod as "card" | "upi" | "cash",
+        paymentType: effectivePaymentType as "full" | "partial",
         consultationFee: consultationFee,
         paymentAmount: collectedAmount,
         remainingAmount,

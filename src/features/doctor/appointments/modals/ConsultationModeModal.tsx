@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useRevealModalClose, RevealModal } from '@/shared/components'
-import { type AnatomyModel, type AnatomyType } from "@/utils/anatomyModelMapping"
-import { getAvailableAnatomyModels } from "@/utils/anatomyModelMapping"
+import { type AnatomyModel, type AnatomyType } from "@/shared/utils/anatomyModelMapping"
+import { getAvailableAnatomyModels } from "@/shared/utils/anatomyModelMapping"
 import { ClipboardList, Ear, ScanFace, Mic, HeartPulse, Stethoscope, Bone } from "lucide-react"
 
 type SelectedMode = "normal" | AnatomyType | null

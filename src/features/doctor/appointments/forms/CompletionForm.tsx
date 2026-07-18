@@ -6,10 +6,10 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { Appointment as AppointmentType } from "@/types/patient"
 import { CompletionFormEntry } from "@/types/appointments"
 import { DocumentMetadata } from "@/types/document"
-import { MedicineSuggestion } from "@/utils/medicineSuggestions"
+import { MedicineSuggestion } from "@/shared/utils/medicineSuggestions"
 import AIPrescriptionSuggestion from "@/features/doctor/appointments/ai/AIPrescriptionSuggestion"
 import AIDiagnosisSuggestion from "@/features/doctor/appointments/ai/AIDiagnosisSuggestion"
-import { formatAIDiagnosisForNotes } from "@/utils/appointments/diagnosisParsers"
+import { formatAIDiagnosisForNotes } from "@/shared/utils/appointments/diagnosisParsers"
 import MedicineForm from "@/features/doctor/appointments/forms/MedicineForm"
 import PrescriptionPanel from "@/features/doctor/clinical/PrescriptionPanel"
 import ConsultationWorkspace from "@/features/doctor/clinical/ConsultationWorkspace"
@@ -17,11 +17,11 @@ import ConsultationClinicalPanel from "@/features/doctor/clinical/consultation/C
 import ConsultationContextPanel from "@/features/doctor/clinical/consultation/ConsultationContextPanel"
 import ConsultationOrdersPanel from "@/features/doctor/clinical/consultation/ConsultationOrdersPanel"
 import PrescriptionQuickAccess from "@/features/doctor/clinical/consultation/PrescriptionQuickAccess"
-import { mergeMedicines } from "@/utils/prescriptionWorkspace"
+import { mergeMedicines } from "@/shared/utils/prescriptionWorkspace"
 import DocumentUpload from "@/features/documents/DocumentUpload"
-import VoiceInput from "@/components/ui/VoiceInput"
-import { parseAiPrescription } from "@/utils/appointments/prescriptionParsers"
-import { hasValidPrescriptionInput } from "@/types/appointments"
+import VoiceInput from "@/shared/ui/VoiceInput"
+import { parseAiPrescription } from "@/shared/utils/appointments/prescriptionParsers"
+import { hasClinicalDocumentation } from "@/features/doctor/clinical/consultation/consultationNotesUtils"
 
 interface CompletionFormProps {
   appointment: AppointmentType
@@ -394,7 +394,7 @@ export default function CompletionForm({
           <div className="flex justify-end gap-3 p-4 border-t border-slate-200 bg-white">
             <button
               type="button"
-              disabled={updating || !hasValidPrescriptionInput(completionData)}
+              disabled={updating || !hasClinicalDocumentation(completionData)}
               onClick={() => setShowCompleteConfirm(true)}
               className="inline-flex items-center justify-center gap-2 h-10 min-w-[150px] rounded-lg bg-emerald-600 text-white text-sm font-semibold shadow-sm hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -403,7 +403,7 @@ export default function CompletionForm({
             <button
               type="button"
               onClick={onAdmitClick}
-              disabled={updating || admitting || !hasValidPrescriptionInput(completionData)}
+              disabled={updating || admitting || !hasClinicalDocumentation(completionData)}
               className="inline-flex items-center justify-center gap-2 h-10 min-w-[150px] rounded-lg border border-slate-800 bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Admit Patient
@@ -489,7 +489,6 @@ export default function CompletionForm({
             style={{ minHeight: "90px" }}
             placeholder="Enter diagnosis, symptoms, or doctor observations..."
             className="w-full rounded-b-xl border-0 p-4 pt-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 resize-y"
-            required
           />
         </div>
       </section>
@@ -532,7 +531,7 @@ export default function CompletionForm({
       {/* Section 2 — Prescription */}
       <section className="mb-6">
         <h3 className="text-base font-semibold text-slate-900 mb-2.5">
-          Prescription <span className="text-red-500">*</span>
+          Prescription <span className="text-xs font-normal text-slate-400">(optional)</span>
         </h3>
 
         {/* Suggested medicines */}
@@ -662,7 +661,7 @@ export default function CompletionForm({
         <div className="flex justify-end gap-3 pt-6 border-t border-slate-200 mt-6">
           <button
             type="button"
-            disabled={updating || !hasValidPrescriptionInput(completionData)}
+            disabled={updating || !hasClinicalDocumentation(completionData)}
             onClick={() => setShowCompleteConfirm(true)}
             className="inline-flex items-center justify-center gap-2 h-10 min-w-[150px] rounded-lg bg-emerald-600 text-white text-sm font-semibold shadow-sm hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -686,7 +685,7 @@ export default function CompletionForm({
           <button
             type="button"
             onClick={onAdmitClick}
-            disabled={updating || admitting || !hasValidPrescriptionInput(completionData)}
+            disabled={updating || admitting || !hasClinicalDocumentation(completionData)}
             className="inline-flex items-center justify-center gap-2 h-10 min-w-[150px] rounded-lg border border-slate-800 bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {admitting ? (

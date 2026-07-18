@@ -8,7 +8,7 @@ import {
   formatBillingCurrency,
   getCollectionPeriodRanges,
   sumPeriodMetrics,
-} from "@/utils/billing/collectionAnalytics"
+} from "@/shared/utils/collectionAnalytics"
 
 function TrendBadge({
   trend,

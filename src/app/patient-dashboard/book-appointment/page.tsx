@@ -3,9 +3,9 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { auth, db } from "@/firebase/config"
 import { doc, getDoc } from "firebase/firestore"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { useDoctors } from "@/hooks/useDoctors"
+import { useDoctors } from "@/shared/hooks/useDoctors"
 import { TabSkeleton } from '@/shared/components'
 import { Notification } from '@/shared/components'
 import BookAppointmentForm from "@/features/patient/BookAppointmentForm"
@@ -14,9 +14,11 @@ import { PageHeader } from '@/shared/components'
 import { UserData, Doctor, NotificationData } from "@/types/patient"
 import { Footer } from '@/shared/components'
 import { useSearchParams, useRouter } from "next/navigation"
-import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
-import { isDateBlocked } from "@/utils/analytics/blockedDates"
-import { assertAppointmentSlotAvailable } from "@/utils/booking/checkAppointmentSlot"
+import { sendWhatsAppMessage, formatWhatsAppRecipient } from "@/shared/utils/campaigns/whatsapp"
+import { isDateBlocked } from "@/shared/utils/analytics/blockedDates"
+import { assertAppointmentSlotAvailable } from "@/shared/utils/checkAppointmentSlot"
+import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
+import { computeAdvanceAmount } from "@/shared/utils/billingSettings"
 
 export default function BookAppointmentPage() {
   return (
@@ -35,6 +37,7 @@ function BookAppointmentContent() {
 
   const { user, loading } = useAuth("patient")
   const { activeHospitalId } = useMultiHospital()
+  const { settings: billingSettings } = useHospitalBillingSettings()
   const { doctors } = useDoctors(activeHospitalId, {
     activeOnly: true,
     realtime: true,
@@ -259,9 +262,11 @@ See you soon! 🏥`
       }
 
       const CONSULTATION_FEE = selectedDoctorData.consultationFee || 500
-      const PARTIAL_PAYMENT_AMOUNT = Math.ceil(CONSULTATION_FEE * 0.1)
+      const effectivePaymentType =
+        paymentType === "partial" && billingSettings.allowPartialPayment ? "partial" : "full"
+      const PARTIAL_PAYMENT_AMOUNT = computeAdvanceAmount(CONSULTATION_FEE, billingSettings)
       const REMAINING_AMOUNT = CONSULTATION_FEE - PARTIAL_PAYMENT_AMOUNT
-      const AMOUNT_TO_PAY = paymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
+      const AMOUNT_TO_PAY = effectivePaymentType === "partial" ? PARTIAL_PAYMENT_AMOUNT : CONSULTATION_FEE
       
       // Check slot availability BEFORE payment deduction
       if (!rescheduleMode) {
@@ -321,11 +326,11 @@ See you soon! 🏥`
         // Payment status: "pending" for cash (to be paid at reception), "paid" for online payments
         paymentStatus: paymentMethod === "cash" ? "pending" : "paid",
         paymentMethod: paymentMethod,
-        paymentType: paymentType,
+        paymentType: effectivePaymentType,
         totalConsultationFee: CONSULTATION_FEE,
         // Payment amount: 0 for cash (not paid yet), actual amount for online payments
         paymentAmount: paymentMethod === "cash" ? 0 : AMOUNT_TO_PAY,
-        remainingAmount: paymentMethod === "cash" ? CONSULTATION_FEE : (paymentType === "partial" ? REMAINING_AMOUNT : 0),
+        remainingAmount: paymentMethod === "cash" ? CONSULTATION_FEE : (effectivePaymentType === "partial" ? REMAINING_AMOUNT : 0),
         transactionId: transactionId,
         // paidAt: empty for cash (not paid yet), timestamp for online payments
         paidAt: paymentMethod === "cash" ? "" : new Date().toISOString(),
@@ -371,14 +376,14 @@ See you soon! 🏥`
         transactionId,
         appointmentId: appointmentId,
         paymentAmount: AMOUNT_TO_PAY,
-        paymentType: paymentType,
+        paymentType: effectivePaymentType,
         chiefComplaint: appointmentData.problem,
       })
 
       // Show success modal with appointment details
       // For cash payments: paymentAmount should be 0, remainingAmount should be full fee
       const modalPaymentAmount = paymentMethod === "cash" ? 0 : AMOUNT_TO_PAY
-      const modalRemainingAmount = paymentMethod === "cash" ? CONSULTATION_FEE : (paymentType === "partial" ? REMAINING_AMOUNT : 0)
+      const modalRemainingAmount = paymentMethod === "cash" ? CONSULTATION_FEE : (effectivePaymentType === "partial" ? REMAINING_AMOUNT : 0)
       
       setSuccessAppointmentData({
         doctorName: `${selectedDoctorData.firstName} ${selectedDoctorData.lastName}`,
@@ -387,7 +392,7 @@ See you soon! 🏥`
         appointmentTime: appointmentData.time,
         transactionId: transactionId,
         paymentAmount: modalPaymentAmount,
-        paymentType: paymentType,
+        paymentType: effectivePaymentType,
         remainingAmount: modalRemainingAmount,
         paymentMethod: paymentMethod,
         paymentStatus: paymentMethod === "cash" ? "pending" : "paid",

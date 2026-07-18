@@ -6,9 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, initFirebaseAdmin } from '@/server/firebaseAdmin'
-import { authenticateRequest, createAuthErrorResponse } from '@/utils/firebase/apiAuth'
-import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/utils/pharmacy/serverPharmacy'
-import { getFileKind, parseExcelBuffer, parsePdfText, type ParsedMedicineRow } from '@/utils/pharmacy/parseMedicineFile'
+import { authenticateRequest, createAuthErrorResponse } from '@/shared/utils/firebase/apiAuth'
+import { getPharmacyAuthContext, getPharmacyCollectionPath, nanoidLike } from '@/shared/utils/pharmacy/serverPharmacy'
+import { getFileKind, parseExcelBuffer, parsePdfText, type ParsedMedicineRow } from '@/shared/utils/pharmacy/parseMedicineFile'
 import type { MedicineBatch } from '@/types/pharmacy'
 
 function getStockDocId(branchId: string, medicineId: string): string {

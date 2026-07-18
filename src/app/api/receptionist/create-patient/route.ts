@@ -2,10 +2,11 @@ import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendBhashWelcomeTemplateIfConfigured } from "@/server/bhashUtilityTemplates"
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
-import { getUserActiveHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
+import { getUserActiveHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 import { createPatientDualWrite } from "@/services/server/PatientService"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
   const friendlyName = firstName?.trim() || "there"
@@ -277,6 +278,17 @@ export async function POST(request: Request) {
       }
     } else {
     }
+
+    void auditLogger.logForUser(auth.user, {
+      hospitalId: userHospitalId,
+      branchId: defaultBranchId,
+      module: "Patient",
+      entityType: "patient",
+      entityId: authUid,
+      action: AUDIT_ACTIONS.PATIENT_CREATED,
+      summary: `Patient ${docData.firstName} ${docData.lastName} was registered.`,
+      metadata: { patientId },
+    })
 
     return Response.json({ success: true, id: authUid, authUid, patientId })
   } catch (error: any) {

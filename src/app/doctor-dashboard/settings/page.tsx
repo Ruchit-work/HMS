@@ -1,13 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import {
   ClinicalAlertCard,
   ClinicalPageFrame,
   ClinicalPageHeader,
 } from "@/features/doctor/clinical"
-import { getSettingsHubItems } from "@/app/doctor-dashboard/doctorNavConfig"
+import { getSettingsHubItems } from "@/features/doctor/nav"
 import {
   BarChart3,
   CalendarPlus,

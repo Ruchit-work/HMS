@@ -1,13 +1,14 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { getDoctorHospitalId, getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
+import { getDoctorHospitalId, getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
 import { sendBhashConfirmationTemplateIfConfigured } from "@/server/bhashAppointmentTemplate"
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { normalizeTime } from "@/utils/timeSlots"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
-import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
-import { getString, isRecord, type UnknownRecord } from "@/utils/api/typeGuards"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { normalizeTime } from "@/shared/utils/timeSlots"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
+import { logApiError, createErrorResponse } from "@/shared/utils/errors/errorLogger"
+import { getString, isRecord, type UnknownRecord } from "@/shared/utils/api/validation"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 const sendAppointmentWhatsApp = async (appointmentData: UnknownRecord) => {
   const patientName = getString(appointmentData.patientName) || "there"
@@ -363,6 +364,24 @@ export async function POST(request: Request) {
       } catch {
       }
     } else {
+    }
+
+    if (appointmentId) {
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: doctorHospitalId,
+        branchId,
+        module: "Appointment",
+        entityType: "appointment",
+        entityId: appointmentId,
+        action: AUDIT_ACTIONS.APPOINTMENT_CREATED,
+        summary: `Appointment ${appointmentId} was created.`,
+        metadata: {
+          patientId: docData.patientId,
+          doctorId: docData.doctorId,
+          appointmentDate: docData.appointmentDate,
+          appointmentTime: docData.appointmentTime,
+        },
+      })
     }
 
     return Response.json({ success: true, id: appointmentId })

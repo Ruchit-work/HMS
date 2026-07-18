@@ -4,13 +4,13 @@ import { useEffect, useState, useCallback } from "react"
 import { db, auth } from "@/firebase/config"
 import { doc, getDoc, query, where, onSnapshot } from "firebase/firestore"
 import { signOut } from "firebase/auth"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
-import { isAppointmentVisibleToReceptionist } from "@/utils/appointments/appointmentSource"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
+import { isAppointmentVisibleToReceptionist } from "@/shared/utils/appointments/appointmentSource"
 import { useRouter } from "next/navigation"
 import { Notification } from '@/shared/components'
-import { useNotificationBadge } from "@/hooks/useNotificationBadge"
+import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
 import ReceptionistTabPanels, {
   prefetchReceptionistTab,
   type ReceptionistTab,

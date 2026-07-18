@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
 import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import { TabSkeleton } from '@/shared/components'
 import { Notification } from '@/shared/components'
 import { AppointmentsList } from "@/features/patient/appointments/AppointmentCard"
@@ -16,7 +16,8 @@ import PaymentMethodSection, {
   PaymentMethodOption,
 } from "@/features/payments/PaymentMethodSection"
 import { UserData, Appointment, NotificationData, BillingRecord } from "@/types/patient"
-import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
+import { cancelAppointment, isAppointmentPaid } from "@/shared/utils/appointmentHelpers"
+import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
 import { Footer } from '@/shared/components'
 import Link from "next/link"
 import { Button } from '@/shared/components'
@@ -47,6 +48,7 @@ export default function PatientAppointments() {
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { settings: billingSettings, onlinePaymentMethods } = useHospitalBillingSettings()
 
   useEffect(() => {
     if (!user || !activeHospitalId) return
@@ -305,20 +307,26 @@ export default function PatientAppointments() {
     setShowCancelModal(true)
   }
 
-  // Handle appointment cancellation
+  // Handle appointment cancellation (unpaid → cancel, paid → refund request)
   const handleCancelAppointment = async () => {
-    if (!appointmentToCancel) return
+    if (!appointmentToCancel || !activeHospitalId) return
 
     // Optimistic update: Update status immediately
     const previousAppointments = [...appointments]
     const cancelledAppointment = appointmentToCancel
-    
+
+    const optimisticStatus =
+      isAppointmentPaid(cancelledAppointment) &&
+      billingSettings.paidAppointmentCancellation === "create_refund_request"
+        ? "refund_requested"
+        : "cancelled"
+
     const optimisticUpdate = {
       ...cancelledAppointment,
-      status: "cancelled" as const,
+      status: optimisticStatus as Appointment["status"],
       cancelledAt: new Date().toISOString()
     }
-    
+
     setAppointments(prev => prev.map(apt =>
       apt.id === cancelledAppointment.id ? optimisticUpdate : apt
     ))
@@ -327,7 +335,7 @@ export default function PatientAppointments() {
 
     setCancelling(true)
     try {
-      const result = await cancelAppointment(cancelledAppointment)
+      const result = await cancelAppointment(cancelledAppointment, activeHospitalId)
 
       // Update with server response (may have additional fields)
       setAppointments(prev => prev.map(apt =>
@@ -560,7 +568,6 @@ export default function PatientAppointments() {
           }}
           onConfirm={handleCancelAppointment}
           cancelling={cancelling}
-          getHoursUntilAppointment={getHoursUntilAppointment}
         />
 
         {/* Notification Toast */}
@@ -614,7 +621,7 @@ export default function PatientAppointments() {
                   paymentData={billingPaymentData}
                   setPaymentData={setBillingPaymentData}
                   amountToPay={selectedBilling.billing.totalAmount}
-                  methods={["card", "upi"]}
+                  methods={onlinePaymentMethods}
                 />
               </div>
               <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-3">

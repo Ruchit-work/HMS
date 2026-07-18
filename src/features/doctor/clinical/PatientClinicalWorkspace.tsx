@@ -14,8 +14,8 @@ import MedicalInfoSection from "@/features/doctor/appointments/sections/MedicalI
 import LifestyleSection from "@/features/doctor/appointments/sections/LifestyleSection"
 import PatientHistorySection from "@/features/doctor/appointments/sections/PatientHistorySection"
 import { Button } from '@/shared/components'
-import { calculateAge } from "@/utils/shared/date"
-import { parsePrescription as parsePrescriptionUtil } from "@/utils/appointments/prescriptionParsers"
+import { calculateAge } from "@/shared/utils/shared/date"
+import { parsePrescription as parsePrescriptionUtil } from "@/shared/utils/appointments/prescriptionParsers"
 import {
   buildClinicalTimelineItems,
   extractCurrentMedications,

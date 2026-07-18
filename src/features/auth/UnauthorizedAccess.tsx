@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { getDashboardPathForRole, getLoginPathForRole, type UserRole } from "@/utils/auth/roleRouting"
+import { getDashboardPathForRole, getLoginPathForRole, type UserRole } from "@/shared/utils/auth/roleRouting"
 
 interface UnauthorizedAccessProps {
   title?: string

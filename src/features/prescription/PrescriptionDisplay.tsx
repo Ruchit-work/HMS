@@ -1,7 +1,7 @@
 "use client"
 
 import { Appointment } from "@/types/patient"
-import { generatePrescriptionPDF } from "@/utils/documents/pdfGenerators"
+import { generatePrescriptionPDF } from "@/shared/utils/documents/pdfGenerators"
 import { Button } from '@/shared/components'
 
 // Helper function to parse prescription text
@@ -180,6 +180,15 @@ export default function PrescriptionDisplay({
         )}
         
         {/* Prescription/Medicine */}
+        {!appointment.medicine && (
+          <div className="bg-white rounded-lg p-4 border border-gray-200">
+            <h5 className="text-gray-700 font-semibold mb-1 flex items-center gap-2">
+              <span>💊</span>
+              <span>Prescribed Medicines</span>
+            </h5>
+            <p className="text-sm text-gray-500">No new medications prescribed.</p>
+          </div>
+        )}
         {appointment.medicine && (() => {
           const parsed = parsePrescription(appointment.medicine)
           if (parsed && parsed.medicines.length > 0) {

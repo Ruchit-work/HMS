@@ -1,7 +1,7 @@
 "use client"
 
 import { QuestionConfig } from "@/constants/questions"
-import VoiceInput from "@/components/ui/VoiceInput"
+import VoiceInput from "@/shared/ui/VoiceInput"
 
 interface QuestionRendererProps {
   question: QuestionConfig

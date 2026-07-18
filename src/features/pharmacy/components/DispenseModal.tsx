@@ -5,9 +5,9 @@ import { Button } from '@/shared/components'
 import { BarcodeCameraScanner } from '@/features/pharmacy/ui/BarcodeCameraScanner'
 import type { BranchMedicineStock, MedicineBatch, PharmacyMedicine } from '@/types/pharmacy'
 import { CashPaymentPanel } from '@/features/pharmacy/ui/CashTenderModal'
-import { generateBillPDFAndPrint } from '@/utils/pharmacy/billPrint'
+import { generateBillPDFAndPrint } from '@/shared/utils/pharmacy/billPrint'
 import { MedicineSearchSelect, POSMedicineSearch } from './SearchInputs'
-import type { QueueItem } from '../types'
+import type { QueueItem } from '@/features/pharmacy/queueTypes'
 
 export function DispenseModal({
   queueItem,

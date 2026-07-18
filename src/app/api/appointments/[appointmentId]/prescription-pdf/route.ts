@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest } from "@/utils/firebase/apiAuth"
-import { pdfAccessTokensMatch } from "@/utils/security/pdfAccessToken"
+import { authenticateRequest } from "@/shared/utils/firebase/apiAuth"
+import { pdfAccessTokensMatch } from "@/shared/utils/pdfAccessToken"
 
 // Handle OPTIONS for CORS (Meta WhatsApp document fetch)
 export async function OPTIONS() {

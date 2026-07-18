@@ -4,9 +4,13 @@ import { useEffect } from "react"
 import jsPDF from "jspdf"
 import { Appointment } from "@/types/patient"
 import { RevealModal, useRevealModalClose } from '@/shared/components'
+import { isAppointmentPaid } from "@/shared/utils/appointmentHelpers"
+import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
+import type { PaidAppointmentCancellationPolicy } from "@/shared/utils/billingSettings"
 
 // ============================================================================
-// CancelAppointmentModal - Modal for confirming appointment cancellation
+// CancelAppointmentModal - Modal for confirming appointment cancellation.
+// Paid-appointment behaviour is driven by hospital billing settings.
 // ============================================================================
 
 interface CancelAppointmentModalProps {
@@ -15,21 +19,90 @@ interface CancelAppointmentModalProps {
   onClose: () => void
   onConfirm: () => void
   cancelling: boolean
-  getHoursUntilAppointment: (appointment: Appointment) => number
+}
+
+function paidCancelCopy(policy: PaidAppointmentCancellationPolicy, amount: number) {
+  switch (policy) {
+    case "disallow":
+      return {
+        title: "This appointment has already been paid",
+        body: (
+          <p>
+            This appointment has already been paid and cannot be cancelled.
+          </p>
+        ),
+        confirmLabel: "Understood",
+        confirmDisabled: true,
+        question: "Cancellation is not allowed for this paid appointment.",
+      }
+    case "create_refund_request":
+      return {
+        title: "This appointment has already been paid",
+        body: (
+          <>
+            <p>
+              A <strong>refund request</strong> for ₹{amount} will be sent to the hospital for approval.
+            </p>
+            <p className="text-xs text-gray-600">
+              Your appointment will be cancelled once the refund is approved. Until then, your
+              payment remains recorded.
+            </p>
+          </>
+        ),
+        confirmLabel: "Create Refund Request",
+        confirmDisabled: false,
+        question: "Create a refund request and cancel this appointment?",
+      }
+    case "auto_refund":
+      return {
+        title: "This appointment has already been paid",
+        body: (
+          <p>
+            Cancelling will automatically refund ₹{amount} and adjust hospital revenue.
+          </p>
+        ),
+        confirmLabel: "Cancel & Refund",
+        confirmDisabled: false,
+        question: "Cancel this appointment and process an automatic refund?",
+      }
+    case "keep_payment":
+    default:
+      return {
+        title: "This appointment has already been paid",
+        body: (
+          <p>
+            The appointment will be cancelled. The payment of ₹{amount} remains with the hospital
+            (non-refundable consultation fee policy).
+          </p>
+        ),
+        confirmLabel: "Cancel Appointment",
+        confirmDisabled: false,
+        question: "Cancel this paid appointment without a refund?",
+      }
+  }
 }
 
 function CancelAppointmentModalContent({
   appointment,
   onConfirm,
   cancelling,
-  getHoursUntilAppointment,
 }: CancelAppointmentModalProps) {
   const requestClose = useRevealModalClose()
-  const hoursUntil = getHoursUntilAppointment(appointment!)
-  const CANCELLATION_FEE = 100
-  const refundAmount = hoursUntil >= 10 ? appointment!.paymentAmount : appointment!.paymentAmount - CANCELLATION_FEE
+  const isPaid = isAppointmentPaid(appointment!)
+  const { settings, refundsEnabled } = useHospitalBillingSettings()
+  const policy = settings.paidAppointmentCancellation
+  const amount = Number(appointment!.paymentAmount || 0)
+  const resolvedPolicy =
+    !refundsEnabled && (policy === "create_refund_request" || policy === "auto_refund")
+      ? "keep_payment"
+      : policy
+  const effectiveCopy = isPaid ? paidCancelCopy(resolvedPolicy, amount) : null
 
   const handleConfirm = () => {
+    if (effectiveCopy?.confirmDisabled) {
+      requestClose()
+      return
+    }
     onConfirm()
     requestClose()
   }
@@ -57,51 +130,34 @@ function CancelAppointmentModalContent({
           <p className="text-sm text-gray-600 mb-2">
             <strong>Time:</strong> {appointment!.appointmentTime}
           </p>
-          <p className="text-sm text-gray-600">
-            <strong>Amount Paid:</strong> ₹{appointment!.paymentAmount}
-          </p>
+          {isPaid && (
+            <p className="text-sm text-gray-600">
+              <strong>Amount Paid:</strong> ₹{appointment!.paymentAmount}
+            </p>
+          )}
         </div>
 
-        <div className={`rounded-lg p-4 mb-4 ${
-          hoursUntil >= 10
-            ? "bg-green-50 border border-green-200"
-            : "bg-yellow-50 border border-yellow-200"
-        }`}>
-          <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-            <span>ℹ️</span>
-            <span>Cancellation Policy</span>
-          </h3>
-          <div className="text-sm text-gray-700 space-y-2">
-            {hoursUntil >= 10 ? (
-              <>
-                <p className="font-semibold text-green-700">✅ Full Refund (100%)</p>
-                <p>You are cancelling more than 10 hours before your appointment.</p>
-                <div className="bg-white rounded p-2 mt-2">
-                  <p className="text-gray-900"><strong>Refund Amount:</strong> ₹{appointment!.paymentAmount}</p>
-                  <p className="text-xs text-gray-600 mt-1">Full amount will be refunded to your account</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="font-semibold text-yellow-700">⚠️ Cancellation Fee: ₹100</p>
-                <p>You are cancelling less than 10 hours before your appointment.</p>
-                <div className="bg-white rounded p-2 mt-2 space-y-1">
-                  <p className="text-gray-900"><strong>Original Amount Paid:</strong> ₹{appointment!.paymentAmount}</p>
-                  <p className="text-gray-900"><strong>Cancellation Fee:</strong> <span className="text-red-600 font-bold">-₹{CANCELLATION_FEE}</span></p>
-                  <p className="text-gray-900 pt-1 border-t"><strong>Refund Amount:</strong> <span className="text-green-600 font-bold">₹{refundAmount}</span></p>
-                </div>
-                {appointment!.paymentAmount <= CANCELLATION_FEE ? (
-                  <p className="text-xs text-orange-600 font-semibold mt-2 bg-orange-50 p-2 rounded border border-orange-200">
-                    ⚠️ Your paid amount (₹{appointment!.paymentAmount}) equals/covers the cancellation fee. No refund will be issued.
-                  </p>
-                ) : null}
-              </>
-            )}
+        {isPaid && effectiveCopy ? (
+          <div className="rounded-lg p-4 mb-4 bg-blue-50 border border-blue-200">
+            <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <span>ℹ️</span>
+              <span>{effectiveCopy.title}</span>
+            </h3>
+            <div className="text-sm text-gray-700 space-y-2">{effectiveCopy.body}</div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-lg p-4 mb-4 bg-slate-50 border border-slate-200">
+            <p className="text-sm text-gray-700">
+              No payment has been collected for this appointment, so it will be cancelled
+              immediately and the slot will be released.
+            </p>
+          </div>
+        )}
 
         <p className="text-gray-700 mb-6 text-center font-medium">
-          Are you sure you want to cancel this appointment?
+          {isPaid && effectiveCopy
+            ? effectiveCopy.question
+            : "Are you sure you want to cancel this appointment?"}
         </p>
 
         <div className="flex gap-3">
@@ -110,7 +166,11 @@ function CancelAppointmentModalContent({
             disabled={cancelling}
             className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {cancelling ? "Cancelling..." : "Confirm Cancellation"}
+            {cancelling
+              ? "Processing..."
+              : isPaid && effectiveCopy
+                ? effectiveCopy.confirmLabel
+                : "Confirm Cancellation"}
           </button>
           <button
             onClick={requestClose}
@@ -131,7 +191,6 @@ export function CancelAppointmentModal({
   onClose,
   onConfirm,
   cancelling,
-  getHoursUntilAppointment,
 }: CancelAppointmentModalProps) {
   if (!isOpen || !appointment) return null
 
@@ -143,7 +202,6 @@ export function CancelAppointmentModal({
         onClose={onClose}
         onConfirm={onConfirm}
         cancelling={cancelling}
-        getHoursUntilAppointment={getHoursUntilAppointment}
       />
     </RevealModal>
   )

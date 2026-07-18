@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import { sendMissedAppointmentWhatsApp } from "@/server/missedAppointmentNotify"
-import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { getHospitalCollectionPath, resolveAuthorizedHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 
 function getSlotDocId(doctorId: string, date: string, time: string): string {
   return `${doctorId}_${date}_${time.replace(/[:\s]/g, "-")}`

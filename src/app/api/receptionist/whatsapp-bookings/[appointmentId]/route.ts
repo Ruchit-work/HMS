@@ -1,9 +1,10 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import { NextRequest } from "next/server"
 import { sendWhatsAppNotification } from "@/server/whatsapp"
-import { resolveAuthorizedHospitalId } from "@/utils/firebase/serverHospitalQueries"
+import { resolveAuthorizedHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 import { resolveAppointment } from "@/services/server/AppointmentService"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 interface Params {
   appointmentId: string
@@ -122,7 +123,7 @@ export async function PUT(
       const appointmentTime = body.appointmentTime || appointmentData.appointmentTime
       
       if (appointmentDate && appointmentTime) {
-        const { normalizeTime } = await import("@/utils/timeSlots")
+        const { normalizeTime } = await import("@/shared/utils/timeSlots")
         const normalizedTime = normalizeTime(appointmentTime)
         const newSlotDocId = `${body.doctorId}_${appointmentDate}_${normalizedTime}`.replace(/[:\s]/g, "-")
         const newSlotRef = firestore.collection("appointmentSlots").doc(newSlotDocId)
@@ -361,6 +362,54 @@ See you soon! 🏥`
       }
     }
 
+    if (
+      updateData.status === "confirmed" &&
+      (appointmentData.status === "whatsapp_pending" || appointmentData.whatsappPending === true)
+    ) {
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: authorizedHospitalId,
+        branchId:
+          typeof updatedData.branchId === "string" ? updatedData.branchId : null,
+        module: "Appointment",
+        entityType: "appointment",
+        entityId: appointmentId,
+        action: AUDIT_ACTIONS.APPOINTMENT_CREATED,
+        summary: `Appointment ${appointmentId} was created from a WhatsApp booking.`,
+        source: "WhatsApp Assistant",
+        metadata: {
+          doctorId: updatedData.doctorId || null,
+          appointmentDate: updatedData.appointmentDate || null,
+          appointmentTime: updatedData.appointmentTime || null,
+        },
+      })
+    }
+
+    if (
+      body.patientName !== undefined ||
+      body.patientPhone !== undefined ||
+      body.patientEmail !== undefined
+    ) {
+      const patientId = String(appointmentData.patientUid || appointmentData.patientId || "")
+      if (patientId) {
+        void auditLogger.logForUser(auth.user, {
+          hospitalId: authorizedHospitalId,
+          branchId:
+            typeof updatedData.branchId === "string" ? updatedData.branchId : null,
+          module: "Patient",
+          entityType: "patient",
+          entityId: patientId,
+          action: AUDIT_ACTIONS.PATIENT_UPDATED,
+          summary: `Patient ${updatedData.patientName || patientId} was updated.`,
+          source: "WhatsApp Assistant",
+          metadata: {
+            fields: ["patientName", "patientPhone", "patientEmail"].filter(
+              (field) => body[field] !== undefined
+            ),
+          },
+        })
+      }
+    }
+
     return Response.json({
       success: true,
       appointment: {
@@ -448,7 +497,7 @@ export async function DELETE(
     const appointmentTime = appointmentData.appointmentTime
     
     if (appointmentDate && appointmentTime) {
-      const { normalizeTime } = await import("@/utils/timeSlots")
+      const { normalizeTime } = await import("@/shared/utils/timeSlots")
       const normalizedTime = normalizeTime(appointmentTime)
       
       // Delete PENDING slot if exists

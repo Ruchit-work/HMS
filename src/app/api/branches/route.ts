@@ -6,10 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
-import { authenticateRequest } from '@/utils/firebase/apiAuth'
-import { assertUserHospitalAccess, getUserActiveHospitalId } from '@/utils/firebase/serverHospitalQueries'
+import { authenticateRequest } from '@/shared/utils/firebase/apiAuth'
+import { assertUserHospitalAccess, getUserActiveHospitalId } from '@/shared/utils/firebase/serverHospitalQueries'
 import { Branch, BranchTimings } from '@/types/branch'
-import { applyRateLimit } from '@/utils/shared/rateLimit'
+import { applyRateLimit } from '@/shared/utils/shared/rateLimit'
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {

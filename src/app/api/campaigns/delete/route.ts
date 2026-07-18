@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import {
   assertUserHospitalAccess,
   getUserActiveHospitalId,
   isPlatformSuperAdmin,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
 
 /**
  * POST /api/campaigns/delete

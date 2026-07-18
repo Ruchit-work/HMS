@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { TabSkeleton } from '@/shared/components'
 import UnauthorizedAccess from "@/features/auth/UnauthorizedAccess"
 import {
@@ -11,7 +11,7 @@ import {
   isRoleAllowed,
   logAuthDev,
   type UserRole,
-} from "@/utils/auth/roleRouting"
+} from "@/shared/utils/auth/roleRouting"
 
 interface RouteGuardProps {
   allowedRoles: Exclude<UserRole, null>[]

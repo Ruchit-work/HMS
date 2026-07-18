@@ -7,7 +7,7 @@ import {
   getAnatomyModelDetails,
   getAvailableAnatomyModels,
   type AnatomyType,
-} from "@/utils/anatomyModelMapping"
+} from "@/shared/utils/anatomyModelMapping"
 import {
   Bone,
   ChevronDown,

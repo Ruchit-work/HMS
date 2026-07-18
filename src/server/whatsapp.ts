@@ -1,6 +1,6 @@
 import { sendTextMessage as metaSendTextMessage } from "@/server/metaWhatsApp"
 import { shouldUseBhashSms } from "@/server/bhashWhatsApp"
-import { formatWhatsAppRecipient } from "@/utils/campaigns/whatsapp"
+import { formatWhatsAppRecipient } from "@/shared/utils/campaigns/whatsapp"
 
  
 export async function getMessageStatus(_messageId: string): Promise<{ status?: string; errorCode?: number; errorMessage?: string; dateSent?: Date; dateUpdated?: Date } | null> {

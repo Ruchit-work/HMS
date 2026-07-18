@@ -6,8 +6,8 @@ import { auth, db } from "@/firebase/config"
 import { signInWithEmailAndPassword, type User } from "firebase/auth"
 import { getDoc, doc, collection, getDocs, setDoc } from "firebase/firestore"
 import { useRouter, useSearchParams } from "next/navigation"
-import { usePublicRoute, seedUserRoleCache } from "@/hooks/useAuth"
-import { useDeferredVisible } from "@/hooks/useDeferredVisible"
+import { usePublicRoute, seedUserRoleCache } from "@/shared/hooks/useAuth"
+import { useDeferredVisible } from "@/shared/hooks/useDeferredVisible"
 import { LoadingSpinner } from '@/shared/components'
 import { Button } from '@/shared/components'
 

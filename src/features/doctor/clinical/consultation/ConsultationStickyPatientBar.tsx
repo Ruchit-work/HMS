@@ -1,7 +1,7 @@
 "use client"
 
 import type { Appointment } from "@/types/patient"
-import { calculateAge } from "@/utils/shared/date"
+import { calculateAge } from "@/shared/utils/shared/date"
 import { getVitalsList } from "@/features/doctor/clinical/patientClinicalUtils"
 import { AlertTriangle, ChevronLeft } from "lucide-react"
 

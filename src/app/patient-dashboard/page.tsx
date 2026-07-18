@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react"
 import { db } from "@/firebase/config"
-import { doc, getDoc, getDocs, collection, query, where, addDoc, updateDoc } from "firebase/firestore"
-import { useAuth } from "@/hooks/useAuth"
+import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
+import { authedFetchJson } from "@/shared/utils/authedFetch"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import { TabSkeleton } from '@/shared/components'
 import { Notification } from '@/shared/components'
 import { CancelAppointmentModal } from "@/features/patient/appointments/AppointmentModals"
@@ -14,9 +15,10 @@ import HealthInformationSection from "@/features/patient/forms/HealthInformation
 import { PageHeader } from '@/shared/components'
 import { Footer } from '@/shared/components'
 import Link from "next/link"
-import { fetchPublishedCampaignsForAudience, type Campaign } from "@/utils/campaigns/campaigns"
+import { fetchPublishedCampaignsForAudience, type Campaign } from "@/shared/utils/campaigns/campaigns"
 import { UserData, Appointment, NotificationData } from "@/types/patient"
-import { getHoursUntilAppointment, cancelAppointment } from "@/utils/appointmentHelpers"
+import { cancelAppointment } from "@/shared/utils/appointmentHelpers"
+import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
 import CampaignCarousel from "@/features/patient/ui/CampaignCarousel"
 
 export default function PatientDashboard() {
@@ -31,6 +33,7 @@ export default function PatientDashboard() {
   // Protect route - only allow patients
   const { user, loading } = useAuth("patient")
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { refundsEnabled, settings: billingSettings } = useHospitalBillingSettings()
 
   useEffect(() => {
     if (!user || !activeHospitalId) return
@@ -107,13 +110,13 @@ export default function PatientDashboard() {
 
 
 
-  // Handle appointment cancellation
+  // Handle appointment cancellation (unpaid → cancel, paid → refund request)
   const handleCancelAppointment = async () => {
-    if (!appointmentToCancel) return
+    if (!appointmentToCancel || !activeHospitalId) return
 
     setCancelling(true)
     try {
-      const result = await cancelAppointment(appointmentToCancel)
+      const result = await cancelAppointment(appointmentToCancel, activeHospitalId)
 
       // Update local state
       setAppointments(appointments.map(apt => 
@@ -157,27 +160,29 @@ export default function PatientDashboard() {
   )
 
   const handleRequestRefund = async (apt: Appointment) => {
+    if (!refundsEnabled || billingSettings.refundPolicy !== "manual_approval") {
+      setNotification({ type: 'error', message: 'This hospital does not provide refunds.' })
+      return
+    }
     try {
-      await addDoc(collection(db, 'refund_requests'), {
-        appointmentId: apt.id,
-        patientId: apt.patientId,
-        doctorId: apt.doctorId,
-        paymentAmount: apt.paymentAmount || apt.totalConsultationFee || 0,
-        paymentMethod: apt.paymentMethod || 'cash',
-        paymentType: apt.paymentType || 'full',
-        reason: 'doctor_unavailable',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      })
-      await updateDoc(doc(db, 'appointments', apt.id), {
-        status: 'refund_requested',
-        refundRequested: true,
-        updatedAt: new Date().toISOString(),
-      })
+      // Unified cancellation engine: creates the refund_requests doc and updates
+      // the hospital-scoped appointment in one authorized server-side call.
+      await authedFetchJson(
+        `/api/appointments/${apt.id}/cancel`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            hospitalId: activeHospitalId || null,
+            action: 'request_refund',
+            reason: 'doctor_unavailable',
+          }),
+        },
+        'Failed to submit refund request'
+      )
       setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, status: 'refund_requested' as any, refundRequested: true } : a))
       setNotification({ type: 'success', message: 'Refund request submitted. We will process it shortly.' })
-    } catch {
-      setNotification({ type: 'error', message: 'Failed to submit refund request. Please try again.' })
+    } catch (error) {
+      setNotification({ type: 'error', message: (error as Error)?.message || 'Failed to submit refund request. Please try again.' })
     }
   }
 
@@ -482,12 +487,15 @@ export default function PatientDashboard() {
                     <Link href={`/patient-dashboard/book-appointment?reschedule=1&aptId=${apt.id}&doctorId=${apt.doctorId}`} prefetch={true} className="text-xs px-3 py-1.5 bg-yellow-600 text-white rounded-md hover:bg-yellow-700">
                       Reschedule
                     </Link>
-                    {String((apt as any)?.paymentStatus) === 'paid' && !Boolean((apt as any)?.refundRequested) && (
+                    {refundsEnabled &&
+                      billingSettings.refundPolicy === "manual_approval" &&
+                      String((apt as any)?.paymentStatus) === 'paid' &&
+                      !Boolean((apt as any)?.refundRequested) && (
                       <button onClick={() => handleRequestRefund(apt)} className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700">
                         Request Refund
                       </button>
                     )}
-                    {Boolean((apt as any)?.refundRequested) && (
+                    {refundsEnabled && Boolean((apt as any)?.refundRequested) && (
                       <span className="text-[11px] px-2 py-1 bg-red-50 text-red-700 border border-red-200 rounded">
                         Refund requested
                       </span>
@@ -651,7 +659,6 @@ export default function PatientDashboard() {
                   }}
         onConfirm={handleCancelAppointment}
         cancelling={cancelling}
-        getHoursUntilAppointment={getHoursUntilAppointment}
       />
 
       {/* Notification Toast */}

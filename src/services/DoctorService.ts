@@ -11,7 +11,7 @@ import {
   type Unsubscribe,
   type QueryConstraint,
 } from "firebase/firestore"
-import { getHospitalCollection } from "@/utils/firebase/hospital-queries"
+import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 
 export type DoctorRecord = { id: string; [key: string]: any }
 

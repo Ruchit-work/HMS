@@ -5,10 +5,10 @@ import { Button } from '@/shared/components'
 import { BarcodeCameraScanner } from '@/features/pharmacy/ui/BarcodeCameraScanner'
 import { CashPaymentPanel } from '@/features/pharmacy/ui/CashTenderModal'
 import type { BranchMedicineStock, PharmacyMedicine } from '@/types/pharmacy'
-import { generateBillPDFAndPrint } from '@/utils/pharmacy/billPrint'
+import { generateBillPDFAndPrint } from '@/shared/utils/pharmacy/billPrint'
 import { BillingRiskStrip } from './RealWorldUiBlocks'
 import { POSMedicineSearch } from './SearchInputs'
-import type { QueueItem } from '../types'
+import type { QueueItem } from '@/features/pharmacy/queueTypes'
 
 /** POS-style billing panel: customer info, medicine search, order table with batch, totals, payment. Used in Prescription Queue & Billing page. */
 export function PharmacyBillingPanel({

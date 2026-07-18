@@ -5,7 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import admin from 'firebase-admin'
-import { verifyAuthToken } from '@/utils/firebase/apiAuth'
+import { verifyAuthToken } from '@/shared/utils/firebase/apiAuth'
+import { DEFAULT_HOSPITAL_BILLING_SETTINGS } from '@/shared/utils/billingSettings'
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -149,6 +150,9 @@ export async function POST(request: NextRequest) {
       multipleBranchesEnabled: enableMultipleBranches,
       enableAnalytics: enableAnalyticsValue,
       enablePharmacy: enablePharmacyValue,
+      settings: {
+        billing: DEFAULT_HOSPITAL_BILLING_SETTINGS,
+      },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     })

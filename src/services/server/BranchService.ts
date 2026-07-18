@@ -6,13 +6,13 @@ export {
   getFirstActiveBranchForHospital,
   getBranchIfBelongsToHospital,
   getReceptionistDefaultBranch,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
 
 import {
   getFirstActiveBranchForHospital,
   getBranchIfBelongsToHospital,
   getReceptionistDefaultBranch,
-} from "@/utils/firebase/serverHospitalQueries"
+} from "@/shared/utils/firebase/serverHospitalQueries"
 
 export const BranchServerService = {
   getFirstActiveBranchForHospital,

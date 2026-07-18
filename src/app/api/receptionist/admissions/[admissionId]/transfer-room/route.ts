@@ -1,7 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 interface Params {
   admissionId: string
@@ -121,6 +122,17 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
       }
 
       return {
+        hospitalId: String(admissionData.hospitalId || ""),
+        branchId: typeof admissionData.branchId === "string" ? admissionData.branchId : null,
+        patientName: String(admissionData.patientName || "Patient"),
+        previousRoomId: currentRoomId,
+        previousRoomName:
+          String(
+            admissionData.customRoomTypeName ||
+              admissionData.roomNumber ||
+              admissionData.roomType ||
+              currentRoomId
+          ),
         roomId: nextRoomId,
         roomNumber: String(nextRoomData.roomNumber || ""),
         roomType: String(nextRoomData.roomType || "general"),
@@ -129,6 +141,24 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
         roomStays: normalizedRoomStays,
       }
     })
+
+    if (result.hospitalId) {
+      const nextRoomName =
+        result.customRoomTypeName || result.roomNumber || result.roomType || result.roomId
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: result.hospitalId,
+        branchId: result.branchId,
+        module: "Admission",
+        entityType: "admission",
+        entityId: admissionId,
+        action: AUDIT_ACTIONS.ROOM_CHANGED,
+        summary: `${result.patientName} moved from ${result.previousRoomName} to ${nextRoomName}.`,
+        metadata: {
+          previousRoomId: result.previousRoomId,
+          nextRoomId: result.roomId,
+        },
+      })
+    }
 
     return Response.json({ success: true, updatedRoom: result })
   } catch (error: any) {

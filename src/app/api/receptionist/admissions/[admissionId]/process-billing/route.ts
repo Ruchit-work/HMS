@@ -1,7 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 interface Params {
   admissionId: string
@@ -241,6 +242,20 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
       },
       { merge: true }
     )
+
+    if (typeof admissionData.hospitalId === "string") {
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: admissionData.hospitalId,
+        branchId:
+          typeof admissionData.branchId === "string" ? admissionData.branchId : null,
+        module: "Billing",
+        entityType: "billing_record",
+        entityId: billingId,
+        action: AUDIT_ACTIONS.BILL_EDITED,
+        summary: `Bill ${billingId} for admission ${admissionData.ipdNo || admissionId} was updated.`,
+        metadata: { admissionId, totalAmount: netPayable, grossTotal },
+      })
+    }
 
     return Response.json({ success: true, billingId, totalAmount: netPayable, grossTotal, roomCharges })
   } catch (error: any) {

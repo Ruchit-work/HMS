@@ -1,8 +1,9 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
-import { getHospitalCollectionPath } from "@/utils/firebase/serverHospitalQueries"
-import { logApiError, createErrorResponse } from "@/utils/errors/errorLogger"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
+import { getHospitalCollectionPath } from "@/shared/utils/firebase/serverHospitalQueries"
+import { logApiError, createErrorResponse } from "@/shared/utils/errors/errorLogger"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 export async function POST(req: Request) {
   // Apply rate limiting first
@@ -33,10 +34,13 @@ export async function POST(req: Request) {
 
   // Declare variables outside try block for catch block access
   let billingId: string | undefined
-  let method: "card" | "upi" | "cash" = "card"
+  let method: "card" | "upi" | "cash" | "bank_transfer" | "cheque" = "card"
   let totalAmount = 0
   let body: any = {}
   let requestedType: "admission" | "appointment" | undefined
+  let auditHospitalId: string | null = null
+  let auditBranchId: string | null = null
+  let auditEntityType = "bill"
 
   try {
     const initResult = initFirebaseAdmin("patient-billing-pay API")
@@ -48,7 +52,13 @@ export async function POST(req: Request) {
     billingId = typeof body?.billingId === "string" ? body.billingId.trim() : body?.billingId
     requestedType = body?.type === "admission" || body?.type === "appointment" ? body.type : undefined
     const paymentMethod = typeof body?.paymentMethod === "string" ? body.paymentMethod.trim().toLowerCase() : "card"
-    if (paymentMethod === "card" || paymentMethod === "upi" || paymentMethod === "cash") {
+    if (
+      paymentMethod === "card" ||
+      paymentMethod === "upi" ||
+      paymentMethod === "cash" ||
+      paymentMethod === "bank_transfer" ||
+      paymentMethod === "cheque"
+    ) {
       method = paymentMethod
     }
     const actor = body?.actor
@@ -64,6 +74,9 @@ export async function POST(req: Request) {
       return Response.json({ error: "Invalid billingId" }, { status: 400 })
     }
 
+    const paymentNotes =
+      typeof body?.paymentNotes === "string" ? body.paymentNotes.trim().slice(0, 500) : ""
+
     const requestedHospitalId =
       typeof body?.hospitalId === "string" && body.hospitalId.trim().length > 0
         ? body.hospitalId.trim()
@@ -77,10 +90,30 @@ export async function POST(req: Request) {
             ? auth.user.data.hospitals[0].trim()
             : null
 
+    const { getHospitalBillingSettings } = await import("@/server/hospitalBillingSettings")
+    const billingSettings = await getHospitalBillingSettings(requestedHospitalId || authHospitalId)
+    if (!billingSettings.paymentMethods[method]) {
+      return Response.json(
+        { error: `Payment method "${method}" is not enabled for this hospital.` },
+        { status: 400 }
+      )
+    }
+    if (isStaff && !billingSettings.billingOptions.allowManualPaymentEntry) {
+      return Response.json(
+        { error: "Manual payment entry is disabled for this hospital." },
+        { status: 403 }
+      )
+    }
+    if (billingSettings.billingOptions.requirePaymentNotes && !paymentNotes) {
+      return Response.json({ error: "Payment notes are required for this hospital." }, { status: 400 })
+    }
+
     const firestore = admin.firestore()
     const nowIso = new Date().toISOString()
     const paymentReference = `BILL-${Date.now()}`
-    const transactionId = `TXN-${Date.now()}`
+    const transactionId = billingSettings.billingOptions.generateTransactionIds
+      ? `TXN-${Date.now()}`
+      : paymentReference
 
     await firestore.runTransaction(async (tx) => {
       // First, try to find in billing_records (admission billing)
@@ -94,6 +127,7 @@ export async function POST(req: Request) {
       if (billingSnap.exists) {
         isAdmissionBilling = true
         billingData = billingSnap.data() || {}
+        auditEntityType = "billing_record"
       } else {
         if (requestedType === "admission") {
           throw new Error("Admission billing record not found")
@@ -131,7 +165,15 @@ export async function POST(req: Request) {
           billingData = globalAppointmentSnap.data() || {}
           appointmentRef = globalAppointmentRef
         }
+        auditEntityType = "appointment"
       }
+
+      auditHospitalId =
+        (typeof billingData.hospitalId === "string" && billingData.hospitalId) ||
+        requestedHospitalId ||
+        authHospitalId
+      auditBranchId =
+        typeof billingData.branchId === "string" ? billingData.branchId : null
 
       // Check if already paid
       if (isAdmissionBilling) {
@@ -162,10 +204,12 @@ export async function POST(req: Request) {
           ? {
               paidAtFrontDesk: true,
               handledBy: "receptionist",
-              settlementMode: "walk_in"
+              settlementMode: "walk_in",
+              ...(paymentNotes ? { paymentNotes } : {}),
             }
           : {
-              paidAtFrontDesk: false
+              paidAtFrontDesk: false,
+              ...(paymentNotes ? { paymentNotes } : {}),
             }
 
       // Update based on billing type
@@ -186,17 +230,38 @@ export async function POST(req: Request) {
         }
         tx.update(appointmentRef, {
           paymentStatus: "paid",
+          // Keep the invoice-level flag in sync (rechecks are created with
+          // billingStatus="unpaid" and it is only cleared on actual collection).
+          billingStatus: "paid",
           paymentMethod: method,
           paidAt: nowIso,
           transactionId: transactionId,
           paymentAmount: totalAmount, // Update paymentAmount to reflect the actual amount paid
           remainingAmount: 0,
-          status: "confirmed",
+          // Collecting a due must not resurrect a finished consultation —
+          // only pre-consultation states are promoted to confirmed.
+          status: billingData.status === "completed" ? "completed" : "confirmed",
           updatedAt: nowIso,
         })
       }
     })
 
+    if (auditHospitalId && auth.user) {
+      const methodLabel = method
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ")
+      void auditLogger.logForUser(auth.user, {
+        hospitalId: auditHospitalId,
+        branchId: auditBranchId,
+        module: "Billing",
+        entityType: auditEntityType,
+        entityId: billingId,
+        action: AUDIT_ACTIONS.PAYMENT_COLLECTED,
+        summary: `Collected ₹${totalAmount.toLocaleString("en-IN")} by ${methodLabel}.`,
+        metadata: { amount: totalAmount, paymentMethod: method, paymentReference },
+      })
+    }
 
     return Response.json({
       success: true,

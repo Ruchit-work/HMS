@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import { MedicineSuggestion, sanitizeMedicineName } from "@/utils/medicineSuggestions"
-import VoiceInput from "@/components/ui/VoiceInput"
+import { createPortal } from "react-dom"
+import { MedicineSuggestion, sanitizeMedicineName } from "@/shared/utils/medicineSuggestions"
+import { authedFetchJson } from "@/shared/utils/authedFetch"
+import VoiceInput from "@/shared/ui/VoiceInput"
 import { CompletionFormEntry } from "@/types/appointments"
 import { FavoriteMedicineToggle } from "@/features/doctor/clinical/consultation/PrescriptionQuickAccess"
 
@@ -14,6 +16,10 @@ interface MedicineFormProps {
   onMedicinesChange: (medicines: CompletionFormEntry["medicines"]) => void
   doctorUid?: string
   compact?: boolean
+}
+
+type InventorySuggestion = MedicineSuggestion & {
+  searchText: string
 }
 
 const TIMES = ["Morning", "Afternoon", "Evening"] as const
@@ -55,8 +61,51 @@ export default function MedicineForm({
   const [searchHighlight, setSearchHighlight] = useState(0)
   const [nameDropdownOpenForIndex, setNameDropdownOpenForIndex] = useState<number | null>(null)
   const [frequencyOpenForIndex, setFrequencyOpenForIndex] = useState<number | null>(null)
+  const [inventoryCatalog, setInventoryCatalog] = useState<InventorySuggestion[]>([])
+  const [inventoryLoading, setInventoryLoading] = useState(false)
   const frequencyRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Load the small hospital medicine catalog once. Search then happens
+  // synchronously in memory instead of waiting for an API/Firebase round trip
+  // after every keystroke.
+  useEffect(() => {
+    let cancelled = false
+    setInventoryLoading(true)
+    const loadCatalog = async () => {
+      try {
+        const data = await authedFetchJson<{
+          medicines?: Array<{
+            id: string
+            name: string
+            genericName?: string
+            manufacturer?: string
+          }>
+        }>("/api/doctor/pharmacy-medicines/search?catalog=1")
+        if (cancelled) return
+        const mapped: InventorySuggestion[] = (data.medicines || [])
+          .filter((m) => m.name && m.name.trim())
+          .map((m) => ({
+            id: `inventory-${m.id}`,
+            name: m.name,
+            normalizedName: m.name.toLowerCase(),
+            searchText: `${m.name} ${m.genericName || ""} ${m.manufacturer || ""}`.toLowerCase(),
+            usageCount: 0,
+            createdAt: "",
+            updatedAt: "",
+          }))
+        setInventoryCatalog(mapped)
+      } catch {
+        if (!cancelled) setInventoryCatalog([])
+      } finally {
+        if (!cancelled) setInventoryLoading(false)
+      }
+    }
+    void loadCatalog()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (frequencyOpenForIndex === null) return
@@ -93,16 +142,36 @@ export default function MedicineForm({
 
   const getSuggestions = useCallback(
     (query: string, limit = 8): MedicineSuggestion[] => {
-      if (!medicineSuggestions.length) return []
       const q = query.trim().toLowerCase()
-      if (!q) return medicineSuggestions.slice(0, limit)
-      const starts = medicineSuggestions.filter((s) => s.name.toLowerCase().startsWith(q))
-      const contains = medicineSuggestions.filter(
-        (s) => !s.name.toLowerCase().startsWith(q) && s.name.toLowerCase().includes(q)
-      )
-      return [...starts, ...contains].slice(0, limit)
+      const combined: MedicineSuggestion[] = []
+      const seen = new Set<string>()
+
+      const addUnique = (suggestion: MedicineSuggestion) => {
+        const key = suggestion.name.trim().toLowerCase()
+        if (!key || seen.has(key)) return
+        seen.add(key)
+        combined.push(suggestion)
+      }
+
+      const learnedMatches = q
+        ? medicineSuggestions.filter((s) => s.name.toLowerCase().includes(q))
+        : medicineSuggestions
+      const inventoryMatches = q
+        ? inventoryCatalog.filter((s) => s.searchText.includes(q))
+        : inventoryCatalog
+
+      // Starts-with results first, then contains results.
+      const allMatches = [...learnedMatches, ...inventoryMatches]
+      allMatches
+        .filter((s) => s.name.toLowerCase().startsWith(q))
+        .forEach(addUnique)
+      allMatches
+        .filter((s) => !s.name.toLowerCase().startsWith(q))
+        .forEach(addUnique)
+
+      return combined.slice(0, limit)
     },
-    [medicineSuggestions]
+    [inventoryCatalog, medicineSuggestions]
   )
 
   const addMedicineFromSuggestion = useCallback(
@@ -162,6 +231,33 @@ export default function MedicineForm({
   }, [])
 
   const searchMatches = searchQuery.trim() ? getSuggestions(searchQuery, 8) : []
+  const searchLoading = medicineSuggestionsLoading || inventoryLoading
+
+  // The consultation panel scrolls with overflow hidden, which clips an
+  // absolutely-positioned dropdown. Render it in a portal with fixed
+  // coordinates anchored to the search input instead.
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const showSearchDropdown = Boolean(searchQuery.trim())
+
+  useEffect(() => {
+    if (!showSearchDropdown) {
+      setDropdownPos(null)
+      return
+    }
+    const updatePosition = () => {
+      const rect = searchInputRef.current?.getBoundingClientRect()
+      if (rect) {
+        setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+      }
+    }
+    updatePosition()
+    window.addEventListener("resize", updatePosition)
+    window.addEventListener("scroll", updatePosition, true)
+    return () => {
+      window.removeEventListener("resize", updatePosition)
+      window.removeEventListener("scroll", updatePosition, true)
+    }
+  }, [showSearchDropdown])
 
   return (
     <div className="space-y-3">
@@ -227,37 +323,47 @@ export default function MedicineForm({
               variant="inline"
             />
           </div>
-          {searchQuery.trim() && (
-            <div className="absolute left-0 right-0 top-full z-[90] mt-1 max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-              {medicineSuggestionsLoading ? (
-                <div className="px-3 py-2 text-xs text-slate-500">Searching…</div>
-              ) : searchMatches.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-slate-500">
-                  No matches. Press Enter to add manually.
-                </div>
-              ) : (
-                searchMatches.map((sugg, idx) => (
-                  <button
-                    key={sugg.id}
-                    type="button"
-                    className={`w-full px-3 py-2 text-left text-xs text-slate-800 focus:outline-none ${
-                      idx === searchHighlight ? "bg-teal-50 text-teal-900" : "hover:bg-slate-50"
-                    }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      addMedicineFromSuggestion(sugg)
-                    }}
-                    onMouseEnter={() => setSearchHighlight(idx)}
-                  >
-                    <span className="font-medium">{sugg.name}</span>
-                    {sugg.dosageOptions?.[0] && (
-                      <span className="text-slate-500 ml-1">— {sugg.dosageOptions[0].value}</span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
+          {showSearchDropdown && dropdownPos && typeof document !== "undefined" &&
+            createPortal(
+              <div
+                style={{
+                  position: "fixed",
+                  top: dropdownPos.top,
+                  left: dropdownPos.left,
+                  width: dropdownPos.width,
+                }}
+                className="z-[999] max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+              >
+                {searchLoading && searchMatches.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-slate-500">Searching…</div>
+                ) : searchMatches.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-slate-500">
+                    No matches. Press Enter to add manually.
+                  </div>
+                ) : (
+                  searchMatches.map((sugg, idx) => (
+                    <button
+                      key={sugg.id}
+                      type="button"
+                      className={`w-full px-3 py-2 text-left text-xs text-slate-800 focus:outline-none ${
+                        idx === searchHighlight ? "bg-teal-50 text-teal-900" : "hover:bg-slate-50"
+                      }`}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        addMedicineFromSuggestion(sugg)
+                      }}
+                      onMouseEnter={() => setSearchHighlight(idx)}
+                    >
+                      <span className="font-medium">{sugg.name}</span>
+                      {sugg.dosageOptions?.[0] && (
+                        <span className="text-slate-500 ml-1">— {sugg.dosageOptions[0].value}</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>,
+              document.body
+            )}
         </div>
         {medicines.length === 0 && (
           <p className="text-[11px] text-slate-500 px-1">
@@ -307,9 +413,8 @@ export default function MedicineForm({
                           first?.focus()
                         }
                       }}
-                      placeholder="Name *"
+                      placeholder="Name"
                       className="w-full pl-2 pr-9 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-500/40 focus:border-green-500"
-                      required
                     />
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-auto">
                       <VoiceInput

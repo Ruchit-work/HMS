@@ -1,6 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { applyRateLimit } from "@/utils/shared/rateLimit"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 export async function POST(request: Request) {
   // Apply rate limiting first
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     const { assertUserHospitalAccess, getUserActiveHospitalId, isPlatformSuperAdmin } = await import(
-      "@/utils/firebase/serverHospitalQueries"
+      "@/shared/utils/firebase/serverHospitalQueries"
     )
     const superAdmin = await isPlatformSuperAdmin(auth.user.uid)
     const callerHospitalId = await getUserActiveHospitalId(auth.user.uid)
@@ -127,6 +128,18 @@ export async function POST(request: Request) {
     try {
       await admin.auth().deleteUser(uid)
 
+      const auditHospitalId = targetHospitalId || callerHospitalId
+      if (auditHospitalId) {
+        void auditLogger.logForUser(auth.user, {
+          hospitalId: auditHospitalId,
+          module: "Administration",
+          entityType: "user",
+          entityId: String(uid),
+          action: AUDIT_ACTIONS.USER_DISABLED_DELETED,
+          summary: `${detectedUserType || "User"} ${uid} was deleted.`,
+          metadata: { userType: detectedUserType, operation: "deleted" },
+        })
+      }
 
       return Response.json({ 
         success: true, 

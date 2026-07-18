@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo } from "react"
 
-export type PaymentMethodOption = "card" | "upi" | "cash"
+export type PaymentMethodOption = "card" | "upi" | "cash" | "bank_transfer" | "cheque"
 type PaymentMethod = PaymentMethodOption | null
 
 export interface PaymentData {
@@ -11,6 +11,8 @@ export interface PaymentData {
   expiryDate: string
   cvv: string
   upiId: string
+  bankReference?: string
+  chequeNumber?: string
 }
 
 interface PaymentMethodSectionProps {
@@ -51,7 +53,6 @@ export default function PaymentMethodSection({
     }
   }, [paymentMethod, availableMethods, setPaymentMethod])
 
-  /* ── SVG icons for method tiles ── */
   const methodConfig: Record<PaymentMethodOption, { label: string; sub: string; icon: React.ReactNode }> = {
     card: {
       label: "Card",
@@ -80,11 +81,37 @@ export default function PaymentMethodSection({
         </svg>
       ),
     },
+    bank_transfer: {
+      label: "Bank Transfer",
+      sub: "NEFT / IMPS",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+        </svg>
+      ),
+    },
+    cheque: {
+      label: "Cheque",
+      sub: "Bank cheque",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
   }
+
+  const gridCols =
+    availableMethods.length <= 1
+      ? "grid-cols-1"
+      : availableMethods.length === 2
+        ? "grid-cols-2"
+        : availableMethods.length === 4
+          ? "grid-cols-2 sm:grid-cols-4"
+          : "grid-cols-2 sm:grid-cols-3"
 
   return (
     <div className="mt-3 border-t border-slate-100 pt-4 space-y-3">
-      {/* ── Section header ── */}
       <div className="rx-form-section-header !mb-3">
         <div className="rx-form-section-icon">
           <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,10 +124,9 @@ export default function PaymentMethodSection({
         </div>
       </div>
 
-      {/* ── Method tiles ── */}
       <div className="rx-form-field">
         <label className="rx-form-label">Payment Method</label>
-        <div className={`grid gap-2 ${availableMethods.length === 1 ? 'grid-cols-1' : availableMethods.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+        <div className={`grid gap-2 ${gridCols}`}>
           {availableMethods.map((method) => {
             const cfg = methodConfig[method]
             const active = paymentMethod === method
@@ -120,7 +146,6 @@ export default function PaymentMethodSection({
         </div>
       </div>
 
-      {/* ── Card details ── */}
       {paymentMethod === "card" && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5 sm:p-4 sm:space-y-3">
           <div className="flex items-center gap-2">
@@ -173,7 +198,6 @@ export default function PaymentMethodSection({
         </div>
       )}
 
-      {/* ── UPI details ── */}
       {paymentMethod === "upi" && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5 sm:p-4 sm:space-y-3">
           <div className="flex items-center gap-2">
@@ -195,7 +219,38 @@ export default function PaymentMethodSection({
         </div>
       )}
 
-      {/* ── Amount summary ── */}
+      {paymentMethod === "bank_transfer" && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5 sm:p-4 sm:space-y-3">
+          <div className="rx-form-field">
+            <label className="rx-form-label">Transfer / UTR Reference</label>
+            <input
+              type="text"
+              value={paymentData.bankReference || ""}
+              onChange={(e) => setPaymentData({ ...paymentData, bankReference: e.target.value })}
+              onKeyDown={preventEnter}
+              placeholder="UTR / reference number"
+              className="rx-form-input"
+            />
+          </div>
+        </div>
+      )}
+
+      {paymentMethod === "cheque" && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5 sm:p-4 sm:space-y-3">
+          <div className="rx-form-field">
+            <label className="rx-form-label">Cheque Number</label>
+            <input
+              type="text"
+              value={paymentData.chequeNumber || ""}
+              onChange={(e) => setPaymentData({ ...paymentData, chequeNumber: e.target.value })}
+              onKeyDown={preventEnter}
+              placeholder="Cheque number"
+              className="rx-form-input"
+            />
+          </div>
+        </div>
+      )}
+
       {paymentMethod && (
         <div className="flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-2.5 sm:py-3">
           <div>
@@ -212,5 +267,3 @@ export default function PaymentMethodSection({
     </div>
   )
 }
-
-

@@ -6,14 +6,14 @@ export {
   PHARMACY_COLLECTIONS,
   getPharmacyCollectionPath,
   getPharmacyAuthContext,
-} from "@/utils/pharmacy/serverPharmacy"
-export type { PharmacyAuthContext } from "@/utils/pharmacy/serverPharmacy"
+} from "@/shared/utils/pharmacy/serverPharmacy"
+export type { PharmacyAuthContext } from "@/shared/utils/pharmacy/serverPharmacy"
 
 import {
   PHARMACY_COLLECTIONS,
   getPharmacyCollectionPath,
   getPharmacyAuthContext,
-} from "@/utils/pharmacy/serverPharmacy"
+} from "@/shared/utils/pharmacy/serverPharmacy"
 
 export const PharmacyServerService = {
   PHARMACY_COLLECTIONS,

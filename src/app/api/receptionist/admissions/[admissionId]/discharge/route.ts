@@ -1,7 +1,8 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
-import { authenticateRequest, createAuthErrorResponse } from "@/utils/firebase/apiAuth"
-import { assertAdmissionHospitalAccess } from "@/utils/firebase/serverHospitalQueries"
+import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
+import { assertAdmissionHospitalAccess } from "@/shared/utils/firebase/serverHospitalQueries"
+import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
 
 interface Params {
   admissionId: string
@@ -363,6 +364,26 @@ export async function POST(
 
       tx.set(billingRecordRef, billingPayload)
     })
+
+    const hospitalId =
+      typeof admissionData.hospitalId === "string" ? admissionData.hospitalId : ""
+    if (hospitalId) {
+      void auditLogger.logForUser(auth.user, {
+        hospitalId,
+        branchId:
+          typeof admissionData.branchId === "string" ? admissionData.branchId : null,
+        module: "Admission",
+        entityType: "admission",
+        entityId: admissionId,
+        action: AUDIT_ACTIONS.PATIENT_DISCHARGED,
+        summary: `${patientNameResolved || "Patient"} was discharged from admission ${admissionData.ipdNo || admissionId}.`,
+        metadata: {
+          billingId: billingRecordRef.id,
+          totalAmount: billingPayload.totalAmount,
+          stayDays: diffDays,
+        },
+      })
+    }
 
     return Response.json({
       success: true,

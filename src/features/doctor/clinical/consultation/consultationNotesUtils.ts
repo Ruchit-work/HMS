@@ -9,13 +9,19 @@ export function splitConsultationNotes(notes: string): {
 } {
   const raw = notes || ""
   const idx = raw.indexOf(EXAMINATION_MARKER)
-  if (idx === -1) {
-    return { clinicalNotes: raw, examinationFindings: "" }
+  if (idx !== -1) {
+    return {
+      clinicalNotes: raw.slice(0, idx).trimEnd(),
+      examinationFindings: raw.slice(idx + EXAMINATION_MARKER.length).trim(),
+    }
   }
-  return {
-    clinicalNotes: raw.slice(0, idx).trimEnd(),
-    examinationFindings: raw.slice(idx + EXAMINATION_MARKER.length).trim(),
+  // Handle notes that start with the marker (clinical notes empty),
+  // where the leading blank line is absent.
+  const startMarker = EXAMINATION_MARKER.trim() + "\n"
+  if (raw.startsWith(startMarker)) {
+    return { clinicalNotes: "", examinationFindings: raw.slice(startMarker.length).trim() }
   }
+  return { clinicalNotes: raw, examinationFindings: "" }
 }
 
 export function mergeConsultationNotes(clinicalNotes: string, examinationFindings: string): string {
