@@ -12,7 +12,7 @@ import { Button } from '@/shared/ui/Button'
 interface ConfirmDialogProps {
   isOpen: boolean
   title?: string
-  message: string
+  message: ReactNode
   confirmText?: string
   cancelText?: string
   onConfirm: () => void | Promise<void>
@@ -21,6 +21,10 @@ interface ConfirmDialogProps {
   /** When false, dialog stays open after confirm (parent must close). Default: true */
   closeOnConfirm?: boolean
   loadingText?: string // Optional custom loading text
+  /** Confirm button style. Default: danger */
+  confirmVariant?: "danger" | "primary" | "secondary" | "outline" | "success"
+  /** Optional wider panel for richer policy copy. */
+  size?: "sm" | "md"
 }
 
 function ConfirmDialogContent({
@@ -33,7 +37,8 @@ function ConfirmDialogContent({
   confirmLoading,
   loadingText,
   closeOnConfirm = true,
-}: Omit<ConfirmDialogProps, 'isOpen'>) {
+  confirmVariant = "danger",
+}: Omit<ConfirmDialogProps, 'isOpen' | 'size'>) {
   const requestClose = useRevealModalClose()
   const [internalLoading, setInternalLoading] = useState(false)
   const isBusy = Boolean(confirmLoading || internalLoading)
@@ -55,14 +60,16 @@ function ConfirmDialogContent({
   return (
     <>
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <div>
+        <div className="min-w-0">
           <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-          <p className="mt-2 text-sm text-slate-600">{message}</p>
+          <div className="mt-2 text-sm text-slate-600 [&_p]:mt-0 [&_ul]:mt-2 [&_li]:mt-1">
+            {typeof message === "string" ? <p>{message}</p> : message}
+          </div>
         </div>
       </div>
       <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -80,7 +87,7 @@ function ConfirmDialogContent({
         </Button>
         <Button
           type="button"
-          variant="danger"
+          variant={confirmVariant}
           size="sm"
           onClick={handleConfirm}
           loading={isBusy}
@@ -110,8 +117,12 @@ export function ConfirmDialog({
   confirmLoading = false,
   loadingText,
   closeOnConfirm = true,
+  confirmVariant = "danger",
+  size = "sm",
 }: ConfirmDialogProps) {
   if (!isOpen) return null
+
+  const widthClass = size === "md" ? "max-w-md" : "max-w-sm"
 
   return (
     <RevealModal
@@ -119,7 +130,9 @@ export function ConfirmDialog({
       onClose={onCancel}
       zIndex={120}
       overlayClassName="bg-slate-900/40"
-      contentClassName="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+      contentClassName={`relative w-full ${widthClass} rounded-2xl border border-slate-200 bg-white p-6 shadow-xl`}
+      contentMaxWidthClass={size === "md" ? "max-w-[min(100%,28rem)]" : "max-w-[min(100%,24rem)]"}
+      ariaLabel={typeof title === "string" ? title : "Confirmation dialog"}
     >
       <ConfirmDialogContent
         title={title}
@@ -131,6 +144,7 @@ export function ConfirmDialog({
         confirmLoading={confirmLoading}
         loadingText={loadingText}
         closeOnConfirm={closeOnConfirm}
+        confirmVariant={confirmVariant}
       />
     </RevealModal>
   )

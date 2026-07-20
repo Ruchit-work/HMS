@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, type ReactNode } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import jsPDF from "jspdf"
+import { CalendarDays, Check, Clock3, Download, Info, X } from "lucide-react"
 import { Appointment } from "@/types/patient"
-import { RevealModal, useRevealModalClose } from '@/shared/components'
+import { Button, RevealModal, useRevealModalClose } from "@/shared/components"
 import { isAppointmentPaid } from "@/shared/utils/appointmentHelpers"
 import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
 import type { PaidAppointmentCancellationPolicy } from "@/shared/utils/billingSettings"
@@ -227,17 +229,68 @@ interface AppointmentSuccessModalProps {
     paymentStatus?: string
     totalConsultationFee?: number
     patientName: string
+    /** Optional display-only fields when available from the booking response. */
+    appointmentId?: string
+    branchName?: string
   } | null
+  /** Optional navigation after booking (defaults by current route). */
+  onViewAppointment?: () => void
+}
+
+function formatAppointmentDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return dateStr
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+function formatPaymentMethod(method?: string): string {
+  if (!method) return "—"
+  const normalized = method.trim().toLowerCase()
+  if (normalized === "upi") return "UPI"
+  if (normalized === "cash") return "Cash"
+  if (normalized === "card") return "Card"
+  if (normalized === "bank_transfer") return "Bank Transfer"
+  if (normalized === "cheque") return "Cheque"
+  return method.charAt(0).toUpperCase() + method.slice(1)
+}
+
+function SummaryField({
+  label,
+  value,
+  valueClassName = "",
+  badge,
+}: {
+  label: string
+  value: ReactNode
+  valueClassName?: string
+  badge?: ReactNode
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <p className={`text-[15px] font-medium text-slate-900 break-words ${valueClassName}`}>{value}</p>
+        {badge}
+      </div>
+    </div>
+  )
 }
 
 function AppointmentSuccessModalContent({
   appointmentData,
-  onClose: _onClose,
+  onViewAppointment,
 }: {
   appointmentData: NonNullable<AppointmentSuccessModalProps["appointmentData"]>
   onClose: () => void
+  onViewAppointment?: () => void
 }) {
   const requestClose = useRevealModalClose()
+  const pathname = usePathname()
+  const router = useRouter()
 
   useEffect(() => {
     const timer = setTimeout(() => requestClose(), 10000)
@@ -328,142 +381,269 @@ function AppointmentSuccessModalContent({
     pdf.save(`Appointment-Confirmation-${appointmentData.transactionId}.pdf`)
   }
 
+  const isPendingPayment =
+    appointmentData.paymentStatus === "pending" || appointmentData.paymentMethod === "cash"
+  const appointmentIdLabel =
+    appointmentData.appointmentId ||
+    (appointmentData.transactionId ? String(appointmentData.transactionId) : null)
+
+  const handleViewAppointment = () => {
+    if (onViewAppointment) {
+      onViewAppointment()
+      requestClose()
+      return
+    }
+    requestClose()
+    if (pathname?.includes("patient-dashboard")) {
+      router.push("/patient-dashboard/appointments")
+    }
+  }
+
   return (
-    <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
-      <div className="bg-gradient-to-r from-slate-700 to-slate-800 p-6 text-white relative">
+    <div
+      className="w-full overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_32px_rgba(15,23,42,0.10),0_24px_48px_rgba(15,23,42,0.06)]"
+      role="document"
+    >
+      <div className="relative p-8">
         <button
+          type="button"
           onClick={requestClose}
-          className="absolute top-4 right-4 w-8 h-8 hover:bg-white/10 rounded-lg flex items-center justify-center transition-colors"
+          aria-label="Close appointment confirmation"
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
         >
-          <span className="text-white text-xl">×</span>
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
-          
-          <div className="text-center">
-            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg animate-bounce-once">
-              <span className="text-4xl text-white">✓</span>
-            </div>
-            <h2 className="text-2xl font-bold mb-1">Appointment Confirmed</h2>
-            <p className="text-slate-300 text-sm">Your booking was successful</p>
+
+        {/* Header */}
+        <header className="mx-auto max-w-lg text-center">
+          <div
+            className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 shadow-[0_8px_20px_rgba(16,185,129,0.35)]"
+            aria-hidden="true"
+          >
+            <Check className="h-7 w-7 text-white" strokeWidth={2.5} />
           </div>
-        </div>
+          <h2 id="appointment-success-title" className="text-[30px] font-bold leading-tight tracking-tight text-slate-900">
+            Appointment Confirmed
+          </h2>
+          <p className="mt-3 text-base leading-relaxed text-slate-600">
+            Your appointment has been booked successfully.
+          </p>
+          <p className="mt-1 text-base leading-relaxed text-slate-500">
+            A confirmation has also been sent via WhatsApp.
+          </p>
+        </header>
 
-        {/* Content */}
-        <div className="p-6 space-y-4">
-          {/* Doctor Info */}
-          <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-white text-xl">
-                👨‍⚕️
+        <div className="mt-8 space-y-6">
+          {/* Appointment Summary */}
+          <section
+            aria-labelledby="appointment-summary-heading"
+            className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.06)]"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 id="appointment-summary-heading" className="text-base font-semibold text-slate-900">
+                Appointment Summary
+              </h3>
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/15">
+                Confirmed
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SummaryField
+                label="Doctor"
+                value={`Dr. ${appointmentData.doctorName}`}
+                badge={
+                  <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 ring-1 ring-inset ring-sky-600/15">
+                    Doctor
+                  </span>
+                }
+              />
+              <SummaryField label="Department" value={appointmentData.doctorSpecialization || "—"} />
+              {appointmentIdLabel ? (
+                <SummaryField
+                  label="Appointment ID"
+                  value={appointmentIdLabel}
+                  valueClassName="font-mono text-[14px]"
+                />
+              ) : null}
+              {appointmentData.branchName ? (
+                <SummaryField
+                  label="Branch"
+                  value={appointmentData.branchName}
+                  badge={
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-500/10">
+                      Branch
+                    </span>
+                  }
+                />
+              ) : null}
+              <SummaryField
+                label="Date"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                    {formatAppointmentDate(appointmentData.appointmentDate)}
+                  </span>
+                }
+              />
+              <SummaryField
+                label="Time"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock3 className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                    {appointmentData.appointmentTime}
+                  </span>
+                }
+              />
+              <SummaryField
+                label="Status"
+                value={
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/15">
+                    Confirmed
+                  </span>
+                }
+              />
+            </div>
+          </section>
+
+          {/* Payment Summary */}
+          <section
+            aria-labelledby="payment-summary-heading"
+            className="rounded-2xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.06)]"
+          >
+            <h3 id="payment-summary-heading" className="text-base font-semibold text-slate-900">
+              Payment Summary
+            </h3>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+                  {isPendingPayment ? "Amount to Pay" : "Amount Paid"}
+                </p>
+                <p className="mt-1 text-[28px] font-bold tracking-tight text-slate-900">
+                  ₹
+                  {isPendingPayment
+                    ? appointmentData.totalConsultationFee || appointmentData.remainingAmount || 0
+                    : appointmentData.paymentAmount}
+                </p>
               </div>
-              <div className="flex-1">
-                <p className="text-xs text-slate-500 font-medium mb-1">Your Doctor</p>
-                <p className="text-lg font-bold text-slate-800">Dr. {appointmentData.doctorName}</p>
-                <p className="text-xs text-slate-600 font-medium">{appointmentData.doctorSpecialization}</p>
+              <SummaryField
+                label="Payment Status"
+                value={
+                  isPendingPayment ? (
+                    <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/15">
+                      Pending
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/15">
+                      Paid
+                    </span>
+                  )
+                }
+              />
+              <SummaryField
+                label="Payment Method"
+                value={formatPaymentMethod(appointmentData.paymentMethod)}
+              />
+              <div className="sm:col-span-2">
+                <SummaryField
+                  label="Transaction ID"
+                  value={appointmentData.transactionId}
+                  valueClassName="font-mono text-[14px]"
+                />
+              </div>
+              {isPendingPayment ? (
+                <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <p className="text-xs leading-relaxed text-amber-800">
+                    Payment will be collected at the reception desk before your appointment.
+                  </p>
+                </div>
+              ) : null}
+              {!isPendingPayment &&
+              appointmentData.paymentType === "partial" &&
+              appointmentData.remainingAmount &&
+              appointmentData.remainingAmount > 0 ? (
+                <div className="sm:col-span-2 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <span className="text-sm font-medium text-slate-700">Pay at Hospital</span>
+                  <span className="text-sm font-bold text-slate-900">
+                    ₹{appointmentData.remainingAmount}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          {/* Important Information */}
+          <section
+            aria-labelledby="important-info-heading"
+            className="rounded-2xl border border-sky-200 bg-sky-50/80 p-4"
+          >
+            <div className="flex gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                <Info className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <h3 id="important-info-heading" className="text-base font-semibold text-sky-950">
+                  Important Information
+                </h3>
+                <ul className="mt-3 space-y-2 text-sm leading-relaxed text-sky-900/80">
+                  <li className="flex gap-2">
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-sky-500" aria-hidden="true" />
+                    <span>Arrive at least 15 minutes before your appointment.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-sky-500" aria-hidden="true" />
+                    <span>Carry a valid photo ID.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-sky-500" aria-hidden="true" />
+                    <span>Bring previous prescriptions or reports if applicable.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-sky-500" aria-hidden="true" />
+                    <span>Contact reception if you need to reschedule.</span>
+                  </li>
+                </ul>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Date & Time */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xl">📅</span>
-                <p className="text-xs text-slate-500 font-bold uppercase">Date</p>
-              </div>
-              <p className="text-sm font-bold text-slate-800">
-                {new Date(appointmentData.appointmentDate).toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
-              </p>
-              <p className="text-xs text-slate-600 font-medium">
-                {new Date(appointmentData.appointmentDate).toLocaleDateString('en-US', { weekday: 'long' })}
-              </p>
-            </div>
-
-            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xl">🕐</span>
-                <p className="text-xs text-slate-500 font-bold uppercase">Time</p>
-              </div>
-              <p className="text-lg font-bold text-slate-800">
-                {appointmentData.appointmentTime}
-              </p>
-            </div>
-          </div>
-
-          {/* Payment Info */}
-          <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">💳</span>
-              <p className="text-sm font-bold text-slate-800">
-                {appointmentData.paymentStatus === "pending" || appointmentData.paymentMethod === "cash"
-                  ? "Payment Pending"
-                  : "Payment Successful"}
-              </p>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-600">Transaction ID:</span>
-                <span className="font-mono text-slate-800 font-semibold text-xs">{appointmentData.transactionId}</span>
-              </div>
-              {appointmentData.paymentStatus === "pending" || appointmentData.paymentMethod === "cash" ? (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Amount to Pay:</span>
-                    <span className="text-slate-800 font-bold">₹{appointmentData.totalConsultationFee || appointmentData.remainingAmount || 0}</span>
-                  </div>
-                  <div className="bg-amber-50 border border-amber-200 rounded p-2 mt-2">
-                    <p className="text-xs text-amber-800">
-                      <span className="font-semibold">💡 Note:</span> Payment will be collected at the reception desk before your appointment.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Amount Paid:</span>
-                    <span className="text-slate-800 font-bold">₹{appointmentData.paymentAmount}</span>
-                  </div>
-                  {appointmentData.paymentType === 'partial' && appointmentData.remainingAmount && appointmentData.remainingAmount > 0 && (
-                    <div className="flex justify-between pt-2 border-t border-slate-200">
-                      <span className="text-slate-700 font-semibold">Pay at Hospital:</span>
-                      <span className="text-slate-900 font-bold">₹{appointmentData.remainingAmount}</span>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Important Note */}
-          <div className="bg-slate-100 border-l-4 border-slate-600 p-3 rounded">
-            <p className="text-xs text-slate-700">
-              <span className="font-bold">📌 Important:</span> Please arrive 15 minutes before your appointment time. Bring this confirmation and a valid ID.
-            </p>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-2">
-            <button
+          {/* Actions */}
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
               onClick={downloadConfirmationPDF}
-              className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-4 py-3 rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+              className="h-11 w-full shadow-sm transition-shadow hover:shadow-md sm:flex-1"
+              aria-label="Download appointment confirmation PDF"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+              <Download className="h-4 w-4" aria-hidden="true" />
               Download PDF
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleViewAppointment}
+              className="h-11 w-full shadow-sm transition-shadow hover:shadow-md sm:flex-1"
+              aria-label="View appointment"
+            >
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              View Appointment
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
               onClick={requestClose}
-              className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition-all border border-slate-300"
+              className="h-11 w-full sm:w-auto sm:min-w-[7.5rem]"
+              aria-label="Close confirmation dialog"
             >
               Close
-            </button>
+            </Button>
           </div>
         </div>
       </div>
+    </div>
   )
 }
 
@@ -471,6 +651,7 @@ export function AppointmentSuccessModal({
   isOpen,
   onClose,
   appointmentData,
+  onViewAppointment,
 }: AppointmentSuccessModalProps) {
   if (!isOpen || !appointmentData) return null
 
@@ -479,10 +660,14 @@ export function AppointmentSuccessModal({
       isOpen={isOpen}
       onClose={onClose}
       contentClassName="p-0"
+      contentMaxWidthClass="max-w-[min(100%,760px)]"
+      ariaLabelledBy="appointment-success-title"
+      closeOnOverlayClick
     >
       <AppointmentSuccessModalContent
         appointmentData={appointmentData}
         onClose={onClose}
+        onViewAppointment={onViewAppointment}
       />
     </RevealModal>
   )

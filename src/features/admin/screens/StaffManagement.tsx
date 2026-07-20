@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
-import { Button } from '@/shared/components'
+import { Button, ConfirmDialog } from '@/shared/components'
 import { FilterChip } from '@/shared/components'
 import { useTablePagination } from "@/shared/hooks/useTablePagination"
 import { useSearch } from "@/shared/hooks/useSearch"
@@ -215,6 +215,8 @@ export default function StaffManagement({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [sortField, setSortField] = useState("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
+  const [deleteTarget, setDeleteTarget] = useState<StaffRow | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     setBranchFilter(selectedBranchId)
@@ -408,9 +410,8 @@ export default function StaffManagement({
   }
 
   const handleDelete = useCallback(async (row: StaffRow) => {
-    const name = `${row.firstName} ${row.lastName}`.trim()
-    if (!window.confirm(`Delete ${name || "this staff member"}? This cannot be undone.`)) return
     try {
+      setDeleteLoading(true)
       const currentUser = auth.currentUser
       if (!currentUser) throw new Error("You must be logged in")
       const token = await currentUser.getIdToken()
@@ -442,10 +443,13 @@ export default function StaffManagement({
         setDrawerOpen(false)
         setSelectedId(null)
       }
+      setDeleteTarget(null)
       toast("Staff member deleted")
       await loadStaff()
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : "Failed to delete", "err")
+    } finally {
+      setDeleteLoading(false)
     }
   }, [selectedId, toast, loadStaff])
 
@@ -715,11 +719,11 @@ export default function StaffManagement({
       },
       {
         label: "Delete",
-        onClick: (r) => void handleDelete(r),
+        onClick: (r) => setDeleteTarget(r),
         variant: "danger",
       },
     ],
-    [openDrawer, openEdit, assignDepartment, changeShift, resetPassword, toggleActive, handleDelete]
+    [openDrawer, openEdit, assignDepartment, changeShift, resetPassword, toggleActive]
   )
 
   const bulkActions: EnterpriseBulkAction<StaffRow>[] = useMemo(
@@ -1136,7 +1140,27 @@ export default function StaffManagement({
           if (selectedStaff) void toggleActive(selectedStaff)
         }}
         onDelete={() => {
-          if (selectedStaff) void handleDelete(selectedStaff)
+          if (selectedStaff) setDeleteTarget(selectedStaff)
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Delete staff member"
+        message={
+          deleteTarget
+            ? `Delete ${`${deleteTarget.firstName} ${deleteTarget.lastName}`.trim() || "this staff member"}? This cannot be undone.`
+            : ""
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmLoading={deleteLoading}
+        onCancel={() => {
+          if (deleteLoading) return
+          setDeleteTarget(null)
+        }}
+        onConfirm={async () => {
+          if (deleteTarget) await handleDelete(deleteTarget)
         }}
       />
     </div>

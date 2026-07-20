@@ -4,6 +4,7 @@ import { useState } from "react"
 import { BlockedDate } from "@/types/patient"
 import { db } from "@/firebase/config"
 import { doc, updateDoc } from "firebase/firestore"
+import { ConfirmDialog } from "@/shared/components"
 
 interface BlockedDatesManagerProps {
   blockedDates: BlockedDate[]
@@ -24,6 +25,7 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
   const [showAddForm, setShowAddForm] = useState(false)
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [lastError, setLastError] = useState<string>("")
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -57,7 +59,7 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
       if (!startDate || !endDate || !newReason.trim()) return
       
       if (new Date(startDate) > new Date(endDate)) {
-        alert("Start date must be before or equal to end date")
+        setNoticeMessage("Start date must be before or equal to end date")
         return
       }
 
@@ -391,6 +393,17 @@ export default function BlockedDatesManager({ blockedDates, onChange, doctorId, 
           <p className="text-xs text-slate-400 mt-1">Click "Block Specific Dates" to add unavailable dates</p>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!noticeMessage}
+        title="Notice"
+        message={noticeMessage || ""}
+        confirmText="OK"
+        cancelText="Close"
+        confirmVariant="primary"
+        onConfirm={() => setNoticeMessage(null)}
+        onCancel={() => setNoticeMessage(null)}
+      />
     </div>
   )
 }

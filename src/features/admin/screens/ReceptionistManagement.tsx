@@ -7,7 +7,7 @@ import { useBranchSelection } from '@/providers/BranchProvider'
 import { filterStaffByBranch } from '@/shared/utils/branch/branchFilters'
 import { RevealModal, useRevealModalClose } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
-import { Notification } from '@/shared/components'
+import { Notification, ConfirmDialog } from '@/shared/components'
 import { auth, db } from '@/firebase/config'
 import { doc, updateDoc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore'
 import type { Branch } from '@/types/branch'
@@ -196,6 +196,7 @@ export default function ReceptionistManagement() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingReceptionist, setEditingReceptionist] = useState<Receptionist | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Receptionist | null>(null)
   const [formData, setFormData] = useState<ReceptionistFormData>({
     firstName: '',
     lastName: '',
@@ -358,10 +359,6 @@ export default function ReceptionistManagement() {
   }
 
   const handleDeleteReceptionist = async (receptionist: Receptionist) => {
-    if (!window.confirm(`Delete receptionist ${receptionist.firstName} ${receptionist.lastName}? This cannot be undone.`)) {
-      return
-    }
-
     setError(null)
     setSuccess(null)
     setDeletingId(receptionist.id)
@@ -402,6 +399,7 @@ export default function ReceptionistManagement() {
       }
 
       setReceptionists(prev => prev.filter(r => r.id !== receptionist.id))
+      setDeleteTarget(null)
       setSuccess('Receptionist deleted successfully.')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err: any) {
@@ -574,7 +572,7 @@ export default function ReceptionistManagement() {
                         <button
                           type="button"
                           disabled={deletingId === receptionist.id}
-                          onClick={() => handleDeleteReceptionist(receptionist)}
+                          onClick={() => setDeleteTarget(receptionist)}
                           className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {deletingId === receptionist.id ? 'Deleting...' : 'Delete'}
@@ -720,6 +718,26 @@ export default function ReceptionistManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Delete receptionist"
+        message={
+          deleteTarget
+            ? `Delete receptionist ${deleteTarget.firstName} ${deleteTarget.lastName}? This cannot be undone.`
+            : ""
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmLoading={!!deletingId}
+        onCancel={() => {
+          if (deletingId) return
+          setDeleteTarget(null)
+        }}
+        onConfirm={async () => {
+          if (deleteTarget) await handleDeleteReceptionist(deleteTarget)
+        }}
+      />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Button } from '@/shared/components'
+import { Button, ConfirmDialog } from '@/shared/components'
 import { FilterChip } from '@/shared/components'
 import { useTablePagination } from "@/shared/hooks/useTablePagination"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
@@ -102,6 +102,14 @@ export default function BranchManagement({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [sortField, setSortField] = useState("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
+  const [pendingConfirm, setPendingConfirm] = useState<
+    | { type: "deactivate"; branch: BranchRow }
+    | { type: "delete"; branch: BranchRow }
+    | { type: "bulk-deactivate"; rows: BranchRow[] }
+    | { type: "bulk-delete"; rows: BranchRow[] }
+    | null
+  >(null)
+  const [confirmLoading, setConfirmLoading] = useState(false)
 
   const loadBranches = async () => {
     if (!activeHospitalId) return
@@ -306,10 +314,8 @@ export default function BranchManagement({
 
   const handleDeactivate = async (branch: BranchRow) => {
     if (branch.status !== "active") return
-    if (!window.confirm(`Deactivate “${branch.name}”? It will no longer appear in active branch lists.`)) {
-      return
-    }
     try {
+      setConfirmLoading(true)
       await updateDoc(doc(db, "branches", branch.id), {
         status: "inactive",
         updatedAt: serverTimestamp(),
@@ -325,17 +331,18 @@ export default function BranchManagement({
         next.delete(branch.id)
         return next
       })
+      setPendingConfirm(null)
       await loadBranches()
     } catch (err: any) {
       setError(err?.message || "Failed to deactivate branch")
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
   const handleDelete = async (branch: BranchRow) => {
-    if (!window.confirm(`Delete “${branch.name}” permanently? This cannot be undone.`)) {
-      return
-    }
     try {
+      setConfirmLoading(true)
       await deleteDoc(doc(db, "branches", branch.id))
       setSuccess(`“${branch.name}” deleted`)
       setTimeout(() => setSuccess(null), 2500)
@@ -348,9 +355,57 @@ export default function BranchManagement({
         next.delete(branch.id)
         return next
       })
+      setPendingConfirm(null)
       await loadBranches()
     } catch (err: any) {
       setError(err?.message || "Failed to delete branch")
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
+
+  const handleBulkDeactivate = async (rows: BranchRow[]) => {
+    const active = rows.filter((r) => r.status === "active")
+    if (!active.length) return
+    setProcessingBulk(true)
+    setConfirmLoading(true)
+    try {
+      await Promise.all(
+        active.map((b) =>
+          updateDoc(doc(db, "branches", b.id), {
+            status: "inactive",
+            updatedAt: serverTimestamp(),
+          })
+        )
+      )
+      setSuccess(`Deactivated ${active.length} branch${active.length === 1 ? "" : "es"}`)
+      setTimeout(() => setSuccess(null), 2500)
+      setSelectedIds(new Set())
+      setPendingConfirm(null)
+      await loadBranches()
+    } catch (err: any) {
+      setError(err?.message || "Bulk deactivate failed")
+    } finally {
+      setProcessingBulk(false)
+      setConfirmLoading(false)
+    }
+  }
+
+  const handleBulkDelete = async (rows: BranchRow[]) => {
+    setProcessingBulk(true)
+    setConfirmLoading(true)
+    try {
+      await Promise.all(rows.map((b) => deleteDoc(doc(db, "branches", b.id))))
+      setSuccess(`Deleted ${rows.length} branch${rows.length === 1 ? "" : "es"}`)
+      setTimeout(() => setSuccess(null), 2500)
+      setSelectedIds(new Set())
+      setPendingConfirm(null)
+      await loadBranches()
+    } catch (err: any) {
+      setError(err?.message || "Bulk delete failed")
+    } finally {
+      setProcessingBulk(false)
+      setConfirmLoading(false)
     }
   }
 
@@ -455,12 +510,12 @@ export default function BranchManagement({
       label: "Deactivate",
       variant: "warning",
       hidden: (b) => b.status !== "active",
-      onClick: (b) => void handleDeactivate(b),
+      onClick: (b) => setPendingConfirm({ type: "deactivate", branch: b }),
     },
     {
       label: "Delete",
       variant: "danger",
-      onClick: (b) => void handleDelete(b),
+      onClick: (b) => setPendingConfirm({ type: "delete", branch: b }),
     },
   ]
 
@@ -475,53 +530,16 @@ export default function BranchManagement({
     },
     {
       label: "Deactivate",
-      onClick: async (rows) => {
+      onClick: (rows) => {
         const active = rows.filter((r) => r.status === "active")
         if (!active.length) return
-        if (!window.confirm(`Deactivate ${active.length} branch${active.length === 1 ? "" : "es"}?`)) {
-          return
-        }
-        setProcessingBulk(true)
-        try {
-          await Promise.all(
-            active.map((b) =>
-              updateDoc(doc(db, "branches", b.id), {
-                status: "inactive",
-                updatedAt: serverTimestamp(),
-              })
-            )
-          )
-          setSuccess(`Deactivated ${active.length} branch${active.length === 1 ? "" : "es"}`)
-          setTimeout(() => setSuccess(null), 2500)
-          setSelectedIds(new Set())
-          await loadBranches()
-        } catch (err: any) {
-          setError(err?.message || "Bulk deactivate failed")
-        } finally {
-          setProcessingBulk(false)
-        }
+        setPendingConfirm({ type: "bulk-deactivate", rows })
       },
     },
     {
       label: "Delete",
       variant: "danger",
-      onClick: async (rows) => {
-        if (!window.confirm(`Permanently delete ${rows.length} branch${rows.length === 1 ? "" : "es"}?`)) {
-          return
-        }
-        setProcessingBulk(true)
-        try {
-          await Promise.all(rows.map((b) => deleteDoc(doc(db, "branches", b.id))))
-          setSuccess(`Deleted ${rows.length} branch${rows.length === 1 ? "" : "es"}`)
-          setTimeout(() => setSuccess(null), 2500)
-          setSelectedIds(new Set())
-          await loadBranches()
-        } catch (err: any) {
-          setError(err?.message || "Bulk delete failed")
-        } finally {
-          setProcessingBulk(false)
-        }
-      },
+      onClick: (rows) => setPendingConfirm({ type: "bulk-delete", rows }),
     },
   ]
 
@@ -906,11 +924,61 @@ export default function BranchManagement({
         }}
         onDeactivate={
           selectedBranch?.status === "active"
-            ? () => {
-                void handleDeactivate(selectedBranch).then(() => setDrawerOpen(false))
-              }
+            ? () => setPendingConfirm({ type: "deactivate", branch: selectedBranch })
             : undefined
         }
+      />
+
+      <ConfirmDialog
+        isOpen={!!pendingConfirm}
+        title={
+          pendingConfirm?.type === "deactivate" || pendingConfirm?.type === "bulk-deactivate"
+            ? "Deactivate branch"
+            : "Delete branch"
+        }
+        message={
+          pendingConfirm?.type === "deactivate"
+            ? `Deactivate “${pendingConfirm.branch.name}”? It will no longer appear in active branch lists.`
+            : pendingConfirm?.type === "delete"
+              ? `Delete “${pendingConfirm.branch.name}” permanently? This cannot be undone.`
+              : pendingConfirm?.type === "bulk-deactivate"
+                ? (() => {
+                    const active = pendingConfirm.rows.filter((r) => r.status === "active")
+                    return `Deactivate ${active.length} branch${active.length === 1 ? "" : "es"}?`
+                  })()
+                : pendingConfirm?.type === "bulk-delete"
+                  ? `Permanently delete ${pendingConfirm.rows.length} branch${pendingConfirm.rows.length === 1 ? "" : "es"}?`
+                  : ""
+        }
+        confirmText={
+          pendingConfirm?.type === "deactivate" || pendingConfirm?.type === "bulk-deactivate"
+            ? "Deactivate"
+            : "Delete"
+        }
+        cancelText="Cancel"
+        confirmLoading={confirmLoading || processingBulk}
+        confirmVariant={
+          pendingConfirm?.type === "delete" || pendingConfirm?.type === "bulk-delete"
+            ? "danger"
+            : "primary"
+        }
+        onCancel={() => {
+          if (confirmLoading || processingBulk) return
+          setPendingConfirm(null)
+        }}
+        onConfirm={async () => {
+          if (!pendingConfirm) return
+          if (pendingConfirm.type === "deactivate") {
+            await handleDeactivate(pendingConfirm.branch)
+            setDrawerOpen(false)
+          } else if (pendingConfirm.type === "delete") {
+            await handleDelete(pendingConfirm.branch)
+          } else if (pendingConfirm.type === "bulk-deactivate") {
+            await handleBulkDeactivate(pendingConfirm.rows)
+          } else if (pendingConfirm.type === "bulk-delete") {
+            await handleBulkDelete(pendingConfirm.rows)
+          }
+        }}
       />
     </div>
   )

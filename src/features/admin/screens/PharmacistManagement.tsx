@@ -7,7 +7,7 @@ import { useMultiHospital } from '@/providers/MultiHospitalProvider'
 import { useBranchSelection } from '@/providers/BranchProvider'
 import { filterStaffByBranch } from '@/shared/utils/branch/branchFilters'
 import type { Branch } from '@/types/branch'
-import { Notification } from '@/shared/components'
+import { Notification, ConfirmDialog } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
 import { Button } from '@/shared/components'
 import { RevealModal, useRevealModalClose } from '@/shared/components'
@@ -182,6 +182,8 @@ export default function PharmacistManagement() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingPharmacist, setEditingPharmacist] = useState<Pharmacist | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [formData, setFormData] = useState<PharmacistFormData>({
     firstName: '',
     lastName: '',
@@ -270,8 +272,8 @@ export default function PharmacistManagement() {
   }
 
   const handleDelete = async (pharmacistId: string) => {
-    if (!window.confirm('Delete this pharmacist? They will no longer be able to log in.')) return
     try {
+      setDeleteLoading(true)
       setError(null)
       setSuccess(null)
       const currentUser = auth.currentUser
@@ -287,9 +289,12 @@ export default function PharmacistManagement() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete pharmacist')
       setSuccess('Pharmacist deleted.')
+      setDeleteTargetId(null)
       await loadData()
     } catch (err: any) {
       setError(err?.message || 'Failed to delete pharmacist. Please try again.')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -417,7 +422,7 @@ export default function PharmacistManagement() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(p.id)}
+                            onClick={() => setDeleteTargetId(p.id)}
                             className="px-3 py-1 rounded-full border border-rose-300 text-xs font-medium text-rose-700 hover:bg-rose-50"
                           >
                             Delete
@@ -529,6 +534,22 @@ export default function PharmacistManagement() {
           </div>
         </RevealModal>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTargetId}
+        title="Delete pharmacist"
+        message="Delete this pharmacist? They will no longer be able to log in."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmLoading={deleteLoading}
+        onCancel={() => {
+          if (deleteLoading) return
+          setDeleteTargetId(null)
+        }}
+        onConfirm={async () => {
+          if (deleteTargetId) await handleDelete(deleteTargetId)
+        }}
+      />
     </div>
   )
 }

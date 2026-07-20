@@ -46,6 +46,12 @@ export function usePharmacyCash({
   const [cashiers, setCashiers] = useState<PharmacyCashierProfile[]>([])
   const [counters, setCounters] = useState<PharmacyCounter[]>([])
   const [shiftReportExpenses, setShiftReportExpenses] = useState<PharmacyExpense[]>([])
+  const [pendingCashDelete, setPendingCashDelete] = useState<
+    | { kind: 'cashier'; cashier: PharmacyCashierProfile }
+    | { kind: 'counter'; counter: PharmacyCounter }
+    | null
+  >(null)
+  const [cashDeleteLoading, setCashDeleteLoading] = useState(false)
 
   useEffect(() => {
     const s = viewShiftReportSession
@@ -181,7 +187,7 @@ export function usePharmacyCash({
   }, [subTab, fetchExpensesAndCategories, branchFilter])
 
   const handleDeleteCashier = useCallback(
-    async (cashier: PharmacyCashierProfile) => {
+    (cashier: PharmacyCashierProfile) => {
       const hasOpenSession = recentCashSessions.some(
         (s) => s.status === 'open' && s.cashierProfileId === cashier.id
       )
@@ -189,32 +195,13 @@ export function usePharmacyCash({
         setError(`Cannot delete cashier "${cashier.name}" while an active shift is open.`)
         return
       }
-      if (
-        !window.confirm(
-          `Delete cashier "${cashier.name}"?\n\nThis removes the cashier from future shift selection. Historical shift records remain unchanged.`
-        )
-      )
-        return
-      const token = await getToken()
-      if (!token) return
-      try {
-        const client = createPharmacyApiClient(token)
-        const result = await client.deleteCashier(cashier.id)
-        if (!result.ok || !result.data.success) {
-          setError((result.data.error as string) || 'Failed to delete cashier')
-          return
-        }
-        setCashiers((prev) => prev.filter((x) => x.id !== cashier.id))
-        setSuccess('Cashier removed.')
-      } catch (e: any) {
-        setError(e?.message || 'Failed to delete cashier')
-      }
+      setPendingCashDelete({ kind: 'cashier', cashier })
     },
-    [getToken, recentCashSessions, setError, setSuccess]
+    [recentCashSessions, setError]
   )
 
   const handleDeleteCounter = useCallback(
-    async (counter: PharmacyCounter) => {
+    (counter: PharmacyCounter) => {
       const hasOpenSession = recentCashSessions.some(
         (s) => s.status === 'open' && s.counterId === counter.id
       )
@@ -222,29 +209,52 @@ export function usePharmacyCash({
         setError(`Cannot delete counter "${counter.name}" while an active shift is open.`)
         return
       }
-      if (
-        !window.confirm(
-          `Delete counter "${counter.name}"?\n\nThis removes the counter from future shift selection. Historical shift records remain unchanged.`
-        )
-      )
-        return
-      const token = await getToken()
-      if (!token) return
-      try {
-        const client = createPharmacyApiClient(token)
-        const result = await client.deleteCounter(counter.id)
+      setPendingCashDelete({ kind: 'counter', counter })
+    },
+    [recentCashSessions, setError]
+  )
+
+  const cancelPendingCashDelete = useCallback(() => {
+    if (cashDeleteLoading) return
+    setPendingCashDelete(null)
+  }, [cashDeleteLoading])
+
+  const confirmPendingCashDelete = useCallback(async () => {
+    if (!pendingCashDelete) return
+    const token = await getToken()
+    if (!token) return
+    setCashDeleteLoading(true)
+    try {
+      const client = createPharmacyApiClient(token)
+      if (pendingCashDelete.kind === 'cashier') {
+        const result = await client.deleteCashier(pendingCashDelete.cashier.id)
+        if (!result.ok || !result.data.success) {
+          setError((result.data.error as string) || 'Failed to delete cashier')
+          return
+        }
+        setCashiers((prev) => prev.filter((x) => x.id !== pendingCashDelete.cashier.id))
+        setSuccess('Cashier removed.')
+      } else {
+        const result = await client.deleteCounter(pendingCashDelete.counter.id)
         if (!result.ok || !result.data.success) {
           setError((result.data.error as string) || 'Failed to delete counter')
           return
         }
-        setCounters((prev) => prev.filter((x) => x.id !== counter.id))
+        setCounters((prev) => prev.filter((x) => x.id !== pendingCashDelete.counter.id))
         setSuccess('Counter removed.')
-      } catch (e: any) {
-        setError(e?.message || 'Failed to delete counter')
       }
-    },
-    [getToken, recentCashSessions, setError, setSuccess]
-  )
+      setPendingCashDelete(null)
+    } catch (e: any) {
+      setError(
+        e?.message ||
+          (pendingCashDelete.kind === 'cashier'
+            ? 'Failed to delete cashier'
+            : 'Failed to delete counter')
+      )
+    } finally {
+      setCashDeleteLoading(false)
+    }
+  }, [pendingCashDelete, getToken, setError, setSuccess])
 
   return {
     activeCashSession,
@@ -267,5 +277,9 @@ export function usePharmacyCash({
     fetchCashiersAndCounters,
     handleDeleteCashier,
     handleDeleteCounter,
+    pendingCashDelete,
+    cashDeleteLoading,
+    cancelPendingCashDelete,
+    confirmPendingCashDelete,
   }
 }

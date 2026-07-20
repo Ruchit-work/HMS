@@ -5,7 +5,7 @@ import { auth } from "@/firebase/config"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import { Admission, AdmissionRequest, Room } from "@/types/patient"
 import { RefreshCw } from "lucide-react"
-import { Button } from '@/shared/components'
+import { Button, ConfirmDialog } from '@/shared/components'
 import { ipdSubTabClass } from "@/features/receptionist/components/admit-dashboard/ipdUi"
 import AdmissionHistoryPanel from "@/features/receptionist/screens/AdmissionHistoryPanel"
 import AssignRoomModal from "@/features/receptionist/components/admit-dashboard/modals/AssignRoomModal"
@@ -258,6 +258,8 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [roomManagerOpen, setRoomManagerOpen] = useState(false)
   const [roomEditId, setRoomEditId] = useState<string | null>(null)
   const [roomManageLoading, setRoomManageLoading] = useState(false)
+  const [archiveRoomTarget, setArchiveRoomTarget] = useState<Room | null>(null)
+  const [archivePackageTarget, setArchivePackageTarget] = useState<AdmissionPackageOption | null>(null)
   const [manageRoomNumber, setManageRoomNumber] = useState("")
   const [manageRoomType, setManageRoomType] = useState<Room["roomType"] | "">("")
   const [manageCustomRoomTypeName, setManageCustomRoomTypeName] = useState("")
@@ -809,12 +811,6 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   }
 
   const handleArchiveRoom = async (room: Room) => {
-    if (room.status === "occupied") {
-      notify({ type: "error", message: "Cannot archive occupied room." })
-      return
-    }
-    const confirmation = window.confirm(`Archive room ${room.roomNumber}?`)
-    if (!confirmation) return
     setRoomManageLoading(true)
     try {
       await authedFetchJson(
@@ -823,6 +819,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         "Failed to archive room"
       )
       notify({ type: "success", message: "Room archived." })
+      setArchiveRoomTarget(null)
       fetchRooms()
     } catch (error: any) {
       notify({ type: "error", message: error?.message || "Failed to archive room" })
@@ -909,8 +906,6 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   }
 
   const handleArchivePackage = async (pkg: AdmissionPackageOption) => {
-    const confirmation = window.confirm(`Archive package "${pkg.packageName}"?`)
-    if (!confirmation) return
     setPackageManageLoading(true)
     try {
       await authedFetchJson(
@@ -919,6 +914,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         "Failed to archive package"
       )
       notify({ type: "success", message: "Package archived." })
+      setArchivePackageTarget(null)
       if (packageEditId === pkg.id) resetPackageForm()
       fetchAdmissionPackages()
     } catch (error: any) {
@@ -1518,12 +1514,18 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
           packagesLoading={packagesLoading}
           admissionPackages={admissionPackages}
           handleOpenEditPackage={handleOpenEditPackage}
-          handleArchivePackage={handleArchivePackage}
+          handleArchivePackage={(pkg) => setArchivePackageTarget(pkg)}
           handleOpenCreateRoom={handleOpenCreateRoom}
           rooms={rooms}
           getRoomTypeDisplayName={getRoomTypeDisplayName}
           handleOpenEditRoom={handleOpenEditRoom}
-          handleArchiveRoom={handleArchiveRoom}
+          handleArchiveRoom={(room) => {
+            if (room.status === "occupied") {
+              notify({ type: "error", message: "Cannot archive occupied room." })
+              return
+            }
+            setArchiveRoomTarget(room)
+          }}
         />
       )}
 
@@ -1877,6 +1879,44 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         setDischargeNotes={setDischargeNotes}
         dischargeLoading={dischargeLoading}
         onConfirm={handleDischarge}
+      />
+
+      <ConfirmDialog
+        isOpen={!!archiveRoomTarget}
+        title="Archive room"
+        message={
+          archiveRoomTarget ? `Archive room ${archiveRoomTarget.roomNumber}?` : ""
+        }
+        confirmText="Archive"
+        cancelText="Cancel"
+        confirmLoading={roomManageLoading}
+        onCancel={() => {
+          if (roomManageLoading) return
+          setArchiveRoomTarget(null)
+        }}
+        onConfirm={async () => {
+          if (archiveRoomTarget) await handleArchiveRoom(archiveRoomTarget)
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={!!archivePackageTarget}
+        title="Archive package"
+        message={
+          archivePackageTarget
+            ? `Archive package "${archivePackageTarget.packageName}"?`
+            : ""
+        }
+        confirmText="Archive"
+        cancelText="Cancel"
+        confirmLoading={packageManageLoading}
+        onCancel={() => {
+          if (packageManageLoading) return
+          setArchivePackageTarget(null)
+        }}
+        onConfirm={async () => {
+          if (archivePackageTarget) await handleArchivePackage(archivePackageTarget)
+        }}
       />
     </div>
   )

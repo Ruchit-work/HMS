@@ -12,6 +12,7 @@ export type UseBranchesOptions = {
 
 /**
  * Load branches for a hospital via BranchService (replaces repeated fetch effects).
+ * Clears previous hospital branches immediately on hospital change and ignores stale responses.
  */
 export function useBranches(
   hospitalId: string | null | undefined,
@@ -20,20 +21,27 @@ export function useBranches(
   const { enabled = true, transform } = options
   const transformRef = useRef(transform)
   transformRef.current = transform
+  const hospitalIdRef = useRef(hospitalId)
+  hospitalIdRef.current = hospitalId
 
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!hospitalId || !enabled) {
+    const requestHospitalId = hospitalId
+    if (!requestHospitalId || !enabled) {
       setBranches([])
+      setLoading(false)
+      setError(null)
       return
     }
     setLoading(true)
     setError(null)
     try {
-      const result = await fetchBranches(hospitalId)
+      const result = await fetchBranches(requestHospitalId)
+      // Ignore responses that belong to a hospital the user has already left.
+      if (hospitalIdRef.current !== requestHospitalId) return
       if (!result.success) {
         setError(result.error || "Failed to load branches")
         setBranches([])
@@ -43,14 +51,20 @@ export function useBranches(
       const next = map ? map(result.branches) : result.branches
       setBranches(next)
     } catch (err) {
+      if (hospitalIdRef.current !== requestHospitalId) return
       setError(err instanceof Error ? err.message : "Failed to load branches")
       setBranches([])
     } finally {
-      setLoading(false)
+      if (hospitalIdRef.current === requestHospitalId) {
+        setLoading(false)
+      }
     }
   }, [hospitalId, enabled])
 
   useEffect(() => {
+    // Clear immediately so Super Admin never sees the previous hospital's branches.
+    setBranches([])
+    setError(null)
     void refresh()
   }, [refresh])
 

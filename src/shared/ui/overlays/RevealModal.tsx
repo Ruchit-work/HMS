@@ -10,24 +10,24 @@ import {
   type ReactNode,
 } from "react"
 
-const DURATION_MS = 280
+const DURATION_MS = 200
 
 const revealModalStyles = `
   .reveal-modal-overlay {
     opacity: 0;
-    transition: opacity 0.28s ease-out;
+    transition: opacity 0.2s ease-out;
   }
   .reveal-modal-overlay.reveal-modal-visible {
     opacity: 1;
   }
   .reveal-modal-overlay.reveal-modal-exiting {
     opacity: 0;
-    transition-duration: 0.22s;
+    transition-duration: 0.18s;
   }
   .reveal-modal-content {
     opacity: 0;
-    transform: scale(0.92);
-    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out;
+    transform: scale(0.96);
+    transition: transform 0.2s ease-out, opacity 0.2s ease-out;
   }
   .reveal-modal-content.reveal-modal-visible {
     opacity: 1;
@@ -35,8 +35,8 @@ const revealModalStyles = `
   }
   .reveal-modal-content.reveal-modal-exiting {
     opacity: 0;
-    transform: scale(0.94);
-    transition-duration: 0.22s;
+    transform: scale(0.96);
+    transition-duration: 0.18s;
     transition-timing-function: ease-in;
   }
   @media (prefers-reduced-motion: reduce) {
@@ -70,8 +70,12 @@ export interface RevealModalProps {
   overlayClassName?: string
   /** Extra class for the content wrapper div. */
   contentClassName?: string
+  /** Max-width utility for the dialog panel (default ~42rem). */
+  contentMaxWidthClass?: string
   /** Optional id for aria-labelledby on the dialog. */
   ariaLabelledBy?: string
+  /** Optional accessible name when labelled-by is not used. */
+  ariaLabel?: string
   /** Optional z-index (default 50). */
   zIndex?: number
 }
@@ -83,12 +87,15 @@ export function RevealModal({
   closeOnOverlayClick = false,
   overlayClassName = "",
   contentClassName = "",
+  contentMaxWidthClass = "max-w-[min(100%,42rem)]",
   ariaLabelledBy,
+  ariaLabel,
   zIndex = 50,
 }: RevealModalProps) {
   const [isExiting, setIsExiting] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
 
   const requestClose = useCallback(() => {
     setIsExiting((prev) => {
@@ -106,6 +113,45 @@ export function RevealModal({
     const id = requestAnimationFrame(() => setIsVisible(true))
     return () => cancelAnimationFrame(id)
   }, [isOpen])
+
+  // ESC to close + restore focus when the dialog unmounts.
+  useEffect(() => {
+    if (!isOpen) return
+    previouslyFocused.current = document.activeElement as HTMLElement | null
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        requestClose()
+        return
+      }
+      if (e.key !== "Tab" || !contentRef.current) return
+      const focusable = contentRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener("keydown", onKeyDown)
+    const focusTimer = window.setTimeout(() => {
+      const first = contentRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      first?.focus()
+    }, 30)
+    return () => {
+      document.removeEventListener("keydown", onKeyDown)
+      window.clearTimeout(focusTimer)
+      previouslyFocused.current?.focus?.()
+    }
+  }, [isOpen, requestClose])
 
   useEffect(() => {
     if (!isExiting) return
@@ -160,6 +206,7 @@ export function RevealModal({
         role="dialog"
         aria-modal="true"
         {...(ariaLabelledBy ? { "aria-labelledby": ariaLabelledBy } : {})}
+        {...(ariaLabel && !ariaLabelledBy ? { "aria-label": ariaLabel } : {})}
         onClick={
           closeOnOverlayClick
             ? (e) => e.target === e.currentTarget && requestClose()
@@ -169,7 +216,7 @@ export function RevealModal({
         <div className="flex min-h-full w-full items-center justify-center p-4 sm:p-6">
           <div
             ref={contentRef}
-            className={`${contentClasses} ${contentClassName} mx-auto w-full max-w-[min(100%,42rem)]`}
+            className={`${contentClasses} ${contentClassName} mx-auto w-full ${contentMaxWidthClass}`}
             onClick={(e) => e.stopPropagation()}
           >
             {children}

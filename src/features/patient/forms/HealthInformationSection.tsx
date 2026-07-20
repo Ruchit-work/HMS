@@ -2,15 +2,16 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { ConfirmDialog } from "@/shared/components"
 
 export default function HealthInformationSection() {
   const [activeHealthTab, setActiveHealthTab] = useState('daily')
+  const [noticeOpen, setNoticeOpen] = useState(false)
 
   const handleResourceClick = (resourceType: string) => {
     switch (resourceType) {
       case 'handbook':
-        // Show alert for now - can be replaced with actual PDF download
-        alert('Patient Handbook PDF will be available soon. This will contain complete hospital policies and procedures.')
+        setNoticeOpen(true)
         break
       case 'tutorial':
         // Navigate to portal tutorial page
@@ -23,6 +24,16 @@ export default function HealthInformationSection() {
 
   return (
     <>
+      <ConfirmDialog
+        isOpen={noticeOpen}
+        title="Notice"
+        message="Patient Handbook PDF will be available soon. This will contain complete hospital policies and procedures."
+        confirmText="OK"
+        cancelText="Close"
+        confirmVariant="primary"
+        onConfirm={() => setNoticeOpen(false)}
+        onCancel={() => setNoticeOpen(false)}
+      />
       {/* Health Information - Interactive Tabs */}
       <div className="bg-white border border-slate-200 rounded-xl mb-6 shadow-sm overflow-hidden">
         <div className="border-b border-slate-200">

@@ -10,7 +10,7 @@ import { fetchBranches } from '@/services/BranchService'
 import { getHospitalCollection } from '@/shared/utils/firebase/hospital-queries'
 import { useSearch } from '@/shared/hooks/useSearch'
 import { useTablePagination } from '@/shared/hooks/useTablePagination'
-import { SuccessToast } from '@/shared/components'
+import { SuccessToast, ConfirmDialog } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
 import AdminProtected from '@/features/auth/AdminProtected'
 import { ViewModal, DeleteModal } from '@/shared/components'
@@ -110,6 +110,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
     const [activeTab, setActiveTab] = useState<'active' | 'pending'>('active')
     const [showAddModal, setShowAddModal] = useState(false)
     const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
+    const [rejectTargetId, setRejectTargetId] = useState<string | null>(null)
 
     const { user, loading: authLoading } = useAuth()
     const { activeHospitalId, isSuperAdmin } = useMultiHospital()
@@ -499,10 +500,6 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             return
         }
         
-        if (!window.confirm('Are you sure you want to reject this doctor? This action cannot be undone.')) {
-            return
-        }
-        
         try {
             setSubmitting(true)
             setError(null)
@@ -562,6 +559,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
             
             // Update local state
             setPendingDoctors(prev => prev.filter(d => d.id !== doctorId))
+            setRejectTargetId(null)
             
             setSuccessMessage('Doctor permanently rejected and deleted from all locations!')
             setTimeout(() => {
@@ -716,7 +714,7 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                     label: 'Reject',
                     variant: 'danger',
                     hidden: (doctor) => !(activeTab === 'pending' && doctor.status === 'pending'),
-                    onClick: (doctor) => handleRejectDoctor(doctor.id),
+                    onClick: (doctor) => setRejectTargetId(doctor.id),
                 }
             )
         }
@@ -1140,6 +1138,22 @@ export default function DoctorManagement({ canDelete = true, canAdd = true, disa
                     />
                 </RevealModal>
             )}
+
+            <ConfirmDialog
+                isOpen={!!rejectTargetId}
+                title="Reject doctor"
+                message="Are you sure you want to reject this doctor? This action cannot be undone."
+                confirmText="Reject"
+                cancelText="Cancel"
+                confirmLoading={submitting}
+                onCancel={() => {
+                    if (submitting) return
+                    setRejectTargetId(null)
+                }}
+                onConfirm={async () => {
+                    if (rejectTargetId) await handleRejectDoctor(rejectTargetId)
+                }}
+            />
         </>
     );
 

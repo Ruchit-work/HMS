@@ -1,14 +1,10 @@
-/**
- * Branch selection context for the Hospital Admin Portal.
- * Single source of truth for selectedBranchId; reuses useBranches + MultiHospital.
- */
-
 "use client"
 
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -47,6 +43,11 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   const { branches, loadingBranches, refresh } = useBranches(activeHospitalId, {
     enabled: Boolean(activeHospitalId),
   })
+
+  // Hospital switch must reset branch selection so stale branch IDs never linger.
+  useEffect(() => {
+    setSelectedBranchIdState("all")
+  }, [activeHospitalId])
 
   const setSelectedBranchId = useCallback((branchId: string) => {
     setSelectedBranchIdState(branchId)

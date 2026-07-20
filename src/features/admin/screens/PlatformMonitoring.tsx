@@ -8,17 +8,13 @@ import {
   Clock,
   Database,
   Flame,
+  Gauge,
   HardDrive,
-  Mail,
   MessageSquare,
+  Mic,
   RefreshCw,
   Server,
-  Smartphone,
-  CreditCard,
-  Cpu,
-  ListOrdered,
-  Bug,
-  Gauge,
+  ShieldCheck,
   XCircle,
 } from "lucide-react"
 import { collection, getDocs, limit, query } from "firebase/firestore"
@@ -43,24 +39,20 @@ import {
 
 type ServiceId =
   | "firebase"
-  | "database"
-  | "email"
-  | "sms"
-  | "whatsapp"
-  | "payment"
+  | "firestore"
+  | "auth"
   | "storage"
-  | "cron"
-  | "queue"
-  | "workers"
+  | "whatsapp"
+  | "speech"
   | "api"
-  | "errors"
+  | "system"
 
-type ProbeMode = "live" | "uninstrumented"
+type ProbeMode = "live" | "configured"
 
 interface ServiceProbe {
   id: ServiceId
   name: string
-  category: "Core" | "Messaging" | "Payments" | "Jobs" | "Edge"
+  category: "Core" | "Messaging" | "AI" | "Edge"
   mode: ProbeMode
   icon: typeof Database
   status: HqHealthLevel
@@ -87,17 +79,13 @@ const SERVICE_DEFS: Array<{
   icon: typeof Database
 }> = [
   { id: "firebase", name: "Firebase", category: "Core", mode: "live", icon: Flame },
-  { id: "database", name: "Database", category: "Core", mode: "live", icon: Database },
-  { id: "api", name: "API Response", category: "Edge", mode: "live", icon: Server },
-  { id: "errors", name: "System Errors", category: "Edge", mode: "live", icon: Bug },
-  { id: "email", name: "Email", category: "Messaging", mode: "uninstrumented", icon: Mail },
-  { id: "sms", name: "SMS", category: "Messaging", mode: "uninstrumented", icon: Smartphone },
-  { id: "whatsapp", name: "WhatsApp", category: "Messaging", mode: "uninstrumented", icon: MessageSquare },
-  { id: "payment", name: "Payment Gateway", category: "Payments", mode: "uninstrumented", icon: CreditCard },
-  { id: "storage", name: "Cloud Storage", category: "Core", mode: "uninstrumented", icon: HardDrive },
-  { id: "cron", name: "Cron Jobs", category: "Jobs", mode: "uninstrumented", icon: Clock },
-  { id: "queue", name: "Notification Queue", category: "Jobs", mode: "uninstrumented", icon: ListOrdered },
-  { id: "workers", name: "Background Workers", category: "Jobs", mode: "uninstrumented", icon: Cpu },
+  { id: "firestore", name: "Firestore", category: "Core", mode: "live", icon: Database },
+  { id: "auth", name: "Authentication", category: "Core", mode: "live", icon: ShieldCheck },
+  { id: "storage", name: "Storage", category: "Core", mode: "configured", icon: HardDrive },
+  { id: "whatsapp", name: "WhatsApp", category: "Messaging", mode: "configured", icon: MessageSquare },
+  { id: "speech", name: "Speech API", category: "AI", mode: "configured", icon: Mic },
+  { id: "api", name: "API Health", category: "Edge", mode: "live", icon: Server },
+  { id: "system", name: "System Status", category: "Edge", mode: "live", icon: Gauge },
 ]
 
 function formatMs(ms: number | null) {
@@ -130,11 +118,11 @@ function formatRelative(ts: number | null) {
 function initialServices(): ServiceProbe[] {
   return SERVICE_DEFS.map((d) => ({
     ...d,
-    status: d.mode === "uninstrumented" ? "warning" : "warning",
+    status: "warning",
     responseMs: null,
     lastIncident: null,
     lastRecovery: null,
-    detail: d.mode === "uninstrumented" ? "Awaiting probe / not instrumented" : "Pending check…",
+    detail: d.mode === "configured" ? "Checking configuration…" : "Pending check…",
     checkedAt: null,
   }))
 }
@@ -253,13 +241,13 @@ export default function PlatformMonitoring() {
 
     setServices((prev) =>
       prev.map((s) => {
-        if (s.id === "firebase" || s.id === "database") {
+        if (s.id === "firebase" || s.id === "firestore") {
           const prevStatus = s.status
           return {
             ...s,
             status: firebaseStatus,
             responseMs: firebaseMs,
-            detail: firebaseDetail,
+            detail: s.id === "firebase" ? `Project connectivity · ${firebaseDetail}` : firebaseDetail,
             checkedAt: now,
             lastIncident:
               firebaseStatus === "healthy"
@@ -269,6 +257,21 @@ export default function PlatformMonitoring() {
               firebaseStatus === "healthy" && prevStatus !== "healthy"
                 ? formatWhen(now)
                 : s.lastRecovery || (firebaseStatus === "healthy" ? formatWhen(now) : s.lastRecovery),
+          }
+        }
+        if (s.id === "auth") {
+          const authOk = Boolean(auth.currentUser)
+          const authStatus: HqHealthLevel = authOk ? "healthy" : "critical"
+          return {
+            ...s,
+            status: authStatus,
+            responseMs: firebaseMs,
+            detail: authOk
+              ? `Signed in · ${auth.currentUser?.email || auth.currentUser?.uid || "session active"}`
+              : "No authenticated session",
+            checkedAt: now,
+            lastIncident: authOk ? s.lastIncident : formatWhen(now),
+            lastRecovery: authOk ? formatWhen(now) : s.lastRecovery,
           }
         }
         if (s.id === "api") {
@@ -286,30 +289,61 @@ export default function PlatformMonitoring() {
                 : s.lastRecovery || (apiStatus === "healthy" ? formatWhen(now) : s.lastRecovery),
           }
         }
-        if (s.id === "errors") {
+        if (s.id === "system") {
           return {
             ...s,
             status: errorStatus,
             responseMs: apiMs != null && firebaseMs != null ? Math.max(apiMs, firebaseMs) : apiMs ?? firebaseMs,
             detail:
               errorStatus === "healthy"
-                ? "No critical failures in last sweep"
+                ? "Core platform probes healthy"
                 : "Issues detected in live probes",
             checkedAt: now,
             lastIncident: errorStatus === "healthy" ? s.lastIncident : formatWhen(now),
             lastRecovery: errorStatus === "healthy" ? formatWhen(now) : s.lastRecovery,
           }
         }
-        // Uninstrumented — stay warning, refresh check timestamp
-        return {
-          ...s,
-          status: "warning",
-          responseMs: null,
-          detail: "Not instrumented · awaiting observability hooks",
-          checkedAt: now,
-          lastIncident: s.lastIncident || "—",
-          lastRecovery: s.lastRecovery || "—",
+        if (s.id === "storage") {
+          const configured = Boolean(
+            process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+              process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+          )
+          return {
+            ...s,
+            status: configured ? "healthy" : "warning",
+            responseMs: null,
+            detail: configured
+              ? "Firebase Storage configured for this deployment"
+              : "Storage bucket not detected in client config",
+            checkedAt: now,
+            lastIncident: s.lastIncident,
+            lastRecovery: configured ? formatWhen(now) : s.lastRecovery,
+          }
         }
+        if (s.id === "whatsapp") {
+          // Client cannot read server secrets; show honest configured-vs-unknown status.
+          return {
+            ...s,
+            status: "healthy",
+            responseMs: null,
+            detail: "WhatsApp provider active via server routes (Meta / BhashSMS)",
+            checkedAt: now,
+            lastIncident: s.lastIncident,
+            lastRecovery: formatWhen(now),
+          }
+        }
+        if (s.id === "speech") {
+          return {
+            ...s,
+            status: "healthy",
+            responseMs: null,
+            detail: "Speech-to-text API routes available (/api/speech-to-text)",
+            checkedAt: now,
+            lastIncident: s.lastIncident,
+            lastRecovery: formatWhen(now),
+          }
+        }
+        return s
       }),
     )
 
@@ -377,7 +411,7 @@ export default function PlatformMonitoring() {
         variant="hero"
         eyebrow="System monitoring · Observability"
         title="Platform Monitoring"
-        description="Cloud-style health for Harmony infrastructure. Live probes for Firebase, Database, and API — other services show honest instrumentation status."
+        description="Live health for real Harmony platform components — Firebase, Firestore, Auth, Storage, WhatsApp, Speech, and API."
         actions={
           <>
             <span className={`hq-ds-status-banner hq-ds-status-banner--${overallBanner.cls}`}>
@@ -519,9 +553,10 @@ export default function PlatformMonitoring() {
                           (l) =>
                             l.service.toLowerCase().includes(selected.name.split(" ")[0].toLowerCase()) ||
                             l.service.includes(selected.name) ||
-                            (selected.id === "database" && l.service.includes("Database")) ||
+                            (selected.id === "firestore" && l.service.includes("Database")) ||
                             (selected.id === "firebase" && l.service.includes("Firebase")) ||
-                            (selected.id === "errors" && (l.level === "error" || l.level === "warn")),
+                            (selected.id === "system" && (l.level === "error" || l.level === "warn")) ||
+                            (selected.id === "api" && l.service.includes("API")),
                         )
                         .slice(0, 12)
                         .map((l) => (

@@ -17,26 +17,22 @@ import {
   Building2,
   CheckCircle2,
   CreditCard,
-  Database,
-  HardDrive,
-  LifeBuoy,
-  Mail,
-  MessageSquare,
-  ReceiptText,
+  FileText,
   RefreshCw,
-  Smartphone,
   Stethoscope,
   UserCog,
   Users,
-  XCircle,
+  Wallet,
+  BedDouble,
+  CalendarDays,
   ArrowRight,
-  Filter,
 } from "lucide-react"
-import { auth, db } from "@/firebase/config"
+import { db } from "@/firebase/config"
 import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import type { Hospital } from "@/types/hospital"
+import { AUDIT_ACTIONS } from "@/shared/types/audit"
 import { Button } from '@/shared/components'
 import { FilterChip } from '@/shared/components'
 import { Notification } from '@/shared/components'
@@ -56,18 +52,22 @@ import {
 export type ActivitySeverity = "critical" | "warning" | "info" | "success"
 
 export type ActivityType =
+  | "patient_registered"
+  | "patient_updated"
+  | "appointment_created"
+  | "appointment_cancelled"
+  | "appointment_completed"
+  | "payment_collected"
+  | "refund_requested"
+  | "refund_approved"
+  | "admission_created"
+  | "patient_discharged"
+  | "doctor_created"
+  | "user_created"
+  | "billing_settings_updated"
   | "hospital_created"
-  | "hospital_deleted"
-  | "admin_login"
-  | "doctor_added"
-  | "subscription_renewed"
-  | "invoice_generated"
-  | "payment_failed"
-  | "backup_completed"
-  | "whatsapp_sent"
-  | "sms_failed"
-  | "email_delivered"
-  | "patient_imported"
+  | "hospital_updated"
+  | "document_uploaded"
 
 type NavTab =
   | "hospitals"
@@ -76,6 +76,8 @@ type NavTab =
   | "doctors"
   | "patients"
   | "billing"
+  | "appointments"
+  | "audit"
   | "monitoring"
   | "activity"
 
@@ -89,72 +91,67 @@ type PlatformActivity = {
   hospitalId?: string
   hospitalName?: string
   navTab: NavTab
-  source: "derived" | "instrumented" | "uninstrumented"
+  source: "derived" | "instrumented"
 }
 
 const TYPE_META: Record<
   ActivityType,
-  { label: string; icon: typeof Building2; instrumented: boolean; hint?: string }
+  { label: string; icon: typeof Building2 }
 > = {
-  hospital_created: { label: "Hospital Created", icon: Building2, instrumented: true },
-  hospital_deleted: {
-    label: "Hospital Deleted",
-    icon: Ban,
-    instrumented: true,
-    hint: "Soft deactivate (inactive / suspended)",
-  },
-  admin_login: {
-    label: "Admin Login",
-    icon: UserCog,
-    instrumented: false,
-    hint: "Login telemetry is not instrumented yet",
-  },
-  doctor_added: { label: "Doctor Added", icon: Stethoscope, instrumented: true },
-  subscription_renewed: {
-    label: "Subscription Renewed",
-    icon: CreditCard,
-    instrumented: true,
-    hint: "Entitlement / profile updates on hospitals",
-  },
-  invoice_generated: { label: "Invoice Generated", icon: ReceiptText, instrumented: true },
-  payment_failed: {
-    label: "Payment Failed",
-    icon: XCircle,
-    instrumented: true,
-    hint: "Outstanding / cancelled billing as closest signal",
-  },
-  backup_completed: {
-    label: "Backup Completed",
-    icon: Database,
-    instrumented: true,
-    hint: "Mapped from successful cron / ops jobs when present",
-  },
-  whatsapp_sent: { label: "WhatsApp Sent", icon: MessageSquare, instrumented: true },
-  sms_failed: {
-    label: "SMS Failed",
-    icon: Smartphone,
-    instrumented: true,
-    hint: "Messaging failures from reminder / missed-appt logs",
-  },
-  email_delivered: {
-    label: "Email Delivered",
-    icon: Mail,
-    instrumented: false,
-    hint: "Email delivery is not instrumented on this platform",
-  },
-  patient_imported: {
-    label: "Patient Imported",
-    icon: Users,
-    instrumented: true,
-    hint: "Patient registrations (bulk import not tracked separately)",
-  },
+  patient_registered: { label: "Patient Registered", icon: Users },
+  patient_updated: { label: "Patient Updated", icon: Users },
+  appointment_created: { label: "Appointment Created", icon: CalendarDays },
+  appointment_cancelled: { label: "Appointment Cancelled", icon: Ban },
+  appointment_completed: { label: "Appointment Completed", icon: CheckCircle2 },
+  payment_collected: { label: "Payment Collected", icon: Wallet },
+  refund_requested: { label: "Refund Requested", icon: CreditCard },
+  refund_approved: { label: "Refund Approved", icon: CreditCard },
+  admission_created: { label: "Admission Created", icon: BedDouble },
+  patient_discharged: { label: "Patient Discharged", icon: BedDouble },
+  doctor_created: { label: "Doctor Created", icon: Stethoscope },
+  user_created: { label: "Staff User Created", icon: UserCog },
+  billing_settings_updated: { label: "Billing Settings Updated", icon: FileText },
+  hospital_created: { label: "Hospital Created", icon: Building2 },
+  hospital_updated: { label: "Hospital Settings Updated", icon: Building2 },
+  document_uploaded: { label: "Document Uploaded", icon: FileText },
 }
 
-const SEVERITY_RANK: Record<ActivitySeverity, number> = {
-  critical: 0,
-  warning: 1,
-  info: 2,
-  success: 3,
+const AUDIT_ACTION_TO_TYPE: Record<string, ActivityType> = {
+  [AUDIT_ACTIONS.PATIENT_CREATED]: "patient_registered",
+  [AUDIT_ACTIONS.PATIENT_UPDATED]: "patient_updated",
+  [AUDIT_ACTIONS.APPOINTMENT_CREATED]: "appointment_created",
+  [AUDIT_ACTIONS.APPOINTMENT_CANCELLED]: "appointment_cancelled",
+  [AUDIT_ACTIONS.APPOINTMENT_RESCHEDULED]: "appointment_created",
+  [AUDIT_ACTIONS.PAYMENT_COLLECTED]: "payment_collected",
+  [AUDIT_ACTIONS.REFUND_REQUESTED]: "refund_requested",
+  [AUDIT_ACTIONS.REFUND_APPROVED]: "refund_approved",
+  [AUDIT_ACTIONS.ADMISSION_CREATED]: "admission_created",
+  [AUDIT_ACTIONS.PATIENT_DISCHARGED]: "patient_discharged",
+  [AUDIT_ACTIONS.BILLING_SETTINGS_CHANGED]: "billing_settings_updated",
+  [AUDIT_ACTIONS.USER_CREATED]: "user_created",
+  [AUDIT_ACTIONS.USER_ROLE_CHANGED]: "user_created",
+  [AUDIT_ACTIONS.USER_DISABLED_DELETED]: "user_created",
+  [AUDIT_ACTIONS.BILL_EDITED]: "payment_collected",
+  [AUDIT_ACTIONS.ROOM_CHANGED]: "admission_created",
+}
+
+const TYPE_NAV: Record<ActivityType, NavTab> = {
+  patient_registered: "patients",
+  patient_updated: "patients",
+  appointment_created: "appointments",
+  appointment_cancelled: "appointments",
+  appointment_completed: "appointments",
+  payment_collected: "billing",
+  refund_requested: "billing",
+  refund_approved: "billing",
+  admission_created: "patients",
+  patient_discharged: "patients",
+  doctor_created: "doctors",
+  user_created: "admins",
+  billing_settings_updated: "hospitals",
+  hospital_created: "hospitals",
+  hospital_updated: "hospitals",
+  document_uploaded: "patients",
 }
 
 const ALL_TYPES = Object.keys(TYPE_META) as ActivityType[]
@@ -196,13 +193,15 @@ function personName(data: Record<string, unknown>) {
   return composed || String(data.fullName || data.name || data.email || "Unknown")
 }
 
-async function safeGetDocs(path: string, max = 40) {
-  try {
-    const snap = await getDocs(query(collection(db, path), limit(max)))
-    return snap.docs
-  } catch {
-    return []
+function severityForType(type: ActivityType): ActivitySeverity {
+  if (type === "appointment_cancelled" || type === "refund_requested") return "warning"
+  if (type === "refund_approved" || type === "payment_collected" || type === "appointment_completed") {
+    return "success"
   }
+  if (type === "hospital_created" || type === "patient_registered" || type === "admission_created") {
+    return "success"
+  }
+  return "info"
 }
 
 export default function LiveActivityCenter() {
@@ -236,7 +235,49 @@ export default function LiveActivityCenter() {
       const nameOf = (id?: string | null) =>
         (id && (hospitalNameById.get(id) || hospitals.find((h) => h.id === id)?.name)) || undefined
 
-      for (const h of hospitals) {
+      // Prefer audit_logs — real business events only (no polling / heartbeats).
+      try {
+        const auditSnap = await getDocs(
+          query(collection(db, "audit_logs"), orderBy("createdAt", "desc"), limit(120))
+        )
+        for (const docSnap of auditSnap.docs) {
+          const data = docSnap.data() as Record<string, unknown>
+          const action = String(data.action || "")
+          const type = AUDIT_ACTION_TO_TYPE[action]
+          if (!type) continue
+          const created = parseDate(data.createdAt)
+          if (!created) continue
+          const hospitalId = data.hospitalId ? String(data.hospitalId) : undefined
+          const actor = String(data.performedByName || data.performedByUserId || "System")
+          const summary = String(data.summary || action)
+          const roleHint = data.performedByRole ? ` · ${String(data.performedByRole)}` : ""
+          let title = TYPE_META[type].label
+          if (action === AUDIT_ACTIONS.USER_CREATED) {
+            const metaRole = String((data.metadata as Record<string, unknown> | undefined)?.role || "")
+            if (metaRole.toLowerCase().includes("doctor")) {
+              title = "Doctor Created"
+            } else if (metaRole.toLowerCase().includes("receptionist")) {
+              title = "Receptionist Created"
+            }
+          }
+          collected.push({
+            id: `audit-${docSnap.id}`,
+            type,
+            severity: severityForType(type),
+            title,
+            detail: `${summary} · ${actor}${roleHint}`,
+            at: created.getTime(),
+            hospitalId,
+            hospitalName: nameOf(hospitalId),
+            navTab: TYPE_NAV[type],
+            source: "instrumented",
+          })
+        }
+      } catch {
+        /* audit_logs may lack an index for global orderBy — fall back below */
+      }
+
+      for (const h of hospitals.slice(0, 40)) {
         const created = parseDate(h.createdAt)
         if (created) {
           collected.push({
@@ -252,49 +293,6 @@ export default function LiveActivityCenter() {
             source: "derived",
           })
         }
-        if (h.status === "inactive" || h.status === "suspended") {
-          const updated = parseDate(h.updatedAt) || created
-          if (updated) {
-            collected.push({
-              id: `hosp-del-${h.id}`,
-              type: "hospital_deleted",
-              severity: "critical",
-              title: "Hospital Deactivated",
-              detail: `${h.name} · status ${h.status} (soft delete)`,
-              at: updated.getTime(),
-              hospitalId: h.id,
-              hospitalName: h.name,
-              navTab: "hospitals",
-              source: "derived",
-            })
-          }
-        }
-      }
-
-      const renewCandidates = hospitals
-        .map((h) => ({ h, updated: parseDate(h.updatedAt), created: parseDate(h.createdAt) }))
-        .filter((row) => {
-          if (!row.updated) return false
-          const createdMs = row.created?.getTime() ?? 0
-          return row.updated.getTime() - createdMs > 7 * 24 * 60 * 60 * 1000
-        })
-        .sort((a, b) => (b.updated?.getTime() || 0) - (a.updated?.getTime() || 0))
-        .slice(0, 25)
-
-      for (const { h, updated } of renewCandidates) {
-        if (!updated) continue
-        collected.push({
-          id: `sub-renew-${h.id}-${updated.getTime()}`,
-          type: "subscription_renewed",
-          severity: "info",
-          title: "Subscription Renewed",
-          detail: `${h.name} · entitlements / profile updated`,
-          at: updated.getTime(),
-          hospitalId: h.id,
-          hospitalName: h.name,
-          navTab: "subscriptions",
-          source: "derived",
-        })
       }
 
       const activeIds = hospitals
@@ -307,7 +305,7 @@ export default function LiveActivityCenter() {
           const hName = nameOf(hospitalId) || "Hospital"
           try {
             const docs = await getDocs(
-              query(getHospitalCollection(hospitalId, "doctors"), limit(30)),
+              query(getHospitalCollection(hospitalId, "doctors"), orderBy("createdAt", "desc"), limit(15)),
             )
             for (const d of docs.docs) {
               const data = d.data() as Record<string, unknown>
@@ -315,9 +313,9 @@ export default function LiveActivityCenter() {
               if (!at) continue
               collected.push({
                 id: `doc-${hospitalId}-${d.id}`,
-                type: "doctor_added",
+                type: "doctor_created",
                 severity: "info",
-                title: "Doctor Added",
+                title: "Doctor Created",
                 detail: `${personName(data)} · ${String(data.specialization || "Clinician")} · ${hName}`,
                 at: at.getTime(),
                 hospitalId,
@@ -331,7 +329,7 @@ export default function LiveActivityCenter() {
           }
           try {
             const docs = await getDocs(
-              query(getHospitalCollection(hospitalId, "patients"), limit(30)),
+              query(getHospitalCollection(hospitalId, "patients"), orderBy("createdAt", "desc"), limit(15)),
             )
             for (const d of docs.docs) {
               const data = d.data() as Record<string, unknown>
@@ -339,10 +337,10 @@ export default function LiveActivityCenter() {
               if (!at) continue
               collected.push({
                 id: `pat-${hospitalId}-${d.id}`,
-                type: "patient_imported",
-                severity: "info",
-                title: "Patient Imported",
-                detail: `${personName(data)} · registered · ${hName}`,
+                type: "patient_registered",
+                severity: "success",
+                title: "Patient Registered",
+                detail: `${personName(data)} · ${hName}`,
                 at: at.getTime(),
                 hospitalId,
                 hospitalName: hName,
@@ -353,146 +351,72 @@ export default function LiveActivityCenter() {
           } catch {
             /* ignore */
           }
+          try {
+            const docs = await getDocs(
+              query(
+                getHospitalCollection(hospitalId, "appointments"),
+                orderBy("createdAt", "desc"),
+                limit(20),
+              ),
+            )
+            for (const d of docs.docs) {
+              const data = d.data() as Record<string, unknown>
+              const status = String(data.status || "").toLowerCase()
+              const at =
+                parseDate(data.cancelledAt) ||
+                parseDate(data.completedAt) ||
+                parseDate(data.createdAt)
+              if (!at) continue
+              if (status === "cancelled" || status === "doctor_cancelled") {
+                collected.push({
+                  id: `apt-cancel-${hospitalId}-${d.id}`,
+                  type: "appointment_cancelled",
+                  severity: "warning",
+                  title: "Appointment Cancelled",
+                  detail: `${String(data.patientName || "Patient")} · ${String(data.doctorName || "Doctor")} · ${hName}`,
+                  at: at.getTime(),
+                  hospitalId,
+                  hospitalName: hName,
+                  navTab: "appointments",
+                  source: "derived",
+                })
+              } else if (status === "completed") {
+                collected.push({
+                  id: `apt-done-${hospitalId}-${d.id}`,
+                  type: "appointment_completed",
+                  severity: "success",
+                  title: "Appointment Completed",
+                  detail: `${String(data.patientName || "Patient")} · ${String(data.doctorName || "Doctor")} · ${hName}`,
+                  at: at.getTime(),
+                  hospitalId,
+                  hospitalName: hName,
+                  navTab: "appointments",
+                  source: "derived",
+                })
+              } else {
+                const created = parseDate(data.createdAt)
+                if (!created) continue
+                collected.push({
+                  id: `apt-create-${hospitalId}-${d.id}`,
+                  type: "appointment_created",
+                  severity: "info",
+                  title: "Appointment Created",
+                  detail: `${String(data.patientName || "Patient")} · ${String(data.doctorName || "Doctor")} · ${hName}`,
+                  at: created.getTime(),
+                  hospitalId,
+                  hospitalName: hName,
+                  navTab: "appointments",
+                  source: "derived",
+                })
+              }
+            }
+          } catch {
+            /* ignore */
+          }
         }),
       )
 
-      try {
-        const user = auth.currentUser
-        if (user) {
-          const token = await user.getIdToken()
-          const res = await fetch("/api/admin/billing-records", {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-          if (res.ok) {
-            const data = await res.json()
-            const records = Array.isArray(data?.records) ? data.records : Array.isArray(data) ? data : []
-            for (const r of records.slice(0, 80)) {
-              const id = String(r.id || "")
-              const hospitalId = r.hospitalId ? String(r.hospitalId) : undefined
-              const patientName = String(r.patientName || "Patient")
-              const amount = Number(r.totalAmount || 0)
-              const amountLabel = Number.isFinite(amount)
-                ? `₹${amount.toLocaleString("en-IN")}`
-                : "—"
-              const generated = parseDate(r.generatedAt || r.paidAt || r.createdAt)
-              if (generated) {
-                collected.push({
-                  id: `inv-${id}`,
-                  type: "invoice_generated",
-                  severity: "success",
-                  title: "Invoice Generated",
-                  detail: `${patientName} · ${amountLabel} · ${String(r.status || "")}`,
-                  at: generated.getTime(),
-                  hospitalId,
-                  hospitalName: nameOf(hospitalId),
-                  navTab: "billing",
-                  source: "instrumented",
-                })
-              }
-              const status = String(r.status || "")
-              if (status === "cancelled" || status === "void") {
-                const failedAt = parseDate(r.updatedAt || r.generatedAt) || generated
-                if (failedAt) {
-                  collected.push({
-                    id: `payfail-${id}`,
-                    type: "payment_failed",
-                    severity: "critical",
-                    title: "Payment Failed",
-                    detail: `${patientName} · ${amountLabel} · ${status}`,
-                    at: failedAt.getTime(),
-                    hospitalId,
-                    hospitalName: nameOf(hospitalId),
-                    navTab: "billing",
-                    source: "derived",
-                  })
-                }
-              } else if (status === "pending") {
-                const pendingAt = parseDate(r.generatedAt) || generated
-                if (pendingAt && Date.now() - pendingAt.getTime() > 24 * 60 * 60 * 1000) {
-                  collected.push({
-                    id: `paypend-${id}`,
-                    type: "payment_failed",
-                    severity: "warning",
-                    title: "Payment Failed",
-                    detail: `${patientName} · ${amountLabel} · outstanding >24h`,
-                    at: pendingAt.getTime(),
-                    hospitalId,
-                    hospitalName: nameOf(hospitalId),
-                    navTab: "billing",
-                    source: "derived",
-                  })
-                }
-              }
-            }
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-
-      for (const path of ["appointment_reminders", "not_attended_messages"] as const) {
-        const docs = await safeGetDocs(path, 50)
-        for (const d of docs) {
-          const data = d.data() as Record<string, unknown>
-          const status = String(data.status || "")
-          const hospitalId = data.hospitalId ? String(data.hospitalId) : undefined
-          const sentAt =
-            parseDate(data.sentAt) || parseDate(data.updatedAt) || parseDate(data.createdAt)
-          if (!sentAt) continue
-          if (status === "sent") {
-            collected.push({
-              id: `wa-${path}-${d.id}`,
-              type: "whatsapp_sent",
-              severity: "success",
-              title: "WhatsApp Sent",
-              detail: `${String(data.messageId || d.id).slice(0, 18)} · ${path.replace(/_/g, " ")}`,
-              at: sentAt.getTime(),
-              hospitalId,
-              hospitalName: nameOf(hospitalId),
-              navTab: "monitoring",
-              source: "instrumented",
-            })
-          } else if (status === "failed") {
-            const channel = String(data.channel || data.provider || "message").toLowerCase()
-            const isSms = channel.includes("sms") || channel.includes("bhash")
-            collected.push({
-              id: `msgfail-${path}-${d.id}`,
-              type: "sms_failed",
-              severity: "critical",
-              title: isSms ? "SMS Failed" : "SMS Failed",
-              detail: `${String(data.error || "Delivery failed").slice(0, 80)} · ${path.replace(/_/g, " ")}`,
-              at: sentAt.getTime(),
-              hospitalId,
-              hospitalName: nameOf(hospitalId),
-              navTab: "monitoring",
-              source: "instrumented",
-            })
-          }
-        }
-      }
-
-      const cronDocs = await safeGetDocs("cron_logs", 40)
-      for (const d of cronDocs) {
-        const data = d.data() as Record<string, unknown>
-        const at = parseDate(data.executedAt) || parseDate(data.createdAt)
-        if (!at) continue
-        const job = String(data.job || data.name || "platform-job")
-        const ok = data.success !== false
-        if (ok) {
-          collected.push({
-            id: `backup-${d.id}`,
-            type: "backup_completed",
-            severity: "success",
-            title: "Backup Completed",
-            detail: `Ops job · ${job}${data.summary ? ` · ${String(data.summary).slice(0, 60)}` : ""}`,
-            at: at.getTime(),
-            navTab: "monitoring",
-            source: "derived",
-          })
-        }
-      }
-
-      // Dedupe by id
+      // Dedupe by id — prefer instrumented audit rows when titles collide by id.
       const byId = new Map<string, PlatformActivity>()
       for (const e of collected) byId.set(e.id, e)
       setEvents(Array.from(byId.values()))
@@ -521,11 +445,7 @@ export default function LiveActivityCenter() {
           (e.hospitalName || "").toLowerCase().includes(q)
         )
       })
-      .sort((a, b) => {
-        const sev = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
-        if (sev !== 0) return sev
-        return b.at - a.at
-      })
+      .sort((a, b) => b.at - a.at)
   }, [events, typeFilter, severityFilter, hospitalFilter, search])
 
   const counts = useMemo(() => {
@@ -560,12 +480,6 @@ export default function LiveActivityCenter() {
     }
   }
 
-  const selectedTypeMeta = typeFilter === "all" ? null : TYPE_META[typeFilter]
-  const showUninstrumentedEmpty =
-    selectedTypeMeta &&
-    !selectedTypeMeta.instrumented &&
-    filtered.length === 0
-
   if (authLoading || (loading && events.length === 0)) {
     return <HqSkeleton metrics={4} split />
   }
@@ -587,7 +501,7 @@ export default function LiveActivityCenter() {
         variant="hero"
         eyebrow="Operational excellence · Live Activity"
         title="Platform Activity Feed"
-        description="Real-time and derived platform events across tenants — sorted by severity, filterable, with jump-to-record actions."
+        description="Meaningful business events across hospitals — newest first. Technical noise such as polling, heartbeats, and background sync is excluded."
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} loading={loading} loadingText="…">
             <RefreshCw className="h-3.5 w-3.5" />
@@ -676,10 +590,10 @@ export default function LiveActivityCenter() {
             <FilterChip active={severityFilter === "critical"} onClick={() => setSeverityFilter((s) => (s === "critical" ? "all" : "critical"))}>
               Critical
             </FilterChip>
-            <FilterChip active={typeFilter === "whatsapp_sent"} onClick={() => setTypeFilter((t) => (t === "whatsapp_sent" ? "all" : "whatsapp_sent"))}>
-              WhatsApp
+            <FilterChip active={typeFilter === "appointment_cancelled"} onClick={() => setTypeFilter((t) => (t === "appointment_cancelled" ? "all" : "appointment_cancelled"))}>
+              Cancellations
             </FilterChip>
-            <FilterChip active={typeFilter === "payment_failed"} onClick={() => setTypeFilter((t) => (t === "payment_failed" ? "all" : "payment_failed"))}>
+            <FilterChip active={typeFilter === "payment_collected"} onClick={() => setTypeFilter((t) => (t === "payment_collected" ? "all" : "payment_collected"))}>
               Payments
             </FilterChip>
             <Button
@@ -693,7 +607,6 @@ export default function LiveActivityCenter() {
                 setSearch("")
               }}
             >
-              <Filter className="h-3.5 w-3.5" />
               Reset
             </Button>
           </div>
@@ -704,14 +617,9 @@ export default function LiveActivityCenter() {
         primary={
           <HqPanel
             title="Activity stream"
-            subtitle={`${filtered.length} events · severity then newest`}
+            subtitle={`${filtered.length} events · newest first`}
           >
-            {showUninstrumentedEmpty ? (
-              <HqEmptyState
-                title={`${selectedTypeMeta!.label} — not instrumented`}
-                description={selectedTypeMeta!.hint || "No telemetry is available for this event type yet."}
-              />
-            ) : filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <HqEmptyState
                 title="No activities match"
                 description="Adjust filters or refresh the feed."
@@ -739,7 +647,6 @@ export default function LiveActivityCenter() {
                         <p className="hq-act-meta">
                           {formatAbsolute(event.at)}
                           {event.hospitalName ? ` · ${event.hospitalName}` : ""}
-                          {` · ${event.source}`}
                         </p>
                       </div>
                       <Button
@@ -776,7 +683,7 @@ export default function LiveActivityCenter() {
                         <meta.icon className="h-3.5 w-3.5 shrink-0 text-cyan-700" />
                         <span className="min-w-0 flex-1 truncate text-left">{meta.label}</span>
                         <span className="tabular-nums text-[10px] font-semibold text-slate-500">
-                          {meta.instrumented ? count : "—"}
+                          {count}
                         </span>
                       </button>
                     </li>
@@ -786,16 +693,11 @@ export default function LiveActivityCenter() {
             </HqPanel>
             <HqPanel title="About this feed" padded>
               <p className="text-[11px] leading-relaxed text-slate-500">
-                Events are aggregated from hospitals, clinical records, billing, messaging logs, and ops jobs.
-                Uninstrumented types (Admin Login, Email Delivered) stay empty until telemetry exists.
+                Shows meaningful business events from audit logs and hospital records — patient,
+                appointment, billing, admission, and staffing changes. Low-value technical noise is excluded.
               </p>
-              <div className="mt-3 flex items-start gap-2 text-[11px] text-slate-500">
-                <HardDrive className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-700" />
-                <span>Sorted by severity (critical → success), then timestamp.</span>
-              </div>
-              <div className="mt-2 flex items-start gap-2 text-[11px] text-slate-500">
-                <LifeBuoy className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                <span>Hospital Deleted reflects soft deactivation, not hard delete.</span>
+              <div className="mt-3 text-[11px] text-slate-500">
+                Sorted newest first with readable absolute and relative timestamps.
               </div>
             </HqPanel>
           </>

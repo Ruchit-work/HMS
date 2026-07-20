@@ -21,7 +21,7 @@ import {
 import { SuccessToast } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
 import AdminProtected from '@/features/auth/AdminProtected'
-import { ViewModal, DeleteModal } from '@/shared/components'
+import { ViewModal, DeleteModal, ConfirmDialog } from '@/shared/components'
 import { Appointment } from '@/types/patient'
 import { Branch } from '@/types/branch'
 import { formatDate, formatDateTime } from '@/shared/utils/shared/date'
@@ -198,6 +198,11 @@ export default function AppoinmentManagement({
     const [deleteModal, setDeleteModal] = useState(false)
     const [deleteAppointment, setDeleteAppointment] = useState<Appointment | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
+    const [cancelConfirm, setCancelConfirm] = useState<{
+        appointment: Appointment
+        mode: 'unpaid' | 'keep_payment' | 'auto_refund' | 'create_refund_request'
+    } | null>(null)
+    const [cancelConfirmLoading, setCancelConfirmLoading] = useState(false)
     const [doctors, setDoctors] = useState<Array<{ id: string; firstName?: string; lastName?: string }>>([])
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
     const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([])
@@ -772,67 +777,58 @@ export default function AppoinmentManagement({
     )
 
     /**
-     * Unified cancellation: unpaid appointments cancel directly; paid appointments
-     * require an explicit refund request (admin approves it later). Both go through
-     * the shared /api/appointments/[id]/cancel engine, which also syncs billing
-     * fields and releases the booked slot.
+     * Opens a Harmony confirmation dialog; paid behaviour follows hospital billing policy.
+     * Actual cancel/refund API calls run only after the user confirms.
      */
     const handleCancelAppointment = useCallback(
-        async (appointment: Appointment) => {
-            try {
-                if (isPaidForCancellation(appointment)) {
-                    const policy = billingSettings.paidAppointmentCancellation
+        (appointment: Appointment) => {
+            if (isPaidForCancellation(appointment)) {
+                const policy = billingSettings.paidAppointmentCancellation
 
-                    if (policy === 'disallow') {
-                        setError('This appointment has already been paid and cannot be cancelled.')
-                        return
-                    }
-
-                    if (policy === 'create_refund_request') {
-                        if (!refundsEnabled) {
-                            setError('This hospital does not provide refunds.')
-                            return
-                        }
-                        const ok = confirm(
-                            'This appointment has already been paid.\n\n' +
-                            'Would you like to create a refund request?\n\n' +
-                            'OK — Create Refund Request\n' +
-                            'Cancel — Keep the appointment'
-                        )
-                        if (!ok) return
-                        await authedFetchJson(
-                            `/api/appointments/${appointment.id}/cancel`,
-                            {
-                                method: 'POST',
-                                body: JSON.stringify({ hospitalId: activeHospitalId || null, action: 'request_refund' }),
-                            },
-                            'Failed to create refund request'
-                        )
-                        setSuccessMessage('Refund request created — approve it from the Overview tab to complete the cancellation.')
-                        setTimeout(() => setSuccessMessage(null), 5000)
-                        return
-                    }
-
-                    const confirmMessage =
-                        policy === 'auto_refund'
-                            ? 'This appointment is paid. Cancel and automatically process a refund?'
-                            : 'This appointment is paid. Cancel and keep the payment (no refund)?'
-                    if (!confirm(confirmMessage)) return
-                    const result = await authedFetchJson<{ message?: string }>(
-                        `/api/appointments/${appointment.id}/cancel`,
-                        {
-                            method: 'POST',
-                            body: JSON.stringify({ hospitalId: activeHospitalId || null, action: 'cancel' }),
-                        },
-                        'Failed to cancel appointment'
-                    )
-                    setSuccessMessage(result.message || 'Appointment cancelled')
-                    setTimeout(() => setSuccessMessage(null), 4000)
+                if (policy === 'disallow') {
+                    setError('This appointment has already been paid and cannot be cancelled.')
                     return
                 }
 
-                if (!confirm('Cancel this appointment?')) return
+                if (policy === 'create_refund_request') {
+                    if (!refundsEnabled) {
+                        setError('This hospital does not provide refunds.')
+                        return
+                    }
+                    setCancelConfirm({ appointment, mode: 'create_refund_request' })
+                    return
+                }
+
+                setCancelConfirm({
+                    appointment,
+                    mode: policy === 'auto_refund' ? 'auto_refund' : 'keep_payment',
+                })
+                return
+            }
+
+            setCancelConfirm({ appointment, mode: 'unpaid' })
+        },
+        [billingSettings.paidAppointmentCancellation, refundsEnabled]
+    )
+
+    const executeCancelConfirm = useCallback(async () => {
+        if (!cancelConfirm) return
+        const { appointment, mode } = cancelConfirm
+        setCancelConfirmLoading(true)
+        try {
+            if (mode === 'create_refund_request') {
                 await authedFetchJson(
+                    `/api/appointments/${appointment.id}/cancel`,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({ hospitalId: activeHospitalId || null, action: 'request_refund' }),
+                    },
+                    'Failed to create refund request'
+                )
+                setSuccessMessage('Refund request created — approve it from the Overview tab to complete the cancellation.')
+                setTimeout(() => setSuccessMessage(null), 5000)
+            } else {
+                const result = await authedFetchJson<{ message?: string }>(
                     `/api/appointments/${appointment.id}/cancel`,
                     {
                         method: 'POST',
@@ -840,14 +836,83 @@ export default function AppoinmentManagement({
                     },
                     'Failed to cancel appointment'
                 )
-                setSuccessMessage('Appointment cancelled')
-                setTimeout(() => setSuccessMessage(null), 3000)
-            } catch (e) {
-                setError((e as Error).message)
+                setSuccessMessage(
+                    mode === 'unpaid'
+                        ? 'Appointment cancelled'
+                        : result.message || 'Appointment cancelled'
+                )
+                setTimeout(() => setSuccessMessage(null), mode === 'unpaid' ? 3000 : 4000)
             }
-        },
-        [activeHospitalId, billingSettings.paidAppointmentCancellation, refundsEnabled]
-    )
+            setCancelConfirm(null)
+        } catch (e) {
+            setError((e as Error).message)
+        } finally {
+            setCancelConfirmLoading(false)
+        }
+    }, [activeHospitalId, cancelConfirm])
+
+    const cancelConfirmCopy = useMemo(() => {
+        if (!cancelConfirm) return null
+        const { mode } = cancelConfirm
+        if (mode === 'create_refund_request') {
+            return {
+                title: 'Cancel Appointment',
+                confirmText: 'Create Refund Request',
+                confirmVariant: 'primary' as const,
+                message: (
+                    <div className="space-y-3">
+                        <p>This appointment has already been paid.</p>
+                        <p>A refund request will be sent for hospital admin approval. The appointment stays active until the refund is approved.</p>
+                    </div>
+                ),
+            }
+        }
+        if (mode === 'auto_refund') {
+            return {
+                title: 'Cancel Appointment',
+                confirmText: 'Cancel & Refund',
+                confirmVariant: 'danger' as const,
+                message: (
+                    <div className="space-y-3">
+                        <p>This appointment has already been paid.</p>
+                        <p>Cancelling will automatically process a refund and adjust hospital revenue.</p>
+                    </div>
+                ),
+            }
+        }
+        if (mode === 'keep_payment') {
+            return {
+                title: 'Cancel Appointment',
+                confirmText: 'Confirm Cancellation',
+                confirmVariant: 'danger' as const,
+                message: (
+                    <div className="space-y-3">
+                        <p>This appointment has already been paid.</p>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hospital Policy</p>
+                            <p className="mt-1 text-sm text-slate-700">
+                                This hospital uses a Non-refundable Consultation Policy.
+                            </p>
+                        </div>
+                        <div>
+                            <p className="font-medium text-slate-800">Cancelling this appointment will:</p>
+                            <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
+                                <li className="flex gap-2"><span className="text-emerald-600">✓</span> Cancel the appointment</li>
+                                <li className="flex gap-2"><span className="text-emerald-600">✓</span> Keep payment</li>
+                                <li className="flex gap-2"><span className="text-emerald-600">✓</span> No refund will be created</li>
+                            </ul>
+                        </div>
+                    </div>
+                ),
+            }
+        }
+        return {
+            title: 'Cancel Appointment',
+            confirmText: 'Confirm Cancellation',
+            confirmVariant: 'danger' as const,
+            message: <p>Cancel this appointment? This cannot be undone from here.</p>,
+        }
+    }, [cancelConfirm])
 
     const appointmentColumns: EnterpriseColumn<Appointment>[] = useMemo(
         () => [
@@ -1494,6 +1559,24 @@ export default function AppoinmentManagement({
                     status: deleteAppointment?.status
                 }}
                 loading={loading}
+            />
+
+            <ConfirmDialog
+                isOpen={Boolean(cancelConfirm && cancelConfirmCopy)}
+                title={cancelConfirmCopy?.title || 'Cancel Appointment'}
+                message={cancelConfirmCopy?.message || ''}
+                confirmText={cancelConfirmCopy?.confirmText || 'Confirm'}
+                cancelText="Cancel"
+                confirmVariant={cancelConfirmCopy?.confirmVariant || 'danger'}
+                size="md"
+                confirmLoading={cancelConfirmLoading}
+                loadingText="Cancelling..."
+                closeOnConfirm={false}
+                onConfirm={executeCancelConfirm}
+                onCancel={() => {
+                    if (cancelConfirmLoading) return
+                    setCancelConfirm(null)
+                }}
             />
         </div>
     )

@@ -7,7 +7,7 @@ import { SYMPTOM_CATEGORIES } from "@/features/patient/SymptomSelector"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import { useDoctors } from "@/shared/hooks/useDoctors"
-import { Button } from '@/shared/components'
+import { Button, ConfirmDialog } from '@/shared/components'
 import { authedFetchJson } from "@/shared/utils/authedFetch"
 import { DataTable, StatusPill, AvatarCell } from '@/shared/components'
 import type { DTColumn, DTRowAction } from '@/shared/components'
@@ -38,7 +38,8 @@ export default function WhatsAppBookingsPanel({
     enabled: Boolean(isActive && activeHospitalId),
   })
   const [updateLoading, setUpdateLoading] = useState(false)
-  const [, setDeleteLoading] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Appointment | null>(null)
 
   // Form state
   const [formDoctorId, setFormDoctorId] = useState("")
@@ -400,17 +401,11 @@ export default function WhatsAppBookingsPanel({
 
   const handleDeleteBooking = useCallback(
     async (booking: Appointment) => {
-      const confirmation = window.confirm(
-        `Are you sure you want to delete this WhatsApp booking?\n\nPatient: ${booking.patientName}\nDate: ${booking.appointmentDate}\nTime: ${booking.appointmentTime}\n\nThis action cannot be undone.`
-      )
-
-      if (!confirmation) return
-
       const previousBookings = [...bookings]
       const deletedBookingId = booking.id
 
       setBookings((prev) => prev.filter((b) => b.id !== deletedBookingId))
-      setDeleteLoading(booking.id)
+      setDeleteLoading(true)
 
       try {
         await authedFetchJson(
@@ -425,11 +420,12 @@ export default function WhatsAppBookingsPanel({
         )
 
         notify({ type: "success", message: "WhatsApp booking deleted successfully!" })
+        setDeleteTarget(null)
       } catch (error: any) {
         setBookings(previousBookings)
         notify({ type: "error", message: error?.message || "Failed to delete booking" })
       } finally {
-        setDeleteLoading(null)
+        setDeleteLoading(false)
       }
     },
     [bookings, notify]
@@ -526,10 +522,10 @@ export default function WhatsAppBookingsPanel({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           ),
-          onClick: handleDeleteBooking,
+          onClick: (booking) => setDeleteTarget(booking),
         },
       ] satisfies DTRowAction<Appointment>[],
-    [handleDeleteBooking]
+    []
   )
 
   const pendingCount = bookings.length
@@ -929,6 +925,36 @@ export default function WhatsAppBookingsPanel({
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Delete WhatsApp booking"
+        message={
+          deleteTarget ? (
+            <>
+              <p>Are you sure you want to delete this WhatsApp booking?</p>
+              <ul>
+                <li>Patient: {deleteTarget.patientName}</li>
+                <li>Date: {deleteTarget.appointmentDate}</li>
+                <li>Time: {deleteTarget.appointmentTime}</li>
+              </ul>
+              <p>This action cannot be undone.</p>
+            </>
+          ) : (
+            ""
+          )
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmLoading={deleteLoading}
+        onCancel={() => {
+          if (deleteLoading) return
+          setDeleteTarget(null)
+        }}
+        onConfirm={async () => {
+          if (deleteTarget) await handleDeleteBooking(deleteTarget)
+        }}
+      />
     </div>
   )
 }

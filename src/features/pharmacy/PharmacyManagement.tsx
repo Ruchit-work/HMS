@@ -126,6 +126,13 @@ export default function PharmacyManagement() {
   const [inventoryRowActionsOpen, setInventoryRowActionsOpen] = useState<string | null>(null)
   const [inventoryDeleteTarget, setInventoryDeleteTarget] = useState<BranchMedicineStock | null>(null)
   const [inventoryDeleteLoading, setInventoryDeleteLoading] = useState(false)
+  const [pendingBranchChange, setPendingBranchChange] = useState<string | null>(null)
+  const [supplierDeletePending, setSupplierDeletePending] = useState<
+    | { step: 'warn-pending'; supplier: PharmacySupplier; pendingCount: number }
+    | { step: 'confirm-delete'; supplier: PharmacySupplier }
+    | null
+  >(null)
+  const [supplierDeleteLoading, setSupplierDeleteLoading] = useState(false)
   const branchFilter = isPharmacyPortal && portal ? portal.branchFilter : branchFilterLocal
   const setBranchFilter = isPharmacyPortal && portal ? (id: string) => portal.setBranchFilter(id) : setBranchFilterLocal
 
@@ -201,6 +208,10 @@ export default function PharmacyManagement() {
     fetchExpensesAndCategories,
     handleDeleteCashier,
     handleDeleteCounter,
+    pendingCashDelete,
+    cashDeleteLoading,
+    cancelPendingCashDelete,
+    confirmPendingCashDelete,
   } = usePharmacyCash({
     activeHospitalId,
     branchFilter,
@@ -932,8 +943,7 @@ export default function PharmacyManagement() {
               onChange={(e) => {
                 const newVal = e.target.value
                 if (newVal === branchFilter) return
-                if (!window.confirm('Are you sure you want to change the branch? Inventory and data will filter by the new branch.')) return
-                setBranchFilter(newVal)
+                setPendingBranchChange(newVal)
               }}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
             >
@@ -1587,27 +1597,14 @@ export default function PharmacyManagement() {
                 (o) => o.supplierId === supplier.id && (o.status ?? '').toLowerCase() === 'pending'
               ).length
               if (pendingOrdersForSupplier > 0) {
-                const continueDelete = window.confirm(
-                  `Supplier "${supplier.name}" has ${pendingOrdersForSupplier} pending order(s).\n\nDeleting now can disrupt pending-order follow-up. Continue anyway?`
-                )
-                if (!continueDelete) return
-              }
-              if (!window.confirm(
-                `Delete supplier "${supplier.name}"?\n\nThis will remove supplier master data from active lists. Historical purchases remain in records.`
-              )) return
-              const token = await getToken()
-              if (!token) {
-                setError('Not authenticated')
+                setSupplierDeletePending({
+                  step: 'warn-pending',
+                  supplier,
+                  pendingCount: pendingOrdersForSupplier,
+                })
                 return
               }
-              const client = createPharmacyApiClient(token)
-              const result = await client.deleteSupplier(supplier.id)
-              if (result.ok && result.data.success) {
-                setSuccess('Supplier deleted')
-                fetchPharmacy()
-              } else {
-                setError((result.data.error as string) || 'Failed to delete')
-              }
+              setSupplierDeletePending({ step: 'confirm-delete', supplier })
             }}
             supplierPage={supplierPage}
             supplierTotalPages={supplierTotalPages}
@@ -2424,6 +2421,102 @@ export default function PharmacyManagement() {
             } finally {
               setInventoryDeleteLoading(false)
               setInventoryDeleteTarget(null)
+            }
+          }}
+        />
+
+        <ConfirmDialog
+          isOpen={pendingBranchChange !== null}
+          title="Change branch"
+          message="Are you sure you want to change the branch? Inventory and data will filter by the new branch."
+          confirmText="Change"
+          cancelText="Cancel"
+          confirmVariant="primary"
+          onCancel={() => setPendingBranchChange(null)}
+          onConfirm={() => {
+            if (pendingBranchChange !== null) {
+              setBranchFilter(pendingBranchChange)
+            }
+            setPendingBranchChange(null)
+          }}
+        />
+
+        <ConfirmDialog
+          isOpen={!!pendingCashDelete}
+          title={pendingCashDelete?.kind === 'counter' ? 'Delete counter' : 'Delete cashier'}
+          message={
+            pendingCashDelete?.kind === 'cashier'
+              ? `Delete cashier "${pendingCashDelete.cashier.name}"?\n\nThis removes the cashier from future shift selection. Historical shift records remain unchanged.`
+              : pendingCashDelete?.kind === 'counter'
+                ? `Delete counter "${pendingCashDelete.counter.name}"?\n\nThis removes the counter from future shift selection. Historical shift records remain unchanged.`
+                : ''
+          }
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmLoading={cashDeleteLoading}
+          onCancel={cancelPendingCashDelete}
+          onConfirm={confirmPendingCashDelete}
+        />
+
+        <ConfirmDialog
+          isOpen={supplierDeletePending?.step === 'warn-pending'}
+          title="Pending orders warning"
+          message={
+            supplierDeletePending?.step === 'warn-pending'
+              ? `Supplier "${supplierDeletePending.supplier.name}" has ${supplierDeletePending.pendingCount} pending order(s).\n\nDeleting now can disrupt pending-order follow-up. Continue anyway?`
+              : ''
+          }
+          confirmText="Continue"
+          cancelText="Cancel"
+          confirmVariant="primary"
+          closeOnConfirm={false}
+          onCancel={() => setSupplierDeletePending(null)}
+          onConfirm={() => {
+            if (supplierDeletePending?.step === 'warn-pending') {
+              setSupplierDeletePending({
+                step: 'confirm-delete',
+                supplier: supplierDeletePending.supplier,
+              })
+            }
+          }}
+        />
+
+        <ConfirmDialog
+          isOpen={supplierDeletePending?.step === 'confirm-delete'}
+          title="Delete supplier"
+          message={
+            supplierDeletePending?.step === 'confirm-delete'
+              ? `Delete supplier "${supplierDeletePending.supplier.name}"?\n\nThis will remove supplier master data from active lists. Historical purchases remain in records.`
+              : ''
+          }
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmLoading={supplierDeleteLoading}
+          onCancel={() => {
+            if (supplierDeleteLoading) return
+            setSupplierDeletePending(null)
+          }}
+          onConfirm={async () => {
+            if (supplierDeletePending?.step !== 'confirm-delete') return
+            const supplier = supplierDeletePending.supplier
+            setSupplierDeleteLoading(true)
+            try {
+              const token = await getToken()
+              if (!token) {
+                setError('Not authenticated')
+                return
+              }
+              const client = createPharmacyApiClient(token)
+              const result = await client.deleteSupplier(supplier.id)
+              if (result.ok && result.data.success) {
+                setSuccess('Supplier deleted')
+                setSupplierDeletePending(null)
+                fetchPharmacy()
+              } else {
+                setError((result.data.error as string) || 'Failed to delete')
+              }
+            } finally {
+              setSupplierDeleteLoading(false)
             }
           }}
         />

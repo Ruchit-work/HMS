@@ -1,102 +1,144 @@
-"use client"
+import type { Metadata } from "next"
+import { LegalDocumentPage, type LegalSection } from "@/shared/ui/legal/LegalDocumentPage"
 
-import Link from "next/link"
-
-export default function PrivacyPolicyPage() {
-  const sections = [
-    {
-      title: "1. Information We Collect",
-      items: [
-        "Patient profile data such as name, age, gender, and contact information",
-        "Medical records, prescriptions, symptoms, vitals, and appointment history",
-        "Insurance, billing, and payment details that you share with our staff",
-        "Technical data including login timestamps, device information, and usage analytics that help us secure your account",
-      ],
-    },
-    {
-      title: "2. How We Use Your Information",
-      items: [
-        "To schedule appointments, manage clinical workflows, and coordinate care",
-        "To notify you about bookings, lab reports, medication reminders, and critical updates",
-        "To comply with legal and regulatory obligations applicable to healthcare providers",
-        "To improve the Hospital Management System experience while keeping your identity protected",
-      ],
-    },
-    {
-      title: "3. How We Protect Your Data",
-      items: [
-        "Role-based access controls for doctors, receptionists, administrators, and patients",
-        "Encryption in transit (HTTPS) and at rest for sensitive health information",
-        "Audit logs for appointment creation, edits, prescriptions, and billing actions",
-        "Continuous monitoring for unusual login activity or unauthorized access attempts",
-      ],
-    },
-    {
-      title: "4. Your Rights",
-      items: [
-        "Request a copy of your medical records or download them from the patient dashboard",
-        "Update or correct personal information by contacting reception or using the profile section",
-        "Ask us to delete your account where legally permissible",
-        "Opt in or out of WhatsApp/push/email notifications at any time",
-      ],
-    },
-  ]
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto bg-white/90 backdrop-blur rounded-3xl shadow-2xl border border-white/40 p-6 sm:p-10">
-        <header className="mb-8 text-center">
-          <p className="text-sm uppercase tracking-widest text-blue-500 font-semibold mb-2">
-            Patient Trust & Transparency
-          </p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-3">
-            Privacy & Data Protection Policy
-          </h1>
-          <p className="text-gray-600 text-base sm:text-lg max-w-2xl mx-auto">
-            This policy explains how the Hospital Management System (“HMS”, “we”, “us”) collects, uses, and safeguards patient information across our web platform, dashboards, and WhatsApp booking flows.
-          </p>
-        </header>
-
-        <div className="space-y-8">
-          {sections.map((section) => (
-            <section key={section.title} className="bg-gray-50 rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-inner">
-              <h2 className="text-xl font-bold text-gray-900 mb-3">{section.title}</h2>
-              <ul className="space-y-2 list-disc pl-5 text-gray-700 leading-relaxed text-sm sm:text-base">
-                {section.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </section>
-          ))}
-
-          <section className="bg-cyan-50 rounded-2xl p-5 sm:p-6 border border-blue-100 shadow-inner">
-            <h2 className="text-xl font-bold text-gray-900 mb-3">5. Contact & Concerns</h2>
-            <p className="text-gray-700 text-sm sm:text-base leading-relaxed mb-4">
-              For privacy-related questions, data requests, or security concerns, reach out to our compliance desk any time.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 text-sm font-medium text-gray-800">
-              <span>📧 privacy@hms.com</span>
-              <span>📞 +1 (555) 123-4567</span>
-            </div>
-          </section>
-        </div>
-
-        <footer className="mt-10 text-center text-sm text-gray-500">
-          <p className="mb-2">Effective Date: January 2025</p>
-          <p>
-            Return to{" "}
-            <Link href="/" className="text-cyan-700 font-semibold hover:underline">
-              Hospital Management System landing page
-            </Link>{" "}
-            or{" "}
-            <Link href="/auth/login" className="text-cyan-700 font-semibold hover:underline">
-              sign in
-            </Link>{" "}
-            to manage your appointments.
-          </p>
-        </footer>
-      </div>
-    </div>
-  )
+export const metadata: Metadata = {
+  title: "Privacy & Data Protection Policy | HMS Cloud",
+  description:
+    "Learn how HMS Cloud collects, uses, protects, and retains hospital, patient, and staff information across clinical, billing, and WhatsApp workflows.",
+  openGraph: {
+    title: "Privacy & Data Protection Policy | HMS Cloud",
+    description:
+      "Enterprise privacy practices for hospitals and clinics using HMS Cloud — encryption, access control, audit logs, and patient rights.",
+    type: "website",
+  },
 }
 
+const SECTIONS: LegalSection[] = [
+  {
+    id: "information-we-collect",
+    title: "1. Information We Collect",
+    intro:
+      "Depending on your role and how your hospital configures HMS Cloud, we may process the following categories of information:",
+    items: [
+      "Patient information such as name, date of birth, gender, contact details, patient identifiers, and demographic profile data",
+      "Doctor information including specialty, schedule, credentials shown in the system, and clinical account details",
+      "Staff accounts for hospital administrators, receptionists, pharmacists, and other authorised hospital users",
+      "Contact information used for appointments, reminders, and operational communication",
+      "Medical records and clinical notes entered by authorised care teams",
+      "Prescriptions and medication details generated during consultations",
+      "Uploaded documents such as reports, consent forms, identity proofs, and clinical attachments",
+      "Billing information including consultation fees, invoices, payment status, payment methods, and transaction references",
+      "Appointment history including bookings, reschedules, cancellations, check-ins, and attendance outcomes",
+      "Login history and authentication events associated with secure account access",
+      "Device and technical information reasonably required for security, diagnostics, and service reliability",
+      "Audit logs of important business actions for accountability and compliance review",
+      "WhatsApp booking data when patients or staff interact with hospital WhatsApp booking and confirmation flows",
+    ],
+  },
+  {
+    id: "how-we-use-information",
+    title: "2. How We Use Information",
+    intro: "We use information only for legitimate healthcare operations and platform administration, including:",
+    items: [
+      "Appointment management — booking, confirmation, rescheduling, cancellation, and attendance tracking",
+      "Clinical workflows — supporting consultations, prescriptions, documents, and inpatient coordination",
+      "Billing — generating invoices, recording payments, advances, partial collections, and refund workflows configured by the hospital",
+      "Notifications — appointment reminders, operational alerts, and service updates authorised by the hospital",
+      "WhatsApp communication — booking assistance, confirmations, and hospital-approved patient messaging",
+      "Security — authenticating users, detecting abuse, and protecting accounts and records",
+      "Legal compliance — meeting applicable healthcare, privacy, and record-keeping obligations",
+      "Analytics — aggregated operational insights that help hospitals improve service delivery",
+      "Platform improvements — reliability, usability, and product quality without selling personal health data",
+    ],
+  },
+  {
+    id: "data-protection",
+    title: "3. Data Protection",
+    intro: "HMS Cloud is designed with hospital-grade controls intended to safeguard sensitive information:",
+    items: [
+      "HTTPS encryption for data transmitted between browsers, APIs, and cloud services",
+      "Role-based access so doctors, receptionists, admins, pharmacists, and patients only see what their role permits",
+      "Audit logs for critical business actions such as appointments, billing changes, admissions, and user administration",
+      "Secure authentication with password protection and multi-factor options where enabled",
+      "Backup and disaster-recovery practices aligned with cloud infrastructure resilience",
+      "Activity monitoring for unusual access patterns and operational health of core services",
+      "Access control at hospital and branch level for multi-tenant healthcare deployments",
+    ],
+  },
+  {
+    id: "patient-rights",
+    title: "4. Patient Rights",
+    intro:
+      "Subject to hospital policy and applicable law, patients may exercise the following rights through the patient portal or by contacting the hospital / HMS Cloud support:",
+    items: [
+      "Access records available in their patient dashboard and related hospital records",
+      "Download appointment confirmations, prescriptions, and other documents made available by the hospital",
+      "Request correction of inaccurate personal profile information",
+      "Request deletion of account or personal data where legally allowed and operationally feasible",
+      "Manage communication preferences for WhatsApp and other non-emergency notifications",
+    ],
+  },
+  {
+    id: "data-retention",
+    title: "5. Data Retention",
+    intro:
+      "Retention periods depend on hospital policy and applicable healthcare, financial, and legal requirements. In general:",
+    items: [
+      "Medical records are retained for as long as required for continuity of care and statutory medical record obligations",
+      "Billing records are retained for accounting, audit, dispute resolution, and tax or regulatory needs",
+      "Audit logs are retained to support security investigations, accountability, and compliance reviews",
+      "Appointment history is retained to support clinical follow-up, operations reporting, and patient service",
+    ],
+    extra: (
+      <p className="mt-3 text-sm leading-relaxed text-gray-700 sm:text-base">
+        Exact retention windows may vary by hospital configuration and Indian healthcare or other applicable
+        regulations. Hospitals remain responsible for defining local retention practices that meet their
+        regulatory obligations.
+      </p>
+    ),
+  },
+  {
+    id: "third-party-services",
+    title: "6. Third Party Services",
+    intro:
+      "HMS Cloud relies on carefully selected infrastructure and communication providers to deliver the service:",
+    items: [
+      "Firebase — authentication, database, storage, and related cloud application services",
+      "WhatsApp Business API / messaging providers — appointment booking, confirmations, and hospital messaging",
+      "SMS providers — optional OTP or operational messaging where configured",
+      "Payment gateway partners — may be introduced for online collections; hospitals control enabled payment methods",
+      "Cloud infrastructure — hosting, networking, and operational resilience for the multi-hospital platform",
+    ],
+    extra: (
+      <p className="mt-3 text-sm leading-relaxed text-gray-700 sm:text-base">
+        Third parties process data only as needed to provide their services and under contractual and technical
+        safeguards appropriate to a healthcare SaaS environment.
+      </p>
+    ),
+  },
+  {
+    id: "cookies",
+    title: "7. Cookies",
+    intro: "We use cookies and similar technologies in a practical, limited way:",
+    items: [
+      "Essential cookies keep you signed in and remember hospital or session preferences needed for the product to work",
+      "Security cookies help protect accounts and detect suspicious activity",
+      "We do not use intrusive advertising cookies to sell personal health information",
+      "You can control cookies through your browser settings; disabling essential cookies may limit platform features",
+    ],
+  },
+]
+
+export default function PrivacyPolicyPage() {
+  return (
+    <LegalDocumentPage
+      eyebrow="Patient Trust & Transparency"
+      title="Privacy & Data Protection"
+      description="This Privacy & Data Protection Policy explains how HMS Cloud (“HMS Cloud”, “we”, “us”) collects, uses, stores, and safeguards information for hospitals, clinics, doctors, staff, and patients across web dashboards, APIs, and WhatsApp booking flows."
+      lastUpdated="20 July 2026"
+      effectiveDate="20 July 2026"
+      version="2.0"
+      sections={SECTIONS}
+    />
+  )
+}
