@@ -263,10 +263,7 @@ export default function AppoinmentManagement({
                 // count refunded money as revenue.
                 const status = String(a.paymentStatus || "").toLowerCase()
                 if (status === "refunded") return false
-                // Cancelled appointments are closed — billing classifies them as
-                // "cancelled", never as collected revenue.
-                const aptStatus = String((a as any).status || "")
-                if (aptStatus === "cancelled" || aptStatus === "doctor_cancelled") return false
+                // keep_payment: cancelled appointment can still be paid revenue.
                 return (
                     status === "paid" ||
                     (Boolean(a.paidAt) && String(a.paidAt).trim() !== "")

@@ -76,12 +76,10 @@ export function isPaidAppointment(apt: PaidAppointmentLike): boolean {
   const status = String(apt.paymentStatus || "").toLowerCase()
   // Refunded money is not collected revenue even though paidAt stays set.
   if (status === "refunded") return false
-  // Cancelled appointments are closed — billing classifies them as "cancelled",
-  // never as collected revenue, so the appointment-level fallback must match.
+  // keep_payment cancellations leave paymentStatus="paid" — that money remains
+  // hospital revenue. Only exclude when payment was actually refunded.
   // (refund_requested is NOT excluded: money stays collected until the admin
   // approves the refund, which flips paymentStatus to "refunded".)
-  const aptStatus = String(apt.status || "").toLowerCase()
-  if (aptStatus === "cancelled" || aptStatus === "doctor_cancelled") return false
   if (status === "paid") return true
   if (apt.paidAt) return true
   // Note: appointment completion is NOT proof of payment — unpaid recheckups

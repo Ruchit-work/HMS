@@ -340,16 +340,14 @@ export async function GET(request: Request) {
       let status: "pending" | "paid" | "void" | "cancelled" = "paid"
       const paymentStatus = String(data.paymentStatus || "").toLowerCase()
       const hasPaidAt = Boolean(data.paidAt) && String(data.paidAt).trim() !== ""
-      if (
-        data.status === "cancelled" ||
-        data.status === "doctor_cancelled" ||
-        // Refunded payments are not collected revenue and are not outstanding —
-        // exclude them from both paid and pending buckets.
-        paymentStatus === "refunded"
-      ) {
+      // Refunded payments leave the cancelled/refund bucket. keep_payment
+      // cancellations keep paymentStatus="paid" and must stay in revenue.
+      if (paymentStatus === "refunded") {
         status = "cancelled"
       } else if (paymentStatus === "paid" || hasPaidAt) {
         status = "paid"
+      } else if (data.status === "cancelled" || data.status === "doctor_cancelled") {
+        status = "cancelled"
       } else {
         // Recheckups are created as paymentStatus="unpaid" with remainingAmount set —
         // treat them as outstanding until front-desk / patient payment clears them.

@@ -936,22 +936,33 @@ export async function POST(req: Request) {
       return rateLimitResult
     }
 
-    // Bhash inbound uses GET only — POST here caused duplicate replies (GET + POST).
+    // Bhash inbound uses GET only — POST here is Meta Cloud API (or misrouted traffic).
+    // When provider is Bhash, do not hard-fail with 503 if Meta app secret is unset.
     const rawBody = await req.text()
     if (!rawBody || rawBody.length > 1024 * 1024) {
       return NextResponse.json({ error: "Invalid webhook payload size" }, { status: 400 })
     }
 
+    const usingBhash = shouldUseBhashSms()
     const appSecret = process.env.META_WHATSAPP_APP_SECRET
     const allowUnsigned =
+      usingBhash ||
       process.env.ALLOW_UNSIGNED_META_WEBHOOK === "true" ||
       process.env.NODE_ENV !== "production"
+
     if (!appSecret) {
       if (!allowUnsigned) {
         return NextResponse.json(
           { error: "Webhook signature verification is required (set META_WHATSAPP_APP_SECRET)" },
           { status: 503 }
         )
+      }
+      // Bhash-only / unsigned allowed: ignore Meta POSTs that we cannot verify
+      if (usingBhash) {
+        console.log("[meta-webhook POST] ignored — Bhash provider (no Meta app secret)", {
+          bodyPreview: rawBody.slice(0, 80),
+        })
+        return NextResponse.json({ success: true, ignored: true, reason: "bhash_provider" })
       }
     } else {
       const signatureHeader = req.headers.get("x-hub-signature-256")
@@ -963,6 +974,12 @@ export async function POST(req: Request) {
     const body = JSON.parse(rawBody)
     if (body?.object && body.object !== "whatsapp_business_account") {
       return NextResponse.json({ success: true })
+    }
+
+    // If somehow Bhash is active but Meta payload arrives with valid signature, still process Meta
+    // only when Meta credentials exist; otherwise ack and skip.
+    if (usingBhash && !process.env.META_WHATSAPP_ACCESS_TOKEN) {
+      return NextResponse.json({ success: true, ignored: true, reason: "bhash_only" })
     }
 
     const entry = body.entry?.[0]

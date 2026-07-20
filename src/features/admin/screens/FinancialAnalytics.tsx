@@ -409,9 +409,7 @@ export default function FinancialAnalytics() {
         if (appointmentIdsWithBillingForRevenue.has(apt.id)) return
         const paymentStatus = String(apt.paymentStatus || "").toLowerCase()
         if (paymentStatus === "refunded") return
-        // Cancelled appointments are never revenue (billing maps them to "cancelled").
-        const aptStatus = String(apt.status || "").toLowerCase()
-        if (aptStatus === "cancelled" || aptStatus === "doctor_cancelled") return
+        // keep_payment cancellations remain paid revenue.
         if (paymentStatus !== 'paid' || !(apt.paymentAmount > 0) || !apt.doctorId) return
 
         if (!doctorRevenueMap[apt.doctorId]) {
@@ -670,9 +668,8 @@ export default function FinancialAnalytics() {
         })),
         ...filteredAppointments
           .filter(a => {
-            // Cancelled appointments are never listed as collected transactions.
-            const aptStatus = String(a.status || "").toLowerCase()
-            if (aptStatus === "cancelled" || aptStatus === "doctor_cancelled") return false
+            // keep_payment: cancelled + paid still counts as a collected transaction.
+            if (String(a.paymentStatus || "").toLowerCase() === "refunded") return false
             return a.paymentStatus === 'paid' && a.paymentAmount > 0 && !appointmentIdsWithBilling.has(a.id)
           })
           .map(a => ({

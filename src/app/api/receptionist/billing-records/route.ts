@@ -380,12 +380,14 @@ export async function GET(request: Request) {
 
       const paymentStatus = String(data.paymentStatus || "").toLowerCase()
       const hasPaidAt = Boolean(data.paidAt) && String(data.paidAt).trim() !== ""
-      // Refunded / cancelled appointments are neither collected revenue nor outstanding.
+      // Refunded money is neither revenue nor outstanding. keep_payment
+      // cancellations stay paid (appointment status cancelled, payment retained).
+      const isRefunded = paymentStatus === "refunded"
+      const isPaid = !isRefunded && (paymentStatus === "paid" || hasPaidAt)
       const isCancelled =
-        data.status === "cancelled" ||
-        data.status === "doctor_cancelled" ||
-        paymentStatus === "refunded"
-      const isPaid = !isCancelled && (paymentStatus === "paid" || hasPaidAt)
+        isRefunded ||
+        (!isPaid &&
+          (data.status === "cancelled" || data.status === "doctor_cancelled"))
       const consultationFee = totalConsultationFee || paymentAmount
 
       records.push({

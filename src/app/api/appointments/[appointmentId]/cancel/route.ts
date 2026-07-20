@@ -162,6 +162,15 @@ export async function POST(
     const billingSettings = await getHospitalBillingSettings(
       resolvedHospitalId || appointment.hospitalId || null
     )
+    console.info("[appointment-cancel] billing policy resolved", {
+      appointmentId,
+      hospitalId: resolvedHospitalId || appointment.hospitalId || null,
+      refundPolicy: billingSettings.refundPolicy,
+      paidAppointmentCancellation: billingSettings.paidAppointmentCancellation,
+      action,
+      paymentStatus: String(appointment.paymentStatus || ""),
+      hasPaidAt: Boolean(appointment.paidAt),
+    })
 
     const currentStatus = String(appointment.status || "")
     const paymentStatus = String(appointment.paymentStatus || "").toLowerCase()
@@ -334,14 +343,15 @@ export async function POST(
           success: true,
           status: "cancelled",
           paymentStatus: "refunded",
+          policy: "auto_refund",
           message: "Appointment cancelled and refund processed automatically.",
         })
       }
 
       // keep_payment (default): cancel appointment, leave payment as paid revenue.
+      // Do not write refund fields or flip paymentStatus / billingStatus.
       await appointmentRef.update({
         status: "cancelled",
-        billingStatus: "cancelled",
         remainingAmount: 0,
         cancelledAt: nowIso,
         cancelledBy: uid,
@@ -351,11 +361,18 @@ export async function POST(
       })
       await releaseAppointmentSlot(firestore, appointment, appointmentId)
       logCancellation("keep_payment")
+      console.info("[appointment-cancel] executed keep_payment", {
+        appointmentId,
+        refundPolicy: billingSettings.refundPolicy,
+        paidAppointmentCancellation: billingSettings.paidAppointmentCancellation,
+        paymentStatus: paymentStatus || "paid",
+      })
       return NextResponse.json({
         success: true,
         status: "cancelled",
         paymentStatus: paymentStatus || "paid",
-        message: "Appointment cancelled. Payment was retained per hospital policy.",
+        policy: "keep_payment",
+        message: "Appointment cancelled. Payment retained — no refund.",
       })
     }
 
