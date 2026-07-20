@@ -84,7 +84,14 @@ const lang = (lang: Language, guj: string, eng: string): string => lang === "guj
 // Session helpers
 const CANCELLED_SESSIONS_COLLECTION = "whatsappBookingCancelled"
 const BOOKING_LOCK_COLLECTION = "whatsappBookingLocks"
-const INBOUND_DEDUPE_MS = 300_000 // 5 min — Bhash retries duplicate callbacks
+/** Bhash retries with the same messageId — keep blocked for 5 minutes. */
+const MESSAGE_ID_DEDUPE_MS = 300_000
+/** Same text without messageId — short window only (Bhash double-fire), not permanent. */
+const TEXT_HASH_DEDUPE_MS = 15_000
+/** Same text+state recent window (retry within same step). */
+const SAME_STATE_DEDUPE_MS = 12_000
+/** Same text after state advanced (retry digit applied to next step). */
+const CROSS_STATE_DEDUPE_MS = 20_000
 const BOOKING_LOCK_TTL_MS = 60_000
 
 /** Valid booking state transitions (prevents step skipping / regression). */
@@ -207,7 +214,7 @@ async function cancelBookingSession(phone: string): Promise<{ hadSession: boolea
   const prevGeneration = (existingCancel.data()?.generation as number) || 0
   if (existingCancel.exists) {
     const at = (existingCancel.data()?.cancelledAtMs as number) || 0
-    if (at && Date.now() - at < INBOUND_DEDUPE_MS) {
+    if (at && Date.now() - at < MESSAGE_ID_DEDUPE_MS) {
       return { hadSession: false, alreadyCancelled: true }
     }
   }
@@ -464,6 +471,35 @@ function getPatientPhoneLookupVariants(phone: string): string[] {
 }
 
 
+/**
+ * Claim inbound idempotency key with TTL.
+ * Previous bug: create() without expiry check permanently blocked "Hi" forever.
+ */
+async function claimInboundDedupeKey(
+  docId: string,
+  payload: Record<string, unknown>,
+  ttlMs: number
+): Promise<"claimed" | "duplicate" | "error"> {
+  const ref = admin.firestore().collection("bhash_inbound_ids").doc(docId)
+  try {
+    return await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      const now = Date.now()
+      if (snap.exists) {
+        const at = (snap.data()?.at as number) || 0
+        if (at && now - at < ttlMs) {
+          return "duplicate"
+        }
+      }
+      tx.set(ref, { ...payload, at: now, ttlMs })
+      return "claimed"
+    })
+  } catch (err) {
+    console.warn("[Bhash inbound] dedupe claim failed", err)
+    return "error"
+  }
+}
+
 /** Per-phone inbound dedupe — blocks echoes, duplicates, and unsolicited auto-replies. */
 async function shouldProcessBhashInbound(
   from: string,
@@ -477,33 +513,43 @@ async function shouldProcessBhashInbound(
   const trimmed = text.trim().toLowerCase().slice(0, 120)
   const normalizedPhone = formatPhoneNumber(from) || `+91${digits}`
 
-  if (messageId) {
-    const idRef = db.collection("bhash_inbound_ids").doc(`${digits}_${messageId}`)
-    try {
-      await idRef.create({ at: Date.now(), from: digits, messageId, ttl: INBOUND_DEDUPE_MS })
-    } catch {
-      console.log("[Bhash inbound] duplicate messageId skipped", { messageId })
-      return false
-    }
-  } else {
-    const textHash = crypto.createHash("sha256").update(`${digits}:${trimmed}`).digest("hex").slice(0, 24)
-    const hashRef = db.collection("bhash_inbound_ids").doc(`${digits}_h_${textHash}`)
-    try {
-      await hashRef.create({ at: Date.now(), from: digits, text: trimmed, ttl: INBOUND_DEDUPE_MS })
-    } catch {
-      console.log("[Bhash inbound] duplicate text hash skipped", { textHash })
-      return false
-    }
-  }
-
   const sessionDoc = await db.collection("whatsappBookingSessions").doc(normalizedPhone).get()
   const sessionState = sessionDoc.exists
     ? (sessionDoc.data() as BookingSession)?.state || "idle"
     : "idle"
 
+  // Message ID: hard dedupe (true duplicate callback). Text-only: short TTL + include state
+  // so "Hi" can be sent again after 15s, and "2" at branch ≠ "2" at doctor.
+  if (messageId) {
+    const claim = await claimInboundDedupeKey(
+      `${digits}_${messageId}`,
+      { from: digits, messageId },
+      MESSAGE_ID_DEDUPE_MS
+    )
+    if (claim === "duplicate") {
+      console.log("[Bhash inbound] duplicate messageId skipped", { messageId })
+      return false
+    }
+    if (claim === "error") return false
+  } else {
+    const textHash = crypto
+      .createHash("sha256")
+      .update(`${digits}:${sessionState}:${trimmed}`)
+      .digest("hex")
+      .slice(0, 24)
+    const claim = await claimInboundDedupeKey(
+      `${digits}_h_${textHash}`,
+      { from: digits, text: trimmed, state: sessionState },
+      TEXT_HASH_DEDUPE_MS
+    )
+    if (claim === "duplicate") {
+      console.log("[Bhash inbound] duplicate text hash skipped", { textHash, state: sessionState })
+      return false
+    }
+    if (claim === "error") return false
+  }
+
   const ref = db.collection("bhash_inbound_recent").doc(digits)
-  const SAME_STATE_MS = INBOUND_DEDUPE_MS
-  const CROSS_STATE_MS = INBOUND_DEDUPE_MS
 
   // Bot outbound echoes — long or multi-line inbound
   if (trimmed.length > 60 || text.split("\n").length > 2) {
@@ -580,10 +626,10 @@ async function shouldProcessBhashInbound(
 
       if (last?.text === trimmed && last.at) {
         const age = now - last.at
-        if (last.state === sessionState && age < SAME_STATE_MS) {
+        if (last.state === sessionState && age < SAME_STATE_DEDUPE_MS) {
           return false
         }
-        if (last.state !== sessionState && age < CROSS_STATE_MS) {
+        if (last.state !== sessionState && age < CROSS_STATE_DEDUPE_MS) {
           return false
         }
       }
