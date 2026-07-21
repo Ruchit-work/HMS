@@ -90,9 +90,14 @@ const MESSAGE_ID_DEDUPE_MS = 300_000
 const TEXT_HASH_DEDUPE_MS = 15_000
 /** Same text+state recent window (retry within same step). */
 const SAME_STATE_DEDUPE_MS = 12_000
-/** Same text after state advanced (retry digit applied to next step). */
-const CROSS_STATE_DEDUPE_MS = 20_000
+/** Same text after state advanced — short window for true retries only.
+ * Menu digits (1–9) are reused at every booking step and must NOT be blocked here. */
+const CROSS_STATE_DEDUPE_MS = 3_000
 const BOOKING_LOCK_TTL_MS = 60_000
+
+function isMenuDigitReply(text: string): boolean {
+  return /^[1-9]$/.test(text.trim())
+}
 
 /** Valid booking state transitions (prevents step skipping / regression). */
 const VALID_BOOKING_TRANSITIONS: Partial<Record<BookingState, BookingState[]>> = {
@@ -336,46 +341,63 @@ async function updateBookingSession(
 
 type ProcessedInput = { state: BookingState; text: string; at: number }
 
-/** Claim user input for current step — blocks webhook retries re-running prior digits at a new step. */
+/** Claim user input for current step — blocks same-step webhook retries only.
+ * Digits like "1"/"2" are reused legitimately at every step (language → branch → doctor),
+ * so cross-step blocking must be a very short retry window only. */
 async function claimBookingInput(
   sessionRef: FirebaseFirestore.DocumentReference,
   text: string,
   expectedState: BookingState
-): Promise<{ claimed: boolean; session: BookingSession | null }> {
+): Promise<{ claimed: boolean; session: BookingSession | null; reason?: string }> {
   const normalized = text.trim().toLowerCase()
   const db = admin.firestore()
+  /** Only block true double-fire retries mid-transition (not intentional next-step picks). */
+  const CROSS_STEP_RETRY_MS = 3_000
 
   try {
     return await db.runTransaction(async (tx) => {
       const snap = await tx.get(sessionRef)
-      if (!snap.exists) return { claimed: false, session: null }
+      if (!snap.exists) return { claimed: false, session: null, reason: "no_session" }
       const data = snap.data() as BookingSession
       if (data.status === "cancelled" || data.state !== expectedState) {
-        return { claimed: false, session: data }
+        return { claimed: false, session: data, reason: "state_mismatch" }
       }
 
       const history: ProcessedInput[] = data.processedInputs || []
-      if (history.some((h) => h.state === expectedState && h.text === normalized)) {
-        return { claimed: false, session: data }
+      const priorSame = history.find((h) => h.state === expectedState && h.text === normalized)
+      if (priorSame) {
+        // Confirm step must never re-run (creates duplicate appointments).
+        if (expectedState === "confirming") {
+          return { claimed: false, session: data, reason: "same_step_duplicate" }
+        }
+        // Selection steps: if claim is stale (>5s), allow retry when outbound may have failed.
+        if (Date.now() - priorSame.at > 5_000) {
+          return { claimed: true, session: data, reason: "retry_after_stale_claim" }
+        }
+        return { claimed: false, session: data, reason: "same_step_duplicate" }
       }
 
-      const stateChangedAt = data.stateChangedAt || 0
+      // Digits 1–9 are reused at every booking step — never cross-step block them.
+      // Only block non-digit text reused within ~3s (true Bhash double-callback).
       const crossStep = history.find((h) => h.text === normalized && h.state !== expectedState)
       if (
         crossStep &&
-        Date.now() - crossStep.at < 120_000 &&
-        stateChangedAt &&
-        Date.now() - stateChangedAt < 25_000
+        Date.now() - crossStep.at < CROSS_STEP_RETRY_MS &&
+        !isMenuDigitReply(normalized)
       ) {
-        return { claimed: false, session: data }
+        return { claimed: false, session: data, reason: "cross_step_retry" }
       }
 
-      const processedInputs = [...history.slice(-12), { state: expectedState, text: normalized, at: Date.now() }]
+      const processedInputs = [
+        ...history.filter((h) => h.state === expectedState).slice(-8),
+        { state: expectedState, text: normalized, at: Date.now() },
+      ]
       tx.update(sessionRef, { processedInputs })
       return { claimed: true, session: data }
     })
-  } catch {
-    return { claimed: false, session: null }
+  } catch (err) {
+    console.warn("[claimBookingInput] transaction failed", err)
+    return { claimed: false, session: null, reason: "tx_error" }
   }
 }
 
@@ -426,16 +448,48 @@ async function shouldSendGreeting(phone: string): Promise<boolean> {
   }
 }
 
-function isBhashRestartCommand(text: string): boolean {
-  const t = text.trim().toLowerCase()
+function getHospitalDisplayName(): string {
+  return process.env.HOSPITAL_NAME?.trim() || "Harmony Medical Services"
+}
+
+/** Main menu — selection is by number only (1 / 2). */
+function buildMainMenuMessage(hasPatientProfile: boolean): string {
+  const hospital = getHospitalDisplayName()
+  if (!hasPatientProfile) {
+    return (
+      `👋 *Welcome to ${hospital}*\n\n` +
+      `We could not find your patient profile yet.\n\n` +
+      `*Reply with a number:*\n\n` +
+      `*1* — Register\n` +
+      `*2* — Help Center`
+    )
+  }
   return (
-    t === "hi" ||
-    t === "hello" ||
-    t === "book" ||
-    t === "book appointment" ||
-    t.startsWith("hi ") ||
-    t.startsWith("hello ")
+    `👋 *Welcome to ${hospital}*\n\n` +
+    `How can we help you today?\n\n` +
+    `*Reply with a number:*\n\n` +
+    `*1* — Book Appointment\n` +
+    `*2* — Help Center`
   )
+}
+
+/** Idle menu: only numbers 1 and 2 select an action. */
+async function handleMainMenuChoice(phone: string, choice: "1" | "2"): Promise<void> {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const patient = await findPatientByPhone(db, normalizedPhone)
+
+  if (choice === "2") {
+    await handleHelpCenter(phone)
+    return
+  }
+
+  // 1 = Register (no profile) or Book Appointment (has profile)
+  if (!patient) {
+    await handleRegistrationPrompt(phone)
+    return
+  }
+  await BUTTON_HANDLERS.book_appointment(phone)
 }
 
 /** STOP / CANCEL / ABORT / QUIT / EXIT — not "no" (used at confirm step). */
@@ -605,16 +659,13 @@ async function shouldProcessBhashInbound(
   }
 
   const cancelledSnap = await db.collection(CANCELLED_SESSIONS_COLLECTION).doc(normalizedPhone).get()
-  if (cancelledSnap.exists && !isCancelIntent(text) && !isBhashRestartCommand(text)) {
-    console.log("[Bhash inbound] ignored — booking cancelled")
+  // After cancel, any new message may restart with the main menu (not only Hi/Book).
+  if (cancelledSnap.exists && isHardCancelIntent(text)) {
+    console.log("[Bhash inbound] ignored — duplicate cancel")
     return false
   }
 
-  // Idle — only respond to explicit user commands (never auto-reply)
-  if (sessionState === "idle" && !isBhashExplicitUserCommand(trimmed)) {
-    console.log("[Bhash inbound] ignored — idle, not a menu command")
-    return false
-  }
+  // Idle: any short non-echo message may open the main menu (handled above filters).
 
   try {
     return await db.runTransaction(async (tx) => {
@@ -629,7 +680,13 @@ async function shouldProcessBhashInbound(
         if (last.state === sessionState && age < SAME_STATE_DEDUPE_MS) {
           return false
         }
-        if (last.state !== sessionState && age < CROSS_STATE_DEDUPE_MS) {
+        // Digits 1–9 are reused at every step (language/branch/doctor/date/time) — never
+        // cross-state block them. Only block non-digit text briefly after a state change.
+        if (
+          last.state !== sessionState &&
+          age < CROSS_STATE_DEDUPE_MS &&
+          !isMenuDigitReply(trimmed)
+        ) {
           return false
         }
       }
@@ -660,6 +717,8 @@ const BHASH_EXPLICIT_COMMANDS = new Set([
   "help",
   "help center",
   "🆘 help center",
+  "1",
+  "2",
   "yes",
   "register",
   "yes, register",
@@ -676,6 +735,7 @@ function isBhashExplicitUserCommand(text: string): boolean {
   const t = text.trim().toLowerCase()
   if (BHASH_EXPLICIT_COMMANDS.has(t)) return true
   if (t.includes("thank")) return true
+  if (/^[1-9]$/.test(t)) return true
   const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
   return greetings.some((g) => t.startsWith(g + " "))
 }
@@ -769,22 +829,6 @@ async function handleInboundTextMessage(
     const { data: session } = await getSession(from)
     logInboundDebug(source, from, text, session, { messageId })
 
-    const greetings = ["hello", "hi", "hy", "hey", "hii", "hiii", "hlo", "helo", "hie", "hai"]
-    if (greetings.some((g) => trimmedText === g || trimmedText.startsWith(g + " "))) {
-      try {
-        await clearCancelMarker(from)
-        await clearSession(from)
-      } catch (err) {
-        console.error("[WhatsApp] clearSession failed on greeting", err)
-      }
-      if (!(await shouldSendGreeting(from))) {
-        console.log("[INBOUND DEBUG] duplicate greeting skipped", { phone: formatPhoneNumber(from), messageId })
-        return
-      }
-      await handleGreeting(from)
-      return
-    }
-
     const hasActiveBooking =
       !!session &&
       session.status !== "cancelled" &&
@@ -795,7 +839,10 @@ async function handleInboundTextMessage(
       if (isHardCancelIntent(text)) {
         const { alreadyCancelled } = await cancelBookingSession(from)
         if (!alreadyCancelled) {
-          await sendTextMessage(from, "Booking cancelled. Type Hi or Book to start again.")
+          await sendTextMessage(
+            from,
+            "✅ *Booking cancelled*\n\nSend any message to open the menu.\nThen reply *1* or *2* to choose."
+          )
         }
         return
       }
@@ -803,66 +850,45 @@ async function handleInboundTextMessage(
       return
     }
 
-    if (isHardCancelIntent(text) || isCancelIntent(text)) {
+    // Idle / no active booking — hard cancel only (no booking to cancel)
+    if (isHardCancelIntent(text)) {
       const { alreadyCancelled } = await cancelBookingSession(from)
       if (!alreadyCancelled) {
-        await sendTextMessage(from, "No active booking. Type Hi or Book when you are ready.")
+        await sendTextMessage(
+          from,
+          "✅ *No active booking*\n\nSend any message to open the menu.\nThen reply *1* or *2* to choose."
+        )
       }
       return
     }
 
-    if (await isBookingCancelled(from)) {
-      sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
+    // Soft cancel words like "no" at idle → show menu instead of dead-end
+    try {
+      await clearCancelMarker(from)
+    } catch {
+      // ignore
+    }
+
+    // Main menu selection — numbers only
+    if (trimmedText === "1" || trimmedText === "2") {
+      await handleMainMenuChoice(from, trimmedText)
+      return
+    }
+
+    // Any other message (hi, hello, book, help, random text) → show main menu
+    try {
+      await clearSession(from)
+    } catch (err) {
+      console.error("[WhatsApp] clearSession failed on menu", err)
+    }
+    if (!(await shouldSendGreeting(from))) {
+      console.log("[INBOUND DEBUG] duplicate menu skipped", {
         phone: formatPhoneNumber(from),
-        context: "handleInboundTextMessage",
-        inbound: trimmedText.slice(0, 40),
+        messageId,
       })
       return
     }
-
-    const isInBooking = await handleBookingConversation(from, text)
-    if (!isInBooking) {
-      if (trimmedText.includes("thank")) {
-        await sendTextMessage(
-          from,
-          "You're welcome! 😊\n\nFeel free to contact our help center if you found any issue.\n\nWe're here to help! 🏥"
-        )
-        return
-      }
-
-      // Bhash has no real buttons — map typed menu replies to button handlers
-      if (
-        trimmedText === "book" ||
-        trimmedText === "book appointment" ||
-        trimmedText === "📅 book appointment"
-      ) {
-        await BUTTON_HANDLERS.book_appointment(from)
-        return
-      }
-      if (
-        trimmedText === "help" ||
-        trimmedText === "help center" ||
-        trimmedText === "🆘 help center"
-      ) {
-        await handleHelpCenter(from)
-        return
-      }
-      if (
-        trimmedText === "yes" ||
-        trimmedText === "register" ||
-        trimmedText === "yes, register" ||
-        trimmedText === "✅ yes, register"
-      ) {
-        await handleRegistrationPrompt(from)
-        return
-      }
-
-      if (shouldUseBhashSms()) {
-        return
-      }
-
-      await handleIncomingText(from)
-    }
+    await handleGreeting(from)
   } finally {
     await lock.release()
   }
@@ -1098,11 +1124,10 @@ async function handleGreeting(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const patient = await findPatientByPhone(db, normalizedPhone)
+  const hospital = getHospitalDisplayName()
 
   if (shouldUseBhashSms()) {
-    const text = !patient
-      ? "Hello!\nWelcome to Harmony Medical Services.\nWe don't have your profile yet.\nReply YES to register\nReply HELP for assistance"
-      : "Hello!\nWelcome to Harmony Medical Services.\nHow can we help you today?\nReply BOOK to book an appointment\nReply HELP for assistance"
+    const text = buildMainMenuMessage(!!patient)
     const result = await sendTextMessage(phone, text)
     if (!result.success) {
       console.error("[WhatsApp greeting] Bhash plain text send failed", result.error)
@@ -1110,29 +1135,29 @@ async function handleGreeting(phone: string) {
     return
   }
 
-  const registerFallback =
-    "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?\n\nReply 'Yes' to register or 'Help' for assistance."
-  const bookFallback =
-    "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?\n\nType 'Book' to book an appointment or 'Help' for assistance."
+  const registerFallback = buildMainMenuMessage(false)
+  const bookFallback = buildMainMenuMessage(true)
 
   if (!patient) {
     const buttonResponse = await sendMultiButtonMessage(
       phone,
-      "Hello! 👋\n\nWelcome to Harmony Medical Services!\n\nWe don't have your profile yet. Would you like to register?",
+      `👋 *Welcome to ${hospital}*\n\nWe could not find your patient profile yet.`,
       [{ id: "register_yes", title: "✅ Yes, Register" }, { id: "help_center", title: "🆘 Help Center" }],
-      "Harmony Medical Services"
+      hospital
     )
     if (!buttonResponse.success) {
       console.error("[WhatsApp greeting] send failed (register)", buttonResponse.error)
     }
     await sendWithFallback(phone, buttonResponse, "", registerFallback)
   } else {
-    const buttonResponse = await sendButtonMessage(
+    const buttonResponse = await sendMultiButtonMessage(
       phone,
-      "Hello! 👋\n\nHow can I help you today?\n\nDo you want to book an appointment?",
-      "Harmony Medical Services",
-      "book_appointment",
-      "📅 Book Appointment"
+      `👋 *Welcome to ${hospital}*\n\nHow can we help you today?`,
+      [
+        { id: "book_appointment", title: "📅 Book Appointment" },
+        { id: "help_center", title: "🆘 Help Center" },
+      ],
+      hospital
     )
     if (!buttonResponse.success) {
       console.error("[WhatsApp greeting] send failed (book)", buttonResponse.error)
@@ -1143,10 +1168,22 @@ async function handleGreeting(phone: string) {
 
 async function handleHelpCenter(phone: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
-  
+  const hospital = getHospitalDisplayName()
+
   await sendTextMessage(
     phone,
-    `🆘 *Help Center*\n\nWe're here to help you!\n\n📞 *Contact Us:*\nPhone: +91-XXXXXXXXXX\nEmail: support@harmonymedical.com\n\n🌐 *Visit Our Website:*\n${baseUrl}\n\n⏰ *Support Hours:*\nMonday - Saturday: 9:00 AM - 6:00 PM\nSunday: 10:00 AM - 2:00 PM\n\nFor urgent medical assistance, please visit our emergency department or call emergency services.`
+    `🆘 *Help Center — ${hospital}*\n\n` +
+      `We're here to support you.\n\n` +
+      `📞 *Contact*\n` +
+      `Phone: +91-XXXXXXXXXX\n` +
+      `Email: support@harmonymedical.com\n\n` +
+      `🌐 *Website*\n` +
+      `${baseUrl}\n\n` +
+      `⏰ *Support Hours*\n` +
+      `Mon – Sat: 9:00 AM – 6:00 PM\n` +
+      `Sunday: 10:00 AM – 2:00 PM\n\n` +
+      `For emergencies, visit our emergency department or call local emergency services.\n\n` +
+      `_Reply any message to open the main menu again._`
   )
 }
 
@@ -1490,6 +1527,10 @@ async function moveToDoctorSelection(
     },
     "moveToDoctorSelection"
   ))) {
+    console.log("[WhatsApp booking] moveToDoctorSelection session update failed", {
+      phone: normalizedPhone,
+      branchId: session.branchId,
+    })
     return
   }
 
@@ -1509,7 +1550,17 @@ async function moveToDoctorSelection(
     "નંબર લખી જવાબ આપો (ઉદાહરણ: 1).",
     "Reply with the doctor number (e.g. 1)."
   )
-  await sendBookingMessage(phone, `${intro}\n${lines.join("\n")}\n${footer}`, "moveToDoctorSelection.picker")
+  const sent = await sendBookingMessage(
+    phone,
+    `${intro}\n${lines.join("\n")}\n${footer}`,
+    "moveToDoctorSelection.picker"
+  )
+  if (!sent) {
+    console.error("[WhatsApp booking] doctor picker send failed", {
+      phone: normalizedPhone,
+      doctorCount: doctors.length,
+    })
+  }
 }
 
 async function sendConfirmationButtons(
@@ -1564,17 +1615,17 @@ async function sendConfirmationButtons(
     hour12: true,
   })
 
-  const message = lang(language,
-    `Appointment Details\n\nDate: ${dateDisplay}\nTime: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception if not selected.`,
-    `Appointment Details\n\nDate: ${dateDisplay}\nTime: ${timeDisplay}\n\nPlease confirm. Doctor will be assigned by reception if not selected.`)
+  const message =
+    `📋 *Appointment Details*\n\n` +
+    `📅 *Date:* ${dateDisplay}\n` +
+    `🕐 *Time:* ${timeDisplay}\n\n` +
+    `Doctor will be assigned by reception if not already selected.\n\n` +
+    `*Reply with a number:*\n\n` +
+    `*1* — Confirm\n` +
+    `*2* — Cancel`
 
   if (shouldUseBhashSms()) {
-    const confirmText = lang(
-      language,
-      `${message}\n\n1. Confirm\n2. Cancel\n\nReply 1 to confirm or 2 to cancel.`,
-      `${message}\n\n1. Confirm\n2. Cancel\n\nReply 1 to confirm or 2 to cancel.`
-    )
-    await sendBookingMessage(phone, confirmText, "sendConfirmationButtons.bhash")
+    await sendBookingMessage(phone, message, "sendConfirmationButtons.bhash")
     return
   }
 
@@ -1583,9 +1634,13 @@ async function sendConfirmationButtons(
     { id: "booking_cancel", title: lang(language, "❌ રદ કરો", "❌ Cancel") },
   ]
 
-  const buttonResponse = await sendMultiButtonMessage(phone, message, buttons, "Harmony Medical Services")
-  await sendWithFallback(phone, buttonResponse, message,
-    lang(language, `${message}\n\nકૃપા કરીને "confirm" અથવા "cancel" લખી જવાબ આપો.`, `${message}\n\nPlease reply with "confirm" or "cancel".`))
+  const buttonResponse = await sendMultiButtonMessage(
+    phone,
+    `📋 *Appointment Details*\n\n📅 *Date:* ${dateDisplay}\n🕐 *Time:* ${timeDisplay}`,
+    buttons,
+    getHospitalDisplayName()
+  )
+  await sendWithFallback(phone, buttonResponse, message, message)
 }
 
 async function processBookingConfirmation(
@@ -2362,35 +2417,24 @@ async function startBookingConversation(phone: string) {
   const patient = await findPatientByPhone(db, normalizedPhone)
   if (!patient) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
-    
+    const hospital = getHospitalDisplayName()
+
     await sendTextMessage(
       phone,
-      `❌ We couldn't find your patient profile.\n\n📝 *Please register first to book appointments:*\n\n${baseUrl}\n\nOr contact reception:\nPhone: +91-XXXXXXXXXX\n\nAfter registration, you can book appointments via WhatsApp! 🏥`
+      `❌ *Profile not found*\n\n` +
+        `We could not find your patient profile at *${hospital}*.\n\n` +
+        `Please register first:\n${baseUrl}\n\n` +
+        `Or contact reception.\n\n` +
+        `_Send any message for the main menu._`
     )
     return
   }
 
-  // Create booking session with language selection state
-  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-  const existing = await sessionRef.get()
-  if (existing.exists) {
-    const existingState = (existing.data() as BookingSession)?.state
-    const updatedAt = existing.data()?.updatedAt
-    const recent =
-      updatedAt && Date.now() - new Date(updatedAt).getTime() < 120_000
-    if (
-      recent &&
-      existingState &&
-      existingState !== "idle" &&
-      existingState !== "confirming"
-    ) {
-      return
-    }
-  }
-
+  // Always start a fresh booking when user chooses Book (1) — never silent-return
   await clearCancelMarker(phone)
   await clearSession(phone)
 
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   const version = Date.now()
   await sessionRef.set({
     state: "selecting_language",
@@ -2415,15 +2459,22 @@ async function startBookingConversation(phone: string) {
 
 async function sendLanguagePicker(phone: string) {
   if (!(await canSendBookingMessage(phone, "sendLanguagePicker"))) {
+    await sendTextMessage(
+      phone,
+      "❌ Session expired.\n\nSend any message to open the main menu again."
+    )
     return
   }
 
+  const message =
+    `🌐 *Select Language*\n\n` +
+    `Please choose your preferred language:\n\n` +
+    `*1* — English\n` +
+    `*2* — Gujarati (ગુજરાતી)\n\n` +
+    `_Reply with 1 or 2_`
+
   if (shouldUseBhashSms()) {
-    await sendBookingMessage(
-      phone,
-      "Select Language\n\nPlease choose your preferred language:\n\n1. English\n2. Gujarati (Gujarati)\n\nReply 1 for English or 2 for Gujarati.",
-      "sendLanguagePicker"
-    )
+    await sendBookingMessage(phone, message, "sendLanguagePicker")
     return
   }
 
@@ -2442,15 +2493,11 @@ async function sendLanguagePicker(phone: string) {
         rows: languageOptions,
       },
     ],
-    "Harmony Medical Services"
+    getHospitalDisplayName()
   )
 
   if (!listResponse.success) {
-    // Fallback to text-based selection
-    await sendTextMessage(
-      phone,
-      "🌐 *Select Language:*\n\nPlease reply with:\n• \"english\" for English\n• \"gujarati\" for ગુજરાતી"
-    )
+    await sendTextMessage(phone, message)
   }
 }
 
@@ -2464,6 +2511,10 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
       context: "handleBookingConversation",
       inbound: text.trim().slice(0, 40),
     })
+    await sendTextMessage(
+      phone,
+      "✅ *Booking was cancelled*\n\nSend any message to open the main menu.\nThen reply *1* or *2*."
+    )
     return true
   }
 
@@ -2535,11 +2586,6 @@ async function handleLanguageSelection(
   const trimmedText = text.trim().toLowerCase()
   let selectedLanguage: "english" | "gujarati" = "english"
 
-  // Handle text input for language selection (fallback)
-  if (trimmedText === "book" || trimmedText === "book appointment") {
-    return true
-  }
-
   if (trimmedText === "english" || trimmedText === "en" || trimmedText === "1") {
     selectedLanguage = "english"
   } else if (trimmedText === "gujarati" || trimmedText === "guj" || trimmedText === "gu" || trimmedText === "2") {
@@ -2549,12 +2595,10 @@ async function handleLanguageSelection(
     return true
   }
 
-  const { claimed } = await claimBookingInput(sessionRef, text, "selecting_language")
+  const { claimed, reason } = await claimBookingInput(sessionRef, text, "selecting_language")
   if (!claimed) {
-    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
-      phone: normalizedPhone,
-      context: "handleLanguageSelection.claim",
-    })
+    console.log("[WhatsApp booking] language claim skipped", { phone: normalizedPhone, reason })
+    await sendLanguagePicker(phone)
     return true
   }
 
@@ -2567,16 +2611,25 @@ async function handleLanguageSelection(
       language: selectedLanguage,
       state: "selecting_branch",
       status: "active",
+      processedInputs: [],
+      stateChangedAt: Date.now(),
       updatedAt: new Date().toISOString(),
     })
     return true
   })
 
   if (!transitioned) {
-    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
-      phone: normalizedPhone,
-      context: "handleLanguageSelection.transition",
-    })
+    console.log("[WhatsApp booking] language transition failed", { phone: normalizedPhone })
+    const after = await sessionRef.get()
+    const afterState = after.exists ? (after.data() as BookingSession).state : null
+    if (afterState === "selecting_branch") {
+      await moveToBranchSelection(db, phone, normalizedPhone, sessionRef, selectedLanguage, {
+        ...(after.data() as BookingSession),
+        language: selectedLanguage,
+      })
+      return true
+    }
+    await sendLanguagePicker(phone)
     return true
   }
 
@@ -2610,6 +2663,11 @@ async function handleBranchSelection(
   if (!sessionDoc.exists) return false
   const freshSession = sessionDoc.data() as BookingSession
   if (freshSession.state !== "selecting_branch") {
+    console.log("[WhatsApp booking] branch ignored — wrong state", {
+      phone: normalizedPhone,
+      state: freshSession.state,
+      message: text.trim().slice(0, 40),
+    })
     return true
   }
 
@@ -2618,7 +2676,14 @@ async function handleBranchSelection(
 
   if (trimmedText === "next" || trimmedText.includes("default")) {
     const { claimed } = await claimBookingInput(sessionRef, text, "selecting_branch")
-    if (!claimed) return true
+    if (!claimed) {
+      await sendBookingMessage(
+        phone,
+        lang(language, "❌ કૃપા કરીને બ્રાન્ચ નંબર લખો.", "❌ Please reply with a branch number."),
+        "handleBranchSelection.nextClaim"
+      )
+      return true
+    }
     await handleBranchButtonClick(phone, "branch_next")
     return true
   }
@@ -2627,7 +2692,7 @@ async function handleBranchSelection(
   if (branches.length === 0) {
     await sendBookingMessage(
       phone,
-      lang(language, "❌ બ્રાન્ચ યાદી મળી નથી. Book લખીને ફરી શરૂ કરો.", "❌ Branch list missing. Type Book to start again."),
+      lang(language, "❌ બ્રાન્ચ યાદી મળી નથી. મુખ્ય મેનૂ માટે કોઈપણ સંદેશ મોકલો.", "❌ Branch list missing. Send any message for the main menu."),
       "handleBranchSelection.noPicker"
     )
     return true
@@ -2635,8 +2700,25 @@ async function handleBranchSelection(
 
   const optionIndex = parseInt(trimmedText, 10)
   if (!isNaN(optionIndex) && optionIndex >= 1 && optionIndex <= branches.length) {
-    const { claimed } = await claimBookingInput(sessionRef, text, "selecting_branch")
-    if (!claimed) return true
+    const { claimed, reason } = await claimBookingInput(sessionRef, text, "selecting_branch")
+    if (!claimed) {
+      console.log("[WhatsApp booking] branch claim skipped", {
+        phone: normalizedPhone,
+        text: trimmedText,
+        reason,
+        branchCount: branches.length,
+      })
+      await sendBookingMessage(
+        phone,
+        lang(
+          language,
+          "❌ કૃપા કરીને ફરી બ્રાન્ચ નંબર લખો (દા.ત. 1).",
+          "❌ Please reply with the branch number again (e.g. 1)."
+        ),
+        "handleBranchSelection.reclaim"
+      )
+      return true
+    }
     await handleBranchButtonClick(phone, `branch_${branches[optionIndex - 1].id}`)
     return true
   }
@@ -2646,7 +2728,14 @@ async function handleBranchSelection(
   )
   if (byName) {
     const { claimed } = await claimBookingInput(sessionRef, text, "selecting_branch")
-    if (!claimed) return true
+    if (!claimed) {
+      await sendBookingMessage(
+        phone,
+        lang(language, "❌ કૃપા કરીને ફરી બ્રાન્ચ નંબર લખો.", "❌ Please reply with the branch number again."),
+        "handleBranchSelection.nameClaim"
+      )
+      return true
+    }
     await handleBranchButtonClick(phone, `branch_${byName.id}`)
     return true
   }
@@ -2654,8 +2743,8 @@ async function handleBranchSelection(
   await sendBookingMessage(
     phone,
     lang(language,
-      "❌ કૃપા કરીને ઉપરની યાદીમાંથી બ્રાન્ચ નંબર અથવા નામ લખો (દા.ત. 1).",
-      "❌ Please reply with the branch number or name from the list above (e.g. 1)."),
+      "❌ કૃપા કરીને ઉપરની યાદીમાંથી બ્રાન્ચ *નંબર* લખો (દા.ત. 1).",
+      "❌ Please reply with the branch *number* from the list above (e.g. 1)."),
     "handleBranchSelection.invalid"
   )
   return true
@@ -2674,6 +2763,10 @@ async function handleDoctorSelection(
   const session = sessionDoc.data() as BookingSession
 
   if (session.state !== "selecting_doctor") {
+    console.log("[WhatsApp booking] doctor ignored — wrong state", {
+      phone: normalizedPhone,
+      state: session.state,
+    })
     return true
   }
   const language = session.language || "english"
@@ -2681,13 +2774,14 @@ async function handleDoctorSelection(
   const doctors = session.pickerDoctorOptions || []
 
   if (doctors.length === 0) {
-    await sendTextMessage(
+    await sendBookingMessage(
       phone,
       lang(
         language,
-        "❌ કોઈ ડૉક્ટર મળ્યા નથી. કૃપા કરીને રિસેપ્શનનો સંપર્ક કરો અથવા 'Book' લખીને ફરી શરૂ કરો.",
-        "❌ No doctors available. Please contact reception or type Book to start again."
-      )
+        "❌ કોઈ ડૉક્ટર મળ્યા નથી. મુખ્ય મેનૂ માટે કોઈપણ સંદેશ મોકલો.",
+        "❌ No doctors available. Send any message for the main menu."
+      ),
+      "handleDoctorSelection.noDoctors"
     )
     await sessionRef.delete()
     return true
@@ -2711,20 +2805,22 @@ async function handleDoctorSelection(
       phone,
       lang(
         language,
-        "❌ કૃપા કરીને ઉપરની યાદીમાંથી ડૉક્ટર નંબર અથવા નામ લખો (દા.ત. 1).",
-        "❌ Please reply with the doctor number or name from the list above (e.g. 1)."
+        "❌ કૃપા કરીને ઉપરની યાદીમાંથી ડૉક્ટર *નંબર* લખો (દા.ત. 1).",
+        "❌ Please reply with the doctor *number* from the list above (e.g. 1)."
       ),
       "handleDoctorSelection.invalid"
     )
     return true
   }
 
-  const { claimed } = await claimBookingInput(sessionRef, text, "selecting_doctor")
+  const { claimed, reason } = await claimBookingInput(sessionRef, text, "selecting_doctor")
   if (!claimed) {
-    sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
-      phone: normalizedPhone,
-      context: "handleDoctorSelection.claim",
-    })
+    console.log("[WhatsApp booking] doctor claim skipped", { phone: normalizedPhone, reason })
+    await sendBookingMessage(
+      phone,
+      lang(language, "❌ કૃપા કરીને ફરી ડૉક્ટર નંબર લખો.", "❌ Please reply with the doctor number again."),
+      "handleDoctorSelection.reclaim"
+    )
     return true
   }
 
@@ -2737,12 +2833,19 @@ async function handleDoctorSelection(
       doctorId: selectedDoctor!.id,
       state: "selecting_date",
       status: "active",
+      processedInputs: [],
+      stateChangedAt: Date.now(),
       updatedAt: new Date().toISOString(),
     })
     return true
   })
 
   if (!transitioned) {
+    await sendBookingMessage(
+      phone,
+      lang(language, "❌ કૃપા કરીને ફરી ડૉક્ટર નંબર લખો.", "❌ Please reply with the doctor number again."),
+      "handleDoctorSelection.transition"
+    )
     return true
   }
 
@@ -2902,12 +3005,18 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
       branchId,
       branchName,
       status: "active",
+      processedInputs: [],
+      stateChangedAt: Date.now(),
       updatedAt: new Date().toISOString(),
     })
     return true
   })
 
   if (!transitioned) {
+    console.log("[WhatsApp booking] branch transition failed", {
+      phone: normalizedPhone,
+      branchId,
+    })
     return
   }
 
@@ -3261,7 +3370,14 @@ async function handleDateSelection(
     numericIndex <= session.pickerDateOptions.length
   ) {
     const { claimed } = await claimBookingInput(sessionRef, text, "selecting_date")
-    if (!claimed) return true
+    if (!claimed) {
+      await sendBookingMessage(
+        phone,
+        lang(language, "❌ કૃપા કરીને ફરી તારીખ નંબર લખો.", "❌ Please reply with the date number again."),
+        "handleDateSelection.reclaim"
+      )
+      return true
+    }
     const selectedDate = session.pickerDateOptions[numericIndex - 1]
     return await applySelectedAppointmentDate(
       db,
@@ -4182,7 +4298,14 @@ async function handleTimeSelection(
   }
 
   const { claimed } = await claimBookingInput(sessionRef, text, "selecting_time")
-  if (!claimed) return true
+  if (!claimed) {
+    await sendBookingMessage(
+      phone,
+      lang(language, "❌ કૃપા કરીને ફરી સમય નંબર લખો.", "❌ Please reply with the time number again."),
+      "handleTimeSelection.reclaim"
+    )
+    return true
+  }
 
   const normalizedTime = normalizeTime(selectedTime)
 
@@ -4222,14 +4345,28 @@ async function handleConfirmation(
 
   if (trimmedText === "2" || trimmedText === "cancel" || trimmedText === "no") {
     const { claimed } = await claimBookingInput(sessionRef, text, "confirming")
-    if (!claimed) return true
+    if (!claimed) {
+      await sendBookingMessage(
+        phone,
+        lang(language, "કૃપા કરીને 1 (ખાતરી) અથવા 2 (રદ) લખો.", "Please reply 1 to confirm or 2 to cancel."),
+        "handleConfirmation.reclaim"
+      )
+      return true
+    }
     await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, "cancel")
     return true
   }
 
   if (trimmedText === "1" || trimmedText === "confirm" || trimmedText === "yes") {
     const { claimed } = await claimBookingInput(sessionRef, text, "confirming")
-    if (!claimed) return true
+    if (!claimed) {
+      await sendBookingMessage(
+        phone,
+        lang(language, "કૃપા કરીને 1 (ખાતરી) અથવા 2 (રદ) લખો.", "Please reply 1 to confirm or 2 to cancel."),
+        "handleConfirmation.reclaim"
+      )
+      return true
+    }
     await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, "confirm")
     return true
   }
