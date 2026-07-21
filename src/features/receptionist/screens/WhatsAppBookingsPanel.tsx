@@ -83,6 +83,8 @@ export default function WhatsAppBookingsPanel({
     "Routine consultation",
   ]
   const [formPaymentMethod, setFormPaymentMethod] = useState<"card" | "upi" | "cash">("cash")
+  /** When true, confirmation marks appointment + billing as paid (same as receptionist book). */
+  const [formCollectPayment, setFormCollectPayment] = useState(true)
 
   const notify = useCallback(
     (payload: { type: "success" | "error"; message: string } | null) => {
@@ -205,6 +207,7 @@ export default function WhatsAppBookingsPanel({
     setFormChiefComplaint(booking.chiefComplaint || "")
     setFormMedicalHistory(booking.medicalHistory || "")
     setFormPaymentMethod((booking.paymentMethod as "card" | "upi" | "cash") || "cash")
+    setFormCollectPayment(true)
     setEditModalOpen(true)
   }, [])
 
@@ -364,7 +367,8 @@ export default function WhatsAppBookingsPanel({
 
     setUpdateLoading(true)
     try {
-      const updateData: any = {
+      const consultationFee = Number(selectedDoctor?.consultationFee || 0)
+      const updateData: Record<string, unknown> = {
         doctorId: formDoctorId,
         patientName: formPatientName.trim(),
         patientPhone: formPatientPhone.trim(),
@@ -376,8 +380,17 @@ export default function WhatsAppBookingsPanel({
         paymentMethod: formPaymentMethod,
         // Ensure API knows which hospital subcollection the appointment lives in
         hospitalId: (selectedBooking as any).hospitalId,
-        // Payment amount will be handled separately in billing section
         markConfirmed: true,
+        // Same payment sync as receptionist create-appointment when collected now
+        collectPayment: formCollectPayment,
+        paymentStatus: formCollectPayment ? "paid" : "pending",
+        paymentType: "full",
+      }
+
+      if (formCollectPayment) {
+        updateData.paymentAmount = consultationFee > 0 ? consultationFee : undefined
+      } else {
+        updateData.paymentAmount = 0
       }
 
       await authedFetchJson(
@@ -389,7 +402,12 @@ export default function WhatsAppBookingsPanel({
         "Failed to update booking"
       )
 
-      notify({ type: "success", message: "Booking updated successfully!" })
+      notify({
+        type: "success",
+        message: formCollectPayment
+          ? "Booking confirmed and payment recorded in billing."
+          : "Booking confirmed. Payment left pending for billing.",
+      })
       handleCloseEditModal()
       // Real-time listener will automatically update the list
     } catch (error: any) {
@@ -883,26 +901,62 @@ export default function WhatsAppBookingsPanel({
                     <p className="rx-form-helper">Helps the doctor prepare for the consultation</p>
                   </div>
 
-                  {selectedDoctor && selectedDoctor.consultationFee && (
+                  {selectedDoctor && selectedDoctor.consultationFee != null && (
                     <div className="mt-3 flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3">
                       <div>
                         <p className="text-xs font-semibold text-cyan-800">Consultation Fee</p>
-                        <p className="mt-0.5 text-[11px] text-cyan-700">Auto-set from doctor profile — collected at billing</p>
+                        <p className="mt-0.5 text-[11px] text-cyan-700">
+                          {formCollectPayment
+                            ? "Will be marked paid in Billing on confirm"
+                            : "Will stay pending until collected in Billing"}
+                        </p>
                       </div>
-                      <span className="text-lg font-bold text-cyan-800">₹{selectedDoctor.consultationFee}</span>
+                      <span className="text-lg font-bold text-cyan-800">
+                        ₹{selectedDoctor.consultationFee}
+                      </span>
                     </div>
                   )}
 
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                        checked={formCollectPayment}
+                        onChange={(e) => setFormCollectPayment(e.target.checked)}
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-800">
+                          Collect payment now
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-slate-500">
+                          Same as receptionist booking — marks appointment and invoice as Paid.
+                          Uncheck to confirm without payment (Billing can collect later).
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
                   <div className="rx-form-field mt-4">
-                    <label className="rx-form-label">Payment Method</label>
-                    <select value={formPaymentMethod}
-                      onChange={(e) => setFormPaymentMethod(e.target.value as any)}
-                      className="rx-form-select">
+                    <label className="rx-form-label">
+                      Payment Method
+                      {formCollectPayment ? <span className="rx-required"> *</span> : null}
+                    </label>
+                    <select
+                      value={formPaymentMethod}
+                      onChange={(e) => setFormPaymentMethod(e.target.value as "card" | "upi" | "cash")}
+                      className="rx-form-select"
+                      disabled={!formCollectPayment}
+                    >
                       <option value="cash">Cash</option>
                       <option value="card">Card / Debit / Credit</option>
                       <option value="upi">UPI / QR Code</option>
                     </select>
-                    <p className="rx-form-helper">Actual payment is collected at the billing counter after the visit</p>
+                    <p className="rx-form-helper">
+                      {formCollectPayment
+                        ? "Payment will sync to Billing, revenue, and cash/UPI/card collection"
+                        : "No payment recorded — invoice stays Pending in Billing"}
+                    </p>
                   </div>
                 </div>
 

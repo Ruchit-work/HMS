@@ -171,17 +171,12 @@ export async function sendBhashConfirmationTemplateIfConfigured(options: {
     templateParams
   )
 
-  console.log("[BhashSMS confirmation]", {
-    method: "template",
-    api: "sendmsgutil.php",
-    template: templateName,
-    phone: recipientPhone,
-    paramCount: templateParams.length,
-    params: templateParams,
-    success: result.success,
-    messageId: result.messageId,
-    error: result.error,
-  })
+  if (!result.success) {
+    console.warn("[BhashSMS confirmation] send failed", {
+      template: templateName,
+      error: result.error,
+    })
+  }
 
   return result.success
 }

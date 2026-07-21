@@ -261,20 +261,27 @@ export default function AppoinmentManagement({
         const completed = todayAppointments.filter((a) => a.status === 'completed').length
         const waiting = todayAppointments.filter((a) => (a as any).status === 'pending' || (a as any).status === 'confirmed' || (a as any).status === 'whatsapp_pending').length
         const cancelled = todayAppointments.filter((a) => (a as any).status === 'cancelled' || (a as any).status === 'doctor_cancelled').length
-        const revenueToday = todayAppointments
+        // Revenue Today = money collected today (by paidAt), same as dashboard / billing collection.
+        // Do not require appointmentDate === today — WhatsApp often books future dates.
+        const revenueToday = appointments
             .filter((a) => {
-                // Match dashboard / billing: only count money actually collected.
-                // Never treat appointment completion alone as payment, and never
-                // count refunded money as revenue.
                 const status = String(a.paymentStatus || "").toLowerCase()
                 if (status === "refunded") return false
-                // keep_payment: cancelled appointment can still be paid revenue.
-                return (
+                const isPaid =
                     status === "paid" ||
                     (Boolean(a.paidAt) && String(a.paidAt).trim() !== "")
-                )
+                if (!isPaid) return false
+                if (a.paidAt && String(a.paidAt).trim() !== "") {
+                    return new Date(a.paidAt).toDateString() === todayStr
+                }
+                // Legacy paid rows without paidAt: attribute to appointment day
+                return Boolean(a.appointmentDate && new Date(a.appointmentDate).toDateString() === todayStr)
             })
-            .reduce((s, a) => s + (Number(a.paymentAmount) || 0), 0)
+            .reduce((s, a) => {
+                const paid = Number(a.paymentAmount) || 0
+                if (paid > 0) return s + paid
+                return s + (Number(a.totalConsultationFee || a.consultationFee) || 0)
+            }, 0)
         return {
             todayTotal: todayAppointments.length,
             completed,

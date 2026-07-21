@@ -385,7 +385,11 @@ export async function GET(request: Request) {
         transactionId: data.transactionId || null,
         hospitalId: data.hospitalId || null,
         branchId: data.branchId || null,
-        paidAtFrontDesk: false,
+        paidAtFrontDesk:
+          data.paidAtFrontDesk === true ||
+          data.createdBy === "receptionist" ||
+          data.handledBy === "receptionist",
+        settlementMode: data.settlementMode || data.paymentMethod || null,
         paymentType: data.paymentType || "full",
         remainingAmount:
           status === "pending"

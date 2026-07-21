@@ -212,28 +212,118 @@ export async function PUT(
     if (body.appointmentTime !== undefined) updateData.appointmentTime = body.appointmentTime
     if (body.chiefComplaint !== undefined) updateData.chiefComplaint = body.chiefComplaint
     if (body.medicalHistory !== undefined) updateData.medicalHistory = body.medicalHistory
-    // No manual consultation fee - only use doctor's fee
-    if (body.paymentAmount !== undefined) {
-      updateData.paymentAmount = body.paymentAmount
-      // Use doctor fee from updateData or appointmentData (doctor fee is the only fee)
-      const doctorFee = updateData.totalConsultationFee || appointmentData.totalConsultationFee || appointmentData.consultationFee || 0
-      updateData.remainingAmount = Math.max(doctorFee - body.paymentAmount, 0)
-    }
-    if (body.paymentMethod !== undefined) updateData.paymentMethod = body.paymentMethod
-    if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus
+    // Doctor fee is the single source for consultation amount
+    const doctorFee = Number(
+      updateData.totalConsultationFee ??
+        appointmentData.totalConsultationFee ??
+        updateData.consultationFee ??
+        appointmentData.consultationFee ??
+        0
+    )
 
-   
+    // Confirm booking (same appointment lifecycle as receptionist create-appointment)
     let shouldSendNotification = false
+    const isConfirming =
+      Boolean(updateData.doctorId || appointmentData.doctorId) && body.markConfirmed !== false
+
     if (updateData.doctorId && body.markConfirmed !== false) {
-  
       updateData.status = "confirmed"
       updateData.whatsappPending = false
-      shouldSendNotification = true // Send WhatsApp notification to patient
+      shouldSendNotification = true
     } else if (updateData.doctorId) {
-   
       updateData.status = "confirmed"
       updateData.whatsappPending = false
-      // Don't send notification if markConfirmed is explicitly false
+    }
+
+    /**
+     * Payment sync — mirror receptionist create-appointment when payment is collected.
+     * Billing invoices are virtualized from appointment payment fields (no separate invoice write).
+     *
+     * collectPayment / paymentStatus:"paid" → paid everywhere
+     * otherwise on confirm → pending (billing can collect later)
+     */
+    const collectPaymentExplicit = body.collectPayment === true
+    const markPaidByStatus =
+      body.collectPayment !== false && String(body.paymentStatus || "").toLowerCase() === "paid"
+    const shouldCollectPayment = collectPaymentExplicit || markPaidByStatus
+
+    if (isConfirming && shouldCollectPayment) {
+      const nowIso = new Date().toISOString()
+      const paidAmount =
+        typeof body.paymentAmount === "number" && body.paymentAmount > 0
+          ? body.paymentAmount
+          : doctorFee > 0
+            ? doctorFee
+            : Number(appointmentData.paymentAmount || 0)
+
+      // Keep fee fields populated so dashboard / billing revenue never sees ₹0 paid rows
+      if (doctorFee > 0) {
+        updateData.consultationFee = doctorFee
+        updateData.totalConsultationFee = doctorFee
+      }
+
+      updateData.paymentAmount = paidAmount
+      updateData.paymentMethod = body.paymentMethod || appointmentData.paymentMethod || "cash"
+      updateData.paymentType = body.paymentType || "full"
+      updateData.paymentStatus = "paid"
+      updateData.billingStatus = "paid"
+      updateData.remainingAmount = 0
+      updateData.paidAt = nowIso
+      updateData.transactionId =
+        typeof body.transactionId === "string" && body.transactionId.trim()
+          ? body.transactionId.trim()
+          : `RCPT${Date.now()}`
+      // Front-desk collection metadata (same intent as /api/patient/billing/pay receptionist path)
+      updateData.paidAtFrontDesk = true
+      updateData.handledBy = "receptionist"
+      updateData.settlementMode = updateData.paymentMethod
+    } else if (isConfirming) {
+      // Confirmed without collecting payment — keep invoice pending for Billing
+      if (body.paymentMethod !== undefined) {
+        updateData.paymentMethod = body.paymentMethod
+      }
+      if (doctorFee > 0) {
+        updateData.consultationFee = doctorFee
+        updateData.totalConsultationFee = doctorFee
+      }
+      updateData.paymentStatus = "pending"
+      updateData.billingStatus = "pending"
+      const pendingAmount =
+        typeof body.paymentAmount === "number"
+          ? body.paymentAmount
+          : Number(appointmentData.paymentAmount || 0)
+      updateData.paymentAmount = pendingAmount
+      updateData.remainingAmount = Math.max(doctorFee - pendingAmount, 0)
+      // Ensure unpaid confirm does not leave stale paid markers
+      updateData.paidAt = null
+      updateData.transactionId = null
+      updateData.paidAtFrontDesk = false
+    } else {
+      // Partial edit without confirm — allow optional payment field updates only
+      if (body.paymentAmount !== undefined) {
+        updateData.paymentAmount = body.paymentAmount
+        updateData.remainingAmount = Math.max(doctorFee - body.paymentAmount, 0)
+      }
+      if (body.paymentMethod !== undefined) updateData.paymentMethod = body.paymentMethod
+      if (body.paymentStatus !== undefined) updateData.paymentStatus = body.paymentStatus
+    }
+
+    // Attach receptionist branch when appointment has none — needed for branch revenue KPIs
+    if (isConfirming && !appointmentData.branchId && !updateData.branchId && auth.user?.role === "receptionist") {
+      try {
+        const receptionistDoc = await firestore.collection("receptionists").doc(auth.user.uid).get()
+        if (receptionistDoc.exists) {
+          const rd = receptionistDoc.data() || {}
+          if (typeof rd.branchId === "string" && rd.branchId.trim()) {
+            updateData.branchId = rd.branchId.trim()
+            if (typeof rd.branchName === "string" && rd.branchName.trim()) {
+              updateData.branchName = rd.branchName.trim()
+            }
+          }
+        }
+      } catch {
+        // non-fatal
+      }
     }
 
     // At this point we know appointmentDoc exists, so appointmentRef must be non-null

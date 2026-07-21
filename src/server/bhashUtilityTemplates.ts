@@ -70,16 +70,12 @@ async function sendUtilityTemplate(options: {
     options.params
   )
 
-  console.log(`[BhashSMS ${options.logLabel}]`, {
-    api: "sendmsgutil.php",
-    template: templateName,
-    phone: recipientPhone,
-    paramCount: options.params.length,
-    params: options.params,
-    success: result.success,
-    messageId: result.messageId,
-    error: result.error,
-  })
+  if (!result.success) {
+    console.warn(`[BhashSMS ${options.logLabel}] send failed`, {
+      template: templateName,
+      error: result.error,
+    })
+  }
 
   return result.success
 }
@@ -213,15 +209,13 @@ export async function sendBhashPrescriptionDocumentTemplateIfConfigured(options:
   if (getPrescriptionDeliveryMode() === "link") {
     const params = [patientName, sanitizeBhashParam(documentUrl), appointmentId]
     const result = await bhashSendUtilityTemplate(recipientPhone, templateName, params)
-    console.log("[BhashSMS prescription_pdf]", {
-      api: "sendmsgutil.php",
-      mode: "link",
-      template: templateName,
-      phone: recipientPhone,
-      params,
-      success: result.success,
-      error: result.error,
-    })
+    if (!result.success) {
+      console.warn("[BhashSMS prescription_pdf] send failed", {
+        mode: "link",
+        template: templateName,
+        error: result.error,
+      })
+    }
     return result.success
   }
 
@@ -234,18 +228,13 @@ export async function sendBhashPrescriptionDocumentTemplateIfConfigured(options:
     documentUrl
   )
 
-  console.log("[BhashSMS prescription_pdf]", {
-    api: "sendmsgutil.php",
-    mode: "document",
-    template: templateName,
-    phone: recipientPhone,
-    htype: "document",
-    url: documentUrl,
-    params,
-    success: result.success,
-    messageId: result.messageId,
-    error: result.error,
-  })
+  if (!result.success) {
+    console.warn("[BhashSMS prescription_pdf] send failed", {
+      mode: "document",
+      template: templateName,
+      error: result.error,
+    })
+  }
 
   return result.success
 }

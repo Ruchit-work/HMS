@@ -258,29 +258,26 @@ async function bhashGet(
       })
       const fallbackBody = await fallbackResponse.text()
       parsed = parseBhashResponse(fallbackBody)
-      console.log("[BhashSMS] utilreply fallback", {
-        phone: params.phone,
-        response: fallbackBody.trim().slice(0, 100),
-        success: parsed.success,
-      })
+      if (!parsed.success) {
+        console.warn("[BhashSMS] utilreply fallback failed", {
+          response: fallbackBody.trim().slice(0, 100),
+          error: parsed.error,
+        })
+      }
     }
     const apiName = resolvedApiUrl.includes("utilreply")
       ? "utilreply"
       : resolvedApiUrl.includes("sendmsgutil")
         ? "sendmsgutil"
         : "sendmsg"
-    console.log("[BhashSMS]", {
-      api: apiName,
-      phone: params.phone,
-      text: params.text?.slice(0, 40),
-      hasParams: !!params.Params,
-      paramCount: params.Params ? params.Params.split(",").length : 0,
-      requestUrl: `${resolvedApiUrl}?${query.replace(/pass=[^&]+/, "pass=***")}`,
-      httpStatus: response.status,
-      response: body.trim().slice(0, 200),
-      success: parsed.success,
-      error: parsed.error,
-    })
+    if (!parsed.success || !response.ok) {
+      console.warn("[BhashSMS] send failed", {
+        api: apiName,
+        httpStatus: response.status,
+        response: body.trim().slice(0, 200),
+        error: parsed.error,
+      })
+    }
     if (!response.ok) {
       return {
         success: false,

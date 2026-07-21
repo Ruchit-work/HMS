@@ -94,9 +94,90 @@ const SAME_STATE_DEDUPE_MS = 12_000
  * Menu digits (1–9) are reused at every booking step and must NOT be blocked here. */
 const CROSS_STATE_DEDUPE_MS = 3_000
 const BOOKING_LOCK_TTL_MS = 60_000
+/** If the user does not reply within this window, the booking session ends and restarts. */
+const BOOKING_SESSION_IDLE_MS = 5 * 60 * 1000
 
 function isMenuDigitReply(text: string): boolean {
   return /^[1-9]$/.test(text.trim())
+}
+
+function getSessionLastActivityMs(session: BookingSession): number {
+  if (typeof session.stateChangedAt === "number" && session.stateChangedAt > 0) {
+    // Prefer updatedAt when newer (covers same-step replies / invalid retries).
+    const updatedMs = session.updatedAt ? Date.parse(session.updatedAt) : 0
+    if (Number.isFinite(updatedMs) && updatedMs > session.stateChangedAt) {
+      return updatedMs
+    }
+    return session.stateChangedAt
+  }
+  if (session.updatedAt) {
+    const updatedMs = Date.parse(session.updatedAt)
+    if (Number.isFinite(updatedMs)) return updatedMs
+  }
+  if (session.createdAt) {
+    const createdMs = Date.parse(session.createdAt)
+    if (Number.isFinite(createdMs)) return createdMs
+  }
+  return 0
+}
+
+function isBookingSessionIdleExpired(session: BookingSession): boolean {
+  if (!session || session.state === "idle" || session.status === "cancelled") return false
+  const lastActivityMs = getSessionLastActivityMs(session)
+  if (!lastActivityMs) return false
+  return Date.now() - lastActivityMs >= BOOKING_SESSION_IDLE_MS
+}
+
+/** End an idle booking session so the next message starts fresh from the menu. */
+async function expireIdleBookingSession(
+  phone: string,
+  session: BookingSession
+): Promise<void> {
+  const normalizedPhone = formatPhoneNumber(phone)
+  const idleMinutes = Math.round(BOOKING_SESSION_IDLE_MS / 60_000)
+  sessionLog("SESSION CLEARED", {
+    phone: normalizedPhone,
+    reason: "idle_timeout",
+    previousState: session.state,
+    idleMs: Date.now() - getSessionLastActivityMs(session),
+  })
+  try {
+    await clearSession(phone)
+  } catch (err) {
+    console.error("[WhatsApp booking] clearSession failed on idle timeout", err)
+  }
+  try {
+    await clearCancelMarker(phone)
+  } catch {
+    // ignore
+  }
+  await sendTextMessage(
+    phone,
+    `⏰ *Session timed out*\n\n` +
+      `Your booking ended because there was no reply for *${idleMinutes} minutes*.\n\n` +
+      `Starting again from the main menu.`
+  )
+}
+
+/**
+ * Returns the active booking session, or null if missing/cancelled/idle-expired.
+ * On idle timeout the session is cleared and the user is notified.
+ */
+async function getActiveBookingSessionOrExpire(
+  phone: string
+): Promise<{ session: BookingSession | null; expired: boolean }> {
+  const { data: session } = await getSession(phone)
+  if (!session || session.status === "cancelled" || session.state === "idle") {
+    return { session: null, expired: false }
+  }
+  if (await isBookingCancelled(phone)) {
+    return { session: null, expired: false }
+  }
+  if (isBookingSessionIdleExpired(session)) {
+    await expireIdleBookingSession(phone, session)
+    return { session: null, expired: true }
+  }
+  return { session, expired: false }
 }
 
 /** Valid booking state transitions (prevents step skipping / regression). */
@@ -826,14 +907,21 @@ async function handleInboundTextMessage(
 
   try {
     const trimmedText = text.trim().toLowerCase()
-    const { data: session } = await getSession(from)
+    let { data: session } = await getSession(from)
     logInboundDebug(source, from, text, session, { messageId })
 
-    const hasActiveBooking =
+    let hasActiveBooking =
       !!session &&
       session.status !== "cancelled" &&
       session.state !== "idle" &&
       !(await isBookingCancelled(from))
+
+    // No reply for 5 minutes → end session and restart from main menu
+    if (hasActiveBooking && session && isBookingSessionIdleExpired(session)) {
+      await expireIdleBookingSession(from, session)
+      session = null
+      hasActiveBooking = false
+    }
 
     if (hasActiveBooking) {
       if (isHardCancelIntent(text)) {
@@ -1704,10 +1792,46 @@ async function processBookingConfirmation(
     await sendTextMessage(phone, lang(language,
       "❌ તારીખ અથવા સમય મળ્યો નથી. કૃપા કરીને ફરીથી શરૂઆત કરો.",
       "❌ Missing date or time. Please start over."))
-    await sessionRef.delete()
     return
   }
 
+  // Idempotency: one confirm per phone+date+time (blocks Bhash double-fire creating 2–3 bookings)
+  const digits = normalizedPhone.replace(/\D/g, "").slice(-10)
+  const idempotencyKey = [
+    digits || normalizedPhone,
+    session.appointmentDate,
+    normalizeTime(session.appointmentTime),
+    session.doctorId || "none",
+  ].join("_")
+  const idempotencyRef = db.collection("whatsapp_booking_idempotency").doc(idempotencyKey)
+  try {
+    await idempotencyRef.create({
+      phone: normalizedPhone,
+      appointmentDate: session.appointmentDate,
+      appointmentTime: session.appointmentTime,
+      doctorId: session.doctorId || null,
+      at: Date.now(),
+      createdAt: new Date().toISOString(),
+    })
+  } catch {
+    console.log("[WhatsApp booking] duplicate confirm blocked by idempotency", {
+      phone: normalizedPhone,
+      key: idempotencyKey,
+    })
+    const existing = await idempotencyRef.get()
+    const existingId = (existing.data()?.appointmentId as string) || ""
+    if (existingId) {
+      await sendTextMessage(
+        phone,
+        lang(
+          language,
+          `✅ તમારી અપોઇન્ટમેન્ટ પહેલેથી બુક થઈ છે.\nAppointment ID: ${existingId}`,
+          `✅ Your appointment is already booked.\nAppointment ID: ${existingId}`
+        )
+      )
+    }
+    return
+  }
 
   const patient = await findPatientByPhone(db, normalizedPhone)
   if (!patient) {
@@ -1882,6 +2006,21 @@ async function processBookingConfirmation(
       true // Mark as WhatsApp pending
     )
 
+    try {
+      await idempotencyRef.set({ appointmentId }, { merge: true })
+    } catch {
+      // ignore
+    }
+
+    console.log("[WhatsApp booking] appointment created", {
+      phone: normalizedPhone,
+      appointmentId,
+      date: session.appointmentDate,
+      time: session.appointmentTime,
+      doctorId: assignedDoctorId || null,
+      branchId: branchId || null,
+    })
+
     if (await wasCancelledAfter(phone, workflowStartedAt)) {
       sessionLog("MESSAGE SKIPPED DUE TO CANCELLED SESSION", {
         phone: normalizedPhone,
@@ -1913,7 +2052,6 @@ async function processBookingConfirmation(
       appointmentId
     )
 
-    const digits = normalizedPhone.replace(/\D/g, "").slice(-10)
     if (digits) {
       await db.collection("bhash_booking_recent").doc(digits).set({
         at: Date.now(),
@@ -1921,6 +2059,11 @@ async function processBookingConfirmation(
       })
     }
   } catch (error: any) {
+    try {
+      await idempotencyRef.delete()
+    } catch {
+      // ignore
+    }
 
     if (error.message === "SLOT_ALREADY_BOOKED") {
       const msg =
@@ -1957,9 +2100,13 @@ async function handleConfirmationButtonClick(phone: string, action: "confirm" | 
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
-  const sessionSnap = await sessionRef.get()
 
-  if (!sessionSnap.exists) {
+  const { session, expired } = await getActiveBookingSessionOrExpire(phone)
+  if (expired) {
+    await handleGreeting(phone)
+    return
+  }
+  if (!session) {
     if (action === "confirm") {
       const digits = normalizedPhone.replace(/\D/g, "").slice(-10)
       if (digits) {
@@ -1975,13 +2122,12 @@ async function handleConfirmationButtonClick(phone: string, action: "confirm" | 
     await sendTextMessage(
       phone,
       action === "confirm"
-        ? "❌ Session expired. Please start booking again."
+        ? "❌ Session expired. Please start booking again.\n\nSend any message for the main menu."
         : "✅ Already cancelled. You can start a new booking anytime."
     )
     return
   }
 
-  const session = sessionSnap.data() as BookingSession
   await processBookingConfirmation(db, phone, normalizedPhone, sessionRef, session, action)
 }
 
@@ -2533,6 +2679,13 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
       context: "handleBookingConversation.status",
     })
     return true
+  }
+
+  // Any reply within an active step refreshes the 5-minute idle timer
+  try {
+    await sessionRef.update({ updatedAt: new Date().toISOString() })
+  } catch {
+    // session may have been cleared concurrently
   }
 
   console.log("[WhatsApp booking]", {
@@ -3302,16 +3455,56 @@ async function applySelectedAppointmentDate(
 
   const patient = await findPatientByPhone(db, normalizedPhone)
   if (patient) {
-    const existingAppointments = await db
-      .collection("appointments")
-      .where("patientId", "==", patient.id)
-      .where("appointmentDate", "==", selectedDate)
-      .where("status", "in", ["pending", "confirmed"])
-      .get()
+    // Check hospital-scoped appointments (WhatsApp creates here) — include whatsapp_pending
+    let hospitalId: string | null =
+      (patient.data?.hospitalId && String(patient.data.hospitalId)) || null
+    if (!hospitalId) {
+      const activeHospitals = await getAllActiveHospitals()
+      hospitalId = activeHospitals[0]?.id || null
+    }
 
-    if (!existingAppointments.empty) {
-      const existingAppt = existingAppointments.docs[0].data()
-      const existingTime = existingAppt.appointmentTime || ""
+    let hasExisting = false
+    let existingTime = ""
+    if (hospitalId) {
+      try {
+        const snap = await db
+          .collection(getHospitalCollectionPath(hospitalId, "appointments"))
+          .where("patientId", "==", patient.id)
+          .where("appointmentDate", "==", selectedDate)
+          .limit(20)
+          .get()
+        const hit = snap.docs.find((d) => {
+          const st = String(d.data()?.status || "")
+          return ["pending", "confirmed", "whatsapp_pending"].includes(st) || d.data()?.whatsappPending === true
+        })
+        if (hit) {
+          hasExisting = true
+          existingTime = String(hit.data()?.appointmentTime || "")
+        }
+      } catch {
+        // fall through
+      }
+    }
+
+    if (!hasExisting) {
+      // Legacy root collection fallback
+      try {
+        const existingAppointments = await db
+          .collection("appointments")
+          .where("patientId", "==", patient.id)
+          .where("appointmentDate", "==", selectedDate)
+          .where("status", "in", ["pending", "confirmed", "whatsapp_pending"])
+          .get()
+        if (!existingAppointments.empty) {
+          hasExisting = true
+          existingTime = existingAppointments.docs[0].data()?.appointmentTime || ""
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (hasExisting) {
       const errorMsg = language === "gujarati"
         ? `❌ *અપોઇન્ટમેન્ટ પહેલેથી બુક થયેલ છે*\n\nતમારે ${selectedDate}${existingTime ? ` at ${existingTime}` : ""} માટે પહેલેથી અપોઇન્ટમેન્ટ બુક કરેલ છે.\n\nકૃપા કરીને બીજી તારીખ પસંદ કરો.`
         : `❌ *Appointment Already Booked*\n\nYou already have an appointment booked for ${selectedDate}${existingTime ? ` at ${existingTime}` : ""}.\n\nPlease select a different date.`

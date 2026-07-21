@@ -43,6 +43,7 @@ interface UnifiedBillingRecord {
   paymentType?: "full" | "partial"
   remainingAmount?: number
   hospitalId?: string | null
+  branchId?: string | null
 }
 
 export async function GET(request: Request) {
@@ -389,6 +390,9 @@ export async function GET(request: Request) {
         (!isPaid &&
           (data.status === "cancelled" || data.status === "doctor_cancelled"))
       const consultationFee = totalConsultationFee || paymentAmount
+      const isPaidRecord = !isCancelled && isPaid
+      const collectedAmount =
+        paymentAmount > 0 ? paymentAmount : isPaidRecord ? consultationFee : paymentAmount || consultationFee
 
       records.push({
         id: docSnap.id,
@@ -400,19 +404,27 @@ export async function GET(request: Request) {
         doctorId: String(data.doctorId || ""),
         doctorName: data.doctorName || null,
         consultationFee,
-        totalAmount: paymentAmount || consultationFee,
-        generatedAt: data.createdAt || data.paidAt || new Date().toISOString(),
+        // Prefer collected amount; fall back to fee so paid WhatsApp confirms still hit revenue cards
+        totalAmount: collectedAmount,
+        // Collection analytics attribute by paidAt — prefer it when paid (parity with admin billing)
+        generatedAt: isPaidRecord
+          ? data.paidAt || data.createdAt || new Date().toISOString()
+          : data.createdAt || data.paidAt || new Date().toISOString(),
         status: isCancelled ? "cancelled" : isPaid ? "paid" : "pending",
         paymentMethod: data.paymentMethod,
         paidAt: isPaid ? data.paidAt || null : null,
         paymentReference: data.transactionId || null,
         transactionId: data.transactionId || null,
-        paidAtFrontDesk: data.createdBy === "receptionist",
-        handledBy: data.createdBy || null,
-        settlementMode: data.paymentMethod || null,
+        paidAtFrontDesk:
+          data.paidAtFrontDesk === true ||
+          data.createdBy === "receptionist" ||
+          data.handledBy === "receptionist",
+        handledBy: data.handledBy || data.createdBy || null,
+        settlementMode: data.settlementMode || data.paymentMethod || null,
         paymentType: data.paymentType || "full",
         remainingAmount: Number(data.remainingAmount || 0) || undefined,
         hospitalId: data.hospitalId || hospitalId || null,
+        branchId: data.branchId || null,
       })
     }
 
