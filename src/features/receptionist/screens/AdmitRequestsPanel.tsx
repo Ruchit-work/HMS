@@ -258,6 +258,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [roomManagerOpen, setRoomManagerOpen] = useState(false)
   const [roomEditId, setRoomEditId] = useState<string | null>(null)
   const [roomManageLoading, setRoomManageLoading] = useState(false)
+  const [manageRoomWard, setManageRoomWard] = useState("")
+  const [manageRoomFloor, setManageRoomFloor] = useState("")
+  const [manageRoomBedCount, setManageRoomBedCount] = useState<number | "">(1)
+  const [manageRoomOccupiedBeds, setManageRoomOccupiedBeds] = useState<number | "">(0)
   const [archiveRoomTarget, setArchiveRoomTarget] = useState<Room | null>(null)
   const [archivePackageTarget, setArchivePackageTarget] = useState<AdmissionPackageOption | null>(null)
   const [manageRoomNumber, setManageRoomNumber] = useState("")
@@ -293,6 +297,9 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const availableRoomsForType = useMemo(() => {
     return rooms.filter((room) => {
       if (room.status !== "available") return false
+      const bedCount = Number((room as any).bedCount || 1)
+      const occupiedBeds = Number((room as any).occupiedBeds || 0)
+      if (occupiedBeds >= bedCount) return false
       if (!assignRoomType) return true
       return getRoomTypeFilterKey(room) === assignRoomType
     })
@@ -738,6 +745,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     setManageCustomRoomTypeName("")
     setManageRoomRate("")
     setManageRoomStatus("available")
+    setManageRoomWard("")
+    setManageRoomFloor("")
+    setManageRoomBedCount(1)
+    setManageRoomOccupiedBeds(0)
   }
 
   const handleOpenCreateRoom = () => {
@@ -752,6 +763,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     setManageCustomRoomTypeName(room.customRoomTypeName || "")
     setManageRoomRate(String(room.ratePerDay || 0))
     setManageRoomStatus(room.status)
+    setManageRoomWard((room as any).ward || "")
+    setManageRoomFloor((room as any).floor || "")
+    setManageRoomBedCount(Number((room as any).bedCount || 1))
+    setManageRoomOccupiedBeds(Number((room as any).occupiedBeds || 0))
     setRoomManagerOpen(true)
   }
 
@@ -783,6 +798,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
             customRoomTypeName: manageRoomType === "custom" ? manageCustomRoomTypeName.trim() : null,
             ratePerDay: Number(manageRoomRate),
             status: manageRoomStatus,
+            ward: manageRoomWard.trim() || null,
+            floor: manageRoomFloor.trim() || null,
+            bedCount: Number(manageRoomBedCount || 1),
+            occupiedBeds: Number(manageRoomOccupiedBeds || 0)
           }
         : {
             roomNumber: manageRoomNumber.trim(),
@@ -790,6 +809,10 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
             customRoomTypeName: manageRoomType === "custom" ? manageCustomRoomTypeName.trim() : null,
             ratePerDay: Number(manageRoomRate),
             status: manageRoomStatus,
+            ward: manageRoomWard.trim() || null,
+            floor: manageRoomFloor.trim() || null,
+            bedCount: Number(manageRoomBedCount || 1),
+            occupiedBeds: Number(manageRoomOccupiedBeds || 0),
           }
       await authedFetchJson(
         url,
@@ -1681,6 +1704,14 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         setManageRoomRate={setManageRoomRate}
         manageRoomStatus={manageRoomStatus}
         setManageRoomStatus={setManageRoomStatus}
+        manageRoomWard={manageRoomWard}
+        setManageRoomWard={setManageRoomWard}
+        manageRoomFloor={manageRoomFloor}
+        setManageRoomFloor={setManageRoomFloor}
+        manageRoomBedCount={manageRoomBedCount}
+        setManageRoomBedCount={setManageRoomBedCount}
+        manageRoomOccupiedBeds={manageRoomOccupiedBeds}
+        setManageRoomOccupiedBeds={setManageRoomOccupiedBeds}
         roomManageLoading={roomManageLoading}
         onSubmit={handleSubmitRoom}
       />

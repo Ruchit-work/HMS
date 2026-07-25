@@ -75,21 +75,11 @@ export function useIpdBootstrapData({
         roomsSnap = await getDocs(collection(db, "rooms"))
       }
 
-      if (roomsSnap.empty && hospitalId) {
-        // Seeding is admin-only; receptionists get a 403 here. Ignore the
-        // failure and fall through to the local demo-room fallback below.
-        try {
-          await authedFetchJson("/api/admin/rooms/seed", { method: "POST" }, "Failed to seed rooms")
-          try {
-            roomsSnap = await getDocs(
-              query(collection(db, "rooms"), where("hospitalId", "==", hospitalId))
-            )
-          } catch {
-            roomsSnap = await getDocs(collection(db, "rooms"))
-          }
-        } catch {
-          // Not authorized to seed (or seed failed) — keep the empty snapshot.
-        }
+      // Do not attempt client-side seeding or demo room creation. If no rooms
+      // are configured for this hospital, return an empty list so the UI can
+      // show an informative message and admins can add rooms via Room Management.
+      if (roomsSnap.empty) {
+        // leave roomsSnap as-is (empty)
       }
 
       let roomsList = roomsSnap.docs.map((r) => {
@@ -102,18 +92,12 @@ export function useIpdBootstrapData({
         const roomHospital = (room as { hospitalId?: string }).hospitalId
         return roomHospital === hospitalId
       })
+      // If no rooms were found in Firestore, do not populate local demo rooms here.
+      // Showing non-persistent "demo-*" rooms leads to server-side failures when
+      // an admission is created because those IDs do not exist in Firestore.
+      // The UI should present an informative message and prompt admins to create rooms.
       if (roomsList.length === 0) {
-        roomsList = Object.entries(fallbackRoomNumbersByType).flatMap(([type, numbers]) => {
-          const roomTypeId = type as Room["roomType"]
-          const rate = roomTypeRateMap[roomTypeId] ?? 0
-          return numbers.map((roomNumber) => ({
-            id: `demo-${roomNumber}`,
-            roomNumber,
-            roomType: roomTypeId,
-            ratePerDay: rate,
-            status: "available" as Room["status"],
-          }))
-        })
+        roomsList = []
       }
       setRooms(roomsList)
     } finally {

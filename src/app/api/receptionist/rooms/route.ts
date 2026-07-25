@@ -3,15 +3,10 @@ import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/fir
 import { getUserActiveHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 
 export async function POST(req: Request) {
-  const auth = await authenticateRequest(req)
+  // Only admin users (hospital admins/platform admins) may create rooms.
+  const auth = await authenticateRequest(req, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
-  }
-  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
-    return Response.json(
-      { error: "Access denied. This endpoint requires receptionist or admin role." },
-      { status: 403 }
-    )
   }
 
   try {
@@ -27,12 +22,18 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}))
     const roomNumber = typeof body?.roomNumber === "string" ? body.roomNumber.trim() : ""
+    const ward = typeof body?.ward === "string" ? body.ward.trim() : ""
+    const floor = typeof body?.floor === "string" ? body.floor.trim() : ""
     const roomType = typeof body?.roomType === "string" ? body.roomType.trim() : ""
     const customRoomTypeName =
       typeof body?.customRoomTypeName === "string" ? body.customRoomTypeName.trim() : ""
+    const bedCount = Number.isFinite(Number(body?.bedCount)) && Number(body?.bedCount) > 0 ? Math.floor(Number(body.bedCount)) : 1
+    const occupiedBeds = 0
     const ratePerDay = Number(body?.ratePerDay || 0)
     const status =
-      body?.status === "occupied" || body?.status === "maintenance" ? body.status : "available"
+      body?.status === "occupied" || body?.status === "maintenance" || body?.status === "inactive"
+        ? body.status
+        : "available"
 
     if (!roomNumber) {
       return Response.json({ error: "Room number is required" }, { status: 400 })
@@ -73,8 +74,12 @@ export async function POST(req: Request) {
     const nowIso = new Date().toISOString()
     const roomRef = await firestore.collection("rooms").add({
       roomNumber,
+      ward: ward || null,
+      floor: floor || null,
       roomType,
       customRoomTypeName: roomType === "custom" ? customRoomTypeName : null,
+      bedCount,
+      occupiedBeds,
       ratePerDay,
       status,
       hospitalId,

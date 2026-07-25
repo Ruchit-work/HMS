@@ -89,29 +89,78 @@ function getCollectionPeriodRanges(period: CollectionPeriod, now = new Date()) {
   }
 }
 
+function recordBilledAmount(record: BillingRecord) {
+  if (record.status === "paid") {
+    return (
+      Number(record.grossTotal || 0) ||
+      Number((record as BillingRecord & { paidAmount?: number }).paidAmount || 0) ||
+      Number(record.totalAmount || 0)
+    )
+  }
+  if (record.status === "void" || record.status === "cancelled") return 0
+  return (
+    Number(record.grossTotal || 0) ||
+    Number(record.remainingAmount || 0) ||
+    Number(record.totalAmount || 0)
+  )
+}
+
+function recordCollectedAmount(record: BillingRecord) {
+  if (record.status !== "paid") {
+    // Partial deposits on pending admission bills still count as collected cash
+    const paidAmount = Number((record as BillingRecord & { paidAmount?: number }).paidAmount || 0)
+    if (record.type === "admission" && paidAmount > 0) return paidAmount
+    return 0
+  }
+  return (
+    Number((record as BillingRecord & { paidAmount?: number }).paidAmount || 0) ||
+    Number(record.grossTotal || 0) ||
+    Number(record.totalAmount || 0)
+  )
+}
+
 function sumPeriodMetrics(records: BillingRecord[], start: Date, end: Date) {
   const paid = records.filter((r) => r.status === "paid" && isInDateRange(r.paidAt, start, end))
-  const cash = paid.filter((r) => r.paymentMethod === "cash" || r.settlementMode === "cash")
-  const upi = paid.filter((r) => r.paymentMethod === "upi" || r.settlementMode === "upi")
-  const card = paid.filter((r) => r.paymentMethod === "card" || r.settlementMode === "card")
+  // Also include admission deposits collected today (pending bills with paidAmount + paidAtFrontDesk)
+  const depositCollected = records.filter(
+    (r) =>
+      r.type === "admission" &&
+      Number((r as BillingRecord & { paidAmount?: number }).paidAmount || 0) > 0 &&
+      isInDateRange(r.paidAt || r.generatedAt, start, end) &&
+      r.status !== "void" &&
+      r.status !== "cancelled"
+  )
+  const collectionSource = [
+    ...paid,
+    ...depositCollected.filter((r) => !paid.some((p) => p.id === r.id)),
+  ]
+
+  const cash = collectionSource.filter((r) => r.paymentMethod === "cash" || r.settlementMode === "cash")
+  const upi = collectionSource.filter((r) => r.paymentMethod === "upi" || r.settlementMode === "upi")
+  const card = collectionSource.filter((r) => r.paymentMethod === "card" || r.settlementMode === "card")
   const generatedInPeriod = records.filter((r) => isInDateRange(r.generatedAt, start, end))
-  // Cancelled/refunded invoices are closed — they are not outstanding dues.
   const pending = generatedInPeriod.filter(
     (r) => r.status !== "paid" && r.status !== "void" && r.status !== "cancelled"
   )
 
-  const collectionAmount = paid.reduce((sum, r) => sum + (r.totalAmount || 0), 0)
+  const collectionAmount = collectionSource.reduce((sum, r) => sum + recordCollectedAmount(r), 0)
 
   return {
     collectionAmount,
-    cashAmount: cash.reduce((sum, r) => sum + (r.totalAmount || 0), 0),
-    upiAmount: upi.reduce((sum, r) => sum + (r.totalAmount || 0), 0),
-    cardAmount: card.reduce((sum, r) => sum + (r.totalAmount || 0), 0),
-    paidCount: paid.length,
+    cashAmount: cash.reduce((sum, r) => sum + recordCollectedAmount(r), 0),
+    upiAmount: upi.reduce((sum, r) => sum + recordCollectedAmount(r), 0),
+    cardAmount: card.reduce((sum, r) => sum + recordCollectedAmount(r), 0),
+    paidCount: collectionSource.length,
     invoicesCount: generatedInPeriod.length,
     pendingCount: pending.length,
-    pendingAmount: pending.reduce((sum, r) => sum + (r.totalAmount || 0), 0),
-    avgBillSize: paid.length > 0 ? Math.round(collectionAmount / paid.length) : 0,
+    pendingAmount: pending.reduce((sum, r) => {
+      const remaining =
+        r.remainingAmount !== undefined
+          ? Number(r.remainingAmount)
+          : Math.max(0, recordBilledAmount(r) - recordCollectedAmount(r))
+      return sum + remaining
+    }, 0),
+    avgBillSize: collectionSource.length > 0 ? Math.round(collectionAmount / collectionSource.length) : 0,
   }
 }
 
@@ -224,6 +273,7 @@ export default function BillingHistoryPanel({
         refundAmount: record.refundAmount !== undefined ? Number(record.refundAmount) : undefined,
         depositSummary: record.depositSummary || null,
         depositTransactions: Array.isArray(record.depositTransactions) ? record.depositTransactions : [],
+        paidAmount: record.paidAmount !== undefined ? Number(record.paidAmount) : undefined,
       }))
       setBillingRecords(formatted)
     } catch (error) {
@@ -320,11 +370,12 @@ export default function BillingHistoryPanel({
     let lastPaymentAt: string | null = null
 
     billingRecords.forEach((record) => {
-      const amount = record.totalAmount || 0
+      const billed = recordBilledAmount(record)
+      const collected = recordCollectedAmount(record)
 
       if (record.status === "paid") {
-        totalBilled += amount
-        totalCollected += amount
+        totalBilled += billed
+        totalCollected += collected
         paidCount += 1
         if (record.paidAt) {
           if (!lastPaymentAt || new Date(record.paidAt) > new Date(lastPaymentAt)) {
@@ -334,12 +385,17 @@ export default function BillingHistoryPanel({
       } else if (record.status === "void") {
         voidCount += 1
       } else if (record.status === "cancelled") {
-        // Cancelled/refunded invoices are closed — not billed, not outstanding.
         cancelledCount += 1
       } else {
-        totalBilled += amount
-        pendingAmount += amount
+        totalBilled += billed
+        totalCollected += collected
+        pendingAmount += Math.max(0, billed - collected)
         pendingCount += 1
+        if (collected > 0 && record.generatedAt) {
+          if (!lastPaymentAt || new Date(record.generatedAt) > new Date(lastPaymentAt)) {
+            lastPaymentAt = record.generatedAt
+          }
+        }
       }
     })
 
@@ -428,11 +484,19 @@ export default function BillingHistoryPanel({
     )
   }
 
-  // Last 5 paid records for the Recent Activity panel
+  // Last 5 paid / deposit-collected records for the Recent Activity panel
   const recentPayments = useMemo(() => {
     return billingRecords
-      .filter(r => r.status === "paid" && r.paidAt)
-      .sort((a, b) => new Date(b.paidAt!).getTime() - new Date(a.paidAt!).getTime())
+      .filter(
+        (r) =>
+          (r.status === "paid" && r.paidAt) ||
+          (r.type === "admission" && Number(r.paidAmount || 0) > 0)
+      )
+      .sort((a, b) => {
+        const aDate = new Date(a.paidAt || a.generatedAt).getTime()
+        const bDate = new Date(b.paidAt || b.generatedAt).getTime()
+        return bDate - aDate
+      })
       .slice(0, 5)
   }, [billingRecords])
 
@@ -807,13 +871,15 @@ export default function BillingHistoryPanel({
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-slate-800">
-                        {formatCurrency(record.totalAmount)}
+                        {formatCurrency(recordCollectedAmount(record) || record.totalAmount)}
                         <span className="ml-1 font-normal text-slate-500">· {record.patientName || 'Patient'}</span>
                       </p>
                       <p className="mt-0.5 text-[10px] capitalize text-slate-400">
                         {record.type === 'appointment' ? 'Appointment' : 'Admission'}
                         {' · '}{record.paymentMethod || record.settlementMode || 'cash'}
-                        {record.paidAt ? ' · ' + new Date(record.paidAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        {(record.paidAt || record.generatedAt)
+                          ? ' · ' + new Date(record.paidAt || record.generatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                          : ''}
                       </p>
                     </div>
                   </div>
@@ -1142,11 +1208,31 @@ export default function BillingHistoryPanel({
                       {/* ── Right: Amount card + CTA ── */}
                       <div className="flex w-full shrink-0 flex-col gap-2 lg:w-44">
                         <div className={`rounded-xl border p-4 text-center ${amountBg}`}>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Total Amount</p>
-                          <p className={`text-2xl font-bold tabular-nums leading-none ${amountColor}`}>
-                            {formatCurrency(record.totalAmount)}
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                            {isPaid ? "Amount Paid" : "Amount Due"}
                           </p>
-                          {record.netPayable !== undefined && record.netPayable !== record.totalAmount && (
+                          <p className={`text-2xl font-bold tabular-nums leading-none ${amountColor}`}>
+                            {formatCurrency(
+                              isPaid
+                                ? recordCollectedAmount(record) || record.totalAmount
+                                : record.remainingAmount !== undefined
+                                  ? Number(record.remainingAmount)
+                                  : record.totalAmount
+                            )}
+                          </p>
+                          {Number(record.grossTotal || 0) > 0 && (
+                            <p className="mt-2 text-[11px] text-slate-500">
+                              Bill: <span className="font-bold text-slate-700">{formatCurrency(Number(record.grossTotal))}</span>
+                            </p>
+                          )}
+                          {!isPaid && Number(record.paidAmount || 0) > 0 && (
+                            <p className="mt-1 text-[11px] text-emerald-600">
+                              Paid: <span className="font-bold">{formatCurrency(Number(record.paidAmount))}</span>
+                            </p>
+                          )}
+                          {record.netPayable !== undefined &&
+                            record.netPayable !== record.totalAmount &&
+                            Number(record.grossTotal || 0) <= 0 && (
                             <p className="mt-2 text-[11px] text-slate-500">
                               Net: <span className="font-bold text-emerald-700">{formatCurrency(record.netPayable)}</span>
                             </p>

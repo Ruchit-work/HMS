@@ -65,8 +65,13 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
 
       if (!nextRoomSnap.exists) throw new Error("Target room not found")
       const nextRoomData = nextRoomSnap.data() || {}
-      if (nextRoomData.status && nextRoomData.status !== "available") {
+      if (nextRoomData.status === "maintenance" || nextRoomData.status === "inactive") {
         throw new Error("Target room is not available")
+      }
+      const nextBedCount = Number(nextRoomData.bedCount || 1)
+      const nextOccupied = Number(nextRoomData.occupiedBeds || 0)
+      if (nextOccupied >= nextBedCount) {
+        throw new Error("Target room is full")
       }
 
       const existingRoomStays = Array.isArray(admissionData.roomStays) ? admissionData.roomStays : []
@@ -109,14 +114,25 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
         updatedAt: nowIso,
       })
 
+      // Increment occupiedBeds for next room and set status if full
+      const nextOccupiedAfter = nextOccupied + 1
+      const nextStatus = nextOccupiedAfter >= nextBedCount ? "occupied" : "available"
       tx.update(nextRoomRef, {
-        status: "occupied",
+        occupiedBeds: admin.firestore.FieldValue.increment(1),
+        status: nextStatus,
         updatedAt: nowIso,
       })
 
+      // Decrement occupiedBeds for current room and update status if no beds left occupied
       if (currentRoomSnap.exists) {
+        const currentRoomData = currentRoomSnap.data() || {}
+        const currOccupied = Number(currentRoomData.occupiedBeds || 0)
+        const currBedCount = Number(currentRoomData.bedCount || 1)
+        const currOccupiedAfter = Math.max(0, currOccupied - 1)
+        const currStatus = currOccupiedAfter <= 0 ? "available" : currentRoomData.status || "occupied"
         tx.update(currentRoomRef, {
-          status: "available",
+          occupiedBeds: admin.firestore.FieldValue.increment(-1),
+          status: currStatus,
           updatedAt: nowIso,
         })
       }

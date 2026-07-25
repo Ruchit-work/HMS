@@ -131,7 +131,7 @@ export default function AssignRoomModal({
             <label className="rx-form-label">Room Number</label>
             {availableRoomsForType.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                No available rooms{assignRoomType ? ` for ${availableRoomTypes.find((t) => t.key === assignRoomType)?.label || assignRoomType}` : ""} — adjust selection or free up rooms.
+                No rooms available. Please contact your administrator to create rooms.
               </div>
             ) : (
               <select value={assignRoomId} onChange={(e) => setAssignRoomId(e.target.value)} className="rx-form-select">

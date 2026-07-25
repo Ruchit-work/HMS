@@ -409,5 +409,6 @@ export interface BillingRecord {
   paymentType?: "full" | "partial" // For appointment billing
   remainingAmount?: number // For appointment billing (partial payments)
   hospitalId?: string | null // For hospital-scoped appointment billing
+  paidAmount?: number // Amount already collected (deposits / payments)
 }
 

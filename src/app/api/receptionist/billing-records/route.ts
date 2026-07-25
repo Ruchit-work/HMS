@@ -44,6 +44,13 @@ interface UnifiedBillingRecord {
   remainingAmount?: number
   hospitalId?: string | null
   branchId?: string | null
+  paidAmount?: number
+  grossTotal?: number
+  netPayable?: number
+  refundAmount?: number
+  depositSummary?: unknown
+  depositTransactions?: unknown[]
+  chargeLineItems?: unknown[]
 }
 
 export async function GET(request: Request) {
@@ -112,6 +119,50 @@ export async function GET(request: Request) {
       billingDocs = snap.docs
         .filter((d) => String(d.data()?.hospitalId || "") === hospitalId)
         .slice(0, 100)
+    }
+
+    // Recover orphan admission bills missing hospitalId (legacy / earlier bug)
+    try {
+      const recentSnap = await firestore
+        .collection("billing_records")
+        .orderBy("generatedAt", "desc")
+        .limit(200)
+        .get()
+      const seenIds = new Set(billingDocs.map((d) => d.id))
+      for (const docSnap of recentSnap.docs) {
+        if (seenIds.has(docSnap.id)) continue
+        const data = docSnap.data() || {}
+        const admissionId = String(data.admissionId || "")
+        if (!admissionId) continue
+        const existingHospital = String(data.hospitalId || "")
+        if (existingHospital && existingHospital !== hospitalId) continue
+
+        let belongsToHospital = existingHospital === hospitalId
+        let resolvedBranchId = data.branchId || null
+        if (!belongsToHospital) {
+          const admissionSnap = await firestore.collection("admissions").doc(admissionId).get()
+          if (!admissionSnap.exists) continue
+          const admissionHospital = String(admissionSnap.data()?.hospitalId || "")
+          if (admissionHospital !== hospitalId) continue
+          belongsToHospital = true
+          resolvedBranchId = admissionSnap.data()?.branchId || resolvedBranchId
+          // Backfill so future hospital-scoped queries include this bill
+          await docSnap.ref.set(
+            {
+              hospitalId,
+              branchId: resolvedBranchId || null,
+              type: "admission",
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          )
+        }
+        if (!belongsToHospital) continue
+        billingDocs.push(docSnap)
+        seenIds.add(docSnap.id)
+      }
+    } catch {
+      // Best-effort recovery only
     }
 
     for (const docSnap of billingDocs) {
@@ -205,6 +256,18 @@ export async function GET(request: Request) {
         }
       }
 
+      const paidAmount = Number(data.paidAmount || 0)
+      const grossTotal = Number(data.grossTotal || 0)
+      const netPayable = Number(data.netPayable || 0)
+      const displayTotal =
+        Number(data.totalAmount || 0) > 0
+          ? Number(data.totalAmount || 0)
+          : paidAmount > 0
+            ? paidAmount
+            : grossTotal > 0
+              ? grossTotal
+              : netPayable
+
       records.push({
         id: docSnap.id,
         type: "admission",
@@ -223,17 +286,44 @@ export async function GET(request: Request) {
             ? "pay_later_after_discharge"
             : "standard",
         packageSummary: data.packageSummary || null,
-        totalAmount: Number(data.totalAmount || 0),
+        totalAmount: displayTotal,
         generatedAt: data.generatedAt || new Date().toISOString(),
         status: data.status || "pending",
         paymentMethod: data.paymentMethod,
         paidAt: data.paidAt || null,
         paymentReference: data.paymentReference || null,
-        transactionId: data.paymentReference || null,
+        transactionId: data.paymentReference || data.transactionId || null,
         paidAtFrontDesk: data?.paidAtFrontDesk ?? false,
         handledBy: data?.handledBy || null,
-        settlementMode: data?.settlementMode || null,
+        settlementMode: data?.settlementMode || data?.paymentMethod || null,
+        paymentType: data.paymentType || "full",
+        remainingAmount:
+          data.remainingAmount !== undefined
+            ? Number(data.remainingAmount)
+            : data.status === "paid"
+              ? 0
+              : Number(data.netPayable || data.totalAmount || 0),
+        hospitalId: data.hospitalId || hospitalId || null,
+        branchId: data.branchId || null,
       })
+
+      // Attach extended admission billing fields for UI (cast via any on client map)
+      const last = records[records.length - 1] as UnifiedBillingRecord & {
+        paidAmount?: number
+        grossTotal?: number
+        netPayable?: number
+        refundAmount?: number
+        depositSummary?: unknown
+        depositTransactions?: unknown
+        chargeLineItems?: unknown
+      }
+      last.paidAmount = paidAmount
+      last.grossTotal = grossTotal || undefined
+      last.netPayable = netPayable || undefined
+      last.refundAmount = data.refundAmount !== undefined ? Number(data.refundAmount) : undefined
+      last.depositSummary = data.depositSummary || null
+      last.depositTransactions = Array.isArray(data.depositTransactions) ? data.depositTransactions : []
+      last.chargeLineItems = Array.isArray(data.chargeLineItems) ? data.chargeLineItems : []
 
       // Track any explicit appointment billing tied to an appointmentId
       if (data.appointmentId) {

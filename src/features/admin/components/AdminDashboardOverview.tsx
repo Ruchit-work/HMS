@@ -100,6 +100,7 @@ type AdminTabId =
   | "subscriptions"
   | "activity"
   | "branches"
+  | "rooms"
   | "staff"
   | "account"
 

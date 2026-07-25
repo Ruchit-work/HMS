@@ -7,15 +7,10 @@ interface Params {
 }
 
 export async function PATCH(req: NextRequest, context: { params: Promise<Params> }) {
-  const auth = await authenticateRequest(req)
+  // Only admins may update rooms.
+  const auth = await authenticateRequest(req, "admin")
   if (!auth.success) {
     return createAuthErrorResponse(auth)
-  }
-  if (auth.user && auth.user.role !== "receptionist" && auth.user.role !== "admin") {
-    return Response.json(
-      { error: "Access denied. This endpoint requires receptionist or admin role." },
-      { status: 403 }
-    )
   }
 
   try {
@@ -50,7 +45,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<Params>
       updates.roomType = nextRoomType
       updates.customRoomTypeName = nextRoomType === "custom" ? customRoomTypeName : null
     }
-    if (body?.status === "available" || body?.status === "occupied" || body?.status === "maintenance") {
+    if (body?.status === "available" || body?.status === "occupied" || body?.status === "maintenance" || body?.status === "inactive") {
       updates.status = body.status
     }
     if (body?.ratePerDay !== undefined) {
@@ -59,6 +54,22 @@ export async function PATCH(req: NextRequest, context: { params: Promise<Params>
         return Response.json({ error: "Rate per day must be a valid positive number" }, { status: 400 })
       }
       updates.ratePerDay = rate
+    }
+    if (body?.ward !== undefined) updates.ward = typeof body.ward === "string" ? body.ward.trim() : null
+    if (body?.floor !== undefined) updates.floor = typeof body.floor === "string" ? body.floor.trim() : null
+    if (body?.bedCount !== undefined) {
+      const bc = Number(body.bedCount)
+      if (!Number.isFinite(bc) || bc <= 0) {
+        return Response.json({ error: "bedCount must be a positive integer" }, { status: 400 })
+      }
+      updates.bedCount = Math.floor(bc)
+    }
+    if (body?.occupiedBeds !== undefined) {
+      const ob = Number(body.occupiedBeds)
+      if (!Number.isFinite(ob) || ob < 0) {
+        return Response.json({ error: "occupiedBeds must be a non-negative integer" }, { status: 400 })
+      }
+      updates.occupiedBeds = Math.floor(ob)
     }
 
     await roomRef.update(updates)

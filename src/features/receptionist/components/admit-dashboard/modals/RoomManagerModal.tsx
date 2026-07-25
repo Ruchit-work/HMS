@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from '@/shared/components'
+import { useAuth } from "@/shared/hooks/useAuth"
 import { ROOM_TYPES } from "@/constants/roomTypes"
 import type { Room } from "@/types/patient"
 
@@ -18,6 +19,14 @@ interface RoomManagerModalProps {
   setManageRoomRate: (value: string) => void
   manageRoomStatus: Room["status"]
   setManageRoomStatus: (value: Room["status"]) => void
+  manageRoomWard: string
+  setManageRoomWard: (value: string) => void
+  manageRoomFloor: string
+  setManageRoomFloor: (value: string) => void
+  manageRoomBedCount: number | ""
+  setManageRoomBedCount: (value: number | "") => void
+  manageRoomOccupiedBeds: number | ""
+  setManageRoomOccupiedBeds: (value: number | "") => void
   roomManageLoading: boolean
   onSubmit: () => void
 }
@@ -36,9 +45,20 @@ export default function RoomManagerModal({
   setManageRoomRate,
   manageRoomStatus,
   setManageRoomStatus,
+  manageRoomWard,
+  setManageRoomWard,
+  manageRoomFloor,
+  setManageRoomFloor,
+  manageRoomBedCount,
+  setManageRoomBedCount,
+  manageRoomOccupiedBeds,
+  setManageRoomOccupiedBeds,
   roomManageLoading,
   onSubmit,
 }: RoomManagerModalProps) {
+  const { user } = useAuth()
+  const isAdmin = Boolean(user && (user.role === "admin" || user.role === "super_admin"))
+  if (!isAdmin) return null
   if (!isOpen) return null
 
   return (
@@ -97,6 +117,63 @@ export default function RoomManagerModal({
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 placeholder="e.g. 3000"
               />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mt-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Ward</label>
+              <input
+                value={manageRoomWard}
+                onChange={(e) => setManageRoomWard(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="e.g. A Ward"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Floor</label>
+              <input
+                value={manageRoomFloor}
+                onChange={(e) => setManageRoomFloor(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="e.g. 3"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Bed count</label>
+              <input
+                type="number"
+                min="1"
+                value={String(manageRoomBedCount || "")}
+                onChange={(e) => setManageRoomBedCount(e.target.value === "" ? "" : Math.max(1, Math.floor(Number(e.target.value))))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="e.g. 1"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mt-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Occupied beds</label>
+              <input
+                type="number"
+                min="0"
+                value={String(manageRoomOccupiedBeds || "")}
+                onChange={(e) => setManageRoomOccupiedBeds(e.target.value === "" ? "" : Math.max(0, Math.floor(Number(e.target.value))))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="e.g. 0"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Status</label>
+              <select
+                value={manageRoomStatus}
+                onChange={(e) => setManageRoomStatus(e.target.value as Room["status"])}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="available">Available</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="inactive">Inactive</option>
+                {roomEditId && <option value="occupied">Occupied</option>}
+              </select>
             </div>
           </div>
           {manageRoomType === "custom" && (

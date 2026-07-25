@@ -205,7 +205,35 @@ export async function POST(
     const netPayable = Math.max(0, grossTotal - totalDeposited)
     const refundAmount = Math.max(0, totalDeposited - grossTotal)
 
-    const billingPayload = {
+    const hospitalId =
+      typeof admissionData.hospitalId === "string" && admissionData.hospitalId.trim()
+        ? admissionData.hospitalId.trim()
+        : ""
+    const branchId =
+      typeof admissionData.branchId === "string" && admissionData.branchId.trim()
+        ? admissionData.branchId.trim()
+        : null
+
+    // Resolve payment method from deposit transactions (cash/upi/card) for collection analytics
+    const depositTransactions = Array.isArray(admissionData.depositTransactions)
+      ? admissionData.depositTransactions
+      : []
+    const resolvedDepositMode = [...depositTransactions]
+      .reverse()
+      .map((txn: any) => String(txn?.paymentMode || "").toLowerCase())
+      .find((mode) => mode === "cash" || mode === "upi" || mode === "card" || mode === "other")
+    const resolvedPaymentMethod =
+      resolvedDepositMode === "upi" || resolvedDepositMode === "card" || resolvedDepositMode === "cash"
+        ? resolvedDepositMode
+        : depositUsed > 0
+          ? "cash"
+          : null
+
+    const isFullyPaid = grossTotal > 0 ? depositUsed >= grossTotal : depositUsed > 0 && netPayable === 0
+    // Invoice face value: full bill when paid; remaining due when still outstanding
+    const invoiceTotalAmount = isFullyPaid ? Math.max(grossTotal, depositUsed) : netPayable
+
+    const billingPayload: Record<string, any> = {
       roomBillingPolicy: "calendar_day_full_charge",
       admissionId,
       appointmentId,
@@ -278,16 +306,28 @@ export async function POST(
         totalAdjusted: depositUsed,
         balance: Math.max(0, totalDeposited - depositUsed),
       },
-      depositTransactions: Array.isArray(admissionData.depositTransactions) ? admissionData.depositTransactions : [],
+      depositTransactions,
       grossTotal,
       netPayable,
       refundAmount,
-      totalAmount: netPayable,
+      paidAmount: depositUsed,
+      totalAmount: invoiceTotalAmount,
       generatedAt: checkOutAt.toISOString(),
-      status: "pending",
-      paymentMethod: null,
-      paidAt: null,
-      paymentReference: null,
+      status: isFullyPaid ? "paid" : "pending",
+      paymentMethod: isFullyPaid ? resolvedPaymentMethod : null,
+      paidAt: isFullyPaid ? checkOutAt.toISOString() : null,
+      paymentReference: isFullyPaid ? `IPD-DEP-${admissionId.slice(0, 8)}` : null,
+      paidAtFrontDesk: isFullyPaid || depositUsed > 0,
+      handledBy: auth.user?.uid || null,
+      settlementMode: resolvedPaymentMethod,
+      paymentType: isFullyPaid ? "full" : depositUsed > 0 ? "partial" : "full",
+      remainingAmount: isFullyPaid ? 0 : netPayable,
+      // Required for receptionist/admin billing queries (hospital-scoped)
+      hospitalId: hospitalId || null,
+      branchId,
+      type: "admission",
+      createdAt: checkOutAt.toISOString(),
+      updatedAt: checkOutAt.toISOString(),
     }
     if (operationPackage && packageDueAmount > 0) {
       billingPayload.otherServices.push({
@@ -312,6 +352,12 @@ export async function POST(
       const existingDepositTransactions = Array.isArray(admissionData.depositTransactions)
         ? admissionData.depositTransactions
         : []
+
+      // Read related docs first (required by Firestore transactions)
+      const appointmentDoc = appointmentRef ? await tx.get(appointmentRef) : null
+      const roomDoc = roomRef ? await tx.get(roomRef) : null
+
+      // Prepare admission update
       tx.update(admissionRef, {
         status: "completed",
         checkOutAt: checkOutAt.toISOString(),
@@ -345,33 +391,38 @@ export async function POST(
               ]
             : existingDepositTransactions,
         billingId: billingRecordRef.id,
-        updatedAt: checkOutAt.toISOString()
+        updatedAt: checkOutAt.toISOString(),
       })
 
-      if (appointmentRef) {
+      // Update appointment (if scoped)
+      if (appointmentRef && appointmentDoc && appointmentDoc.exists) {
         tx.update(appointmentRef, {
           status: "completed",
-          updatedAt: checkOutAt.toISOString()
+          updatedAt: checkOutAt.toISOString(),
         })
       }
 
-      if (roomRef) {
+      // Update room occupancy (if scoped)
+      if (roomRef && roomDoc && roomDoc.exists) {
+        const rd = roomDoc.data() || {}
+        const currentOccupied = Number(rd.occupiedBeds || 0)
+        const nextOccupied = Math.max(0, currentOccupied - 1)
+        const nextStatus = nextOccupied <= 0 ? "available" : rd.status || "occupied"
         tx.update(roomRef, {
-          status: "available",
-          updatedAt: checkOutAt.toISOString()
+          occupiedBeds: admin.firestore.FieldValue.increment(-1),
+          status: nextStatus,
+          updatedAt: checkOutAt.toISOString(),
         })
       }
 
       tx.set(billingRecordRef, billingPayload)
     })
 
-    const hospitalId =
-      typeof admissionData.hospitalId === "string" ? admissionData.hospitalId : ""
-    if (hospitalId) {
+    const auditHospitalId = hospitalId
+    if (auditHospitalId) {
       void auditLogger.logForUser(auth.user, {
-        hospitalId,
-        branchId:
-          typeof admissionData.branchId === "string" ? admissionData.branchId : null,
+        hospitalId: auditHospitalId,
+        branchId,
         module: "Admission",
         entityType: "admission",
         entityId: admissionId,
@@ -380,6 +431,7 @@ export async function POST(
         metadata: {
           billingId: billingRecordRef.id,
           totalAmount: billingPayload.totalAmount,
+          paidAmount: billingPayload.paidAmount,
           stayDays: diffDays,
         },
       })

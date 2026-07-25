@@ -55,6 +55,9 @@ const FinancialAnalytics = dynamic(() => import("@/features/admin/screens/Financ
 const HospitalManagement = dynamic(() => import("@/features/admin/screens/HospitalManagement"), {
   loading: () => <TabSkeleton variant="table" />,
 })
+const RoomManagement = dynamic(() => import("@/features/admin/screens/RoomManagement"), {
+  loading: () => <TabSkeleton variant="table" />,
+})
 const AdminAssignment = dynamic(() => import("@/features/admin/screens/AdminAssignment"), {
   loading: () => <TabSkeleton variant="table" />,
 })
@@ -216,6 +219,7 @@ const TAB_IDS = [
   "overview",
   "patients",
   "doctors",
+  "rooms",
   "campaigns",
   "appointments",
   "billing",
@@ -251,6 +255,7 @@ const TAB_META: Record<AdminTabId, { title: string; description: string }> = {
   branches: { title: "Branch Management", description: "Multi-site operations · capacity · staffing control" },
   staff: { title: "Staff Management", description: "Workforce directory · roles · shifts · access control" },
   settings: { title: "Hospital Settings", description: "Billing, payment, and operational policies for this hospital" },
+  rooms: { title: "Room Management", description: "Manage rooms, ward, beds and availability for this hospital" },
   audit: { title: "Audit Logs", description: "Immutable history of critical business events for this hospital" },
   account: { title: "My Account", description: "View your profile and update your login password" },
 }
@@ -1120,14 +1125,24 @@ function AdminDashboardContent() {
                 <span className="rx-nav-group-label">Management</span>
                 <div className="space-y-0.5 mt-1.5">
                   {branchManagementEnabled && (
-                    <button
-                      type="button"
-                      onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
-                      className={`rx-nav-item ${activeTab === "branches" ? "rx-nav-item--active" : ""}`}
-                    >
-                      <GitBranch className="w-4 h-4 shrink-0" />
-                      <span>Branches</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab("branches"); setSidebarOpen(false) }}
+                        className={`rx-nav-item ${activeTab === "branches" ? "rx-nav-item--active" : ""}`}
+                      >
+                        <GitBranch className="w-4 h-4 shrink-0" />
+                        <span>Branches</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab("rooms"); setSidebarOpen(false) }}
+                        className={`rx-nav-item ${activeTab === "rooms" ? "rx-nav-item--active" : ""}`}
+                      >
+                        <Building2 className="w-4 h-4 shrink-0" />
+                        <span>Rooms</span>
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"
@@ -1563,6 +1578,7 @@ function AdminDashboardContent() {
           )}
 
           {activeTab === "hospitals" && <HospitalManagement />}
+          {activeTab === "rooms" && <RoomManagement />}
 
           {activeTab === "admins" && <AdminAssignment />}
 

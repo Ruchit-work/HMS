@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from '@/shared/components'
+import { useAuth } from "@/shared/hooks/useAuth"
 import type { Room } from "@/types/patient"
 import type { Dispatch, SetStateAction } from "react"
 
@@ -83,6 +84,8 @@ export default function IpdSettingsSection({
   handleOpenEditRoom,
   handleArchiveRoom,
 }: IpdSettingsSectionProps) {
+  const { user } = useAuth()
+  const isAdmin = Boolean(user && (user.role === "admin" || user.role === "super_admin"))
   return (
     <>
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -236,9 +239,13 @@ export default function IpdSettingsSection({
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900">Room Master</h3>
-          <Button type="button" variant="primary" size="sm" onClick={handleOpenCreateRoom}>
-            Add Room
-          </Button>
+          {isAdmin ? (
+            <Button type="button" variant="primary" size="sm" onClick={handleOpenCreateRoom}>
+              Add Room
+            </Button>
+          ) : (
+            <div className="text-sm text-slate-500">Contact administrator to manage rooms</div>
+          )}
         </div>
         <div className="rounded-xl border border-slate-200">
           <table className="min-w-full text-sm">
@@ -260,8 +267,14 @@ export default function IpdSettingsSection({
                   <td className="px-3 py-3 text-xs text-slate-600 capitalize">{room.status}</td>
                   <td className="px-3 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => handleOpenEditRoom(room)} className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600">Edit</button>
-                      <button onClick={() => handleArchiveRoom(room)} className="rounded border border-rose-200 px-2 py-1 text-xs text-rose-600">Archive</button>
+                      {isAdmin ? (
+                        <>
+                          <button onClick={() => handleOpenEditRoom(room)} className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600">Edit</button>
+                          <button onClick={() => handleArchiveRoom(room)} className="rounded border border-rose-200 px-2 py-1 text-xs text-rose-600">Archive</button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-500">Admin only</span>
+                      )}
                     </div>
                   </td>
                 </tr>

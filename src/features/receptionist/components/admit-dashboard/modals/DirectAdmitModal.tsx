@@ -310,9 +310,13 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
                   const selected = admissionPackages.find((pkg) => pkg.id === nextPackageId)
                   if (selected?.preferredRoomType) {
                     setAssignRoomType(selected.preferredRoomType)
-                    const firstMatching = rooms.find(
-                      (room) => room.status === "available" && getRoomTypeFilterKey(room) === selected.preferredRoomType
-                    )
+                    const firstMatching = rooms.find((room) => {
+                      if (room.status !== "available") return false
+                      const bedCount = Number((room as any).bedCount || 1)
+                      const occupiedBeds = Number((room as any).occupiedBeds || 0)
+                      if (occupiedBeds >= bedCount) return false
+                      return getRoomTypeFilterKey(room) === selected.preferredRoomType
+                    })
                     setAssignRoomId(firstMatching?.id || "")
                   }
                 }}
@@ -371,12 +375,18 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
               </div>
               <div className="rx-form-field">
                 <label className="rx-form-label">Room Number</label>
-                <select value={assignRoomId} onChange={(e) => setAssignRoomId(e.target.value)} className="rx-form-select">
-                  <option value="">Select room</option>
-                  {availableRoomsForType.map((room) => (
-                    <option key={room.id} value={room.id}>{room.roomNumber} — {getRoomTypeDisplayName(room)}</option>
-                  ))}
-                </select>
+                {availableRoomsForType.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                    No rooms available. Please contact your administrator to create rooms.
+                  </div>
+                ) : (
+                  <select value={assignRoomId} onChange={(e) => setAssignRoomId(e.target.value)} className="rx-form-select">
+                    <option value="">Select room</option>
+                    {availableRoomsForType.map((room) => (
+                      <option key={room.id} value={room.id}>{room.roomNumber} — {getRoomTypeDisplayName(room)}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               {!directPackageId && (
                 <div className="rx-form-field">

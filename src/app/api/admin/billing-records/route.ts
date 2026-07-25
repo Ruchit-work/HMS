@@ -32,6 +32,7 @@ interface UnifiedBillingRecord {
   settlementMode?: string | null
   paymentType?: "full" | "partial"
   remainingAmount?: number
+  paidAmount?: number
   hospitalId?: string | null
   branchId?: string | null
 }
@@ -187,6 +188,8 @@ export async function GET(request: Request) {
         paymentMethod: data.paymentMethod,
         paidAt: data.paidAt || null,
         paymentReference: data.paymentReference || null,
+        paidAmount: Number(data.paidAmount || 0),
+        remainingAmount: Number(data.remainingAmount || 0),
         transactionId: data.paymentReference || null,
         paidAtFrontDesk: data?.paidAtFrontDesk ?? false,
         handledBy: data?.handledBy || null,

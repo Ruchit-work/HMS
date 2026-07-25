@@ -224,8 +224,14 @@ export async function POST(req: Request) {
       return Response.json({ error: "Room not found" }, { status: 404 })
     }
     const roomData = roomSnap.data() || {}
-    if (roomData.status && roomData.status !== "available") {
+    // Disallow assignment to inactive/maintenance rooms
+    if (roomData.status === "maintenance" || roomData.status === "inactive") {
       return Response.json({ error: "Room is not available" }, { status: 400 })
+    }
+    const bedCount = Number(roomData.bedCount || 1)
+    const occupiedBeds = Number(roomData.occupiedBeds || 0)
+    if (occupiedBeds >= bedCount) {
+      return Response.json({ error: "Room is full" }, { status: 400 })
     }
 
     const hospitalId = await getUserActiveHospitalId(auth.user!.uid)
@@ -419,6 +425,7 @@ export async function POST(req: Request) {
         : []
     const admissionPayload = {
       hospitalId,
+      branchId: defaultBranchId,
       ipdNo,
       appointmentId: "",
       patientUid: resolvedPatientUid || resolvedPatientId || `direct-${admissionRef.id}`,
@@ -478,12 +485,21 @@ export async function POST(req: Request) {
     }
 
     await firestore.runTransaction(async (tx) => {
-      if (!isPlanned) {
-        tx.update(roomRef, {
-          status: "occupied",
-          updatedAt: nowIso,
-        })
+      const roomDoc = await tx.get(roomRef)
+      if (!roomDoc.exists) throw new Error("Room not found during transaction")
+      const rd = roomDoc.data() || {}
+      const currentOccupied = Number(rd.occupiedBeds || 0)
+      const totalBeds = Number(rd.bedCount || 1)
+      const nextOccupied = currentOccupied + (isPlanned ? 0 : 1)
+      const nextStatus = nextOccupied >= totalBeds ? "occupied" : "available"
+      const roomUpdates: Record<string, unknown> = {
+        updatedAt: nowIso,
       }
+      if (!isPlanned) {
+        roomUpdates.occupiedBeds = admin.firestore.FieldValue.increment(1)
+        roomUpdates.status = nextStatus
+      }
+      tx.update(roomRef, roomUpdates)
       tx.set(admissionRef, admissionPayload)
     })
 

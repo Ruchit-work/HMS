@@ -1,7 +1,7 @@
 import { admin, initFirebaseAdmin } from "@/server/firebaseAdmin"
 import type { NextRequest } from "next/server"
 import { authenticateRequest, createAuthErrorResponse } from "@/shared/utils/firebase/apiAuth"
-import { getAllActiveHospitals, getDoctorHospitalId, getHospitalCollectionPath, getUserActiveHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
+import { getAllActiveHospitals, getDoctorHospitalId, getHospitalCollectionPath, getReceptionistDefaultBranch, getUserActiveHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 
 interface Params {
   requestId: string
@@ -98,8 +98,13 @@ export async function POST(
     }
 
     const roomData = roomSnap.data() || {}
-    if (roomData.status && roomData.status !== "available") {
+    if (roomData.status === "maintenance" || roomData.status === "inactive") {
       return Response.json({ error: "Room is not available" }, { status: 400 })
+    }
+    const bedCount = Number(roomData.bedCount || 1)
+    const occupiedBeds = Number(roomData.occupiedBeds || 0)
+    if (occupiedBeds >= bedCount) {
+      return Response.json({ error: "Room is full" }, { status: 400 })
     }
 
     const hospitalId =
@@ -131,8 +136,14 @@ export async function POST(
         ? initialDepositPaymentMode
         : "cash"
 
+    const { branchId: defaultBranchId } = await getReceptionistDefaultBranch(
+      auth.user!.uid,
+      auth.user?.role
+    )
+
     const admissionPayload = {
       hospitalId,
+      branchId: defaultBranchId,
       appointmentId,
       patientUid: String(requestData.patientUid || ""),
       patientId: requestData.patientId || null,
@@ -183,6 +194,14 @@ export async function POST(
     }
 
     await firestore.runTransaction(async (tx) => {
+      const roomDoc = await tx.get(roomRef)
+      if (!roomDoc.exists) throw new Error("Room not found during transaction")
+      const rd = roomDoc.data() || {}
+      const currentOccupied = Number(rd.occupiedBeds || 0)
+      const totalBeds = Number(rd.bedCount || 1)
+      const nextOccupied = currentOccupied + 1
+      const nextStatus = nextOccupied >= totalBeds ? "occupied" : "available"
+
       tx.update(requestRef, {
         status: "accepted",
         acceptedAt: nowIso,
@@ -198,7 +217,8 @@ export async function POST(
       })
 
       tx.update(roomRef, {
-        status: "occupied",
+        occupiedBeds: admin.firestore.FieldValue.increment(1),
+        status: nextStatus,
         updatedAt: nowIso
       })
 

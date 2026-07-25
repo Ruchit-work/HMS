@@ -213,12 +213,23 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
       grossTotal,
       netPayable,
       refundAmount,
-      totalAmount: netPayable,
+      paidAmount: depositUsed,
+      totalAmount: netPayable > 0 ? netPayable : grossTotal,
       generatedAt: nowIso,
       status: "pending",
       paymentMethod: null,
       paidAt: null,
       paymentReference: null,
+      remainingAmount: netPayable,
+      hospitalId:
+        typeof admissionData.hospitalId === "string" && admissionData.hospitalId.trim()
+          ? admissionData.hospitalId.trim()
+          : null,
+      branchId:
+        typeof admissionData.branchId === "string" && admissionData.branchId.trim()
+          ? admissionData.branchId.trim()
+          : null,
+      type: "admission",
       updatedAt: nowIso,
     }
 
