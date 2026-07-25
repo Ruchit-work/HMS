@@ -190,6 +190,12 @@ export async function POST(request: Request) {
       bloodGroup: patientData.bloodGroup || "",
       address: patientData.address || "",
       dateOfBirth: patientData.dateOfBirth || "",
+      heightCm: patientData.heightCm !== undefined && patientData.heightCm !== null && `${patientData.heightCm}`.trim() !== "" && Number(patientData.heightCm) > 0
+        ? Number(patientData.heightCm)
+        : null,
+      weightKg: patientData.weightKg !== undefined && patientData.weightKg !== null && `${patientData.weightKg}`.trim() !== "" && Number(patientData.weightKg) > 0
+        ? Number(patientData.weightKg)
+        : null,
       createdAt: patientData.createdAt || nowIso,
       updatedAt: nowIso,
       createdBy: patientData.createdBy || "receptionist",

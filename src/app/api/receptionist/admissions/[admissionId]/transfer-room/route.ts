@@ -127,7 +127,6 @@ export async function POST(req: NextRequest, context: { params: Promise<Params> 
       if (currentRoomSnap.exists) {
         const currentRoomData = currentRoomSnap.data() || {}
         const currOccupied = Number(currentRoomData.occupiedBeds || 0)
-        const currBedCount = Number(currentRoomData.bedCount || 1)
         const currOccupiedAfter = Math.max(0, currOccupied - 1)
         const currStatus = currOccupiedAfter <= 0 ? "available" : currentRoomData.status || "occupied"
         tx.update(currentRoomRef, {

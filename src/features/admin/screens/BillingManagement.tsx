@@ -12,6 +12,7 @@ import {
   getCollectionPeriodRanges,
   sumPeriodMetrics,
 } from "@/shared/utils/collectionAnalytics"
+import BillingExpensesSection from "@/features/receptionist/components/billing/BillingExpensesSection"
 
 const BILLING_PAGE_SIZE = 10
 
@@ -608,6 +609,9 @@ export default function BillingManagement() {
           </div>
         )}
       </section>
+
+      {/* Operational expenses — admins have full access (create/edit/delete) */}
+      <BillingExpensesSection />
     </div>
   )
 }

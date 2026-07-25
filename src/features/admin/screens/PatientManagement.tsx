@@ -753,6 +753,8 @@ export default function PatientManagement({
                 bloodGroup: values.bloodGroup,
                 address: values.address,
                 dateOfBirth: values.dateOfBirth,
+                heightCm: values.heightCm || "",
+                weightKg: values.weightKg || "",
                 status: values.status ?? 'active',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),

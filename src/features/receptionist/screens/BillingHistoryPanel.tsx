@@ -9,6 +9,7 @@ import PaymentMethodSection, {
 import { BillingRecord } from "@/types/patient"
 import { authedFetchJson } from "@/shared/utils/authedFetch"
 import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
+import BillingExpensesSection from "@/features/receptionist/components/billing/BillingExpensesSection"
 
 // Show more billing records per page now that cards are more compact
 const BILLING_PAGE_SIZE = 10
@@ -215,6 +216,8 @@ export default function BillingHistoryPanel({
   const [billingTypeFilter, setBillingTypeFilter] = useState<"all" | "admission" | "appointment">("all")
   const [collectionPeriod, setCollectionPeriod] = useState<CollectionPeriod>("today")
   const [currentPage, setCurrentPage] = useState(1)
+  // Incrementing counter — each bump opens the Add Expense modal in the expenses section
+  const [expenseAddSignal, setExpenseAddSignal] = useState(0)
   const {
     settings: billingSettings,
     refundsEnabled,
@@ -729,6 +732,12 @@ export default function BillingHistoryPanel({
             iconPath: 'M4 6h16M4 10h16M4 14h16M4 18h16',
             cls: 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100',
             action: () => { setBillingStatusFilter("all"); setBillingTypeFilter("all") },
+          },
+          {
+            label: '+ Add Expense',
+            iconPath: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+            cls: 'text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100',
+            action: () => { setExpenseAddSignal((prev) => prev + 1) },
           },
         ] as const).map((qa) => (
           <button key={qa.label} type="button" onClick={qa.action}
@@ -1304,6 +1313,11 @@ export default function BillingHistoryPanel({
           </div>
         )}
       </section>
+
+      {/* ════════════════════════════════════════════
+          OPERATIONAL EXPENSES
+          ════════════════════════════════════════════ */}
+      <BillingExpensesSection onNotification={onNotification} openAddSignal={expenseAddSignal} />
 
       {/* ════════════════════════════════════════════
           PAYMENT MODAL

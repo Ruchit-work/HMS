@@ -15,6 +15,8 @@ export interface PatientProfileFormValues {
   dateOfBirth: string
   bloodGroup: string
   address: string
+  heightCm: string
+  weightKg: string
   status: 'active' | 'inactive'
   password: string
 }
@@ -61,6 +63,8 @@ export default function PatientProfileForm({
   const [dateOfBirth, setDateOfBirth] = useState(initialValues?.dateOfBirth ?? '')
   const [bloodGroup, setBloodGroup] = useState(initialValues?.bloodGroup ?? '')
   const [address, setAddress] = useState(initialValues?.address ?? '')
+  const [heightCm, setHeightCm] = useState(initialValues?.heightCm ?? '')
+  const [weightKg, setWeightKg] = useState(initialValues?.weightKg ?? '')
   const [status, setStatus] = useState<PatientProfileFormValues['status']>(
     showStatusField ? initialValues?.status ?? 'active' : 'active'
   )
@@ -70,6 +74,10 @@ export default function PatientProfileForm({
   const [showBloodGroupDropdown, setShowBloodGroupDropdown] = useState(false)
 
   const today = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  // Email is only mandatory for public self-signup (it is the portal login).
+  // Admin/receptionist registration works without an email.
+  const emailRequired = mode === 'public'
 
   useEffect(() => {
     setFormError(null)
@@ -103,11 +111,12 @@ export default function PatientProfileForm({
       case 'lastName':
         if (!value.trim()) return 'Last name is required'
         return null
-      case 'email':
-        if (!value.trim()) return 'Email address is required'
+      case 'email': {
+        if (!value.trim()) return emailRequired ? 'Email address is required' : null
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
         if (!emailRegex.test(value.trim())) return 'Please enter a valid email address'
         return null
+      }
       case 'phone':
         if (value.trim()) {
           const normalizedCountryCode = (countryCode || '+91').trim() || '+91'
@@ -162,12 +171,14 @@ export default function PatientProfileForm({
     if (!trimmedLast) {
       return setFormError('Please enter last name')
     }
-    if (!trimmedEmail) {
+    if (emailRequired && !trimmedEmail) {
       return setFormError('Please enter email address')
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(trimmedEmail)) {
-      return setFormError('Please enter a valid email address')
+    if (trimmedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(trimmedEmail)) {
+        return setFormError('Please enter a valid email address')
+      }
     }
 
     if (trimmedPhone) {
@@ -182,6 +193,15 @@ export default function PatientProfileForm({
 
     if (mode === 'public' && !dateOfBirth) {
       return setFormError('Please enter your date of birth')
+    }
+
+    const trimmedHeight = heightCm.trim()
+    const trimmedWeight = weightKg.trim()
+    if (trimmedHeight && (!Number.isFinite(Number(trimmedHeight)) || Number(trimmedHeight) <= 0)) {
+      return setFormError('Please enter a valid height in cm')
+    }
+    if (trimmedWeight && (!Number.isFinite(Number(trimmedWeight)) || Number(trimmedWeight) <= 0)) {
+      return setFormError('Please enter a valid weight in kg')
     }
 
     if (!password) {
@@ -210,6 +230,8 @@ export default function PatientProfileForm({
       dateOfBirth,
       bloodGroup,
       address: address.trim(),
+      heightCm: trimmedHeight,
+      weightKg: trimmedWeight,
       status: showStatusField ? status : 'active',
       password,
     }
@@ -406,6 +428,38 @@ export default function PatientProfileForm({
             <p className="rx-form-helper">Critical for emergency transfusions and surgical preparation</p>
           </div>
         </div>
+
+        {/* Height + Weight */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+          <div className="rx-form-field">
+            <label className="rx-form-label">Height (cm)</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={1}
+              step="any"
+              value={heightCm}
+              onChange={(e) => { setHeightCm(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="e.g. 170"
+            />
+            <p className="rx-form-helper">Optional — recorded in the patient's vitals</p>
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Weight (kg)</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={1}
+              step="any"
+              value={weightKg}
+              onChange={(e) => { setWeightKg(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="e.g. 65"
+            />
+            <p className="rx-form-helper">Optional — recorded in the patient's vitals</p>
+          </div>
+        </div>
       </div>
 
       {/* ══════════════════════════════════════
@@ -427,7 +481,8 @@ export default function PatientProfileForm({
         {/* Email */}
         <div className="rx-form-field">
           <label className="rx-form-label">
-            Email Address <span className="rx-required">*</span>
+            Email Address
+            {emailRequired && <span className="rx-required">*</span>}
           </label>
           <input
             type="email"
@@ -442,7 +497,7 @@ export default function PatientProfileForm({
             onBlur={(e) => handleFieldBlur('email', e.target.value)}
             className={`rx-form-input ${fieldErrors.email ? 'rx-form-input--error' : ''}`}
             placeholder="patient@example.com"
-            required
+            required={emailRequired}
           />
           {fieldErrors.email ? (
             <p className="rx-form-error-text">
@@ -450,7 +505,7 @@ export default function PatientProfileForm({
               {fieldErrors.email}
             </p>
           ) : (
-            <p className="rx-form-helper">Used for appointment reminders, reports, and portal login</p>
+            <p className="rx-form-helper">{emailRequired ? 'Used for appointment reminders, reports, and portal login' : 'Optional — used for appointment reminders, reports, and portal login'}</p>
           )}
         </div>
 

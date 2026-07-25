@@ -42,6 +42,8 @@ interface NewPatientForm {
   bloodGroup: string
   dateOfBirth: string
   address: string
+  heightCm: string
+  weightKg: string
 }
 
 const initialNewPatient: NewPatientForm = {
@@ -53,6 +55,8 @@ const initialNewPatient: NewPatientForm = {
   bloodGroup: "",
   dateOfBirth: "",
   address: "",
+  heightCm: "",
+  weightKg: "",
 }
 
 const emptyBookingPayment: BookingPaymentData = {
@@ -742,8 +746,11 @@ export default function BookAppointmentPanel({
       await assertAppointmentSlotAvailable(selectedDoctorId, appointmentDate, appointmentTime)
 
       if (patientMode === "new") {
-        if (!newPatient.firstName || !newPatient.lastName || !newPatient.email) {
-          throw new Error("Fill first name, last name, email")
+        if (!newPatient.firstName || !newPatient.lastName) {
+          throw new Error("Fill first name and last name")
+        }
+        if (newPatient.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatient.email.trim())) {
+          throw new Error("Please enter a valid email address")
         }
         if (newPatientPassword.length < 6) {
           throw new Error("Password must be at least 6 characters")
@@ -1019,19 +1026,19 @@ export default function BookAppointmentPanel({
                 >
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <input
-                      placeholder="First name"
+                      placeholder="First name *"
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.firstName}
                       onChange={(e) => setNewPatient((v) => ({ ...v, firstName: e.target.value }))}
                     />
                     <input
-                      placeholder="Last name"
+                      placeholder="Last name *"
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.lastName}
                       onChange={(e) => setNewPatient((v) => ({ ...v, lastName: e.target.value }))}
                     />
                     <input
-                      placeholder="Email"
+                      placeholder="Email (optional)"
                       type="email"
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       value={newPatient.email}
@@ -1090,6 +1097,24 @@ export default function BookAppointmentPanel({
                         onChange={(e) => setNewPatient((v) => ({ ...v, dateOfBirth: e.target.value }))}
                       />
                     </div>
+                    <input
+                      placeholder="Height (cm) — e.g. 170"
+                      type="number"
+                      inputMode="decimal"
+                      min={1}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                      value={newPatient.heightCm}
+                      onChange={(e) => setNewPatient((v) => ({ ...v, heightCm: e.target.value }))}
+                    />
+                    <input
+                      placeholder="Weight (kg) — e.g. 65"
+                      type="number"
+                      inputMode="decimal"
+                      min={1}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                      value={newPatient.weightKg}
+                      onChange={(e) => setNewPatient((v) => ({ ...v, weightKg: e.target.value }))}
+                    />
                     <input
                       placeholder="Address"
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100 sm:col-span-2"

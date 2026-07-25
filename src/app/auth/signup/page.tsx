@@ -260,6 +260,8 @@ function SignUpContent() {
         gender: values.gender,
         bloodGroup: values.bloodGroup,
         address: values.address,
+        heightCm: values.heightCm && Number(values.heightCm) > 0 ? Number(values.heightCm) : null,
+        weightKg: values.weightKg && Number(values.weightKg) > 0 ? Number(values.weightKg) : null,
         patientId,
         hospitalId: selectedHospital, // Store hospital association
         defaultBranchId: selectedBranch ? selectedBranch.id : null,
