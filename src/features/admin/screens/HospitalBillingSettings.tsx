@@ -14,6 +14,7 @@ import {
   type PaidAppointmentCancellationPolicy,
   type PaymentMethodKey,
   type RefundPolicy,
+  type RoundingPolicy,
 } from "@/shared/utils/billingSettings"
 
 type Notify = (type: "success" | "error", message: string) => void
@@ -70,6 +71,19 @@ const METHOD_LABELS: Record<PaymentMethodKey, string> = {
   bank_transfer: "Bank Transfer",
   cheque: "Cheque",
 }
+
+const ROUNDING_OPTIONS: Array<{ value: RoundingPolicy; title: string; description: string }> = [
+  {
+    value: "none",
+    title: "No Rounding",
+    description: "Patient pays the exact amount including paise (e.g. ₹50.70).",
+  },
+  {
+    value: "round_down_rupee",
+    title: "Round Down to Whole Rupee (Default)",
+    description: "Paise become a Round Off Discount. Example: ₹50.70 → pay ₹50.00 (discount ₹0.70). Medicine MRP is unchanged.",
+  },
+]
 
 function RadioCard({
   name,
@@ -380,7 +394,7 @@ export default function HospitalBillingSettings({ onNotify }: { onNotify: Notify
           <SectionCard
             icon={CreditCard}
             title="Accepted Payment Methods"
-            description="Only enabled methods appear in booking and collection screens."
+            description="Only enabled methods appear in booking, collection, and pharmacy prescription billing."
           >
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {(Object.keys(METHOD_LABELS) as PaymentMethodKey[]).map((method) => (
@@ -389,9 +403,9 @@ export default function HospitalBillingSettings({ onNotify }: { onNotify: Notify
                   checked={settings.paymentMethods[method]}
                   title={METHOD_LABELS[method]}
                   description={
-                    method === "bank_transfer" || method === "cheque"
-                      ? "Future-ready for offline / gateway settlement."
-                      : "Available for front-desk collection."
+                    method === "cheque"
+                      ? "Available for front-desk collection when enabled."
+                      : "Available for front-desk and pharmacy billing when enabled."
                   }
                   onChange={(next) =>
                     update("paymentMethods", {
@@ -405,6 +419,26 @@ export default function HospitalBillingSettings({ onNotify }: { onNotify: Notify
             <p className="text-xs text-slate-500">
               Currently enabled: {enabledPaymentMethods(settings).map((m) => METHOD_LABELS[m]).join(", ") || "None"}
             </p>
+          </SectionCard>
+
+          <SectionCard
+            icon={Wallet}
+            title="Rounding Policy"
+            description="Applied only at billing time. Medicine MRP is never modified."
+          >
+            <div className="grid gap-3 lg:grid-cols-2">
+              {ROUNDING_OPTIONS.map((option) => (
+                <RadioCard
+                  key={option.value}
+                  name="roundingPolicy"
+                  value={option.value}
+                  checked={settings.roundingPolicy === option.value}
+                  title={option.title}
+                  description={option.description}
+                  onChange={() => update("roundingPolicy", option.value)}
+                />
+              ))}
+            </div>
           </SectionCard>
 
           <SectionCard

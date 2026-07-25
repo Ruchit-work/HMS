@@ -77,6 +77,11 @@ export function createPharmacyApiClient(token: string) {
     getSuppliers: (params: { hospitalId: string }) => get('/api/pharmacy/suppliers', params),
     getAlerts: (params: { hospitalId: string; branchId?: string }) => get('/api/pharmacy/alerts', params),
     getPrescriptionQueue: (params: { hospitalId: string; branchId?: string }) => get('/api/pharmacy/prescription-queue', params),
+    removePrescriptionFromQueue: (appointmentId: string) =>
+      send(`/api/pharmacy/prescription-queue/${appointmentId}`, {
+        method: 'POST',
+        body: { action: 'remove' },
+      }),
     getSales: (params: { hospitalId: string; branchId?: string }) => get('/api/pharmacy/sales', params),
     getAnalytics: (params: { hospitalId: string; branchId?: string }) => get('/api/pharmacy/analytics', params),
     getTransfers: (params: { hospitalId: string }) => get('/api/pharmacy/transfers', params),

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/shared/components'
 import { BarcodeCameraScanner } from '@/features/pharmacy/ui/BarcodeCameraScanner'
 import type { BranchMedicineStock, MedicineBatch, PharmacyMedicine } from '@/types/pharmacy'
@@ -8,6 +8,19 @@ import { CashPaymentPanel } from '@/features/pharmacy/ui/CashTenderModal'
 import { generateBillPDFAndPrint } from '@/shared/utils/pharmacy/billPrint'
 import { MedicineSearchSelect, POSMedicineSearch } from './SearchInputs'
 import type { QueueItem } from '@/features/pharmacy/queueTypes'
+import { useHospitalBillingSettings } from '@/shared/hooks/useHospitalBillingSettings'
+import {
+  applyBillRounding,
+  enabledPharmacyPaymentMethods,
+  type PaymentMethodKey,
+} from '@/shared/utils/billingSettings'
+
+const PHARMACY_METHOD_LABELS: Record<string, string> = {
+  cash: 'Cash',
+  upi: 'UPI',
+  card: 'Card',
+  bank_transfer: 'Bank Transfer',
+}
 
 export function DispenseModal({
   queueItem,
@@ -34,9 +47,16 @@ export function DispenseModal({
   inline?: boolean
   hasActiveSession?: boolean
 }) {
+  const { settings: billingSettings } = useHospitalBillingSettings()
+  const pharmacyPaymentMethods = useMemo(
+    () => enabledPharmacyPaymentMethods(billingSettings),
+    [billingSettings]
+  )
+
   const branchId = queueItem.branchId || ''
   const branchStock = stock.filter((s) => s.branchId === branchId)
   const [saving, setSaving] = useState(false)
+  const [paymentMode, setPaymentMode] = useState<PaymentMethodKey>('cash')
   const [pendingDispensePayload, setPendingDispensePayload] = useState<{
     lines: Array<{ medicineId: string; quantity: number }>
     billAmount: number
@@ -47,6 +67,12 @@ export function DispenseModal({
   const cashConfirmLockRef = useRef(false)
   const [taxPercent, setTaxPercent] = useState(0)
   const [discountAmount, setDiscountAmount] = useState(0)
+
+  useEffect(() => {
+    if (pharmacyPaymentMethods.length > 0 && !pharmacyPaymentMethods.includes(paymentMode)) {
+      setPaymentMode(pharmacyPaymentMethods[0])
+    }
+  }, [pharmacyPaymentMethods, paymentMode])
   const [scannedMedicines, setScannedMedicines] = useState<PharmacyMedicine[]>([])
   const displayMedicines = useMemo(() => {
     const seen = new Set<string>()
@@ -144,7 +170,8 @@ export function DispenseModal({
     const billDiscount = Math.max(0, Number(discountAmount) || 0)
     const billTaxable = Math.max(0, billGross - billDiscount)
     const billTax = billTaxable * (taxPercent / 100)
-    const billNet = billTaxable + billTax
+    const preRound = billTaxable + billTax
+    const rounded = applyBillRounding(preRound, billingSettings.roundingPolicy)
     generateBillPDFAndPrint({
       type: 'prescription',
       patientName: queueItem.patientName,
@@ -155,10 +182,11 @@ export function DispenseModal({
       lines: billLines,
       grossTotal: billGross,
       discountAmount: billDiscount > 0 ? billDiscount : undefined,
+      roundOffDiscount: rounded.roundOffDiscount > 0 ? rounded.roundOffDiscount : undefined,
       taxTotal: billTax,
       taxPercent,
-      netTotal: billNet,
-      paymentMethod: 'cash',
+      netTotal: rounded.finalPayable,
+      paymentMethod: paymentMode,
     })
   }
 
@@ -166,7 +194,8 @@ export function DispenseModal({
     payload: Array<{ medicineId: string; quantity: number }>,
     amountReceived: number,
     changeGiven: number,
-    idempotencyKey: string
+    idempotencyKey: string,
+    mode: PaymentMethodKey = paymentMode
   ) => {
     if (!branchId) {
       onError('Appointment has no branch. Cannot dispense.')
@@ -187,11 +216,13 @@ export function DispenseModal({
           appointmentId: queueItem.appointmentId,
           branchId,
           lines: payload,
-          paymentMode: 'cash',
-          amountReceived,
-          tenderNotes: {},
-          changeNotes: {},
-          changeGiven,
+          paymentMode: mode,
+          amountReceived: mode === 'cash' ? amountReceived : undefined,
+          tenderNotes: mode === 'cash' ? {} : undefined,
+          changeNotes: mode === 'cash' ? {} : undefined,
+          changeGiven: mode === 'cash' ? changeGiven : undefined,
+          discountAmount: Math.max(0, Number(discountAmount) || 0),
+          taxPercent,
         }),
       })
       const data = await res.json()
@@ -230,6 +261,10 @@ export function DispenseModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (pharmacyPaymentMethods.length === 0) {
+      onError('Enable at least one pharmacy payment method in Hospital Billing Settings.')
+      return
+    }
     if (pendingDispensePayload) {
       onError('Complete or cancel the cash payment below before starting another dispense.')
       return
@@ -284,11 +319,13 @@ export function DispenseModal({
     }, 0)
     const disc = Math.max(0, Number(discountAmount) || 0)
     const taxable = Math.max(0, gross - disc)
-    const netTotalBill = taxable + taxable * (taxPercent / 100)
+    const preRound = taxable + taxable * (taxPercent / 100)
+    const rounded = applyBillRounding(preRound, billingSettings.roundingPolicy)
+    const netTotalBill = rounded.finalPayable
 
     if (netTotalBill <= 0) {
       const checkoutId = crypto.randomUUID()
-      await executeDispense(payload, 0, 0, checkoutId)
+      await executeDispense(payload, 0, 0, checkoutId, paymentMode)
       return
     }
 
@@ -298,7 +335,8 @@ export function DispenseModal({
     setPendingBillAmount(netTotalBill)
   }
 
-  const showCashPanel = !!pendingDispensePayload && pendingBillAmount > 0
+  const showPaymentPanel = !!pendingDispensePayload && pendingBillAmount > 0
+  const showCashPanel = showPaymentPanel && paymentMode === 'cash'
   const selectedCount = lines.filter((l) => l.medicineId && Number(l.quantity) > 0).length
   const orderLines = lines
     .map((l) => {
@@ -314,7 +352,9 @@ export function DispenseModal({
   const discount = Math.max(0, Number(discountAmount) || 0)
   const taxable = Math.max(0, grossTotal - discount)
   const taxTotal = taxable * (taxPercent / 100)
-  const netTotal = taxable + taxTotal
+  const preRoundTotal = taxable + taxTotal
+  const rounding = applyBillRounding(preRoundTotal, billingSettings.roundingPolicy)
+  const netTotal = rounding.finalPayable
   const modalSize = { width: '95vw', height: '92vh', minWidth: '900px', minHeight: '600px' }
 
   const content = (
@@ -581,10 +621,13 @@ export function DispenseModal({
             </div>
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <span className="text-slate-600">Items: <strong>{selectedCount}</strong></span>
-              <span className="text-slate-600">Gross: <strong>₹{grossTotal.toFixed(2)}</strong></span>
+              <span className="text-slate-600">Medicine Total: <strong>₹{grossTotal.toFixed(2)}</strong></span>
               {discount > 0 && <span className="text-slate-600">Discount: <strong>₹{discount.toFixed(2)}</strong></span>}
               <span className="text-slate-600">Tax: <strong>₹{taxTotal.toFixed(2)}</strong></span>
-              <span className="text-slate-800 font-semibold">Total: ₹{netTotal.toFixed(2)}</span>
+              {rounding.roundOffDiscount > 0 && (
+                <span className="text-emerald-700">Round Off Discount: <strong>₹{rounding.roundOffDiscount.toFixed(2)}</strong></span>
+              )}
+              <span className="text-slate-800 font-semibold">Final Payable: ₹{netTotal.toFixed(2)}</span>
             </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={saving}>
@@ -596,36 +639,115 @@ export function DispenseModal({
                 size="sm"
                 loading={saving}
                 loadingText="Processing…"
-                disabled={!hasActiveSession || selectedCount === 0 || !!pendingDispensePayload || saving}
+                disabled={!hasActiveSession || pharmacyPaymentMethods.length === 0 || selectedCount === 0 || !!pendingDispensePayload || saving}
                 title={
                   !hasActiveSession
                     ? 'Start a cash session first (Cash & expenses → Start shift)'
-                    : showCashPanel
-                      ? 'Confirm cash received in the panel below'
-                      : 'Review totals, then confirm cash payment below'
+                    : showPaymentPanel
+                      ? 'Confirm payment in the panel below'
+                      : 'Review totals, then confirm payment below'
                 }
               >
-                {showCashPanel ? 'Awaiting cash confirmation' : 'Review & open cash panel'}
+                {showPaymentPanel ? 'Awaiting payment confirmation' : 'Review & collect payment'}
               </Button>
             </div>
           </div>
-          {showCashPanel && (
-            <div className="mt-2 border-t border-slate-200 pt-4">
-              <CashPaymentPanel
-                key={cashCheckoutId ?? 'dispense-cash'}
-                billAmount={pendingBillAmount}
-                onConfirm={doDispenseWithCash}
-                confirmLabel="Confirm dispense & print bill"
-                isProcessing={saving}
-                disabled={saving}
-                resetKey={cashCheckoutId ?? undefined}
-                onCancel={() => {
-                  if (saving) return
-                  setPendingDispensePayload(null)
-                  setPendingBillAmount(0)
-                  setCashCheckoutId(null)
-                }}
-              />
+          {showPaymentPanel && (
+            <div className="mt-2 border-t border-slate-200 pt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+                  Payment Method
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {pharmacyPaymentMethods.map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setPaymentMode(method)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${
+                        paymentMode === method
+                          ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {PHARMACY_METHOD_LABELS[method] || method}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {showCashPanel ? (
+                <CashPaymentPanel
+                  key={cashCheckoutId ?? 'dispense-cash'}
+                  billAmount={pendingBillAmount}
+                  onConfirm={doDispenseWithCash}
+                  confirmLabel="Confirm dispense & print bill"
+                  isProcessing={saving}
+                  disabled={saving}
+                  resetKey={cashCheckoutId ?? undefined}
+                  onCancel={() => {
+                    if (saving) return
+                    setPendingDispensePayload(null)
+                    setPendingBillAmount(0)
+                    setCashCheckoutId(null)
+                  }}
+                />
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Collect ₹{pendingBillAmount.toFixed(2)} via {PHARMACY_METHOD_LABELS[paymentMode] || paymentMode}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Medicine Total ₹{grossTotal.toFixed(2)}
+                      {rounding.roundOffDiscount > 0
+                        ? ` · Round Off Discount ₹${rounding.roundOffDiscount.toFixed(2)}`
+                        : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={saving}
+                      onClick={() => {
+                        setPendingDispensePayload(null)
+                        setPendingBillAmount(0)
+                        setCashCheckoutId(null)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      loading={saving}
+                      loadingText="Dispensing…"
+                      onClick={async () => {
+                        const pending = pendingDispensePayload
+                        if (!pending || saving) return
+                        setPendingDispensePayload(null)
+                        setPendingBillAmount(0)
+                        setCashCheckoutId(null)
+                        const ok = await executeDispense(
+                          pending.lines,
+                          pending.billAmount,
+                          0,
+                          pending.idempotencyKey,
+                          paymentMode
+                        )
+                        if (!ok) {
+                          setPendingDispensePayload(pending)
+                          setPendingBillAmount(pending.billAmount)
+                          setCashCheckoutId(pending.idempotencyKey)
+                        }
+                      }}
+                    >
+                      Confirm dispense & print bill
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </form>

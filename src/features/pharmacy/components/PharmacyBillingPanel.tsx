@@ -9,6 +9,19 @@ import { generateBillPDFAndPrint } from '@/shared/utils/pharmacy/billPrint'
 import { BillingRiskStrip } from './RealWorldUiBlocks'
 import { POSMedicineSearch } from './SearchInputs'
 import type { QueueItem } from '@/features/pharmacy/queueTypes'
+import { useHospitalBillingSettings } from '@/shared/hooks/useHospitalBillingSettings'
+import {
+  applyBillRounding,
+  enabledPharmacyPaymentMethods,
+  type PaymentMethodKey,
+} from '@/shared/utils/billingSettings'
+
+const PHARMACY_METHOD_LABELS: Record<string, string> = {
+  cash: 'Cash',
+  upi: 'UPI',
+  card: 'Card',
+  bank_transfer: 'Bank Transfer',
+}
 
 /** POS-style billing panel: customer info, medicine search, order table with batch, totals, payment. Used in Prescription Queue & Billing page. */
 export function PharmacyBillingPanel({
@@ -42,6 +55,12 @@ export function PharmacyBillingPanel({
   /** If false, user must start a cash session before completing sales */
   hasActiveSession?: boolean
 }) {
+  const { settings: billingSettings } = useHospitalBillingSettings()
+  const pharmacyPaymentMethods = useMemo(
+    () => enabledPharmacyPaymentMethods(billingSettings),
+    [billingSettings]
+  )
+
   const [saving, setSaving] = useState(false)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -50,9 +69,13 @@ export function PharmacyBillingPanel({
   const [phoneHighlight, setPhoneHighlight] = useState(false)
   const [noPhoneHospitalPatient, setNoPhoneHospitalPatient] = useState(false)
   const [branchId, setBranchId] = useState(selectedBranchId ?? '')
-  const paymentOptions = [{ id: 'cash' as const, label: 'Cash' }, { id: 'upi' as const, label: 'UPI' }, { id: 'card' as const, label: 'Card' }, { id: 'other' as const, label: 'Insurance' }]
-  const [paymentMode, setPaymentMode] = useState<'cash' | 'card' | 'upi' | 'credit' | 'other'>('cash')
+  const [paymentMode, setPaymentMode] = useState<PaymentMethodKey>('cash')
   useEffect(() => { if (selectedBranchId) setBranchId(selectedBranchId) }, [selectedBranchId])
+  useEffect(() => {
+    if (pharmacyPaymentMethods.length > 0 && !pharmacyPaymentMethods.includes(paymentMode)) {
+      setPaymentMode(pharmacyPaymentMethods[0])
+    }
+  }, [pharmacyPaymentMethods, paymentMode])
   const effectiveBranchId = selectedBranchId ?? branchId
   const [taxPercent, setTaxPercent] = useState(0)
   const [discountAmount, setDiscountAmount] = useState(0)
@@ -193,7 +216,7 @@ export function PharmacyBillingPanel({
         customerPhone?: string
         customerAddress?: string
         doctorName?: string
-        paymentMode?: 'cash' | 'card' | 'upi' | 'credit' | 'other'
+        paymentMode?: PaymentMethodKey | 'credit' | 'other'
         taxPercent?: number
         discountAmount?: number
         lines?: Array<{ medicineId: string; quantity: string; batchId?: string }>
@@ -202,7 +225,12 @@ export function PharmacyBillingPanel({
       setCustomerPhone(parsed.customerPhone || '')
       setCustomerAddress(parsed.customerAddress || '')
       setDoctorName(parsed.doctorName || '')
-      setPaymentMode(parsed.paymentMode || 'cash')
+      const resumedMode = parsed.paymentMode || 'cash'
+      setPaymentMode(
+        pharmacyPaymentMethods.includes(resumedMode as PaymentMethodKey)
+          ? (resumedMode as PaymentMethodKey)
+          : (pharmacyPaymentMethods[0] || 'cash')
+      )
       setTaxPercent(Number(parsed.taxPercent) || 0)
       setDiscountAmount(Number(parsed.discountAmount) || 0)
       setLines(Array.isArray(parsed.lines) ? parsed.lines : [])
@@ -286,6 +314,10 @@ export function PharmacyBillingPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (pharmacyPaymentMethods.length === 0) {
+      onError('Enable at least one pharmacy payment method in Hospital Billing Settings.')
+      return
+    }
     if (pendingDispensePayload) {
       onError('Complete or cancel the cash payment below before starting another bill.')
       return
@@ -354,7 +386,9 @@ export function PharmacyBillingPanel({
     const disc = Math.max(0, Number(discountAmount) || 0)
     const taxable = Math.max(0, grossFromPayload - disc)
     const billTax = taxable * (taxPercent / 100)
-    const net = taxable + billTax
+    const preRound = taxable + billTax
+    const rounded = applyBillRounding(preRound, billingSettings.roundingPolicy)
+    const net = rounded.finalPayable
     if (paymentMode === 'cash') {
       const checkoutId = crypto.randomUUID()
       setCashCheckoutId(checkoutId)
@@ -389,6 +423,8 @@ export function PharmacyBillingPanel({
           paymentMode,
           lines: payload,
           appointmentId: billingAppointmentId ?? undefined,
+          discountAmount: disc,
+          taxPercent,
         }),
       })
       const data = await res.json()
@@ -404,10 +440,10 @@ export function PharmacyBillingPanel({
         return { name: med?.name ?? '', qty, rate, amount, tax }
       })
       const gross = billLines.reduce((s, l) => s + l.amount, 0)
-      const disc = Math.max(0, Number(discountAmount) || 0)
-      const taxable = Math.max(0, gross - disc)
-      const billTax = taxable * (taxPercent / 100)
-      const net = taxable + billTax
+      const billDisc = Math.max(0, Number(discountAmount) || 0)
+      const billTaxable = Math.max(0, gross - billDisc)
+      const billTaxAmount = billTaxable * (taxPercent / 100)
+      const billRounded = applyBillRounding(billTaxable + billTaxAmount, billingSettings.roundingPolicy)
       generateBillPDFAndPrint({
         type: 'walk_in',
         patientName: customerName.trim(),
@@ -416,10 +452,11 @@ export function PharmacyBillingPanel({
         branchName,
         lines: billLines,
         grossTotal: gross,
-        discountAmount: disc > 0 ? disc : undefined,
-        taxTotal: billTax,
+        discountAmount: billDisc > 0 ? billDisc : undefined,
+        roundOffDiscount: billRounded.roundOffDiscount > 0 ? billRounded.roundOffDiscount : undefined,
+        taxTotal: billTaxAmount,
         taxPercent,
-        netTotal: net,
+        netTotal: billRounded.finalPayable,
         paymentMethod: paymentMode,
       })
       onSuccess()
@@ -471,6 +508,8 @@ export function PharmacyBillingPanel({
           tenderNotes: {},
           changeNotes: {},
           changeGiven,
+          discountAmount: Math.max(0, Number(discountAmount) || 0),
+          taxPercent,
         }),
       })
       const data = await res.json()
@@ -486,10 +525,10 @@ export function PharmacyBillingPanel({
         return { name: med?.name ?? '', qty, rate, amount, tax }
       })
       const gross = billLines.reduce((s, l) => s + l.amount, 0)
-      const disc = Math.max(0, Number(discountAmount) || 0)
-      const taxable = Math.max(0, gross - disc)
-      const billTax = taxable * (taxPercent / 100)
-      const net = taxable + billTax
+      const billDisc = Math.max(0, Number(discountAmount) || 0)
+      const billTaxable = Math.max(0, gross - billDisc)
+      const billTaxAmount = billTaxable * (taxPercent / 100)
+      const billRounded = applyBillRounding(billTaxable + billTaxAmount, billingSettings.roundingPolicy)
       generateBillPDFAndPrint({
         type: 'walk_in',
         patientName: pending.customerName,
@@ -498,10 +537,11 @@ export function PharmacyBillingPanel({
         branchName,
         lines: billLines,
         grossTotal: gross,
-        discountAmount: disc > 0 ? disc : undefined,
-        taxTotal: billTax,
+        discountAmount: billDisc > 0 ? billDisc : undefined,
+        roundOffDiscount: billRounded.roundOffDiscount > 0 ? billRounded.roundOffDiscount : undefined,
+        taxTotal: billTaxAmount,
         taxPercent,
-        netTotal: net,
+        netTotal: billRounded.finalPayable,
         paymentMethod: 'cash',
       })
       onSuccess()
@@ -562,7 +602,8 @@ export function PharmacyBillingPanel({
   const discount = Math.max(0, Number(discountAmount) || 0)
   const taxable = Math.max(0, grossTotal - discount)
   const taxTotal = taxable * (taxPercent / 100)
-  const netTotal = taxable + taxTotal
+  const rounding = applyBillRounding(taxable + taxTotal, billingSettings.roundingPolicy)
+  const netTotal = rounding.finalPayable
   const today = new Date().toISOString().slice(0, 10)
   const showCashPanel = paymentMode === 'cash' && !!pendingDispensePayload && pendingBillAmount > 0
 
@@ -710,14 +751,14 @@ export function PharmacyBillingPanel({
           <div>
             <label className="block text-xs text-slate-500 mb-1">Payment Mode</label>
             <div className="flex flex-wrap gap-1.5">
-              {paymentOptions.map((opt) => (
+              {pharmacyPaymentMethods.map((method) => (
                 <button
-                  key={opt.id}
+                  key={method}
                   type="button"
-                  onClick={() => setPaymentMode(opt.id === 'other' ? 'other' : opt.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${paymentMode === (opt.id === 'other' ? 'other' : opt.id) ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white text-slate-600 border-[var(--color-neutral-200)] hover:bg-slate-50'}`}
+                  onClick={() => setPaymentMode(method)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition ${paymentMode === method ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]' : 'bg-white text-slate-600 border-[var(--color-neutral-200)] hover:bg-slate-50'}`}
                 >
-                  {opt.label}
+                  {PHARMACY_METHOD_LABELS[method] || method}
                 </button>
               ))}
             </div>
@@ -1004,7 +1045,7 @@ export function PharmacyBillingPanel({
           <span className="font-medium text-slate-800">{orderLines.length}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-600">
-          <span>Subtotal</span>
+          <span>Medicine Total</span>
           <span className="tabular-nums">₹{grossTotal.toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-600">
@@ -1019,8 +1060,12 @@ export function PharmacyBillingPanel({
           <span>Tax ({taxPercent}%)</span>
           <span className="tabular-nums">₹{taxTotal.toFixed(2)}</span>
         </div>
+        <div className="flex justify-between text-sm text-slate-600">
+          <span>Round Off Discount</span>
+          <span className="tabular-nums text-emerald-700">₹{rounding.roundOffDiscount.toFixed(2)}</span>
+        </div>
         <div className="flex justify-between items-center pt-2 border-t border-[var(--color-neutral-200)]">
-          <span className="text-base font-semibold text-slate-800">Total payable</span>
+          <span className="text-base font-semibold text-slate-800">Final Payable Amount</span>
           <span className="text-2xl font-bold text-[var(--color-primary)] tabular-nums">₹{netTotal.toFixed(2)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-2">
@@ -1061,7 +1106,7 @@ export function PharmacyBillingPanel({
             className="ml-auto rounded-full px-6"
             loading={saving}
             loadingText="Processing…"
-            disabled={!canCompleteSale || !hasActiveSession || !!pendingDispensePayload || saving}
+            disabled={!canCompleteSale || !hasActiveSession || pharmacyPaymentMethods.length === 0 || !!pendingDispensePayload || saving}
             title={
               !hasActiveSession
                 ? 'Start a cash session first (Cash & expenses → Start shift)'

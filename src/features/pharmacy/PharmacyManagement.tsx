@@ -266,6 +266,7 @@ export default function PharmacyManagement() {
 
   const [inventoryHealthFilter, setInventoryHealthFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'expiring_soon' | 'dead_stock'>('all')
   const [dispenseQueueItem, setDispenseQueueItem] = useState<QueueItem | null>(null)
+  const [removingQueueAppointmentId, setRemovingQueueAppointmentId] = useState<string | null>(null)
   const queuePosSearchRef = useRef<HTMLInputElement>(null)
   const [editMinLevelMedicine, setEditMinLevelMedicine] = useState<PharmacyMedicine | null>(null)
   const [receiveOrder, setReceiveOrder] = useState<PharmacyPurchaseOrder | null>(null)
@@ -809,7 +810,29 @@ export default function PharmacyManagement() {
   )
 
   const queueToShow = branchFilter === 'all' ? queue : queue.filter(q => q.branchId === branchFilter)
-  const pendingQueue = queueToShow.filter(q => !q.dispensed)
+  const pendingQueue = queueToShow.filter(q => !q.dispensed && (q.queueStatus == null || q.queueStatus === 'pending'))
+
+  const handleRemoveFromQueue = useCallback(async (item: QueueItem) => {
+    try {
+      setRemovingQueueAppointmentId(item.appointmentId)
+      const token = await getToken()
+      if (!token) throw new Error('Not authenticated')
+      const client = createPharmacyApiClient(token)
+      const res = await client.removePrescriptionFromQueue(item.appointmentId)
+      if (!res.ok || !res.data.success) {
+        throw new Error((res.data as { error?: string }).error || 'Failed to remove from queue')
+      }
+      setSuccess('Prescription removed from pharmacy queue. Medical history retained.')
+      if (dispenseQueueItem?.appointmentId === item.appointmentId) {
+        setDispenseQueueItem(null)
+      }
+      await fetchPharmacy()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove from queue')
+    } finally {
+      setRemovingQueueAppointmentId(null)
+    }
+  }, [getToken, fetchPharmacy, dispenseQueueItem, setSuccess, setError])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1106,6 +1129,8 @@ export default function PharmacyManagement() {
             pendingQueue={pendingQueue}
             isViewOnly={isViewOnly}
             onSelectQueueItem={setDispenseQueueItem}
+            onRemoveFromQueue={handleRemoveFromQueue}
+            removingAppointmentId={removingQueueAppointmentId}
             onRefreshQueue={() => { void fetchPharmacy() }}
             onEnterFullscreen={enterQueueFullscreen}
             onExitFullscreen={exitQueueFullscreen}

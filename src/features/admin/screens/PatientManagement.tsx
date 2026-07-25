@@ -51,9 +51,14 @@ interface Patient {
             appointmentDate?: string
             appointmentTime?: string
             doctorName?: string
+            doctorSpecialization?: string
             status?: string
             chiefComplaint?: string
             medicalHistory?: string
+            doctorNotes?: string
+            medicine?: string
+            finalDiagnosis?: string[]
+            customDiagnosis?: string
         }>
         nextAppointment?: {
             date: string
@@ -383,9 +388,16 @@ export default function PatientManagement({
         const appointmentMap = new Map<string, any>()
         const appointmentsRef = getHospitalCollection(activeHospitalId, 'appointments')
 
-        // Query by UID and patient ID because old + new records are not always consistent.
-        const tasks: Promise<QuerySnapshot<DocumentData>>[] = [getDocs(query(appointmentsRef, where('patientUid', '==', patient.id)))]
-        if (patient.patientId) {
+        // Appointments are keyed inconsistently across flows:
+        // - Receptionist/doctor booking stores Firebase Auth UID in `patientId` (no patientUid).
+        // - Patient self-booking stores `patientUid` (= auth UID).
+        // - Some legacy rows store the sequential hospital patient number in `patientId`.
+        // Query all three and dedupe by appointment document id.
+        const tasks: Promise<QuerySnapshot<DocumentData>>[] = [
+            getDocs(query(appointmentsRef, where('patientId', '==', patient.id))),
+            getDocs(query(appointmentsRef, where('patientUid', '==', patient.id))),
+        ]
+        if (patient.patientId && patient.patientId !== patient.id) {
             tasks.push(getDocs(query(appointmentsRef, where('patientId', '==', patient.patientId))))
         }
 
@@ -396,7 +408,17 @@ export default function PatientManagement({
             })
         })
 
-        const appointments = Array.from(appointmentMap.values())
+        // Visit History excludes cancelled / no-show / not-attended (refunds do not affect inclusion).
+        const HIDDEN_VISIT_STATUSES = new Set([
+            'cancelled',
+            'doctor_cancelled',
+            'no_show',
+            'not_attended',
+            'refund_requested',
+        ])
+        const appointments = Array.from(appointmentMap.values()).filter(
+            (apt: any) => !HIDDEN_VISIT_STATUSES.has(String(apt.status || '').toLowerCase())
+        )
         const today = new Date().toISOString().split('T')[0]
         const upcoming = appointments.filter((apt: any) => {
             const isUpcoming = String(apt.appointmentDate || '') >= today
@@ -426,9 +448,14 @@ export default function PatientManagement({
                 appointmentDate: apt.appointmentDate,
                 appointmentTime: apt.appointmentTime,
                 doctorName: apt.doctorName,
+                doctorSpecialization: apt.doctorSpecialization || '',
                 status: apt.status,
                 chiefComplaint: apt.chiefComplaint,
                 medicalHistory: apt.medicalHistory,
+                doctorNotes: apt.doctorNotes || '',
+                medicine: apt.medicine || '',
+                finalDiagnosis: Array.isArray(apt.finalDiagnosis) ? apt.finalDiagnosis : [],
+                customDiagnosis: apt.customDiagnosis || '',
             })),
             nextAppointment: nextAppointment ? {
                 date: nextAppointment.appointmentDate,
@@ -1676,7 +1703,13 @@ export default function PatientManagement({
                           const today = new Date().toISOString().split('T')[0]
                           return String(apt.appointmentDate || '') >= today && ['confirmed', 'pending', 'whatsapp_pending'].includes(String(apt.status || ''))
                         })
-                        .map((apt) => (
+                        .map((apt) => {
+                          const diagnosisParts = [
+                            ...(Array.isArray(apt.finalDiagnosis) ? apt.finalDiagnosis : []),
+                            apt.customDiagnosis || '',
+                          ].filter(Boolean)
+                          const diagnosisLabel = diagnosisParts.join(', ')
+                          return (
                           <div key={apt.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-xs font-semibold text-slate-800">
@@ -1692,12 +1725,32 @@ export default function PatientManagement({
                                 {apt.status === 'whatsapp_pending' ? 'pending' : (apt.status || '—')}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-500 mt-0.5">{apt.doctorName || 'Doctor TBD'}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {apt.doctorName || 'Doctor TBD'}
+                              {apt.doctorSpecialization ? ` · ${apt.doctorSpecialization}` : ''}
+                            </p>
+                            <p className="text-[10px] font-mono text-slate-400 mt-0.5">ID: {apt.id}</p>
                             {apt.chiefComplaint && (
                               <p className="text-xs text-slate-600 mt-0.5 truncate">{apt.chiefComplaint}</p>
                             )}
+                            {diagnosisLabel && (
+                              <p className="text-xs text-slate-600 mt-0.5 truncate">
+                                <span className="font-semibold text-slate-500">Diagnosis:</span> {diagnosisLabel}
+                              </p>
+                            )}
+                            {apt.medicine && (
+                              <p className="text-xs text-slate-600 mt-0.5 truncate">
+                                <span className="font-semibold text-slate-500">Rx:</span> {apt.medicine}
+                              </p>
+                            )}
+                            {apt.doctorNotes && (
+                              <p className="text-xs text-slate-600 mt-0.5 truncate">
+                                <span className="font-semibold text-slate-500">Notes:</span> {apt.doctorNotes}
+                              </p>
+                            )}
                           </div>
-                        ))}
+                          )
+                        })}
                     </div>
                   )}
                 </div>

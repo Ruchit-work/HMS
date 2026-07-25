@@ -11,6 +11,12 @@ import { writePharmacyAuditEvent } from '@/shared/utils/pharmacy/audit'
 import { pharmacyError } from '@/shared/utils/pharmacy/apiResponse'
 import { getHospitalCollectionPath } from '@/shared/utils/firebase/serverHospitalQueries'
 import type { MedicineBatch, PharmacySale, PharmacySaleLine } from '@/types/pharmacy'
+import { getHospitalBillingSettings } from '@/server/hospitalBillingSettings'
+import {
+  applyBillRounding,
+  enabledPharmacyPaymentMethods,
+  type PaymentMethodKey,
+} from '@/shared/utils/billingSettings'
 
 function getStockDocId(branchId: string, medicineId: string): string {
   return `${branchId}_${medicineId}`
@@ -32,7 +38,19 @@ export async function POST(request: NextRequest) {
   } catch {
     return pharmacyError('Invalid JSON body', 400, 'INVALID_JSON_BODY')
   }
-  const { appointmentId, branchId, lines, customerName, customerPhone, paymentMode, tenderNotes, changeNotes, changeGiven } = body as {
+  const {
+    appointmentId,
+    branchId,
+    lines,
+    customerName,
+    customerPhone,
+    paymentMode,
+    tenderNotes,
+    changeNotes,
+    changeGiven,
+    discountAmount,
+    taxPercent,
+  } = body as {
     appointmentId?: string
     branchId: string
     lines: Array<{ medicineId: string; quantity: number; batchId?: string }>
@@ -42,14 +60,25 @@ export async function POST(request: NextRequest) {
     tenderNotes?: Record<string, number>
     changeNotes?: Record<string, number>
     changeGiven?: number
+    discountAmount?: number
+    taxPercent?: number
   }
-  const paymentModeValue = (paymentMode ?? '').toLowerCase()
-  const allowedPaymentModes = ['cash', 'card', 'upi', 'credit', 'other'] as const
-  const validPaymentMode = allowedPaymentModes.includes(paymentModeValue as (typeof allowedPaymentModes)[number])
-    ? paymentModeValue
-    : 'cash'
 
+  const billingSettings = await getHospitalBillingSettings(ctxResult.context.hospitalId)
+  const enabledModes = enabledPharmacyPaymentMethods(billingSettings)
+  const paymentModeValue = (paymentMode ?? '').toLowerCase() as PaymentMethodKey
   const isWalkIn = !appointmentId || appointmentId === ''
+  if (!isWalkIn && !enabledModes.includes(paymentModeValue)) {
+    return pharmacyError(
+      'Selected payment method is not enabled in Hospital Billing Settings.',
+      400,
+      'PAYMENT_METHOD_DISABLED'
+    )
+  }
+  const walkInModes = new Set(['cash', 'card', 'upi', 'bank_transfer', 'credit', 'other'])
+  const validPaymentMode = isWalkIn
+    ? (walkInModes.has(paymentModeValue) ? paymentModeValue : 'cash')
+    : paymentModeValue
 
   if (!branchId || !Array.isArray(lines) || lines.length === 0) {
     return NextResponse.json(
@@ -199,7 +228,16 @@ const deductions: Array<{ stockRef: DocRef; batches: MedicineBatch[]; totalQty: 
     })
   }
 
-  const totalAmount = saleLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0)
+  const medicineTotal = Math.round(
+    saleLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0) * 100
+  ) / 100
+  const disc = Math.max(0, Number(discountAmount) || 0)
+  const taxPct = Math.max(0, Number(taxPercent) || 0)
+  const taxable = Math.max(0, medicineTotal - disc)
+  const taxTotal = Math.round(taxable * (taxPct / 100) * 100) / 100
+  const preRound = Math.round((taxable + taxTotal) * 100) / 100
+  const rounded = applyBillRounding(preRound, billingSettings.roundingPolicy)
+  const totalAmount = rounded.finalPayable
   const saleId = nanoidLike()
   const now = new Date().toISOString()
   const ymd = now.slice(0, 10).replace(/-/g, '')
@@ -210,6 +248,12 @@ const deductions: Array<{ stockRef: DocRef; batches: MedicineBatch[]; totalQty: 
     branchId,
     patientName,
     lines: saleLines,
+    medicineTotal,
+    discountAmount: disc,
+    taxPercent: taxPct,
+    taxTotal,
+    roundOffDiscount: rounded.roundOffDiscount,
+    roundingPolicy: billingSettings.roundingPolicy,
     totalAmount,
     paymentMode: validPaymentMode,
     dispensedAt: now,

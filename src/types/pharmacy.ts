@@ -82,7 +82,7 @@ export interface PharmacySaleLine {
 export type PharmacySaleType = 'prescription' | 'walk_in'
 
 /** Payment mode for sales */
-export type PaymentMode = 'cash' | 'card' | 'upi' | 'credit' | 'other'
+export type PaymentMode = 'cash' | 'card' | 'upi' | 'bank_transfer' | 'credit' | 'other'
 
 export interface PharmacySale {
   id: string
@@ -100,7 +100,7 @@ export interface PharmacySale {
   doctorName?: string
   lines: PharmacySaleLine[]
   totalAmount: number
-  /** cash | card | upi | credit | other */
+  /** cash | card | upi | bank_transfer | credit | other */
   paymentMode?: PaymentMode | null
   dispensedAt: Timestamp | string
   dispensedBy: string // uid

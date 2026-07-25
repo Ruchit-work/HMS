@@ -90,42 +90,39 @@ export async function GET(req: Request, context: { params: Promise<Params> }) {
     const appointmentMap = new Map<string, any>()
     if (hospitalId) {
       const hospitalAppointmentsRef = firestore.collection(getHospitalCollectionPath(hospitalId, "appointments"))
-      const byUidSnap = await hospitalAppointmentsRef.where("patientUid", "==", patientUid).limit(25).get()
-      byUidSnap.docs.forEach((docSnap) => {
-        appointmentMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() || {}) })
-      })
-      if (patientId) {
-        const byPatientIdSnap = await hospitalAppointmentsRef.where("patientId", "==", patientId).limit(25).get()
-        byPatientIdSnap.docs.forEach((docSnap) => {
-          if (!appointmentMap.has(docSnap.id)) {
-            appointmentMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() || {}) })
-          }
-        })
+      // Receptionist/doctor bookings store Firebase Auth UID in `patientId` (often without patientUid).
+      // Patient self-booking stores `patientUid`. Legacy rows may use the sequential hospital patient number.
+      const hospitalQueries = [
+        hospitalAppointmentsRef.where("patientUid", "==", patientUid).limit(25).get(),
+        hospitalAppointmentsRef.where("patientId", "==", patientUid).limit(25).get(),
+      ]
+      if (patientId && patientId !== patientUid) {
+        hospitalQueries.push(hospitalAppointmentsRef.where("patientId", "==", patientId).limit(25).get())
       }
+      const hospitalSnaps = await Promise.all(hospitalQueries)
+      hospitalSnaps.forEach((snap) => {
+        snap.docs.forEach((docSnap) => {
+          appointmentMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() || {}) })
+        })
+      })
     }
 
-    if (patientId) {
-      const rootAppointmentsSnap = await firestore
-        .collection("appointments")
-        .where("patientId", "==", patientId)
-        .limit(25)
-        .get()
-      rootAppointmentsSnap.docs.forEach((docSnap) => {
+    const rootQueries = [
+      firestore.collection("appointments").where("patientUid", "==", patientUid).limit(25).get(),
+      firestore.collection("appointments").where("patientId", "==", patientUid).limit(25).get(),
+    ]
+    if (patientId && patientId !== patientUid) {
+      rootQueries.push(
+        firestore.collection("appointments").where("patientId", "==", patientId).limit(25).get()
+      )
+    }
+    const rootSnaps = await Promise.all(rootQueries)
+    rootSnaps.forEach((snap) => {
+      snap.docs.forEach((docSnap) => {
         if (!appointmentMap.has(docSnap.id)) {
           appointmentMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() || {}) })
         }
       })
-    }
-
-    const rootByUidSnap = await firestore
-      .collection("appointments")
-      .where("patientUid", "==", patientUid)
-      .limit(25)
-      .get()
-    rootByUidSnap.docs.forEach((docSnap) => {
-      if (!appointmentMap.has(docSnap.id)) {
-        appointmentMap.set(docSnap.id, { id: docSnap.id, ...(docSnap.data() || {}) })
-      }
     })
 
     // Fallback removed: do not scan other hospitals (tenant isolation).

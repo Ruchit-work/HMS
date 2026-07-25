@@ -25,10 +25,12 @@ interface BillData {
   lines: BillLine[]
   grossTotal: number
   discountAmount?: number
+  /** Paise waived by hospital rounding policy (does not change MRP). */
+  roundOffDiscount?: number
   taxTotal: number
   taxPercent: number
   netTotal: number
-  paymentMethod?: "cash" | "upi" | "card" | "credit" | "other" | string
+  paymentMethod?: "cash" | "upi" | "card" | "credit" | "other" | "bank_transfer" | string
   invoiceNumber?: string
   pharmacyName?: string
   pharmacyAddress?: string
@@ -591,12 +593,16 @@ function buildBillHTML(data: BillData): string {
 
       <div class="totals">
         <div class="row">
-          <span class="label">Gross Total</span>
+          <span class="label">Medicine Total</span>
           <span class="value">${money(data.grossTotal)}</span>
         </div>
         <div class="row">
           <span class="label">Discount</span>
           <span class="value">${money(data.discountAmount ?? 0)}</span>
+        </div>
+        <div class="row">
+          <span class="label">Round Off Discount</span>
+          <span class="value">${money(data.roundOffDiscount ?? 0)}</span>
         </div>
         <div class="row">
           <span class="label">GST (${escapeHtml(String(data.taxPercent))}%)</span>
@@ -611,7 +617,7 @@ function buildBillHTML(data: BillData): string {
           <span class="value">${money(sgst)}</span>
         </div>
         <div class="row payable">
-          <span>Net Payable Amount</span>
+          <span>Final Payable Amount</span>
           <span class="value">${money(data.netTotal)}</span>
         </div>
       </div>

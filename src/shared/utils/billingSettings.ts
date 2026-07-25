@@ -8,6 +8,9 @@ export type PaidAppointmentCancellationPolicy =
 
 export type PaymentMethodKey = "cash" | "upi" | "card" | "bank_transfer" | "cheque"
 
+/** How pharmacy / POS bills handle paise on the final payable amount. */
+export type RoundingPolicy = "none" | "round_down_rupee"
+
 export interface HospitalBillingSettings {
   refundPolicy: RefundPolicy
   paidAppointmentCancellation: PaidAppointmentCancellationPolicy
@@ -17,6 +20,8 @@ export interface HospitalBillingSettings {
   recheckupStartsUnpaid: boolean
   defaultRecheckupFee: number
   paymentMethods: Record<PaymentMethodKey, boolean>
+  /** Applied at billing time only — never changes medicine MRP. */
+  roundingPolicy: RoundingPolicy
   billingOptions: {
     generateTransactionIds: boolean
     requirePaymentNotes: boolean
@@ -44,6 +49,7 @@ export const DEFAULT_HOSPITAL_BILLING_SETTINGS: HospitalBillingSettings = {
     bank_transfer: false,
     cheque: false,
   },
+  roundingPolicy: "round_down_rupee",
   billingOptions: {
     generateTransactionIds: true,
     requirePaymentNotes: false,
@@ -59,6 +65,7 @@ const CANCELLATION_POLICIES = new Set<PaidAppointmentCancellationPolicy>([
   "create_refund_request",
   "auto_refund",
 ])
+const ROUNDING_POLICIES = new Set<RoundingPolicy>(["none", "round_down_rupee"])
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback
@@ -92,6 +99,9 @@ export function normalizeHospitalBillingSettings(value: unknown): HospitalBillin
   )
     ? (input.paidAppointmentCancellation as PaidAppointmentCancellationPolicy)
     : DEFAULT_HOSPITAL_BILLING_SETTINGS.paidAppointmentCancellation
+  const roundingPolicy = ROUNDING_POLICIES.has(input.roundingPolicy as RoundingPolicy)
+    ? (input.roundingPolicy as RoundingPolicy)
+    : DEFAULT_HOSPITAL_BILLING_SETTINGS.roundingPolicy
 
   return {
     refundPolicy,
@@ -135,6 +145,7 @@ export function normalizeHospitalBillingSettings(value: unknown): HospitalBillin
       ),
       cheque: asBoolean(methods.cheque, DEFAULT_HOSPITAL_BILLING_SETTINGS.paymentMethods.cheque),
     },
+    roundingPolicy,
     billingOptions: {
       generateTransactionIds: asBoolean(
         options.generateTransactionIds,
@@ -175,6 +186,45 @@ export function computeAdvanceAmount(
   if (percent <= 0) return 0
   if (percent >= 100) return fee
   return Math.ceil((fee * percent) / 100)
+}
+
+/**
+ * Apply hospital rounding policy to a bill total.
+ * Does not change medicine MRP — only the final payable amount.
+ *
+ * round_down_rupee: ₹50.70 → payable ₹50.00, discount ₹0.70
+ * none: keep amount as-is (2 decimal places)
+ */
+export function applyBillRounding(
+  amount: number,
+  policy: RoundingPolicy = "none"
+): { medicineTotal: number; roundOffDiscount: number; finalPayable: number } {
+  const medicineTotal = Math.round(Math.max(0, Number(amount) || 0) * 100) / 100
+  if (policy !== "round_down_rupee") {
+    return { medicineTotal, roundOffDiscount: 0, finalPayable: medicineTotal }
+  }
+  const paise = Math.round(medicineTotal * 100)
+  const payablePaise = Math.floor(paise / 100) * 100
+  const roundOffDiscount = (paise - payablePaise) / 100
+  return {
+    medicineTotal,
+    roundOffDiscount,
+    finalPayable: payablePaise / 100,
+  }
+}
+
+/** Payment methods shown in pharmacy POS / prescription queue (subset of hospital methods). */
+export const PHARMACY_PAYMENT_METHOD_KEYS: PaymentMethodKey[] = [
+  "cash",
+  "upi",
+  "card",
+  "bank_transfer",
+]
+
+export function enabledPharmacyPaymentMethods(
+  settings: Pick<HospitalBillingSettings, "paymentMethods">
+): PaymentMethodKey[] {
+  return PHARMACY_PAYMENT_METHOD_KEYS.filter((method) => settings.paymentMethods[method])
 }
 
 export function validateHospitalBillingSettings(

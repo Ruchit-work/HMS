@@ -220,6 +220,9 @@ export async function POST(request: Request) {
 
     const docData: Record<string, unknown> = {
       patientId: String(appointmentData.patientId),
+      // Mirror auth UID so Visit History / patient dashboard queries by patientUid also match
+      // receptionist-booked appointments (patientId is the Firebase Auth UID / patients doc id).
+      patientUid: String(appointmentData.patientUid || appointmentData.patientId),
       patientName: String(appointmentData.patientName),
       patientEmail: safeValue(appointmentData.patientEmail, ""),
       patientPhone: safeValue(appointmentData.patientPhone, ""),
