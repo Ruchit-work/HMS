@@ -27,6 +27,7 @@ function billingSettingsChangeSummary(
     recheckupStartsUnpaid: "Recheckup Starts Unpaid",
     defaultRecheckupFee: "Default Recheckup Fee",
     roundingPolicy: "Rounding Policy",
+    enableDetailedCashCounting: "Detailed Cash Counting",
   }
   const changed = Object.keys(labels).filter(
     (key) =>

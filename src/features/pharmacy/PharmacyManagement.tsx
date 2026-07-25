@@ -4,10 +4,10 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { useHospitalBillingSettings } from '@/shared/hooks/useHospitalBillingSettings'
 import { usePharmacyPortal } from '@/providers/PharmacyPortalProvider'
 import type { PharmacyPortalTabId } from '@/providers/PharmacyPortalProvider'
 import { GroupedNav } from '@/shared/components'
-import { Button } from '@/shared/components'
 import { buildPharmacyAdminNavSections } from '@/features/pharmacy/pharmacyNavConfig'
 import { Notification } from '@/shared/components'
 import { useTablePagination } from '@/shared/hooks/useTablePagination'
@@ -30,8 +30,10 @@ import { usePharmacyCatalog } from '@/features/pharmacy/hooks/usePharmacyCatalog
 import { usePharmacyCash } from '@/features/pharmacy/hooks/usePharmacyCash'
 import { usePharmacyReturns } from '@/features/pharmacy/hooks/usePharmacyReturns'
 import {
-  ShiftCloseChecklist,
-} from '@/features/pharmacy/components/RealWorldUiBlocks'
+  CloseShiftConfirmModal,
+  CloseShiftSuccessModal,
+  type CloseShiftSuccessSummary,
+} from '@/features/pharmacy/components/CloseShiftModals'
 import { DispenseModal } from '@/features/pharmacy/components/DispenseModal'
 import { InventoryTabContent } from '@/features/pharmacy/components/InventoryTabContent'
 import { AddMedicineForm, EditMinLevelModal } from '@/features/pharmacy/components/InventoryModals'
@@ -50,7 +52,7 @@ import { AddSupplierForm, EditSupplierForm } from '@/features/pharmacy/component
 import { TransfersTabContent } from '@/features/pharmacy/components/TransfersTabContent'
 import { AddPharmacistModalContent } from '@/features/pharmacy/components/UserManagementForms'
 import { UsersTabContent } from '@/features/pharmacy/components/UsersTabContent'
-import { CASH_DENOMS, REQUIRE_SHIFT_HANDOVER_NOTE, createEmptyCashNotes } from '@/features/pharmacy/constants'
+import { CASH_DENOMS, createEmptyCashNotes } from '@/features/pharmacy/constants'
 import {
   computeCloseShiftPreview,
   computeDailySummaryDayRows,
@@ -114,6 +116,8 @@ export default function PharmacyManagement() {
   const isPharmacyPortal = pathname === '/pharmacy'
   const isAdmin = authUser?.role === 'admin'
   const { activeHospitalId, activeHospital, isSuperAdmin } = useMultiHospital()
+  const { settings: hospitalBillingSettings } = useHospitalBillingSettings()
+  const detailedCashCounting = hospitalBillingSettings.enableDetailedCashCounting
   const portal = usePharmacyPortal()
 
   const [branchFilterLocal, setBranchFilterLocal] = useState<string>('all')
@@ -293,6 +297,8 @@ export default function PharmacyManagement() {
   const [saveExpenseLoading, setSaveExpenseLoading] = useState(false)
   const [cashOpeningNotes, setCashOpeningNotes] = useState<Record<string, string>>(() => createEmptyCashNotes())
   const [cashClosingNotes, setCashClosingNotes] = useState<Record<string, string>>(() => createEmptyCashNotes())
+  const [countedCashSimple, setCountedCashSimple] = useState('')
+  const [openingCashSimple, setOpeningCashSimple] = useState('')
   const openCounterSectionRef = useRef<HTMLDivElement>(null)
   const closeCounterSectionRef = useRef<HTMLDivElement>(null)
   const [highlightOpenCounter, setHighlightOpenCounter] = useState(false)
@@ -309,6 +315,7 @@ export default function PharmacyManagement() {
     cashExpenses: number
     profit: number
   } | null>(null)
+  const [closeShiftSuccess, setCloseShiftSuccess] = useState<CloseShiftSuccessSummary | null>(null)
   useEffect(() => {
     if (!highlightOpenCounter && !highlightCloseCounter) return
     const t = setTimeout(() => {
@@ -352,16 +359,15 @@ export default function PharmacyManagement() {
     setPrintBridgeUrl(bridgeStored)
   }, [])
 
-  const [expenseForm, setExpenseForm] = useState<{ date: string; amount: string; paymentMethod: string; note: string }>({
+  const [expenseForm, setExpenseForm] = useState<{ date: string; amount: string; paymentMethod: string; note: string; categoryId?: string }>({
     date: new Date().toISOString().slice(0, 10),
     amount: '',
     paymentMethod: 'cash',
     note: '',
+    categoryId: '',
   })
   const [defaultPrinterId, setDefaultPrinterId] = useState('')
   const [printBridgeUrl, setPrintBridgeUrl] = useState('')
-  type CashExpensePeriod = 'today' | 'week' | 'month' | 'year'
-  const [cashExpensePeriod, _setCashExpensePeriod] = useState<CashExpensePeriod>('today')
   type CashExpenseSubTab = 'shift' | 'daily'
   const [cashExpenseSubTab, setCashExpenseSubTab] = useState<CashExpenseSubTab>('shift')
   const [dailySummarySearch, setDailySummarySearch] = useState('')
@@ -383,18 +389,26 @@ export default function PharmacyManagement() {
   const [newCounterName, setNewCounterName] = useState<string>('')
   const [editingCashierId, setEditingCashierId] = useState<string | null>(null)
   const [editingCounterId, setEditingCounterId] = useState<string | null>(null)
-  const [manageCashierCounterTab, setManageCashierCounterTab] = useState<'cashier' | 'counter'>('cashier')
+  const [manageCashierCounterTab, setManageCashierCounterTab] = useState<'cashier' | 'counter' | 'printing'>('cashier')
   const [cashierSearchQuery, setCashierSearchQuery] = useState('')
   const [counterSearchQuery, setCounterSearchQuery] = useState('')
   const [showCloseShiftConfirm, setShowCloseShiftConfirm] = useState(false)
-  const [closedByName, setClosedByName] = useState<string>('')
-  const [closeChecklist, setCloseChecklist] = useState({
-    countedCash: false,
-    reviewedRefundsAndExpenses: false,
-    varianceAcknowledged: false,
-  })
+  const [closeConfirmed, setCloseConfirmed] = useState(false)
   const [closeVarianceReason, setCloseVarianceReason] = useState('')
   const [closeHandoverNote, setCloseHandoverNote] = useState('')
+
+  const authenticatedCloserName = useMemo(() => {
+    const data = authUser?.data as { firstName?: string; lastName?: string } | undefined
+    const fromName =
+      data?.firstName != null && data?.lastName != null
+        ? `${String(data.firstName)} ${String(data.lastName)}`.trim()
+        : data?.firstName != null
+          ? String(data.firstName)
+          : data?.lastName != null
+            ? String(data.lastName)
+            : ''
+    return fromName || authUser?.email?.split('@')[0] || 'Cashier'
+  }, [authUser])
   const [showAddPharmacistModal, setShowAddPharmacistModal] = useState(false)
   const [pharmacistForm, setPharmacistForm] = useState<{ firstName: string; lastName: string; email: string; password: string; branchId: string }>({
     firstName: '',
@@ -516,8 +530,9 @@ export default function PharmacyManagement() {
       sessionSales,
       cashClosingNotes,
       cashDenoms: CASH_DENOMS,
+      countedCashOverride: detailedCashCounting ? null : (Math.max(0, Number(countedCashSimple) || 0)),
     }),
-    [activeCashSession, sessionSales, cashClosingNotes]
+    [activeCashSession, sessionSales, cashClosingNotes, detailedCashCounting, countedCashSimple]
   )
 
   // Period date range helpers (combined across all counters – filter by branch only)
@@ -1174,77 +1189,6 @@ export default function PharmacyManagement() {
 
         {subTab === 'cash_and_expenses' && (
           <div className="space-y-6">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-900">Billing printer settings</h3>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Save printer ID once. Bills auto-open print flow when configured; otherwise PDF downloads.
-                  </p>
-                </div>
-                <div className="w-full sm:w-[460px]">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Default printer ID</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={defaultPrinterId}
-                      onChange={(e) => setDefaultPrinterId(e.target.value)}
-                      placeholder="e.g. HP-LaserJet-1, EPSON-TM-T82, Canon-FrontDesk"
-                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window === 'undefined') return
-                        const ids = defaultPrinterId
-                          .split(/[\n,]/g)
-                          .map((v) => v.trim())
-                          .filter(Boolean)
-                        if (ids.length > 0) {
-                          window.localStorage.setItem('pharmacyPrinterIds', ids.join(','))
-                          window.localStorage.setItem('pharmacyPrinterId', ids[0])
-                          setSuccess(`Saved ${ids.length} printer ID${ids.length > 1 ? 's' : ''}.`)
-                        } else {
-                          window.localStorage.removeItem('pharmacyPrinterIds')
-                          window.localStorage.removeItem('pharmacyPrinterId')
-                          setSuccess('Default printer ID cleared. Bills will download as PDF.')
-                        }
-                      }}
-                      className="rounded-lg bg-[#0891b2] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0e7490] transition"
-                    >
-                      Save
-                    </button>
-                  </div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1 mt-3">Print bridge URL (Phase 2)</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={printBridgeUrl}
-                      onChange={(e) => setPrintBridgeUrl(e.target.value)}
-                      placeholder="e.g. http://localhost:3210/print"
-                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window === 'undefined') return
-                        const url = printBridgeUrl.trim()
-                        if (url) {
-                          window.localStorage.setItem('pharmacyPrintBridgeUrl', url)
-                          setSuccess('Print bridge URL saved.')
-                        } else {
-                          window.localStorage.removeItem('pharmacyPrintBridgeUrl')
-                          setSuccess('Print bridge URL cleared.')
-                        }
-                      }}
-                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
-                    >
-                      Save URL
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
             {/* Cash & Expenses sub-tabs – professional tab bar */}
             <div className="border-b border-slate-200 bg-white">
               <div className="flex gap-0" role="tablist" aria-label="Cash & Expenses views">
@@ -1304,7 +1248,6 @@ export default function PharmacyManagement() {
               />
             ) : (
               <CashExpensesShiftContent
-                cashExpensePeriod={cashExpensePeriod}
                 periodSummaries={periodSummaries}
                 cashSessionsLoading={cashSessionsLoading}
                 activeCashSession={activeCashSession}
@@ -1313,10 +1256,13 @@ export default function PharmacyManagement() {
                 cashClosingNotes={cashClosingNotes}
                 setCashClosingNotes={setCashClosingNotes}
                 closeShiftPreview={closeShiftPreview}
+                detailedCashCounting={detailedCashCounting}
+                countedCashSimple={countedCashSimple}
+                setCountedCashSimple={setCountedCashSimple}
+                closeShiftLoading={closeShiftLoading}
                 closeCounterButtonClicked={closeCounterButtonClicked}
                 closeCounterSectionRef={closeCounterSectionRef}
                 openCounterSectionRef={openCounterSectionRef}
-                highlightCloseCounter={highlightCloseCounter}
                 highlightOpenCounter={highlightOpenCounter}
                 lastClosedSummary={lastClosedSummary}
                 recentCashSessions={recentCashSessions}
@@ -1328,9 +1274,8 @@ export default function PharmacyManagement() {
                 setSelectedCounterId={setSelectedCounterId}
                 cashOpeningNotes={cashOpeningNotes}
                 setCashOpeningNotes={setCashOpeningNotes}
-                openedByName={openedByName}
-                branchFilter={branchFilter}
-                activeHospitalId={activeHospitalId}
+                openingCashSimple={openingCashSimple}
+                setOpeningCashSimple={setOpeningCashSimple}
                 expenseForm={expenseForm}
                 setExpenseForm={setExpenseForm}
                 pendingExpensePayload={pendingExpensePayload}
@@ -1344,14 +1289,11 @@ export default function PharmacyManagement() {
                 branches={branches}
                 openCounterLoading={openCounterLoading}
                 saveExpenseLoading={saveExpenseLoading}
+                onViewAllSales={() => setSubTab('sales')}
                 onCloseShiftClick={() => {
                   setCloseCounterButtonClicked(true)
                   window.setTimeout(() => setCloseCounterButtonClicked(false), 350)
-                  setCloseChecklist({
-                    countedCash: false,
-                    reviewedRefundsAndExpenses: false,
-                    varianceAcknowledged: false,
-                  })
+                  setCloseConfirmed(false)
                   setCloseVarianceReason('')
                   setCloseHandoverNote('')
                   setShowCloseShiftConfirm(true)
@@ -1383,11 +1325,15 @@ export default function PharmacyManagement() {
                   const counter = counters.find((c) => c.id === selectedCounterId)
                   const notesNum: Record<string, number> = {}
                   let openingTotal = 0
-                  CASH_DENOMS.forEach((den) => {
-                    const count = Math.max(0, Number(cashOpeningNotes[den] || 0))
-                    notesNum[den] = count
-                    openingTotal += count * Number(den)
-                  })
+                  if (detailedCashCounting) {
+                    CASH_DENOMS.forEach((den) => {
+                      const count = Math.max(0, Number(cashOpeningNotes[den] || 0))
+                      notesNum[den] = count
+                      openingTotal += count * Number(den)
+                    })
+                  } else {
+                    openingTotal = Math.max(0, Number(openingCashSimple) || 0)
+                  }
                   setOpenCounterLoading(true)
                   try {
                     const client = createPharmacyApiClient(token)
@@ -1410,36 +1356,37 @@ export default function PharmacyManagement() {
                     setSuccess('Billing counter opened.')
                     setActiveCashSession((result.data.session as PharmacyCashSession | undefined) ?? null)
                     setLastClosedSummary(null)
+                    setOpeningCashSimple('')
                   } catch (e: any) {
                     setError(e?.message || 'Failed to open counter')
                   } finally {
                     setOpenCounterLoading(false)
                   }
                 }}
-                onSaveExpense={async () => {
-                  if (saveExpenseLoading) return
+                onSaveExpense={async (): Promise<'posted' | 'pending_cash' | 'error'> => {
+                  if (saveExpenseLoading) return 'error'
                   if (!activeHospitalId) {
                     setError('Active hospital is not set.')
-                    return
+                    return 'error'
                   }
                   const note = expenseForm.note.trim()
                   const amount = Number(expenseForm.amount)
                   if (!expenseForm.date || !note) {
-                    setError('Please fill date and note (required).')
-                    return
+                    setError('Please fill expense name and date (required).')
+                    return 'error'
                   }
                   if (!amount || amount <= 0) {
                     setError('Please enter a valid amount.')
-                    return
+                    return 'error'
                   }
                   if (branchFilter === 'all') {
                     setError('Select a branch to add expense.')
-                    return
+                    return 'error'
                   }
                   if (expenseForm.paymentMethod === 'cash') {
                     if (!activeCashSession) {
                       setError('Start a cash session first to record cash expense.')
-                      return
+                      return 'error'
                     }
                     setPendingExpensePayload({
                       amount,
@@ -1448,7 +1395,7 @@ export default function PharmacyManagement() {
                       paymentMethod: expenseForm.paymentMethod,
                     })
                     setShowExpenseCashModal(true)
-                    return
+                    return 'pending_cash'
                   }
                   setSaveExpenseLoading(true)
                   try {
@@ -1463,14 +1410,17 @@ export default function PharmacyManagement() {
                       note,
                       amount,
                       paymentMethod: expenseForm.paymentMethod,
+                      categoryId: expenseForm.categoryId || undefined,
                     })
                     if (!result.ok || !result.data.success) throw new Error((result.data.error as string) || 'Failed to add expense')
                     setSuccess('Expense recorded.')
-                    setExpenseForm((prev) => ({ ...prev, amount: '', note: '' }))
+                    setExpenseForm((prev) => ({ ...prev, amount: '', note: '', categoryId: '' }))
                     fetchExpensesAndCategories()
                     fetchCashSessions()
+                    return 'posted'
                   } catch (e: unknown) {
                     setError(e instanceof Error ? e.message : 'Failed to add expense')
+                    return 'error'
                   } finally {
                     setSaveExpenseLoading(false)
                   }
@@ -1490,10 +1440,11 @@ export default function PharmacyManagement() {
                       amount: pendingExpensePayload.amount,
                       paymentMethod: 'cash',
                       expenseNotes,
+                      categoryId: expenseForm.categoryId || undefined,
                     })
                     if (!result.ok || !result.data.success) throw new Error((result.data.error as string) || 'Failed to add expense')
                     setSuccess('Expense recorded. Counter updated.')
-                    setExpenseForm((prev) => ({ ...prev, amount: '', note: '' }))
+                    setExpenseForm((prev) => ({ ...prev, amount: '', note: '', categoryId: '' }))
                     setShowExpenseCashModal(false)
                     setPendingExpensePayload(null)
                     fetchExpensesAndCategories()
@@ -1542,6 +1493,37 @@ export default function PharmacyManagement() {
               setShowCreateCounterModal(true)
             }}
             onDeleteCounter={handleDeleteCounter}
+            defaultPrinterId={defaultPrinterId}
+            setDefaultPrinterId={setDefaultPrinterId}
+            printBridgeUrl={printBridgeUrl}
+            setPrintBridgeUrl={setPrintBridgeUrl}
+            onSavePrinterIds={() => {
+              if (typeof window === 'undefined') return
+              const ids = defaultPrinterId
+                .split(/[\n,]/g)
+                .map((v) => v.trim())
+                .filter(Boolean)
+              if (ids.length > 0) {
+                window.localStorage.setItem('pharmacyPrinterIds', ids.join(','))
+                window.localStorage.setItem('pharmacyPrinterId', ids[0])
+                setSuccess(`Saved ${ids.length} printer ID${ids.length > 1 ? 's' : ''}.`)
+              } else {
+                window.localStorage.removeItem('pharmacyPrinterIds')
+                window.localStorage.removeItem('pharmacyPrinterId')
+                setSuccess('Default printer ID cleared. Bills will download as PDF.')
+              }
+            }}
+            onSaveBridgeUrl={() => {
+              if (typeof window === 'undefined') return
+              const url = printBridgeUrl.trim()
+              if (url) {
+                window.localStorage.setItem('pharmacyPrintBridgeUrl', url)
+                setSuccess('Print bridge URL saved.')
+              } else {
+                window.localStorage.removeItem('pharmacyPrintBridgeUrl')
+                setSuccess('Print bridge URL cleared.')
+              }
+            }}
           />
         )}
 
@@ -2041,159 +2023,147 @@ export default function PharmacyManagement() {
         )}
 
         {showCloseShiftConfirm && activeCashSession && (
-          <RevealModal
+          <CloseShiftConfirmModal
             isOpen
-            contentClassName="!max-w-md max-h-[min(90dvh,720px)]"
             onClose={() => {
+              if (closeShiftLoading) return
               setShowCloseShiftConfirm(false)
-              setCloseChecklist({
-                countedCash: false,
-                reviewedRefundsAndExpenses: false,
-                varianceAcknowledged: false,
-              })
+              setCloseConfirmed(false)
               setCloseVarianceReason('')
               setCloseHandoverNote('')
             }}
-          >
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-auto max-h-[min(90dvh,720px)] flex flex-col overflow-hidden border border-slate-200/80">
-              <div className="shrink-0 bg-white border-b border-slate-200 px-6 sm:px-8 pt-6 pb-5 rounded-t-2xl">
-                <h2 className="text-xl font-bold text-slate-800 tracking-tight">Close shift</h2>
-                <p className="text-sm text-slate-500 mt-1">Confirm closing this shift. Start and close times are recorded.</p>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-5">
-                <p className="text-slate-700 font-medium">Are you sure you want to close this shift?</p>
-                <ShiftCloseChecklist
-                  difference={closeShiftPreview.difference}
-                  expectedCash={closeShiftPreview.expectedCash}
-                  actualCash={closeShiftPreview.actualCash}
-                  closedByName={closedByName}
-                  onClosedByNameChange={setClosedByName}
-                  closeVarianceReason={closeVarianceReason}
-                  onCloseVarianceReasonChange={setCloseVarianceReason}
-                  closeHandoverNote={closeHandoverNote}
-                  onCloseHandoverNoteChange={setCloseHandoverNote}
-                  closeChecklist={closeChecklist}
-                  onCloseChecklistChange={setCloseChecklist}
-                />
-              </div>
-              <div className="shrink-0 border-t border-slate-200 bg-white px-6 sm:px-8 py-4 flex justify-end gap-3 rounded-b-2xl">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowCloseShiftConfirm(false)
-                      setCloseChecklist({
-                        countedCash: false,
-                        reviewedRefundsAndExpenses: false,
-                        varianceAcknowledged: false,
-                      })
-                      setCloseVarianceReason('')
-                      setCloseHandoverNote('')
-                    }}
-                    className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200"
-                  >
-                    Cancel
-                  </button>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    loading={closeShiftLoading}
-                    loadingText="Closing shift…"
-                    onClick={async () => {
-                      if (closeShiftLoading) return
-                      const token = await getToken()
-                      if (!token || !activeCashSession) return
-                      if (!closeChecklist.countedCash || !closeChecklist.reviewedRefundsAndExpenses) {
-                        setError('Please complete the close-shift checklist before closing.')
-                        return
-                      }
-                      if (closeShiftPreview.difference !== 0 && !closeChecklist.varianceAcknowledged) {
-                        setError('Please acknowledge the non-zero cash variance before closing.')
-                        return
-                      }
-                      if (closeShiftPreview.difference !== 0 && !closeVarianceReason) {
-                        setError('Please select a variance reason before closing.')
-                        return
-                      }
-                      if (REQUIRE_SHIFT_HANDOVER_NOTE && closeHandoverNote.trim().length < 5) {
-                        setError('Please add a handover note before closing the shift.')
-                        return
-                      }
-                      setCloseShiftLoading(true)
-                      setShowCloseShiftConfirm(false)
-                      const closingNotesNum: Record<string, number> = {}
-                      CASH_DENOMS.forEach((den) => {
-                        const count = Math.max(0, Number(cashClosingNotes[den] || 0))
-                        closingNotesNum[den] = count
-                      })
-                      const closingTotal = closeShiftPreview.actualCash
-                      const body = {
-                        action: 'close',
-                        sessionId: activeCashSession.id,
-                        closingNotes: closingNotesNum,
-                        closingCashTotal: closingTotal,
-                        closedByName: closedByName || undefined,
-                        varianceReason: closeVarianceReason || undefined,
-                        handoverNote: closeHandoverNote.trim() || undefined,
-                        cashSales: sessionSales
-                          .filter((s) => s.paymentMode === 'cash')
-                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
-                        upiSales: sessionSales
-                          .filter((s) => s.paymentMode === 'upi')
-                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
-                        cardSales: sessionSales
-                          .filter((s) => s.paymentMode === 'card')
-                          .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
-                        refunds: sessionSales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
-                        cashRefunds: sessionSales
-                          .filter((s) => s.paymentMode === 'cash')
-                          .reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
-                        changeGiven: Number(activeCashSession?.changeGiven ?? 0),
-                        hospitalId: activeHospitalId,
-                        branchId: branchFilter === 'all' ? undefined : branchFilter,
-                      }
-                      try {
-                        const client = createPharmacyApiClient(token)
-                        const result = await client.upsertCashSession(body)
-                        if (!result.ok || !result.data.success) {
-                          setError((result.data.error as string) || 'Failed to close cash session')
-                          return
-                        }
-                        setSuccess('Counter closed and report saved.')
-                        setActiveCashSession(null)
-                        setCashClosingNotes(createEmptyCashNotes())
-                        const closed = result.data.session as PharmacyCashSession | undefined
-                        if (closed) {
-                          const cash = Number(closed.cashSales ?? 0)
-                          const upi = Number(closed.upiSales ?? 0)
-                          const card = Number(closed.cardSales ?? 0)
-                          const refunds = Number(closed.refunds ?? 0)
-                          const cashExp = Number(closed.cashExpenses ?? 0)
-                          const totalCollection = cash + upi + card - refunds
-                          setLastClosedSummary({
-                            openingCashTotal: Number(closed.openingCashTotal ?? 0),
-                            closingCashTotal: Number(closed.closingCashTotal ?? 0),
-                            cashSales: cash,
-                            upiSales: upi,
-                            cardSales: card,
-                            refunds,
-                            cashExpenses: cashExp,
-                            profit: totalCollection - cashExp,
-                          })
-                        }
-                        fetchCashSessions()
-                        openCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                      } catch (e: any) {
-                        setError(e?.message || 'Failed to close cash session')
-                      } finally {
-                        setCloseShiftLoading(false)
-                      }
-                    }}
-                  >
-                    Yes, close shift
-                  </Button>
-              </div>
-            </div>
-          </RevealModal>
+            salesTotal={periodSummaries.today.salesTotal}
+            expectedCash={closeShiftPreview.expectedCash}
+            countedCash={closeShiftPreview.actualCash}
+            difference={closeShiftPreview.difference}
+            varianceReason={closeVarianceReason}
+            onVarianceReasonChange={setCloseVarianceReason}
+            notes={closeHandoverNote}
+            onNotesChange={setCloseHandoverNote}
+            confirmed={closeConfirmed}
+            onConfirmedChange={setCloseConfirmed}
+            loading={closeShiftLoading}
+            onConfirmClose={async () => {
+              if (closeShiftLoading) return
+              const token = await getToken()
+              if (!token || !activeCashSession) return
+              if (!closeConfirmed) {
+                setError('Please confirm the counted cash is correct before closing.')
+                return
+              }
+              if (closeShiftPreview.difference !== 0 && !closeVarianceReason) {
+                setError('Please select a variance reason before closing.')
+                return
+              }
+              setCloseShiftLoading(true)
+              const closingNotesNum: Record<string, number> = {}
+              if (detailedCashCounting) {
+                CASH_DENOMS.forEach((den) => {
+                  const count = Math.max(0, Number(cashClosingNotes[den] || 0))
+                  closingNotesNum[den] = count
+                })
+              }
+              const closingTotal = closeShiftPreview.actualCash
+              const body = {
+                action: 'close',
+                sessionId: activeCashSession.id,
+                closingNotes: closingNotesNum,
+                closingCashTotal: closingTotal,
+                closedByName: authenticatedCloserName || undefined,
+                varianceReason: closeVarianceReason || undefined,
+                handoverNote: closeHandoverNote.trim() || undefined,
+                cashSales: sessionSales
+                  .filter((s) => s.paymentMode === 'cash')
+                  .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                upiSales: sessionSales
+                  .filter((s) => s.paymentMode === 'upi')
+                  .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                cardSales: sessionSales
+                  .filter((s) => s.paymentMode === 'card')
+                  .reduce((sum, s) => sum + Number(s.netAmount ?? s.totalAmount ?? 0), 0),
+                refunds: sessionSales.reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
+                cashRefunds: sessionSales
+                  .filter((s) => s.paymentMode === 'cash')
+                  .reduce((sum, s) => sum + Number(s.refundedAmount || 0), 0),
+                changeGiven: Number(activeCashSession?.changeGiven ?? 0),
+                hospitalId: activeHospitalId,
+                branchId: branchFilter === 'all' ? undefined : branchFilter,
+              }
+              try {
+                const client = createPharmacyApiClient(token)
+                const result = await client.upsertCashSession(body)
+                if (!result.ok || !result.data.success) {
+                  setError((result.data.error as string) || 'Failed to close cash session')
+                  return
+                }
+                setShowCloseShiftConfirm(false)
+                setSuccess('Counter closed and report saved.')
+                setActiveCashSession(null)
+                setCashClosingNotes(createEmptyCashNotes())
+                setCountedCashSimple('')
+                const closed = result.data.session as PharmacyCashSession | undefined
+                if (closed) {
+                  const cash = Number(closed.cashSales ?? 0)
+                  const upi = Number(closed.upiSales ?? 0)
+                  const card = Number(closed.cardSales ?? 0)
+                  const refunds = Number(closed.refunds ?? 0)
+                  const cashExp = Number(closed.cashExpenses ?? 0)
+                  const totalCollection = cash + upi + card - refunds
+                  const profit = totalCollection - cashExp
+                  setLastClosedSummary({
+                    openingCashTotal: Number(closed.openingCashTotal ?? 0),
+                    closingCashTotal: Number(closed.closingCashTotal ?? 0),
+                    cashSales: cash,
+                    upiSales: upi,
+                    cardSales: card,
+                    refunds,
+                    cashExpenses: cashExp,
+                    profit,
+                  })
+                  setCloseShiftSuccess({
+                    shiftId: closed.id ?? activeCashSession.id,
+                    salesTotal: periodSummaries.today.salesTotal,
+                    expenses: periodSummaries.today.expenseTotal,
+                    expectedCash: Number(closed.expectedCash ?? closeShiftPreview.expectedCash),
+                    countedCash: Number(closed.closingCashTotal ?? closingTotal),
+                    difference: Number(closed.difference ?? closeShiftPreview.difference),
+                    openingCashTotal: Number(closed.openingCashTotal ?? 0),
+                    closingCashTotal: Number(closed.closingCashTotal ?? 0),
+                    cashSales: cash,
+                    upiSales: upi,
+                    cardSales: card,
+                    refunds,
+                    cashExpenses: cashExp,
+                    profit,
+                    closedAt: typeof closed.closedAt === 'string' ? closed.closedAt : undefined,
+                    closedByName: authenticatedCloserName || undefined,
+                    varianceReason: closeVarianceReason || undefined,
+                    handoverNote: closeHandoverNote.trim() || undefined,
+                  })
+                }
+                setCloseConfirmed(false)
+                setCloseVarianceReason('')
+                setCloseHandoverNote('')
+                fetchCashSessions()
+              } catch (e: any) {
+                setError(e?.message || 'Failed to close cash session')
+              } finally {
+                setCloseShiftLoading(false)
+              }
+            }}
+          />
+        )}
+
+        {closeShiftSuccess && (
+          <CloseShiftSuccessModal
+            isOpen
+            summary={closeShiftSuccess}
+            hospitalName={activeHospital?.name}
+            onDone={() => {
+              setCloseShiftSuccess(null)
+              openCounterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }}
+          />
         )}
 
         {showCreateCashierModal && (

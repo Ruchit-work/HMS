@@ -2,8 +2,8 @@ import React from 'react'
 import type { PharmacyCashierProfile, PharmacyCounter } from '@/types/pharmacy'
 
 export function SettingsTabContent(props: {
-  manageCashierCounterTab: 'cashier' | 'counter'
-  setManageCashierCounterTab: React.Dispatch<React.SetStateAction<'cashier' | 'counter'>>
+  manageCashierCounterTab: 'cashier' | 'counter' | 'printing'
+  setManageCashierCounterTab: React.Dispatch<React.SetStateAction<'cashier' | 'counter' | 'printing'>>
   cashierSearchQuery: string
   setCashierSearchQuery: React.Dispatch<React.SetStateAction<string>>
   counterSearchQuery: string
@@ -18,6 +18,12 @@ export function SettingsTabContent(props: {
   onOpenCreateCounter: () => void
   onOpenEditCounter: (counter: PharmacyCounter) => void
   onDeleteCounter: (counter: PharmacyCounter) => void
+  defaultPrinterId: string
+  setDefaultPrinterId: React.Dispatch<React.SetStateAction<string>>
+  printBridgeUrl: string
+  setPrintBridgeUrl: React.Dispatch<React.SetStateAction<string>>
+  onSavePrinterIds: () => void
+  onSaveBridgeUrl: () => void
 }) {
   const {
     manageCashierCounterTab,
@@ -36,13 +42,19 @@ export function SettingsTabContent(props: {
     onOpenCreateCounter,
     onOpenEditCounter,
     onDeleteCounter,
+    defaultPrinterId,
+    setDefaultPrinterId,
+    printBridgeUrl,
+    setPrintBridgeUrl,
+    onSavePrinterIds,
+    onSaveBridgeUrl,
   } = props
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-200">
-        <h3 className="text-lg font-semibold text-slate-900">Manage Cashier & Counter</h3>
-        <p className="text-sm text-slate-500 mt-0.5">Add and manage cashiers and billing counters. Used when starting a shift in Cash & Expenses.</p>
+        <h3 className="text-lg font-semibold text-slate-900">Pharmacy Settings</h3>
+        <p className="text-sm text-slate-500 mt-0.5">Manage cashiers, billing counters and printing. Used when starting a shift and printing bills.</p>
       </div>
       <div className="p-5">
         <div className="flex items-center gap-2 border-b border-slate-200 mb-4">
@@ -64,7 +76,65 @@ export function SettingsTabContent(props: {
           >
             Counter
           </button>
+          <button
+            type="button"
+            onClick={() => setManageCashierCounterTab('printing')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+              manageCashierCounterTab === 'printing' ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50' : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Printing
+          </button>
         </div>
+        {manageCashierCounterTab === 'printing' && (
+          <div className="max-w-2xl space-y-5">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900">Billing printer settings</h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Save printer ID once. Bills auto-open the print flow when configured; otherwise the bill downloads as a PDF. This is a per-device setting and stays out of the cashier&apos;s daily view.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Default printer ID</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={defaultPrinterId}
+                  onChange={(e) => setDefaultPrinterId(e.target.value)}
+                  placeholder="e.g. HP-LaserJet-1, EPSON-TM-T82, Canon-FrontDesk"
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={onSavePrinterIds}
+                  className="rounded-lg bg-[#0891b2] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0e7490] transition"
+                >
+                  Save
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">Separate multiple printers with a comma. The first is used as default.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Print bridge URL (Phase 2)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={printBridgeUrl}
+                  onChange={(e) => setPrintBridgeUrl(e.target.value)}
+                  placeholder="e.g. http://localhost:3210/print"
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={onSaveBridgeUrl}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                >
+                  Save URL
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {manageCashierCounterTab === 'cashier' && (
           <div>
             <div className="flex justify-between items-center mb-4">

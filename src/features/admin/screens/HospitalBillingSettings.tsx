@@ -439,6 +439,12 @@ export default function HospitalBillingSettings({ onNotify }: { onNotify: Notify
                 />
               ))}
             </div>
+            <ToggleRow
+              checked={settings.enableDetailedCashCounting}
+              title="Enable Detailed Cash Counting"
+              description="Show a note/coin denomination breakdown (₹500…₹1) when opening and closing a cash shift. When off, cashiers enter a single counted-cash amount."
+              onChange={(next) => update("enableDetailedCashCounting", next)}
+            />
           </SectionCard>
 
           <SectionCard

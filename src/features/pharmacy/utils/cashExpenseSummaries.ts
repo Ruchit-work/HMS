@@ -75,11 +75,14 @@ export const computeCloseShiftPreview = ({
   sessionSales,
   cashClosingNotes,
   cashDenoms,
+  countedCashOverride,
 }: {
   activeCashSession: PharmacyCashSession | null
   sessionSales: PharmacySale[]
   cashClosingNotes: Record<string, string>
   cashDenoms: readonly string[]
+  /** When provided (not null), use this as the counted cash instead of the denomination breakdown. */
+  countedCashOverride?: number | null
 }): CloseShiftPreview => {
   const openingCash = Number(activeCashSession?.openingCashTotal ?? 0)
   const cashSales = Number(activeCashSession?.cashSales ?? 0) || sessionSales
@@ -91,10 +94,12 @@ export const computeCloseShiftPreview = ({
   const changeGiven = Number(activeCashSession?.changeGiven ?? 0)
   const cashExpenses = Number(activeCashSession?.cashExpenses ?? 0)
   const expectedCash = openingCash + cashSales - cashRefunds - changeGiven - cashExpenses
-  const actualCash = cashDenoms.reduce(
-    (sum, den) => sum + Math.max(0, Number(cashClosingNotes[den] || 0)) * Number(den),
-    0
-  )
+  const actualCash = countedCashOverride != null
+    ? Math.max(0, Number(countedCashOverride) || 0)
+    : cashDenoms.reduce(
+        (sum, den) => sum + Math.max(0, Number(cashClosingNotes[den] || 0)) * Number(den),
+        0
+      )
   const difference = actualCash - expectedCash
   return { openingCash, cashSales, cashRefunds, changeGiven, cashExpenses, expectedCash, actualCash, difference }
 }

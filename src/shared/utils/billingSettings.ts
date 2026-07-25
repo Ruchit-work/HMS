@@ -22,6 +22,8 @@ export interface HospitalBillingSettings {
   paymentMethods: Record<PaymentMethodKey, boolean>
   /** Applied at billing time only — never changes medicine MRP. */
   roundingPolicy: RoundingPolicy
+  /** When true, cash shift close/open uses a note/coin denomination breakdown; otherwise a single counted-cash input. */
+  enableDetailedCashCounting: boolean
   billingOptions: {
     generateTransactionIds: boolean
     requirePaymentNotes: boolean
@@ -50,6 +52,7 @@ export const DEFAULT_HOSPITAL_BILLING_SETTINGS: HospitalBillingSettings = {
     cheque: false,
   },
   roundingPolicy: "round_down_rupee",
+  enableDetailedCashCounting: false,
   billingOptions: {
     generateTransactionIds: true,
     requirePaymentNotes: false,
@@ -146,6 +149,10 @@ export function normalizeHospitalBillingSettings(value: unknown): HospitalBillin
       cheque: asBoolean(methods.cheque, DEFAULT_HOSPITAL_BILLING_SETTINGS.paymentMethods.cheque),
     },
     roundingPolicy,
+    enableDetailedCashCounting: asBoolean(
+      input.enableDetailedCashCounting,
+      DEFAULT_HOSPITAL_BILLING_SETTINGS.enableDetailedCashCounting
+    ),
     billingOptions: {
       generateTransactionIds: asBoolean(
         options.generateTransactionIds,
