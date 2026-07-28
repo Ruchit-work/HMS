@@ -163,8 +163,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Get Google Review link from environment variable
-    const googleReviewLink = process.env.GOOGLE_REVIEW_LINK || ""
+    // Get Google Review link from environment variable or fallback to new Google review URL
+    const googleReviewLink = process.env.GOOGLE_REVIEW_LINK || "https://maps.app.goo.gl/742Ho7cF3VVkPYH67"
     // Build completion message
     let messageText = `✅ *Checkup Completed*\n\n` +
       `Hello ${name},\n\n` +
