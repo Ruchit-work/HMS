@@ -18,6 +18,7 @@ import {
   Settings2,
   BarChart3,
   X,
+  Trash2,
 } from "lucide-react"
 import { useAuth } from "@/shared/hooks/useAuth"
 import { useMultiHospital } from "@/providers/MultiHospitalProvider"
@@ -399,6 +400,7 @@ function TenantDetailDrawer({
   onUpgrade,
   onRenew,
   onSuspend,
+  onDelete,
   onAnalytics,
 }: {
   tenant: TenantView | null
@@ -407,6 +409,7 @@ function TenantDetailDrawer({
   onUpgrade: () => void
   onRenew: () => void
   onSuspend: () => void
+  onDelete: () => void
   onAnalytics: () => void
 }) {
   if (!tenant) return null
@@ -559,6 +562,21 @@ export default function HospitalManagement() {
   const [planFilter, setPlanFilter] = useState<"all" | HqTenantPlan>("all")
   const [deactivateTarget, setDeactivateTarget] = useState<Hospital | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Hospital | null>(null)
+  const [deletePreview, setDeletePreview] = useState<{
+    branches: number
+    doctors: number
+    receptionists: number
+    admins: number
+    patients: number
+    appointments: number
+    admissions: number
+    bills: number
+    auditLogs: number
+  } | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [confirmHospitalNameInput, setConfirmHospitalNameInput] = useState("")
+  const [deletingHospital, setDeletingHospital] = useState(false)
   const [viewTenantId, setViewTenantId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -738,6 +756,65 @@ export default function HospitalManagement() {
       setError(message)
     } finally {
       setDeactivating(false)
+    }
+  }
+
+  const handleOpenDeleteModal = async (hospital: Hospital) => {
+    setDeleteTarget(hospital)
+    setConfirmHospitalNameInput("")
+    setDeletePreview(null)
+    setLoadingPreview(true)
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) return
+      const token = await currentUser.getIdToken()
+      const res = await fetch(`/api/hospitals/${encodeURIComponent(hospital.id)}/delete-preview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.counts) {
+          setDeletePreview(data.counts)
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load delete preview:", e)
+    } finally {
+      setLoadingPreview(false)
+    }
+  }
+
+  const handleConfirmDeleteHospital = async () => {
+    if (!deleteTarget) return
+    if (confirmHospitalNameInput.trim() !== deleteTarget.name.trim()) return
+
+    setDeletingHospital(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const currentUser = auth.currentUser
+      if (!currentUser) throw new Error("Authentication required")
+
+      const token = await currentUser.getIdToken()
+      const res = await fetch(`/api/hospitals/${encodeURIComponent(deleteTarget.id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to delete hospital")
+
+      setSuccess(`Hospital "${deleteTarget.name}" (${deleteTarget.code}) and all associated records permanently deleted.`)
+      setDeleteTarget(null)
+      setConfirmHospitalNameInput("")
+      setDeletePreview(null)
+      setViewTenantId(null)
+      await loadHospitals()
+      await refreshContextHospitals()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete hospital. Please try again."
+      setError(message)
+    } finally {
+      setDeletingHospital(false)
     }
   }
 
@@ -1047,6 +1124,15 @@ export default function HospitalManagement() {
                       <BarChart3 className="h-3.5 w-3.5" />
                       Analytics
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="danger"
+                      onClick={() => void handleOpenDeleteModal(tenant)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </Button>
                   </>
                 }
               />
@@ -1120,6 +1206,11 @@ export default function HospitalManagement() {
         onSuspend={() => {
           if (viewedTenant) setDeactivateTarget(viewedTenant)
         }}
+        onDelete={() => {
+          if (viewedTenant) {
+            void handleOpenDeleteModal(viewedTenant)
+          }
+        }}
         onAnalytics={() => {
           if (viewedTenant) void openAnalytics(viewedTenant)
         }}
@@ -1139,6 +1230,134 @@ export default function HospitalManagement() {
         onCancel={() => setDeactivateTarget(null)}
         confirmLoading={deactivating}
       />
+
+      {/* Delete Hospital Modal */}
+      {deleteTarget && (
+        <RevealModal
+          isOpen={true}
+          onClose={() => {
+            setDeleteTarget(null)
+            setConfirmHospitalNameInput("")
+            setDeletePreview(null)
+          }}
+          contentClassName="p-0 max-w-xl"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-red-200 overflow-hidden">
+            {/* Danger Header */}
+            <div className="bg-gradient-to-r from-red-600 to-rose-700 px-6 py-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 backdrop-blur-sm">
+                  <Trash2 className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Permanently Delete Hospital</h3>
+                  <p className="text-xs text-red-100 font-mono">ID: {deleteTarget.id}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null)
+                  setConfirmHospitalNameInput("")
+                  setDeletePreview(null)
+                }}
+                className="text-white/70 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-slate-800 text-sm">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-900">
+                <p className="font-bold text-red-800 text-base mb-1">⚠️ Irreversible Action</p>
+                <p className="text-xs text-red-700 leading-relaxed">
+                  You are about to permanently delete <strong className="text-red-900 font-semibold">{deleteTarget.name}</strong> (Code: <span className="font-mono font-bold">{deleteTarget.code}</span>).
+                  This action cannot be undone. All database records and authentication accounts belonging exclusively to this hospital will be permanently erased.
+                </p>
+              </div>
+
+              {/* Deletion Summary Box */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">This will permanently delete:</p>
+                {loadingPreview ? (
+                  <div className="py-4 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Calculating tenant resource summary…
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-medium text-slate-700">
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.branches.toLocaleString("en-IN") : "0"} Branches
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.doctors.toLocaleString("en-IN") : "0"} Doctors
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.receptionists.toLocaleString("en-IN") : "0"} Receptionists
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.admins.toLocaleString("en-IN") : "0"} Admin
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.patients.toLocaleString("en-IN") : "0"} Patients
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.appointments.toLocaleString("en-IN") : "0"} Appointments
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.admissions.toLocaleString("en-IN") : "0"} Admissions
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.bills.toLocaleString("en-IN") : "0"} Bills
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+                      <span className="text-emerald-600 font-bold mr-1">✓</span> {deletePreview ? deletePreview.auditLogs.toLocaleString("en-IN") : "0"} Audit Logs
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Name Confirmation Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Type the hospital name <span className="text-red-600 font-mono select-all">"{deleteTarget.name}"</span> to continue:
+                </label>
+                <input
+                  type="text"
+                  value={confirmHospitalNameInput}
+                  onChange={(e) => setConfirmHospitalNameInput(e.target.value)}
+                  placeholder={`Type "${deleteTarget.name}"`}
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100 font-medium"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setDeleteTarget(null)
+                    setConfirmHospitalNameInput("")
+                    setDeletePreview(null)
+                  }}
+                  disabled={deletingHospital}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={confirmHospitalNameInput.trim() !== deleteTarget.name.trim() || deletingHospital}
+                  loading={deletingHospital}
+                  onClick={() => void handleConfirmDeleteHospital()}
+                >
+                  Permanently Delete Hospital
+                </Button>
+              </div>
+            </div>
+          </div>
+        </RevealModal>
+      )}
     </HqShell>
   )
 }
