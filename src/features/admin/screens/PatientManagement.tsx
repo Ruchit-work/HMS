@@ -20,6 +20,8 @@ import PatientProfileForm, { PatientProfileFormValues } from '@/features/forms/P
 import { calculateAge, formatDate, formatDateTime } from '@/shared/utils/shared/date'
 import { useTablePagination } from '@/shared/hooks/useTablePagination'
 import DocumentListCompact from '@/features/documents/DocumentListCompact'
+import PatientVisitHistorySection from '@/features/receptionist/components/PatientVisitHistorySection'
+import type { PatientVisitHistoryDetails } from '@/features/receptionist/utils/visitHistoryDisplay'
 import {
   EnterpriseDataTable,
   StatusPill,
@@ -43,23 +45,7 @@ interface Patient {
     createdBy: string
     createdAt: string
     updatedAt: string
-    appointmentDetails?: {
-        total: number
-        upcoming: number
-        appointments?: Array<{
-            id: string
-            appointmentDate?: string
-            appointmentTime?: string
-            doctorName?: string
-            doctorSpecialization?: string
-            status?: string
-            chiefComplaint?: string
-            medicalHistory?: string
-            doctorNotes?: string
-            medicine?: string
-            finalDiagnosis?: string[]
-            customDiagnosis?: string
-        }>
+    appointmentDetails?: PatientVisitHistoryDetails & {
         nextAppointment?: {
             date: string
             time: string
@@ -444,18 +430,17 @@ export default function PatientManagement({
             total: appointments.length,
             upcoming: upcoming.length,
             appointments: sortedAppointments.map((apt: any) => ({
+                ...apt,
                 id: String(apt.id || ''),
-                appointmentDate: apt.appointmentDate,
-                appointmentTime: apt.appointmentTime,
-                doctorName: apt.doctorName,
-                doctorSpecialization: apt.doctorSpecialization || '',
-                status: apt.status,
-                chiefComplaint: apt.chiefComplaint,
-                medicalHistory: apt.medicalHistory,
-                doctorNotes: apt.doctorNotes || '',
-                medicine: apt.medicine || '',
-                finalDiagnosis: Array.isArray(apt.finalDiagnosis) ? apt.finalDiagnosis : [],
-                customDiagnosis: apt.customDiagnosis || '',
+                department: apt.department || apt.doctorSpecialization || '',
+                billingAmount:
+                    typeof apt.paymentAmount === 'number'
+                        ? apt.paymentAmount
+                        : typeof apt.totalConsultationFee === 'number'
+                          ? apt.totalConsultationFee
+                          : typeof apt.consultationFee === 'number'
+                            ? apt.consultationFee
+                            : 0,
             })),
             nextAppointment: nextAppointment ? {
                 date: nextAppointment.appointmentDate,
@@ -1666,94 +1651,11 @@ export default function PatientManagement({
               {/* ── VISIT HISTORY + DOCUMENTS ── */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-                {/* Visit history */}
-                <div className="bg-white rounded-xl border border-slate-200 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Visit History</p>
-                    <div className="flex gap-2 text-xs">
-                      <span className="text-slate-400">{selectedPatient?.appointmentDetails?.total ?? '—'} total</span>
-                      <span className="text-emerald-600 font-semibold">{selectedPatient?.appointmentDetails?.upcoming ?? '—'} upcoming</span>
-                    </div>
-                  </div>
-                  {!selectedPatient?.appointmentDetails ? (
-                    <p className="text-xs text-slate-400 text-center py-4">Loading…</p>
-                  ) : (selectedPatient.appointmentDetails.appointments?.length ?? 0) === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-4">No visits recorded</p>
-                  ) : (
-                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                      <div className="flex gap-1.5 mb-2">
-                        {(['all', 'upcoming'] as const).map((f) => (
-                          <button
-                            key={f}
-                            type="button"
-                            onClick={() => setAppointmentViewFilter(f === appointmentViewFilter ? null : f)}
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors ${
-                              appointmentViewFilter === f
-                                ? 'bg-cyan-600 text-white border-cyan-600'
-                                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            {f === 'all' ? 'All visits' : 'Upcoming only'}
-                          </button>
-                        ))}
-                      </div>
-                      {(selectedPatient.appointmentDetails.appointments || [])
-                        .filter((apt) => {
-                          if (appointmentViewFilter !== 'upcoming') return true
-                          const today = new Date().toISOString().split('T')[0]
-                          return String(apt.appointmentDate || '') >= today && ['confirmed', 'pending', 'whatsapp_pending'].includes(String(apt.status || ''))
-                        })
-                        .map((apt) => {
-                          const diagnosisParts = [
-                            ...(Array.isArray(apt.finalDiagnosis) ? apt.finalDiagnosis : []),
-                            apt.customDiagnosis || '',
-                          ].filter(Boolean)
-                          const diagnosisLabel = diagnosisParts.join(', ')
-                          return (
-                          <div key={apt.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-semibold text-slate-800">
-                                {apt.appointmentDate ? formatDate(apt.appointmentDate) : 'Date TBD'}
-                                {apt.appointmentTime ? ` · ${apt.appointmentTime}` : ''}
-                              </p>
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                                apt.status === 'confirmed' ? 'bg-cyan-100 text-cyan-700'
-                                : apt.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
-                                : apt.status === 'cancelled' ? 'bg-red-100 text-red-600'
-                                : 'bg-amber-100 text-amber-700'
-                              }`}>
-                                {apt.status === 'whatsapp_pending' ? 'pending' : (apt.status || '—')}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {apt.doctorName || 'Doctor TBD'}
-                              {apt.doctorSpecialization ? ` · ${apt.doctorSpecialization}` : ''}
-                            </p>
-                            <p className="text-[10px] font-mono text-slate-400 mt-0.5">ID: {apt.id}</p>
-                            {apt.chiefComplaint && (
-                              <p className="text-xs text-slate-600 mt-0.5 truncate">{apt.chiefComplaint}</p>
-                            )}
-                            {diagnosisLabel && (
-                              <p className="text-xs text-slate-600 mt-0.5 truncate">
-                                <span className="font-semibold text-slate-500">Diagnosis:</span> {diagnosisLabel}
-                              </p>
-                            )}
-                            {apt.medicine && (
-                              <p className="text-xs text-slate-600 mt-0.5 truncate">
-                                <span className="font-semibold text-slate-500">Rx:</span> {apt.medicine}
-                              </p>
-                            )}
-                            {apt.doctorNotes && (
-                              <p className="text-xs text-slate-600 mt-0.5 truncate">
-                                <span className="font-semibold text-slate-500">Notes:</span> {apt.doctorNotes}
-                              </p>
-                            )}
-                          </div>
-                          )
-                        })}
-                    </div>
-                  )}
-                </div>
+                <PatientVisitHistorySection
+                  details={selectedPatient?.appointmentDetails}
+                  viewFilter={appointmentViewFilter}
+                  onViewFilterChange={setAppointmentViewFilter}
+                />
 
                 {/* Documents */}
                 <div className="bg-white rounded-xl border border-slate-200 p-4">

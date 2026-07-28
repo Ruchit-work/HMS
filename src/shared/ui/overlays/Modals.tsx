@@ -283,6 +283,7 @@ interface ViewModalProps {
   subtitle: string
   headerColor: 'blue' | 'green' | 'purple' | 'orange'
   children: ReactNode
+  zIndex?: number
 }
 
 const viewModalHeaderClasses = {
@@ -345,11 +346,12 @@ export function ViewModal({
   subtitle,
   headerColor,
   children,
+  zIndex,
 }: ViewModalProps) {
   if (!isOpen) return null
 
   return (
-    <RevealModal isOpen={isOpen} onClose={onClose} contentClassName="p-0">
+    <RevealModal isOpen={isOpen} onClose={onClose} contentClassName="p-0" zIndex={zIndex}>
       <ViewModalContent title={title} subtitle={subtitle} headerColor={headerColor}>
         {children}
       </ViewModalContent>
