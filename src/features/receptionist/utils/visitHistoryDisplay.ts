@@ -54,11 +54,24 @@ export function formatBillingAmount(amount?: number): string {
   return `₹${value.toLocaleString("en-IN")}`
 }
 
+import { getVisitTypeShortLabel, getVisitTypeBadgeClass } from "@/shared/utils/visitTypes"
+
 export function getVisitType(visit: Record<string, unknown>): string {
   if (visit.whatsappPending) return "WhatsApp"
   if (visit.createdBy === "receptionist") return "Walk-in"
   return "Online"
 }
+
+/** Returns clinical visit type short label (OPD, IPD, Day Care, Minor OT, Major OT) */
+export function getClinicalVisitTypeLabel(visit: Record<string, unknown>): string {
+  return getVisitTypeShortLabel(visit.visitType as string)
+}
+
+/** Returns badge CSS class for clinical visit type */
+export function getClinicalVisitTypeBadgeClass(visit: Record<string, unknown>): string {
+  return getVisitTypeBadgeClass(visit.visitType as string)
+}
+
 
 export function getAppointmentType(visit: Record<string, unknown>): string {
   const type = String(visit.appointmentType || "")

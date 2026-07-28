@@ -5,6 +5,8 @@ import { Appointment } from "@/types/patient"
 import { generateAppointmentConfirmationPDF } from "@/shared/utils/documents/pdfGenerators"
 import PrescriptionDisplay from "@/features/prescription/PrescriptionDisplay"
 import AppointmentDocuments from "@/features/documents/AppointmentDocuments"
+import { getVisitTypeShortLabel, getVisitTypeBadgeClass } from "@/shared/utils/visitTypes"
+
 
 interface AppointmentCardProps {
   appointment: Appointment
@@ -56,16 +58,21 @@ export default function AppointmentCard({
             </p>
           </div>
 
-          {/* Status Badge */}
-          <span className={`px-3 py-1 rounded text-xs font-medium ${
-            appointment.status === "confirmed"
-              ? "bg-teal-500 text-white"
-              : appointment.status === "completed"
-              ? "bg-slate-700 text-white"
-              : "bg-red-500 text-white"
-          }`}>
-            {appointment.status === "confirmed" ? "Confirmed" : appointment.status === "completed" ? "Completed" : "Cancelled"}
-          </span>
+          {/* Visit Type & Status Badges */}
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${getVisitTypeBadgeClass(appointment.visitType as string)}`}>
+              {getVisitTypeShortLabel(appointment.visitType as string)}
+            </span>
+            <span className={`px-3 py-1 rounded text-xs font-medium ${
+              appointment.status === "confirmed"
+                ? "bg-teal-500 text-white"
+                : appointment.status === "completed"
+                ? "bg-slate-700 text-white"
+                : "bg-red-500 text-white"
+            }`}>
+              {appointment.status === "confirmed" ? "Confirmed" : appointment.status === "completed" ? "Completed" : "Cancelled"}
+            </span>
+          </div>
         </div>
       </div>
 

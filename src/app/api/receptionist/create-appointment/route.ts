@@ -172,16 +172,24 @@ export async function POST(request: Request) {
     // Normalize appointment time to 24-hour format (HH:MM) for consistent storage
     const normalizedAppointmentTime = normalizeTime(String(appointmentData.appointmentTime))
     
-    // Get doctor's consultation fee and hospital for payment calculations
-    const doctorDoc = await admin.firestore().collection("doctors").doc(String(appointmentData.doctorId)).get()
-    const doctorData = doctorDoc.exists ? doctorDoc.data() : {}
-    const consultationFee = doctorData?.consultationFee || appointmentData.paymentAmount || 0
-    
     // Get doctor's hospital ID - appointment belongs to doctor's hospital
     const doctorHospitalId = await getDoctorHospitalId(String(appointmentData.doctorId))
     if (!doctorHospitalId) {
       return Response.json({ error: "Doctor's hospital not found" }, { status: 400 })
     }
+
+    // Get visit type and effective consultation fee server-side
+    const { normalizeVisitType } = await import("@/shared/utils/visitTypes")
+    const { getEffectiveConsultationFee } = await import("@/shared/utils/billingSettings")
+    const { getHospitalBillingSettings } = await import("@/server/hospitalBillingSettings")
+
+    const visitType = normalizeVisitType(appointmentData.visitType)
+    const doctorDoc = await admin.firestore().collection("doctors").doc(String(appointmentData.doctorId)).get()
+    const doctorData = doctorDoc.exists ? doctorDoc.data() : {}
+    const doctorBaseFee = doctorData?.consultationFee || appointmentData.paymentAmount || 0
+    
+    const billingSettings = await getHospitalBillingSettings(doctorHospitalId)
+    const consultationFee = getEffectiveConsultationFee(doctorBaseFee, visitType, billingSettings)
 
     // Get receptionist's branch ID (if user is a receptionist)
     let branchId: string | null = null
@@ -233,6 +241,7 @@ export async function POST(request: Request) {
       appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
       status: safeValue(appointmentData.status, "confirmed"),
       appointmentType: safeValue(appointmentData.appointmentType, "consultation"),
+      visitType,
       
       // Payment fields - properly set for completed payment
       paymentAmount: totalPaymentAmount,

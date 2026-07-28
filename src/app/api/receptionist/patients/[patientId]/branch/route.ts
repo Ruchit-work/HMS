@@ -7,6 +7,7 @@ import {
   getUserActiveHospitalId,
 } from "@/shared/utils/firebase/serverHospitalQueries"
 import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
+import { getActorInfo } from "@/shared/utils/auditHelpers"
 
 type RouteContext = {
   params: Promise<{ patientId: string }>
@@ -74,6 +75,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     defaultBranchName: branch.name,
     hospitalId,
     updatedAt: nowIso,
+    updatedBy: getActorInfo(auth.user!),
   }
 
   const seed = (hospitalSnap.exists ? hospitalSnap.data() : rootSnap.data()) || {}

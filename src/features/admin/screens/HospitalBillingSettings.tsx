@@ -423,6 +423,44 @@ export default function HospitalBillingSettings({ onNotify }: { onNotify: Notify
 
           <SectionCard
             icon={Wallet}
+            title="Visit Type Consultation Fees"
+            description="Set hospital-wide default consultation fee overrides per Visit Type. Setting a fee to ₹0 uses the doctor's standard consultation fee."
+          >
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {([
+                { key: "opd", label: "Outpatient (OPD)", desc: "Default OPD consultation" },
+                { key: "ipd", label: "Inpatient (IPD)", desc: "Inpatient admission visit" },
+                { key: "day_care", label: "Day Care", desc: "Day care procedure / observation" },
+                { key: "minor_ot", label: "Minor OT", desc: "Minor operation theatre procedure" },
+                { key: "major_ot", label: "Major OT", desc: "Major operation theatre procedure foundation" },
+              ] as const).map((vt) => (
+                <div key={vt.key} className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                  <label className="block text-xs font-semibold text-slate-800">{vt.label}</label>
+                  <p className="mt-0.5 text-[11px] text-slate-500 mb-2">{vt.desc}</p>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-xs font-medium text-slate-400">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      className="w-full rounded-lg border border-slate-300 pl-7 pr-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-hidden"
+                      value={settings.visitTypeFees?.[vt.key] ?? 0}
+                      onChange={(e) => {
+                        const feeVal = Math.max(0, Number(e.target.value) || 0)
+                        update("visitTypeFees", {
+                          ...(settings.visitTypeFees || { opd: 0, ipd: 0, day_care: 0, minor_ot: 0, major_ot: 0 }),
+                          [vt.key]: feeVal,
+                        })
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            icon={Wallet}
             title="Rounding Policy"
             description="Applied only at billing time. Medicine MRP is never modified."
           >

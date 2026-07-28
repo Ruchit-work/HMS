@@ -123,6 +123,8 @@ export interface Appointment {
   transactionId: string
   paidAt: string
   status: "pending" | "confirmed" | "completed" | "cancelled" | "whatsapp_pending" | "not_attended" | "no_show"
+  appointmentType?: string
+  visitType?: string
   whatsappPending?: boolean
   createdAt: string
   updatedAt: string

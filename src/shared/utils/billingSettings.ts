@@ -1,3 +1,5 @@
+import { normalizeVisitType, type VisitType } from "@/shared/utils/visitTypes"
+
 export type RefundPolicy = "disabled" | "manual_approval" | "automatic"
 
 export type PaidAppointmentCancellationPolicy =
@@ -19,6 +21,7 @@ export interface HospitalBillingSettings {
   autoCreateRecheckup: boolean
   recheckupStartsUnpaid: boolean
   defaultRecheckupFee: number
+  visitTypeFees: Record<VisitType, number>
   paymentMethods: Record<PaymentMethodKey, boolean>
   /** Applied at billing time only — never changes medicine MRP. */
   roundingPolicy: RoundingPolicy
@@ -44,6 +47,13 @@ export const DEFAULT_HOSPITAL_BILLING_SETTINGS: HospitalBillingSettings = {
   autoCreateRecheckup: true,
   recheckupStartsUnpaid: true,
   defaultRecheckupFee: 0,
+  visitTypeFees: {
+    opd: 0,
+    ipd: 0,
+    day_care: 0,
+    minor_ot: 0,
+    major_ot: 0,
+  },
   paymentMethods: {
     cash: true,
     upi: true,
@@ -106,6 +116,19 @@ export function normalizeHospitalBillingSettings(value: unknown): HospitalBillin
     ? (input.roundingPolicy as RoundingPolicy)
     : DEFAULT_HOSPITAL_BILLING_SETTINGS.roundingPolicy
 
+  const visitTypeFeesRaw =
+    input.visitTypeFees && typeof input.visitTypeFees === "object"
+      ? (input.visitTypeFees as Record<string, unknown>)
+      : {}
+
+  const visitTypeFees: Record<VisitType, number> = {
+    opd: Math.max(0, asFiniteNumber(visitTypeFeesRaw.opd, DEFAULT_HOSPITAL_BILLING_SETTINGS.visitTypeFees.opd)),
+    ipd: Math.max(0, asFiniteNumber(visitTypeFeesRaw.ipd, DEFAULT_HOSPITAL_BILLING_SETTINGS.visitTypeFees.ipd)),
+    day_care: Math.max(0, asFiniteNumber(visitTypeFeesRaw.day_care, DEFAULT_HOSPITAL_BILLING_SETTINGS.visitTypeFees.day_care)),
+    minor_ot: Math.max(0, asFiniteNumber(visitTypeFeesRaw.minor_ot, DEFAULT_HOSPITAL_BILLING_SETTINGS.visitTypeFees.minor_ot)),
+    major_ot: Math.max(0, asFiniteNumber(visitTypeFeesRaw.major_ot, DEFAULT_HOSPITAL_BILLING_SETTINGS.visitTypeFees.major_ot)),
+  }
+
   return {
     refundPolicy,
     paidAppointmentCancellation,
@@ -138,6 +161,7 @@ export function normalizeHospitalBillingSettings(value: unknown): HospitalBillin
         DEFAULT_HOSPITAL_BILLING_SETTINGS.defaultRecheckupFee
       )
     ),
+    visitTypeFees,
     paymentMethods: {
       cash: asBoolean(methods.cash, DEFAULT_HOSPITAL_BILLING_SETTINGS.paymentMethods.cash),
       upi: asBoolean(methods.upi, DEFAULT_HOSPITAL_BILLING_SETTINGS.paymentMethods.upi),
@@ -172,6 +196,24 @@ export function normalizeHospitalBillingSettings(value: unknown): HospitalBillin
       ),
     },
   }
+}
+
+/**
+ * Calculates effective consultation fee for an appointment given the doctor fee,
+ * visit type, and hospital billing settings. If hospital settings define a fee > 0
+ * for the specified visit type, it overrides doctor base fee; otherwise falls back to doctor fee.
+ */
+export function getEffectiveConsultationFee(
+  doctorBaseFee: number,
+  visitTypeInput?: unknown,
+  settings?: HospitalBillingSettings
+): number {
+  const visitType = normalizeVisitType(visitTypeInput)
+  const configuredFee = settings?.visitTypeFees?.[visitType]
+  if (typeof configuredFee === "number" && configuredFee > 0) {
+    return configuredFee
+  }
+  return Math.max(0, Number(doctorBaseFee) || 0)
 }
 
 export function enabledPaymentMethods(

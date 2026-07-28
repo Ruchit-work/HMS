@@ -172,8 +172,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "Doctor's hospital not found" }, { status: 400 })
     }
 
+    const { normalizeVisitType } = await import("@/shared/utils/visitTypes")
+    const { getEffectiveConsultationFee } = await import("@/shared/utils/billingSettings")
     const { getHospitalBillingSettings } = await import("@/server/hospitalBillingSettings")
     const billingSettings = await getHospitalBillingSettings(doctorHospitalId)
+
+    const visitType = normalizeVisitType(appointmentData.visitType)
+    const effectiveConsultationFee = getEffectiveConsultationFee(consultationFee, visitType, billingSettings)
 
     if (isRecheck && !billingSettings.autoCreateRecheckup) {
       return Response.json(
@@ -190,13 +195,13 @@ export async function POST(request: Request) {
     const recheckupFee =
       Number(billingSettings.defaultRecheckupFee) > 0
         ? Number(billingSettings.defaultRecheckupFee)
-        : Number(consultationFee) || 0
+        : Number(effectiveConsultationFee) || 0
     const totalPaymentAmount =
       isRecheck
         ? recheckupFee
         : typeof appointmentData.paymentAmount === "number"
           ? appointmentData.paymentAmount
-          : consultationFee + totalAdditionalFees
+          : effectiveConsultationFee + totalAdditionalFees
 
     const recheckupUnpaid = isRecheck && billingSettings.recheckupStartsUnpaid
     const paymentStatus = recheckupUnpaid ? "unpaid" : isRecheck ? "paid" : "paid"
@@ -254,8 +259,9 @@ export async function POST(request: Request) {
       appointmentTime: normalizedAppointmentTime,
       status: safeValue(appointmentData.status, "confirmed"),
       appointmentType: safeValue(appointmentData.appointmentType, isRecheck ? "recheckup" : isEmergency ? "emergency" : "consultation"),
+      visitType,
       paymentAmount: totalPaymentAmount,
-      totalConsultationFee: consultationFee,
+      totalConsultationFee: effectiveConsultationFee,
       additionalFees:
         additionalFeesArray.length > 0
           ? additionalFeesArray.map((fee: unknown) => {

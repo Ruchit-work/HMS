@@ -19,10 +19,21 @@ export interface PatientProfileFormValues {
   weightKg: string
   status: 'active' | 'inactive'
   password: string
+  city?: string
+  state?: string
+  pincode?: string
+  alternatePhone?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+  maritalStatus?: string
+  occupation?: string
+  insuranceProvider?: string
+  insurancePolicyNumber?: string
 }
 
 interface PatientProfileFormProps {
   mode: 'public' | 'admin'
+  isEditMode?: boolean
   initialValues?: Partial<Omit<PatientProfileFormValues, 'status'>> & { status?: PatientProfileFormValues['status'] }
   loading?: boolean
   submitLabel?: string
@@ -40,6 +51,7 @@ const RECEPTIONIST_DEFAULT_PASSWORD = '123456'
 
 export default function PatientProfileForm({
   mode,
+  isEditMode = false,
   initialValues,
   loading,
   submitLabel,
@@ -63,6 +75,16 @@ export default function PatientProfileForm({
   const [dateOfBirth, setDateOfBirth] = useState(initialValues?.dateOfBirth ?? '')
   const [bloodGroup, setBloodGroup] = useState(initialValues?.bloodGroup ?? '')
   const [address, setAddress] = useState(initialValues?.address ?? '')
+  const [city, setCity] = useState(initialValues?.city ?? '')
+  const [state, setState] = useState(initialValues?.state ?? '')
+  const [pincode, setPincode] = useState(initialValues?.pincode ?? '')
+  const [alternatePhone, setAlternatePhone] = useState(initialValues?.alternatePhone ?? '')
+  const [emergencyContactName, setEmergencyContactName] = useState(initialValues?.emergencyContactName ?? '')
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(initialValues?.emergencyContactPhone ?? '')
+  const [maritalStatus, setMaritalStatus] = useState(initialValues?.maritalStatus ?? '')
+  const [occupation, setOccupation] = useState(initialValues?.occupation ?? '')
+  const [insuranceProvider, setInsuranceProvider] = useState(initialValues?.insuranceProvider ?? '')
+  const [insurancePolicyNumber, setInsurancePolicyNumber] = useState(initialValues?.insurancePolicyNumber ?? '')
   const [heightCm, setHeightCm] = useState(initialValues?.heightCm ?? '')
   const [weightKg, setWeightKg] = useState(initialValues?.weightKg ?? '')
   const [status, setStatus] = useState<PatientProfileFormValues['status']>(
@@ -204,18 +226,20 @@ export default function PatientProfileForm({
       return setFormError('Please enter a valid weight in kg')
     }
 
-    if (!password) {
-      return setFormError('Please provide a password')
-    }
+    if (!isEditMode) {
+      if (!password) {
+        return setFormError('Please provide a password')
+      }
 
-    if (receptionistMode) {
-      if (password.length < 6) return setFormError('Password must be at least 6 characters')
-    } else if (!isPasswordValid(password)) {
-      return setFormError('Password does not meet requirements')
-    }
+      if (receptionistMode) {
+        if (password.length < 6) return setFormError('Password must be at least 6 characters')
+      } else if (!isPasswordValid(password)) {
+        return setFormError('Password does not meet requirements')
+      }
 
-    if (password !== confirmPassword) {
-      return setFormError('Passwords do not match')
+      if (password !== confirmPassword) {
+        return setFormError('Passwords do not match')
+      }
     }
 
     const normalizedCountryCode = (countryCode || '+91').trim() || '+91'
@@ -230,10 +254,20 @@ export default function PatientProfileForm({
       dateOfBirth,
       bloodGroup,
       address: address.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
+      alternatePhone: alternatePhone.trim(),
+      emergencyContactName: emergencyContactName.trim(),
+      emergencyContactPhone: emergencyContactPhone.trim(),
+      maritalStatus: maritalStatus.trim(),
+      occupation: occupation.trim(),
+      insuranceProvider: insuranceProvider.trim(),
+      insurancePolicyNumber: insurancePolicyNumber.trim(),
       heightCm: trimmedHeight,
       weightKg: trimmedWeight,
       status: showStatusField ? status : 'active',
-      password,
+      password: isEditMode ? '' : password,
     }
 
     try {
@@ -533,16 +567,138 @@ export default function PatientProfileForm({
         </div>
 
         {/* Address */}
+        {/* Alternate Phone */}
+        <div className="rx-form-field mt-4">
+          <label className="rx-form-label">Alternate Phone Number</label>
+          <input
+            type="tel"
+            value={alternatePhone}
+            onChange={(e) => { setAlternatePhone(e.target.value); clearErrors() }}
+            className="rx-form-input"
+            placeholder="Secondary contact number"
+          />
+        </div>
+
+        {/* Address */}
         <div className="rx-form-field mt-4">
           <label className="rx-form-label">Home Address</label>
           <textarea
             value={address}
             onChange={(e) => { setAddress(e.target.value); clearErrors() }}
             className="rx-form-textarea"
-            placeholder="Street, area, city, state, PIN code"
+            placeholder="Street address or locality"
             rows={2}
           />
-          <p className="rx-form-helper">Used for home-care coordination and delivery of reports</p>
+        </div>
+
+        {/* City, State, Pincode */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mt-4">
+          <div className="rx-form-field">
+            <label className="rx-form-label">City</label>
+            <input
+              type="text"
+              value={city}
+              onChange={(e) => { setCity(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="e.g. Mumbai"
+            />
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">State</label>
+            <input
+              type="text"
+              value={state}
+              onChange={(e) => { setState(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="e.g. Maharashtra"
+            />
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Pincode</label>
+            <input
+              type="text"
+              value={pincode}
+              onChange={(e) => { setPincode(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="e.g. 400001"
+            />
+          </div>
+        </div>
+
+        {/* Emergency Contact */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+          <div className="rx-form-field">
+            <label className="rx-form-label">Emergency Contact Name</label>
+            <input
+              type="text"
+              value={emergencyContactName}
+              onChange={(e) => { setEmergencyContactName(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="Relative or guardian name"
+            />
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Emergency Contact Phone</label>
+            <input
+              type="tel"
+              value={emergencyContactPhone}
+              onChange={(e) => { setEmergencyContactPhone(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="Emergency contact phone"
+            />
+          </div>
+        </div>
+
+        {/* Marital Status & Occupation */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+          <div className="rx-form-field">
+            <label className="rx-form-label">Marital Status</label>
+            <select
+              value={maritalStatus}
+              onChange={(e) => { setMaritalStatus(e.target.value); clearErrors() }}
+              className="rx-form-select"
+            >
+              <option value="">Select status</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+              <option value="Divorced">Divorced</option>
+              <option value="Widowed">Widowed</option>
+            </select>
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Occupation</label>
+            <input
+              type="text"
+              value={occupation}
+              onChange={(e) => { setOccupation(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="e.g. Engineer, Business, Student"
+            />
+          </div>
+        </div>
+
+        {/* Insurance Information */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+          <div className="rx-form-field">
+            <label className="rx-form-label">Insurance Provider</label>
+            <input
+              type="text"
+              value={insuranceProvider}
+              onChange={(e) => { setInsuranceProvider(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="e.g. Star Health, HDFC ERGO"
+            />
+          </div>
+          <div className="rx-form-field">
+            <label className="rx-form-label">Insurance Policy Number</label>
+            <input
+              type="text"
+              value={insurancePolicyNumber}
+              onChange={(e) => { setInsurancePolicyNumber(e.target.value); clearErrors() }}
+              className="rx-form-input"
+              placeholder="Policy / Member ID"
+            />
+          </div>
         </div>
       </div>
 
@@ -577,7 +733,8 @@ export default function PatientProfileForm({
       {/* ══════════════════════════════════════
           Section 4 — Account Security
           ══════════════════════════════════════ */}
-      <div className="rx-form-section">
+      {!isEditMode && (
+        <div className="rx-form-section">
         <div className="rx-form-section-header">
           <div className="rx-form-section-icon">
             <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -673,6 +830,7 @@ export default function PatientProfileForm({
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Submit ── */}
       <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-end">

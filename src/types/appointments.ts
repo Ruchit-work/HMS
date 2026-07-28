@@ -1,5 +1,8 @@
 export type TabKey = "today" | "tomorrow" | "thisWeek" | "nextWeek" | "history"
 
+export type { VisitType } from "@/shared/utils/visitTypes"
+
+
 /** Doctor review filter within a schedule tab (UI only). */
 export type QueueView = "all" | "pending" | "completed" | "followups"
 

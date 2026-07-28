@@ -1,6 +1,6 @@
 {
     "ekline-vscode.EkLineToken": "3eaebe17-e36e-4e6d-872d-c31d89e778c5",
-    "ekline-vscode.Disabled": false,
+    "ekline-vscode.Disabled": true,
     "ekline-vscode.StyleGuide": "Stripe",
     "ekline-vscode.DocumentationPaths": [
         "src",

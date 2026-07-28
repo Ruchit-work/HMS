@@ -21,6 +21,7 @@ import { useIpdAdmissionsDesk, type AdmissionsDeskFocus } from "@/features/recep
 import { useIpdDashboardInsights } from "@/features/receptionist/hooks/useIpdDashboardInsights"
 import { useIpdBootstrapData } from "@/features/receptionist/hooks/useIpdBootstrapData"
 import { authedFetchJson } from "@/shared/utils/authedFetch"
+import type { VisitType } from "@/shared/utils/visitTypes"
 
 const roomTypeLabelMap: Record<Room["roomType"], string> = ROOM_TYPES.reduce((acc, type) => {
   acc[type.id] = type.name
@@ -242,6 +243,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
   const [managePackageRoomStayDays, setManagePackageRoomStayDays] = useState(1)
   const [managePackageRoomType, setManagePackageRoomType] = useState("")
   const [managePackageExclusions, setManagePackageExclusions] = useState("")
+  const [directVisitType, setDirectVisitType] = useState<VisitType>("ipd")
   const [directAdmitType, setDirectAdmitType] = useState<"emergency" | "planned">("emergency")
   const [directPlannedAdmitAt, setDirectPlannedAdmitAt] = useState("")
   const [directExpectedDischargeAt, setDirectExpectedDischargeAt] = useState("")
@@ -500,6 +502,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
     setDirectEmergencyRelativeName("")
     setDirectDoctorName("")
     setDirectDoctorId("")
+    setDirectVisitType("ipd")
     setDirectAdmitType("emergency")
     setDirectPlannedAdmitAt("")
     setDirectExpectedDischargeAt("")
@@ -620,6 +623,7 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
           emergencyContactName: directEmergencyRelativeName.trim() || undefined,
           doctorName: directDoctorName.trim() || undefined,
           doctorId: directDoctorId.trim() || undefined,
+          visitType: directVisitType,
           admitType: directAdmitType,
           plannedAdmitAt: directAdmitType === "planned" ? directPlannedAdmitAt || undefined : undefined,
           expectedDischargeAt: directExpectedDischargeAt || undefined,
@@ -1664,6 +1668,8 @@ export default function AdmitRequestsPanel({ onNotification, onOpenBilling }: Ad
         directInitialDepositMode={directInitialDepositMode}
         setDirectInitialDepositMode={setDirectInitialDepositMode}
         depositPaymentModes={DEPOSIT_PAYMENT_MODES as unknown as Array<{ value: string; label: string }>}
+        directVisitType={directVisitType}
+        setDirectVisitType={setDirectVisitType}
         assignNotes={assignNotes}
         setAssignNotes={setAssignNotes}
         directAdmitLoading={directAdmitLoading}

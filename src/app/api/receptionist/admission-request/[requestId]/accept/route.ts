@@ -29,7 +29,8 @@ export async function POST(
       return Response.json({ error: "Server not configured for admin" }, { status: 500 })
     }
 
-    const { roomId, notes, initialDeposit, initialDepositPaymentMode } = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => ({}))
+    const { roomId, notes, initialDeposit, initialDepositPaymentMode } = body
     if (!roomId || typeof roomId !== "string") {
       return Response.json({ error: "Missing roomId" }, { status: 400 })
     }
@@ -141,10 +142,12 @@ export async function POST(
       auth.user?.role
     )
 
+    const { normalizeAdmissionVisitType } = await import("@/shared/utils/visitTypes")
     const admissionPayload = {
       hospitalId,
       branchId: defaultBranchId,
       appointmentId,
+      visitType: normalizeAdmissionVisitType(requestData.visitType || body.visitType),
       patientUid: String(requestData.patientUid || ""),
       patientId: requestData.patientId || null,
       patientName: requestData.patientName || null,

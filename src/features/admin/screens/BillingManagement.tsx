@@ -13,12 +13,14 @@ import {
   sumPeriodMetrics,
 } from "@/shared/utils/collectionAnalytics"
 import BillingExpensesSection from "@/features/receptionist/components/billing/BillingExpensesSection"
+import { getVisitTypeShortLabel, getVisitTypeBadgeClass } from "@/shared/utils/visitTypes"
 
 const BILLING_PAGE_SIZE = 10
 
 interface UnifiedBillingRecord {
   id: string
   type: "admission" | "appointment"
+  visitType?: string
   admissionId?: string
   appointmentId?: string
   patientId: string
@@ -551,6 +553,15 @@ export default function BillingManagement() {
                             }`}
                           >
                             {record.type === "admission" ? "Admission" : "Appointment"}
+                          </span>
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getVisitTypeBadgeClass(
+                              record.visitType || (record.type === "admission" ? "ipd" : "opd")
+                            )}`}
+                          >
+                            {getVisitTypeShortLabel(
+                              record.visitType || (record.type === "admission" ? "ipd" : "opd")
+                            )}
                           </span>
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusStyle}`}

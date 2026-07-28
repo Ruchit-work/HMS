@@ -24,6 +24,8 @@ import PatientConsentVideo from "@/features/consent/PatientConsentVideo"
 import { Button } from '@/shared/components'
 import { assertAppointmentSlotAvailable } from "@/shared/utils/checkAppointmentSlot"
 import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
+import { VISIT_TYPE_OPTIONS, type VisitType } from "@/shared/utils/visitTypes"
+
 
 interface BookAppointmentPanelProps {
   patientMode: "existing" | "new"
@@ -121,6 +123,7 @@ export default function BookAppointmentPanel({
   const [searchDoctor, setSearchDoctor] = useState("")
   const [appointmentDate, setAppointmentDate] = useState("")
   const [appointmentTime, setAppointmentTime] = useState("")
+  const [visitType, setVisitType] = useState<VisitType>("opd")
 
   const [symptomCategory, setSymptomCategory] = useState("")
   const [customSymptom, setCustomSymptom] = useState("")
@@ -675,6 +678,7 @@ export default function BookAppointmentPanel({
         chiefComplaint: chiefComplaint || "General consultation",
         medicalHistory: medicalHistory || "",
         status: "confirmed",
+        visitType: visitType,
         paymentAmount: paymentAmount,
         paymentMethod: paymentMethod,
         paymentType: "full",
@@ -697,7 +701,7 @@ export default function BookAppointmentPanel({
       )
       return appointmentData
     },
-    [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId, symptomCategory, customSymptom, additionalFees]
+    [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId, symptomCategory, customSymptom, additionalFees, visitType]
   )
 
   const preventDuplicateAppointment = useCallback(
@@ -1505,6 +1509,33 @@ export default function BookAppointmentPanel({
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Visit Type Selection */}
+                <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 block mb-2">
+                    Visit Type
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {VISIT_TYPE_OPTIONS.map((vt) => {
+                      const isSelected = visitType === vt.value
+                      return (
+                        <button
+                          key={vt.value}
+                          type="button"
+                          onClick={() => setVisitType(vt.value)}
+                          className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all ${
+                            isSelected
+                              ? "border-cyan-600 bg-cyan-50/80 text-cyan-900 ring-1 ring-cyan-600 shadow-xs"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className="text-xs font-bold">{vt.shortLabel}</span>
+                          <span className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{vt.label}</span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               </div>

@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react"
 import { DataTable, StatusPill, AvatarCell } from '@/shared/components'
 import type { DTColumn, DTRowAction } from '@/shared/components'
+import { getVisitTypeShortLabel, getVisitTypeBadgeClass } from "@/shared/utils/visitTypes"
+
 
 interface InpatientRow {
   id: string
@@ -15,6 +17,7 @@ interface InpatientRow {
   admittedOn: string
   admittedDateISO?: string
   status: "stable" | "critical" | "improving"
+  visitType?: string
 }
 
 interface InpatientTableProps {
@@ -119,6 +122,11 @@ export default function InpatientTable({
       width: "w-[16%]",
       render: (row) => (
         <div className="flex flex-col gap-1">
+          {row.visitType && (
+            <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold w-max ${getVisitTypeBadgeClass(row.visitType)}`}>
+              {getVisitTypeShortLabel(row.visitType)}
+            </span>
+          )}
           {focusTag && (
             <StatusPill label={focusTag} variant="warning" />
           )}

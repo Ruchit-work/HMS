@@ -10,11 +10,8 @@ import { filterPatientsByBranch } from '@/shared/utils/branch/branchFilters'
 import { fetchBranches } from '@/services/BranchService'
 import { useSearch } from '@/shared/hooks/useSearch'
 import { getHospitalCollection } from '@/shared/utils/firebase/hospital-queries'
-import { SuccessToast } from '@/shared/components'
-import { TabSkeleton } from '@/shared/components'
+import { SuccessToast, TabSkeleton, ViewModal, DeleteModal, RevealModal, useRevealModalClose, Button } from '@/shared/components'
 import AdminProtected from '@/features/auth/AdminProtected'
-import { ViewModal, DeleteModal } from '@/shared/components'
-import { RevealModal, useRevealModalClose } from '@/shared/components'
 import OTPVerificationModal from '@/features/forms/OTPVerificationModal'
 import PatientProfileForm, { PatientProfileFormValues } from '@/features/forms/PatientProfileForm'
 import { calculateAge, formatDate, formatDateTime } from '@/shared/utils/shared/date'
@@ -22,6 +19,7 @@ import { useTablePagination } from '@/shared/hooks/useTablePagination'
 import DocumentListCompact from '@/features/documents/DocumentListCompact'
 import PatientVisitHistorySection from '@/features/receptionist/components/PatientVisitHistorySection'
 import type { PatientVisitHistoryDetails } from '@/features/receptionist/utils/visitHistoryDisplay'
+import { formatAuditUserDisplay } from "@/shared/utils/auditHelpers"
 import {
   EnterpriseDataTable,
   StatusPill,
@@ -42,7 +40,8 @@ interface Patient {
     bloodGroup: string
     address: string
     dateOfBirth: string
-    createdBy: string
+    createdBy?: string | { uid?: string; name?: string; role?: string }
+    updatedBy?: string | { uid?: string; name?: string; role?: string }
     createdAt: string
     updatedAt: string
     appointmentDetails?: PatientVisitHistoryDetails & {
@@ -304,6 +303,8 @@ export default function PatientManagement({
     const [deletePatient, setDeletePatient] = useState<Patient | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [showAddModal, setShowAddModal] = useState(false)
+    const [showEditModal, setShowEditModal] = useState(false)
+    const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
     const [showOtpModal, setShowOtpModal] = useState(false)
     const [pendingPatientValues, setPendingPatientValues] = useState<PatientProfileFormValues | null>(null)
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
@@ -824,6 +825,46 @@ export default function PatientManagement({
         setShowOtpModal(true)
     }
 
+    const handleOpenEditModal = (patient: Patient) => {
+        setEditingPatient(patient)
+        setShowEditModal(true)
+    }
+
+    const handleSavePatientEdit = async (values: PatientProfileFormValues) => {
+        if (!editingPatient) return
+        try {
+            setLoading(true)
+            setError(null)
+            const currentUser = auth.currentUser
+            if (!currentUser) {
+                throw new Error("You must be logged in to update patients")
+            }
+            const token = await currentUser.getIdToken()
+            const res = await fetch(`/api/receptionist/patients/${encodeURIComponent(editingPatient.id)}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ patientData: values }),
+            })
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}))
+                throw new Error(data?.error || 'Failed to update patient profile')
+            }
+
+            setShowEditModal(false)
+            setEditingPatient(null)
+            setSuccessMessage('Patient profile updated successfully!')
+            setTimeout(() => setSuccessMessage(null), 3000)
+        } catch (err: any) {
+            setError(err?.message || 'Failed to update patient profile')
+        } finally {
+            setLoading(false)
+        }
+    }
+
     const handleOtpVerified = async () => {
         if (!pendingPatientValues) return
         await finalizePatientCreation(pendingPatientValues)
@@ -1269,6 +1310,10 @@ export default function PatientManagement({
     const patientRowActions: EnterpriseRowAction<Patient>[] = useMemo(() => {
         const actions: EnterpriseRowAction<Patient>[] = [
             {
+                label: 'Edit',
+                onClick: (patient) => handleOpenEditModal(patient),
+            },
+            {
                 label: 'Branch',
                 onClick: (patient) => openBranchEditModal(patient),
             },
@@ -1541,14 +1586,29 @@ export default function PatientManagement({
                         <p className="text-xs font-mono text-slate-400 mt-0.5">#{selectedPatient.patientId}</p>
                       )}
                     </div>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
-                      selectedPatient?.status === 'active'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-slate-100 text-slate-500 border-slate-200'
-                    }`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                      {selectedPatient?.status === 'active' ? 'Active' : 'Inactive'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (selectedPatient) {
+                            setShowViewModal(false)
+                            handleOpenEditModal(selectedPatient)
+                          }
+                        }}
+                      >
+                        Edit Profile
+                      </Button>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
+                        selectedPatient?.status === 'active'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                      }`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                        {selectedPatient?.status === 'active' ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
                   </div>
                   {/* Quick clinical facts */}
                   <div className="flex flex-wrap gap-2 mt-3">
@@ -1713,8 +1773,9 @@ export default function PatientManagement({
                   {[
                     { label: 'Patient ID', value: selectedPatient?.patientId || 'Not assigned', mono: true },
                     { label: 'Status', value: selectedPatient?.status || '—', mono: false },
-                    { label: 'Created by', value: selectedPatient?.createdBy || '—', mono: false },
+                    { label: 'Created by', value: formatAuditUserDisplay(selectedPatient?.createdBy), mono: false },
                     { label: 'Registered', value: formatDateTime(selectedPatient?.createdAt || ''), mono: false },
+                    { label: 'Last updated by', value: formatAuditUserDisplay(selectedPatient?.updatedBy), mono: false },
                     { label: 'Last updated', value: formatDateTime(selectedPatient?.updatedAt || ''), mono: false },
                   ].map(({ label, value, mono }) => (
                     <div key={label} className="bg-slate-50 rounded-lg px-3 py-2">
@@ -1727,6 +1788,83 @@ export default function PatientManagement({
 
             </div>
           </ViewModal>
+
+          {/* Edit Patient Modal */}
+          {showEditModal && (
+            <RevealModal
+              isOpen={true}
+              onClose={() => {
+                setShowEditModal(false)
+                setEditingPatient(null)
+                setError(null)
+              }}
+              contentClassName="p-0 max-w-3xl"
+            >
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Edit Patient Profile</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Update demographic and contact details for #{editingPatient?.patientId || editingPatient?.id}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false)
+                      setEditingPatient(null)
+                      setError(null)
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="p-6 max-h-[85vh] overflow-y-auto">
+                  {editingPatient && (
+                    <PatientProfileForm
+                      mode="admin"
+                      isEditMode={true}
+                      initialValues={{
+                        firstName: editingPatient.firstName || "",
+                        lastName: editingPatient.lastName || "",
+                        email: editingPatient.email || "",
+                        gender: editingPatient.gender || "",
+                        phone: editingPatient.phone || "",
+                        dateOfBirth: editingPatient.dateOfBirth || "",
+                        bloodGroup: editingPatient.bloodGroup || "",
+                        address: editingPatient.address || "",
+                        city: (editingPatient as any).city || "",
+                        state: (editingPatient as any).state || "",
+                        pincode: (editingPatient as any).pincode || "",
+                        alternatePhone: (editingPatient as any).alternatePhone || "",
+                        emergencyContactName: (editingPatient as any).emergencyContactName || "",
+                        emergencyContactPhone: (editingPatient as any).emergencyContactPhone || "",
+                        maritalStatus: (editingPatient as any).maritalStatus || "",
+                        occupation: (editingPatient as any).occupation || "",
+                        insuranceProvider: (editingPatient as any).insuranceProvider || "",
+                        insurancePolicyNumber: (editingPatient as any).insurancePolicyNumber || "",
+                        status: editingPatient.status === "inactive" ? "inactive" : "active",
+                      }}
+                      loading={loading}
+                      submitLabel="Update Patient Profile"
+                      onSubmit={handleSavePatientEdit}
+                      onCancel={() => {
+                        setShowEditModal(false)
+                        setEditingPatient(null)
+                        setError(null)
+                      }}
+                      externalError={error}
+                      onErrorClear={() => setError(null)}
+                    />
+                  )}
+                </div>
+              </div>
+            </RevealModal>
+          )}
+
           {/* Delete Confirmation Modal */}
           <DeleteModal
             isOpen={deleteModal}

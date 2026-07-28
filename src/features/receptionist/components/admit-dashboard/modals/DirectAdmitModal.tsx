@@ -2,6 +2,8 @@
 
 import { Button } from '@/shared/components'
 import type { Room } from "@/types/patient"
+import { ADMISSION_VISIT_TYPE_OPTIONS, type VisitType } from "@/shared/utils/visitTypes"
+
 
 type ExistingPatientOption = {
   uid: string
@@ -101,6 +103,8 @@ interface DirectAdmitModalProps {
   directInitialDepositMode: string
   setDirectInitialDepositMode: (value: string) => void
   depositPaymentModes: PaymentModeOption[]
+  directVisitType: VisitType
+  setDirectVisitType: (value: VisitType) => void
   assignNotes: string
   setAssignNotes: (value: string) => void
   directAdmitLoading: boolean
@@ -162,6 +166,8 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
     directInitialDepositMode,
     setDirectInitialDepositMode,
     depositPaymentModes,
+    directVisitType,
+    setDirectVisitType,
     assignNotes,
     setAssignNotes,
     directAdmitLoading,
@@ -333,7 +339,21 @@ export default function DirectAdmitModal(props: DirectAdmitModalProps) {
           {/* ── Admission Schedule ── */}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Admission Schedule</p>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <div className="rx-form-field">
+                <label className="rx-form-label">Visit Type</label>
+                <select
+                  value={directVisitType}
+                  onChange={(e) => setDirectVisitType(e.target.value as VisitType)}
+                  className="rx-form-select font-semibold text-slate-900"
+                >
+                  {ADMISSION_VISIT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="rx-form-field">
                 <label className="rx-form-label">Admit Type</label>
                 <select value={directAdmitType} onChange={(e) => setDirectAdmitType(e.target.value as "emergency" | "planned")} className="rx-form-select">

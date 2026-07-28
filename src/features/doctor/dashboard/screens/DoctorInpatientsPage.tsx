@@ -12,6 +12,7 @@ import {
   ClinicalPageHeader,
 } from "@/features/doctor/clinical"
 import { Users } from "lucide-react"
+import { getVisitTypeShortLabel, getVisitTypeBadgeClass } from "@/shared/utils/visitTypes"
 
 const ROUND_CHARGE_OPTIONS = [
   { key: "medicine", label: "Medicine" },
@@ -417,7 +418,12 @@ export default function DoctorInpatientsPage() {
                   return [
                     <tr key={`${patient.id}-row`} className="border-t border-slate-100">
                       <td className="px-3 py-3">
-                        <p className="font-semibold text-slate-900">{patient.patientName || "Unknown patient"}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-semibold text-slate-900">{patient.patientName || "Unknown patient"}</p>
+                          <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${getVisitTypeBadgeClass((patient as any).visitType || "ipd")}`}>
+                            {getVisitTypeShortLabel((patient as any).visitType || "ipd")}
+                          </span>
+                        </div>
                         <p className="text-xs text-slate-500">{patient.patientId || "PID: N/A"}</p>
                       </td>
                       <td className="px-3 py-3 text-slate-700">

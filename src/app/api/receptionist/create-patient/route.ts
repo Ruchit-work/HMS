@@ -7,6 +7,7 @@ import { applyRateLimit } from "@/shared/utils/shared/rateLimit"
 import { getUserActiveHospitalId } from "@/shared/utils/firebase/serverHospitalQueries"
 import { createPatientDualWrite } from "@/services/server/PatientService"
 import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
+import { getActorInfo } from "@/shared/utils/auditHelpers"
 
 const buildWelcomeMessage = (firstName?: string, lastName?: string, patientId?: string, email?: string) => {
   const friendlyName = firstName?.trim() || "there"
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
     })
 
     const nowIso = new Date().toISOString()
+    const actorInfo = getActorInfo(auth.user!)
     const docData = {
       status: patientData.status || "active",
       firstName: String(firstName).trim(),
@@ -198,7 +200,8 @@ export async function POST(request: Request) {
         : null,
       createdAt: patientData.createdAt || nowIso,
       updatedAt: nowIso,
-      createdBy: patientData.createdBy || "receptionist",
+      createdBy: typeof patientData.createdBy === "object" && patientData.createdBy !== null ? patientData.createdBy : actorInfo,
+      updatedBy: actorInfo,
       patientId,
       hospitalId: userHospitalId, // Store hospital association
       defaultBranchId: defaultBranchId || null, // Store default branch (where patient was registered)

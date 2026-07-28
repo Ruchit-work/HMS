@@ -26,6 +26,8 @@ function formatVisitDate(date: string) {
   return new Date(date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 }
 
+import { getVisitTypeShortLabel, getVisitTypeBadgeClass } from "@/shared/utils/visitTypes"
+
 export default function AppointmentsListPane({
   appointments,
   selectedId,
@@ -79,6 +81,9 @@ export default function AppointmentsListPane({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="text-sm font-semibold text-slate-900 truncate">{apt.patientName || "Patient"}</p>
                     <ClinicalStatusBadge status={apt.status} size="sm" showDot={false} />
+                    <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${getVisitTypeBadgeClass(apt.visitType as string)}`}>
+                      {getVisitTypeShortLabel(apt.visitType as string)}
+                    </span>
                     {isFollowUp && (
                       <span className="inline-flex items-center gap-0.5 rounded-md bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
                         <RotateCcw className="w-2.5 h-2.5" />

@@ -6,7 +6,9 @@ import {
   getUserActiveHospitalId,
   resolveAdmissionHospitalId,
 } from "@/shared/utils/firebase/serverHospitalQueries"
+import { normalizeAdmissionVisitType } from "@/shared/utils/visitTypes"
 import { auditLogger, AUDIT_ACTIONS } from "@/server/auditLogger"
+import { getActorInfo } from "@/shared/utils/auditHelpers"
 
 const DOB_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const IPD_START_NUMBER = 1000
@@ -291,6 +293,7 @@ export async function POST(req: Request) {
       const nameParts = String(resolvedPatientName || "").trim().split(/\s+/).filter(Boolean)
       const firstName = nameParts[0] || "Patient"
       const lastName = nameParts.slice(1).join(" ") || ""
+      const actorInfo = getActorInfo(auth.user!)
       const patientDoc: Record<string, unknown> = {
         status: "active",
         firstName,
@@ -303,7 +306,8 @@ export async function POST(req: Request) {
         dateOfBirth: resolvedDob || "",
         createdAt: nowIso,
         updatedAt: nowIso,
-        createdBy: "receptionist",
+        createdBy: actorInfo,
+        updatedBy: actorInfo,
         patientId: generatedPatientId,
         hospitalId,
         defaultBranchId,
@@ -333,7 +337,8 @@ export async function POST(req: Request) {
         metadata: { patientId: generatedPatientId, registrationSource: "direct_admission" },
       })
     } else {
-      const patientUpdates: Record<string, unknown> = { updatedAt: nowIso }
+      const actorInfo = getActorInfo(auth.user!)
+      const patientUpdates: Record<string, unknown> = { updatedAt: nowIso, updatedBy: actorInfo }
       if (patientPhone) patientUpdates.phone = patientPhone
       if (patientGender) patientUpdates.gender = patientGender
       if (resolvedDob) patientUpdates.dateOfBirth = resolvedDob
@@ -427,6 +432,7 @@ export async function POST(req: Request) {
       hospitalId,
       branchId: defaultBranchId,
       ipdNo,
+      visitType: normalizeAdmissionVisitType(body.visitType),
       appointmentId: "",
       patientUid: resolvedPatientUid || resolvedPatientId || `direct-${admissionRef.id}`,
       patientId: resolvedPatientId || null,
