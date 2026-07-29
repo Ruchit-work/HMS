@@ -9,6 +9,8 @@ import PaymentMethodSection, {
 import { BillingRecord } from "@/types/patient"
 import { authedFetchJson } from "@/shared/utils/authedFetch"
 import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
+import { usePrint } from "@/shared/hooks/usePrint"
+import { convertBillingToPrintData } from "@/shared/utils/printConverters"
 import BillingExpensesSection from "@/features/receptionist/components/billing/BillingExpensesSection"
 
 // Show more billing records per page now that cards are more compact
@@ -202,6 +204,7 @@ export default function BillingHistoryPanel({
   focusBillingQuery,
   onFocusHandled,
 }: BillingHistoryPanelProps) {
+  const { printBillingInvoice } = usePrint()
   const [billingRecords, setBillingRecords] = useState<BillingRecord[]>([])
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState<string | null>(null)
@@ -1247,6 +1250,9 @@ export default function BillingHistoryPanel({
                             </p>
                           )}
                         </div>
+                        <Button type="button" size="sm" variant="outline" onClick={() => printBillingInvoice(convertBillingToPrintData(record))}>
+                          Print Invoice
+                        </Button>
                         {!isPaid && !isVoid && !isCancelled && billingSettings.billingOptions.allowManualPaymentEntry && (
                           <Button type="button" size="sm" variant="primary" onClick={() => handleOpenBillingPayment(record)}>
                             <svg className="mr-1.5 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

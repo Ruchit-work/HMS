@@ -2,6 +2,8 @@
 
 import type { Admission, Room } from "@/types/patient"
 import { Button } from '@/shared/components'
+import { usePrint } from '@/shared/hooks/usePrint'
+import { convertAdmissionToPrintData } from '@/shared/utils/printConverters'
 
 type AdmissionPackageOption = {
   id: string
@@ -52,6 +54,7 @@ export default function AdmissionDetailsModal({
   handleSaveAdmissionDetails,
   handleProcessBilling,
 }: AdmissionDetailsModalProps) {
+  const { printAdmissionForm } = usePrint()
   if (!selectedAdmission || dischargeModalOpen) return null
 
   return (
@@ -316,6 +319,13 @@ export default function AdmissionDetailsModal({
             ))}
           </div>
           <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => printAdmissionForm(convertAdmissionToPrintData(selectedAdmission))}
+            >
+              Print Admission Form
+            </Button>
             <Button
               variant="outline"
               onClick={() => handleSaveAdmissionDetails(selectedAdmission)}

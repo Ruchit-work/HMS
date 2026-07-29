@@ -14,7 +14,9 @@ import {
   type ClinicalReportCategory,
   type ClinicalReportEntry,
 } from "@/shared/utils/clinicalReportUtils"
-import { AlertTriangle, Eye } from "lucide-react"
+import { AlertTriangle, Eye, Printer } from "lucide-react"
+import { usePrint } from "@/shared/hooks/usePrint"
+import { convertLabReportToPrintData } from "@/shared/utils/printConverters"
 
 interface ClinicalReportsPanelProps {
   documents: DocumentMetadata[]
@@ -61,10 +63,12 @@ function StatusBadge({ entry }: { entry: ClinicalReportEntry }) {
 function ReportTimelineCard({
   entry,
   onPreview,
+  onPrint,
   showTimeline = true,
 }: {
   entry: ClinicalReportEntry
   onPreview: () => void
+  onPrint?: () => void
   showTimeline?: boolean
 }) {
   return (
@@ -101,14 +105,26 @@ function ReportTimelineCard({
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onPreview}
-            className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-teal-50 hover:border-teal-200 transition-colors"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            Preview
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={onPreview}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-teal-50 hover:border-teal-200 transition-colors"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Preview
+            </button>
+            {onPrint && (
+              <button
+                type="button"
+                onClick={onPrint}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-cyan-50 hover:border-cyan-200 transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5 text-cyan-700" />
+                Print
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -130,6 +146,7 @@ export default function ClinicalReportsPanel({
   compact = false,
   maxItems,
 }: ClinicalReportsPanelProps) {
+  const { printLabReport } = usePrint()
   const [activeCategory, setActiveCategory] = useState<ClinicalReportCategory>("all")
 
   const entries = useMemo(
@@ -208,6 +225,7 @@ export default function ClinicalReportsPanel({
               key={entry.id}
               entry={entry}
               onPreview={() => onDocumentClick(entry.document)}
+              onPrint={() => printLabReport(convertLabReportToPrintData(entry.document))}
             />
           ))
         )}

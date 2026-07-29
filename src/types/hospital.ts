@@ -5,6 +5,7 @@
 
 import { Timestamp } from 'firebase/firestore'
 import type { HospitalBillingSettings } from '@/shared/utils/billingSettings'
+import type { HospitalPrintSettings } from '@/types/print'
 
 export interface Hospital {
   id: string
@@ -22,6 +23,7 @@ export interface Hospital {
   enablePharmacy?: boolean
   settings?: {
     billing?: HospitalBillingSettings
+    print?: HospitalPrintSettings
     [key: string]: unknown
   }
   createdAt: Timestamp | string

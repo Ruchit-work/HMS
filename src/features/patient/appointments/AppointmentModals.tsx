@@ -2,13 +2,13 @@
 
 import { useEffect, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import jsPDF from "jspdf"
 import { CalendarDays, Check, Clock3, Download, Info, X } from "lucide-react"
 import { Appointment } from "@/types/patient"
 import { Button, RevealModal, useRevealModalClose } from "@/shared/components"
 import { isAppointmentPaid } from "@/shared/utils/appointmentHelpers"
 import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
 import type { PaidAppointmentCancellationPolicy } from "@/shared/utils/billingSettings"
+import { generateAppointmentConfirmationPDF } from "@/shared/utils/documents/pdfGenerators"
 
 // ============================================================================
 // CancelAppointmentModal - Modal for confirming appointment cancellation.
@@ -298,87 +298,7 @@ function AppointmentSuccessModalContent({
   }, [requestClose])
 
   const downloadConfirmationPDF = () => {
-    const pdf = new jsPDF()
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    
-    // Header
-    pdf.setFillColor(45, 55, 72) // slate-800
-    pdf.rect(0, 0, pageWidth, 40, 'F')
-    pdf.setTextColor(255, 255, 255)
-    pdf.setFontSize(24)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('Appointment Confirmed', pageWidth / 2, 25, { align: 'center' })
-    
-    // Success Icon
-    pdf.setFontSize(40)
-    pdf.text('✓', pageWidth / 2, 60, { align: 'center' })
-    
-    // Appointment Details
-    pdf.setTextColor(0, 0, 0)
-    pdf.setFontSize(12)
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('APPOINTMENT DETAILS', 20, 80)
-    
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(11)
-    let yPos = 95
-    
-    pdf.text(`Patient Name: ${appointmentData.patientName}`, 20, yPos)
-    yPos += 10
-    pdf.text(`Doctor: Dr. ${appointmentData.doctorName}`, 20, yPos)
-    yPos += 10
-    pdf.text(`Specialization: ${appointmentData.doctorSpecialization}`, 20, yPos)
-    yPos += 10
-    pdf.text(`Date: ${new Date(appointmentData.appointmentDate).toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })}`, 20, yPos)
-    yPos += 10
-    pdf.text(`Time: ${appointmentData.appointmentTime}`, 20, yPos)
-    
-    // Payment Details
-    yPos += 20
-    pdf.setFont('helvetica', 'bold')
-    pdf.text('PAYMENT DETAILS', 20, yPos)
-    
-    pdf.setFont('helvetica', 'normal')
-    yPos += 15
-    pdf.text(`Transaction ID: ${appointmentData.transactionId}`, 20, yPos)
-    yPos += 10
-    
-    if (appointmentData.paymentStatus === "pending" || appointmentData.paymentMethod === "cash") {
-      pdf.text(`Payment Status: Pending`, 20, yPos)
-      yPos += 10
-      pdf.text(`Amount to Pay: ₹${appointmentData.totalConsultationFee || appointmentData.remainingAmount || 0}`, 20, yPos)
-      yPos += 10
-      pdf.setFontSize(9)
-      pdf.setTextColor(100, 100, 100)
-      pdf.text(`Payment will be collected at the reception desk.`, 20, yPos)
-      pdf.setTextColor(0, 0, 0)
-      pdf.setFontSize(11)
-    } else {
-      pdf.text(`Amount Paid: ₹${appointmentData.paymentAmount}`, 20, yPos)
-      yPos += 10
-      
-      if (appointmentData.paymentType === 'partial' && appointmentData.remainingAmount && appointmentData.remainingAmount > 0) {
-        pdf.setTextColor(255, 100, 0)
-        pdf.text(`Remaining to Pay at Hospital: ₹${appointmentData.remainingAmount}`, 20, yPos)
-        pdf.setTextColor(0, 0, 0)
-      }
-    }
-    
-    // Footer
-    yPos += 25
-    pdf.setFontSize(10)
-    pdf.setTextColor(100, 100, 100)
-    pdf.text('Please arrive 15 minutes before your appointment time.', 20, yPos)
-    yPos += 7
-    pdf.text('Bring this confirmation and a valid ID.', 20, yPos)
-    
-    // Download
-    pdf.save(`Appointment-Confirmation-${appointmentData.transactionId}.pdf`)
+    generateAppointmentConfirmationPDF(appointmentData as unknown as Appointment)
   }
 
   const isPendingPayment =

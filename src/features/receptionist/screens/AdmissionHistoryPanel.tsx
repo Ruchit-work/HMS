@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { auth } from "@/firebase/config"
-import { useMultiHospital } from "@/providers/MultiHospitalProvider"
+import { usePrint } from "@/shared/hooks/usePrint"
+import { convertDischargeToPrintData } from "@/shared/utils/printConverters"
 import { Button } from '@/shared/components'
 import { Admission, BillingRecord } from "@/types/patient"
 
@@ -11,7 +12,7 @@ interface AdmissionHistoryPanelProps {
 }
 
 export default function AdmissionHistoryPanel({ onNotification }: AdmissionHistoryPanelProps) {
-  const { activeHospital } = useMultiHospital()
+  const { printDischargeSummary } = usePrint()
   const [history, setHistory] = useState<Admission[]>([])
   const [billingByAdmissionId, setBillingByAdmissionId] = useState<Record<string, BillingRecord>>({})
   const [loading, setLoading] = useState(false)
@@ -136,185 +137,9 @@ export default function AdmissionHistoryPanel({ onNotification }: AdmissionHisto
 
   const handlePrintSummary = useCallback(
     (admission: Admission) => {
-      const hospitalName = activeHospital?.name || "Hospital Management System"
-      const hospitalAddress = activeHospital?.address || ""
-      const hospitalPhone = activeHospital?.phone || ""
-      const ipdLabel = admission.ipdNo?.trim() || admission.id
-      const billing = billingByAdmissionId[admission.id]
-      const stays =
-        Array.isArray(admission.roomStays) && admission.roomStays.length > 0
-          ? admission.roomStays
-          : [
-              {
-                roomNumber: admission.roomNumber,
-                roomType: admission.roomType,
-                customRoomTypeName: admission.customRoomTypeName || null,
-                ratePerDay: admission.roomRatePerDay,
-              },
-            ]
-      const roomJourneyHtml = stays
-        .map((stay: any, idx: number) => {
-          const roomTypeLabel =
-            stay.roomType === "custom" ? stay.customRoomTypeName || "Custom Room Type" : stay.roomType
-          const fromAt = stay.fromAt ? new Date(stay.fromAt).toLocaleString() : "N/A"
-          const toAt = stay.toAt ? new Date(stay.toAt).toLocaleString() : "Discharge"
-          return `
-            <tr>
-              <td>${idx + 1}</td>
-              <td>${stay.roomNumber || "N/A"}</td>
-              <td>${roomTypeLabel}</td>
-              <td>${fromAt}</td>
-              <td>${toAt}</td>
-              <td class="right">${formatCurrency(Number(stay.ratePerDay || 0))}</td>
-            </tr>
-          `
-        })
-        .join("")
-
-      const otherServicesRows =
-        billing && Array.isArray(billing.otherServices) && billing.otherServices.length > 0
-          ? billing.otherServices
-              .map(
-                (service) => `
-                <tr>
-                  <td>${service.description || "Service"}</td>
-                  <td class="right">${formatCurrency(Number(service.amount || 0))}</td>
-                </tr>
-              `
-              )
-              .join("")
-          : ""
-
-      const billingLinesHtml = billing
-        ? `
-          <tr><td>Bill ID</td><td class="right">${billing.id}</td></tr>
-          <tr><td>Room Charges</td><td class="right">${formatCurrency(Number(billing.roomCharges || 0))}</td></tr>
-          <tr><td>Doctor Fee</td><td class="right">${formatCurrency(Number(billing.doctorFee || 0))}</td></tr>
-          ${otherServicesRows}
-          <tr class="total"><td>Total Amount</td><td class="right">${formatCurrency(Number(billing.totalAmount || 0))}</td></tr>
-          <tr><td>Payment Status</td><td class="right" style="text-transform:capitalize">${billing.status}</td></tr>
-          <tr><td>Payment Method</td><td class="right">${billing.paymentMethod || "N/A"}</td></tr>
-          <tr><td>Paid At</td><td class="right">${billing.paidAt ? new Date(billing.paidAt).toLocaleString() : "N/A"}</td></tr>
-          <tr><td>Reference</td><td class="right">${billing.paymentReference || "N/A"}</td></tr>
-        `
-        : `<tr><td colspan="2">Billing details not found for this admission.</td></tr>`
-
-      const html = `
-  <div class="page">
-    <div class="header">
-      <div>
-        <p class="hospital">${hospitalName}</p>
-        ${hospitalAddress ? `<p class="subtitle">${hospitalAddress}</p>` : ""}
-        ${hospitalPhone ? `<p class="subtitle">Tel: ${hospitalPhone}</p>` : ""}
-        <p class="title">Discharge & Billing Summary</p>
-        <p class="subtitle">Official inpatient discharge statement</p>
-      </div>
-      <div class="meta">
-        <p><span>IPD No:</span> ${ipdLabel}</p>
-        <p><span>Admission ID:</span> ${admission.id}</p>
-        <p><span>Generated:</span> ${new Date().toLocaleString()}</p>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Admission Details</h3>
-      <table class="info-table">
-        <tr><td><strong>Patient</strong></td><td>${admission.patientName || "Unknown"}</td><td><strong>Patient ID</strong></td><td>${admission.patientId || "N/A"}</td></tr>
-        <tr><td><strong>Doctor</strong></td><td>${admission.doctorName || "N/A"}</td><td><strong>Status</strong></td><td style="text-transform:capitalize">${admission.status}</td></tr>
-        <tr><td><strong>Check-in</strong></td><td>${admission.checkInAt ? new Date(admission.checkInAt).toLocaleString() : "N/A"}</td><td><strong>Check-out</strong></td><td>${admission.checkOutAt ? new Date(admission.checkOutAt).toLocaleString() : "N/A"}</td></tr>
-        <tr><td><strong>Address</strong></td><td colspan="3">${admission.patientAddress || "N/A"}</td></tr>
-      </table>
-    </div>
-
-    <div class="card">
-      <h3>Room Journey</h3>
-      <table class="grid">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Room</th>
-            <th>Type</th>
-            <th>From</th>
-            <th>To</th>
-            <th class="right">Rate / Day</th>
-          </tr>
-        </thead>
-        <tbody>${roomJourneyHtml}</tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h3>Billing Breakdown</h3>
-      <table class="grid">${billingLinesHtml}</table>
-    </div>
-
-    <div class="signatures">
-      <div>
-        <p class="sig-label">Reception / Billing</p>
-        <div class="sig-line"></div>
-        <p class="sig-hint">Name & signature</p>
-      </div>
-      <div>
-        <p class="sig-label">Patient / Attendant</p>
-        <div class="sig-line"></div>
-        <p class="sig-hint">Name & signature</p>
-      </div>
-    </div>
-    <div class="footer-note">
-      <p>Computer-generated discharge summary. Please verify all amounts before payment.</p>
-    </div>
-  </div>`
-
-      const printWindow = window.open("", "_blank", "width=900,height=700")
-      if (!printWindow) {
-        notify({ type: "error", message: "Unable to open print window. Please allow popups." })
-        return
-      }
-      printWindow.document.open()
-      printWindow.document.write(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Admission Summary - ${admission.id}</title>
-    <style>
-      @page { size: A4; margin: 12mm; }
-      body { margin: 0; font-family: Arial, sans-serif; color: #0f172a; background: #f8fafc; }
-      .page { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; }
-      .header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
-      .hospital { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: #334155; text-transform: uppercase; }
-      .title { margin: 6px 0 0; font-size: 22px; font-weight: 800; color: var(--color-primary-dark); }
-      .header { border-bottom-color: var(--color-primary); }
-      .subtitle { margin: 2px 0 0; font-size: 12px; color: #64748b; }
-      .meta p { margin: 0 0 4px; font-size: 12px; text-align: right; }
-      .meta span { font-weight: 700; color: #334155; }
-      .card { margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
-      .card h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #475569; }
-      .info-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-      .info-table td { border-bottom: 1px dashed #e2e8f0; padding: 6px 4px; vertical-align: top; }
-      .grid { width: 100%; border-collapse: collapse; font-size: 12px; }
-      .grid th { background: #f1f5f9; color: #334155; text-align: left; padding: 7px 6px; border: 1px solid #e2e8f0; }
-      .grid td { padding: 7px 6px; border: 1px solid #e2e8f0; }
-      .right { text-align: right; }
-      .total td { font-weight: 800; background: #ecfeff; }
-      .signatures { display: flex; gap: 24px; margin-top: 16px; }
-      .signatures > div { flex: 1; }
-      .sig-label { margin: 0 0 4px; font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; }
-      .sig-line { border-bottom: 1px solid #94a3b8; height: 36px; margin: 8px 0 4px; }
-      .sig-hint { margin: 0; font-size: 10px; color: #64748b; }
-      .footer-note { margin-top: 10px; font-size: 11px; color: #64748b; text-align: center; }
-      @media print {
-        body { background: #fff; }
-        .page { border: none; border-radius: 0; padding: 0; }
-      }
-    </style>
-  </head>
-  <body>${html}</body>
-</html>`)
-      printWindow.document.close()
-      printWindow.focus()
-      setTimeout(() => printWindow.print(), 250)
+      printDischargeSummary(convertDischargeToPrintData(admission))
     },
-    [activeHospital, billingByAdmissionId, notify]
+    [printDischargeSummary]
   )
 
   return (

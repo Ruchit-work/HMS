@@ -3,8 +3,11 @@
 import { ReactNode } from "react"
 import GlobalHeader from "@/shared/ui/layout/GlobalHeader"
 import { MultiHospitalProvider } from "@/providers/MultiHospitalProvider"
+import { PrintProvider } from "@/providers/PrintProvider"
 import ErrorBoundary from "@/shared/ui/boundaries/ErrorBoundary"
 import SpeechRecognitionProvider from "@/shared/ui/SpeechRecognitionProvider"
+
+import { SessionProvider } from "@/providers/SessionProvider"
 
 interface ClientLayoutContentProps {
   children: ReactNode
@@ -20,8 +23,12 @@ export function ClientLayoutContent({ children }: ClientLayoutContentProps) {
     <ErrorBoundary>
       <SpeechRecognitionProvider>
         <MultiHospitalProvider>
-          <GlobalHeader />
-          {children}
+          <SessionProvider>
+            <PrintProvider>
+              <GlobalHeader />
+              {children}
+            </PrintProvider>
+          </SessionProvider>
         </MultiHospitalProvider>
       </SpeechRecognitionProvider>
     </ErrorBoundary>

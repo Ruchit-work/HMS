@@ -18,7 +18,9 @@ import {
   isAppointmentVisibleToReceptionist,
   logAppointmentQuery,
 } from '@/shared/utils/appointments/appointmentSource'
-import { SuccessToast } from '@/shared/components'
+import { usePrint } from "@/shared/hooks/usePrint"
+import { convertAppointmentToPrintData } from "@/shared/utils/printConverters"
+import { SuccessToast, Button } from '@/shared/components'
 import { TabSkeleton } from '@/shared/components'
 import AdminProtected from '@/features/auth/AdminProtected'
 import { ViewModal, DeleteModal, ConfirmDialog } from '@/shared/components'
@@ -100,6 +102,7 @@ export default function AppoinmentManagement({
     disableAdminGuard = true,
     receptionistBranchId = null,
 }: AppoinmentManagementProps = {}) {
+    const { printAppointmentSlip } = usePrint()
     const { selectedBranchId, branches: contextBranches, isProvided: branchContextProvided } = useBranchSelection()
     const sharedHospitalData = useAdminHospitalDataOptional()
     const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -459,21 +462,14 @@ export default function AppoinmentManagement({
         URL.revokeObjectURL(link.href)
         setExportOpen(false)
     }
+    const handlePrintSlip = (apt: Appointment) => {
+        printAppointmentSlip(convertAppointmentToPrintData(apt))
+    }
+
     const printReport = () => {
-        const printWindow = window.open('', '_blank')
-        if (!printWindow) return
-        printWindow.document.write(`
-          <html><head><title>Appointments Report</title></head><body>
-          <h1>Appointments Report</h1>
-          <p>Generated: ${new Date().toLocaleString()}</p>
-          <table border="1" cellpadding="6" style="border-collapse:collapse;width:100%">
-          <thead><tr><th>Patient</th><th>Doctor</th><th>Date</th><th>Time</th><th>Visit Type</th><th>Status</th><th>Payment</th><th>Amount</th></tr></thead>
-          <tbody>
-          ${filteredAppointments.slice(0, 500).map((a) => `<tr><td>${a.patientName}</td><td>${a.doctorName}</td><td>${a.appointmentDate}</td><td>${a.appointmentTime || ''}</td><td>${getVisitType(a)}</td><td>${getStatusDisplayLabel((a as any).status)}</td><td>${getPaymentStatusLabel(a)}</td><td>${a.paymentAmount ?? ''}</td></tr>`).join('')}
-          </tbody></table></body></html>`)
-        printWindow.document.close()
-        printWindow.print()
-        printWindow.close()
+        if (filteredAppointments.length > 0) {
+            handlePrintSlip(filteredAppointments[0])
+        }
         setExportOpen(false)
     }
 
@@ -1036,6 +1032,10 @@ export default function AppoinmentManagement({
     const appointmentRowActions: EnterpriseRowAction<Appointment>[] = useMemo(
         () => [
             {
+                label: 'Print Appointment Slip',
+                onClick: (a) => handlePrintSlip(a),
+            },
+            {
                 label: 'Check-in patient',
                 hidden: (a) => {
                     const s = (a as any).status
@@ -1370,10 +1370,18 @@ export default function AppoinmentManagement({
                                                     {apt.doctorSpecialization ? ` · ${apt.doctorSpecialization}` : ''}
                                                 </p>
                                             </div>
-                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusCls}`}>
-                                                <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                                {statusLabel}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <Button type="button" size="sm" variant="outline" onClick={() => handlePrintSlip(apt)}>
+                                                    <svg className="mr-1.5 h-3.5 w-3.5 text-cyan-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                                    </svg>
+                                                    Print Slip
+                                                </Button>
+                                                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusCls}`}>
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                                    {statusLabel}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700">

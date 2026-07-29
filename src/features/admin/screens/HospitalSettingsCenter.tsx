@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { CreditCard, Settings } from "lucide-react"
+import { CreditCard, Printer, Settings } from "lucide-react"
 import HospitalBillingSettings from "@/features/admin/screens/HospitalBillingSettings"
+import { HospitalPrintSettingsScreen } from "@/features/admin/screens/HospitalPrintSettingsScreen"
 
 type Notify = (type: "success" | "error", message: string) => void
 
-type SettingsSection = "billing"
+type SettingsSection = "billing" | "print"
 
 export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify }) {
   const [section, setSection] = useState<SettingsSection>("billing")
@@ -39,10 +40,24 @@ export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify 
             <CreditCard className="h-3.5 w-3.5" />
             Billing & Payment Settings
           </button>
+
+          <button
+            type="button"
+            onClick={() => setSection("print")}
+            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              section === "print"
+                ? "bg-cyan-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Print & Document Branding
+          </button>
         </div>
       </div>
 
       {section === "billing" ? <HospitalBillingSettings onNotify={onNotify} /> : null}
+      {section === "print" ? <HospitalPrintSettingsScreen onNotify={onNotify} /> : null}
     </div>
   )
 }

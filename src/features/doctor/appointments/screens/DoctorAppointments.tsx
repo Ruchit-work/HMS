@@ -8,6 +8,8 @@ import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { TabSkeleton } from '@/shared/components'
 import { Notification } from '@/shared/components'
 import { generatePrescriptionPDF } from "@/shared/utils/documents/pdfGenerators"
+import { usePrint } from "@/shared/hooks/usePrint"
+import { convertPrescriptionToPrintData } from "@/shared/utils/printConverters"
 import { completeAppointment } from "@/shared/utils/appointmentHelpers"
 import { calculateAge } from "@/shared/utils/shared/date"
 import { Appointment as AppointmentType } from "@/types/patient"
@@ -63,6 +65,7 @@ import {
 import type { AnatomyType } from "@/shared/utils/anatomyModelMapping"
 
 function DoctorAppointmentsContent() {
+  const { printPrescription } = usePrint()
   const searchParams = useSearchParams()
   const [expandedAppointment, setExpandedAppointment] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>("today")
@@ -1211,15 +1214,9 @@ function DoctorAppointmentsContent() {
       return
     }
     try {
-      const medicineText = formatMedicinesAsText(data.medicines, data.notes || "")
-      generatePrescriptionPDF({
-        ...appointment,
-        medicine: medicineText,
-        doctorNotes: data.notes,
-      })
-      setNotification({ type: "success", message: "Prescription PDF generated." })
+      printPrescription(convertPrescriptionToPrintData(appointment, data))
     } catch {
-      setNotification({ type: "error", message: "Failed to generate prescription PDF." })
+      setNotification({ type: "error", message: "Failed to open print preview." })
     }
   }
 

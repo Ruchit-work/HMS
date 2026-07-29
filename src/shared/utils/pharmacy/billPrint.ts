@@ -1,6 +1,25 @@
 /**
  * Pharmacy bill: modern HTML template + html2pdf.js export.
+ * Built on top of HMS Centralized Document Template Components & Engine.
  */
+
+import {
+  escapeHtml,
+  getSharedDocumentStyles,
+  renderDocumentHeader,
+  renderInfoCards,
+  renderDocumentTable,
+  renderTotalsBox,
+  renderAdviceBox,
+  renderSignatureBox,
+  renderDocumentFooter,
+  type DocumentInfoCard,
+  type DocumentTableColumn,
+  type DocumentTableRow,
+  type DocumentTotalsRow,
+} from "@/shared/utils/documents/templateComponents"
+
+import { getHtml2Pdf, getDefaultHtml2PdfOptions, prepareContainerAndAssets } from "@/shared/utils/documents/html2pdfEngine"
 
 interface BillLine {
   name: string
@@ -44,17 +63,6 @@ interface BillData {
   printerIds?: string[]
 }
 
-declare global {
-  interface Window {
-    html2pdf?: any
-  }
-}
-
-const INVOICE_BG = "#f8fafc"
-const BORDER = "#e2e8f0"
-const TEXT = "#0f172a"
-const MUTED = "#475569"
-
 function money(value: number): string {
   return `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -90,15 +98,6 @@ function normalizeDateTime(raw: string): { date: string; time: string } {
     hour12: true,
   })
   return { date, time }
-}
-
-function escapeHtml(s: string): string {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
 }
 
 function sanitizeFilePart(value: string, fallback: string): string {
@@ -173,9 +172,8 @@ async function sendToPrintBridge(
   }
 }
 
-function buildBillHTML(data: BillData): string {
+export function buildBillHTML(data: BillData): string {
   const dt = normalizeDateTime(data.date)
-  const hasDoctor = Boolean(data.doctorName && String(data.doctorName).trim())
   const paymentMethod = (data.paymentMethod || "cash").toUpperCase()
   const invoiceNo = data.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`
   const pharmacyName = data.pharmacyName || "Harmony Pharmacy"
@@ -186,29 +184,103 @@ function buildBillHTML(data: BillData): string {
   const cgst = data.cgstAmount ?? data.taxTotal / 2
   const sgst = data.sgstAmount ?? data.taxTotal / 2
 
-  const rows = data.lines
-    .map((line, idx) => {
-      const mrp = line.mrp ?? line.rate
-      const disc = line.discount ?? 0
-      const expiry = line.expiryDate ? escapeHtml(line.expiryDate) : "-"
-      const batch = line.batchNo ? escapeHtml(line.batchNo) : "-"
-      return `
-        <tr>
-          <td class="left product-cell">
-            <div class="product-name">${escapeHtml(line.name || "-")}</div>
-            <div class="product-sub">Item ${idx + 1}</div>
-          </td>
-          <td class="left">${batch}</td>
-          <td class="left">${expiry}</td>
-          <td class="num">${escapeHtml(String(line.qty || 0))}</td>
-          <td class="num">${money(mrp)}</td>
-          <td class="num">${money(disc)}</td>
-          <td class="num">${money(line.tax || 0)}</td>
-          <td class="num amount-cell">${money(line.amount || 0)}</td>
-        </tr>
-      `
-    })
-    .join("")
+  const headerHTML = renderDocumentHeader({
+    hospitalSettings: {
+      headerTitle: pharmacyName,
+      address: pharmacyAddress,
+      phone: pharmacyPhone,
+      taxRegistrationNo: gstNo,
+      logoUrl: data.logoUrl,
+    },
+    docTitle: "Pharmacy Invoice",
+    docId: invoiceNo,
+    docDate: dt.date,
+    docTime: dt.time || "-",
+    customKv: [{ k: "Payment", v: paymentMethod }],
+  })
+
+  const infoCards: DocumentInfoCard[] = [
+    {
+      title: "Customer Details",
+      lines: [
+        { label: "Patient Name", value: data.patientName || "-", isBold: true },
+        { label: "Customer Phone", value: data.customerPhone || "-" },
+        { label: "Doctor Name", value: data.doctorName ? `Dr. ${data.doctorName}` : undefined },
+      ],
+    },
+    {
+      title: "Branch & Visit",
+      lines: [
+        { label: "Branch", value: data.branchName || "-", isBold: true },
+        { label: "Invoice Type", value: data.type === "walk_in" ? "Walk-in" : "Prescription" },
+        { label: "Total Items", value: String(data.lines.length) },
+      ],
+    },
+  ]
+
+  const infoGridHTML = renderInfoCards(infoCards)
+
+  const columns: DocumentTableColumn[] = [
+    { header: "Product Name", key: "name", width: "36%" },
+    { header: "Batch No", key: "batch", width: "11%" },
+    { header: "Expiry Date", key: "expiry", width: "13%" },
+    { header: "Quantity", key: "qty", width: "10%", align: "right" },
+    { header: "MRP", key: "mrp", width: "9%", align: "right" },
+    { header: "Discount", key: "disc", width: "10%", align: "right" },
+    { header: "Tax", key: "tax", width: "8%", align: "right" },
+    { header: "Amount", key: "amount", width: "13%", align: "right" },
+  ]
+
+  const tableRows: DocumentTableRow[] = data.lines.map((line, idx) => ({
+    name: `${escapeHtml(line.name || "-")}<div class="product-sub">Item ${idx + 1}</div>`,
+    batch: line.batchNo || "-",
+    expiry: line.expiryDate || "-",
+    qty: String(line.qty || 0),
+    mrp: money(line.mrp ?? line.rate),
+    disc: money(line.discount ?? 0),
+    tax: money(line.tax || 0),
+    amount: money(line.amount || 0),
+  }))
+
+  const tableHTML = renderDocumentTable({ columns, rows: tableRows })
+
+  const totalsBox: DocumentTotalsRow[] = [
+    { label: "Medicine Total", value: money(data.grossTotal) },
+    { label: "Discount", value: money(data.discountAmount ?? 0), isDiscount: true },
+    { label: "Round Off Discount", value: money(data.roundOffDiscount ?? 0) },
+    { label: `GST (${String(data.taxPercent)}%)`, value: money(data.taxTotal) },
+    { label: "CGST", value: money(cgst) },
+    { label: "SGST", value: money(sgst) },
+    { label: "Final Payable Amount", value: money(data.netTotal), isGrandTotal: true },
+  ]
+
+  const totalsHTML = renderTotalsBox(totalsBox)
+
+  const paymentBoxHTML = `
+    <div class="payment-box">
+      <div class="payment-grid">
+        <div>
+          <div class="line"><b>Payment Method:</b> <span>${escapeHtml(paymentMethod)}</span></div>
+          <div class="line"><b>Tax Model:</b> <span>GST ${escapeHtml(String(data.taxPercent))}%</span></div>
+          <div class="line"><b>Tax Split:</b> <span>CGST ${money(cgst)} · SGST ${money(sgst)}</span></div>
+        </div>
+        <div class="qr">${escapeHtml(qrLabel)}<br/>QR</div>
+      </div>
+    </div>
+  `
+
+  const adviceHTML = renderAdviceBox({
+    title: "Note",
+    text: "Thank you for your purchase. We wish you good health.",
+  })
+
+  const signatureHTML = renderSignatureBox({ title: "Authorized Signature" })
+  const footerHTML = renderDocumentFooter(
+    { headerTitle: pharmacyName },
+    "Goods once sold will not be taken back. For queries, contact billing desk within 24 hours."
+  )
+
+  const styles = getSharedDocumentStyles("A4")
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -217,443 +289,24 @@ function buildBillHTML(data: BillData): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pharmacy Invoice</title>
   <style>
-    :root {
-      --bg: ${INVOICE_BG};
-      --border: ${BORDER};
-      --text: ${TEXT};
-      --muted: ${MUTED};
-      --accent: #0e7490;
-      --success-bg: #ecfeff;
-      --success-border: #a5f3fc;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 16px;
-      background: #eef2f7;
-      color: var(--text);
-      font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
-      font-size: 13px;
-      line-height: 1.4;
-    }
-    .invoice {
-      width: 100%;
-      max-width: 800px;
-      margin: 0 auto;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 6px 24px rgba(15, 23, 42, 0.06);
-    }
-    .header {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 16px;
-      padding: 18px 22px;
-      background: linear-gradient(110deg, #0f4c81 0%, #155e75 60%, #0f766e 100%);
-      border-bottom: 1px solid var(--border);
-    }
-    .header::after {
-      content: "";
-      display: block;
-      grid-column: 1 / -1;
-      height: 1px;
-      background: rgba(255, 255, 255, 0.35);
-      margin-top: 2px;
-    }
-    .brand {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-      min-width: 0;
-    }
-    .logo-wrap {
-      width: 54px;
-      height: 54px;
-      border: 1px dashed #cbd5e1;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #fff;
-      overflow: hidden;
-      flex-shrink: 0;
-      color: #64748b;
-      font-size: 10px;
-      text-align: center;
-      padding: 4px;
-    }
-    .logo-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
-    .brand h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .2px; color: #ffffff; }
-    .brand .meta { color: rgba(255, 255, 255, 0.88); margin-top: 3px; font-size: 12px; }
-    .title-box {
-      text-align: right;
-      min-width: 230px;
-    }
-    .title-box h2 {
-      margin: 0 0 8px;
-      color: #ffffff;
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: .3px;
-    }
-    .kv {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 2px 10px;
-      justify-content: end;
-      font-size: 12px;
-    }
-    .kv .k { color: rgba(255, 255, 255, 0.8); }
-    .kv .v { font-weight: 600; text-align: right; color: #ffffff; }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      padding: 16px 22px 8px;
-    }
-    .card {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg);
-      padding: 12px;
-      min-width: 0;
-    }
-    .card h3 {
-      margin: 0 0 8px;
-      font-size: 12px;
-      color: var(--muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .3px;
-    }
-    .line { margin: 2px 0; }
-    .line b { font-weight: 600; }
-    .line span { color: var(--muted); }
-
-    .table-wrap {
-      padding: 10px 22px 0;
-      overflow: visible;
-    }
-    table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      table-layout: fixed;
-    }
-    thead th {
-      position: sticky;
-      top: 0;
-      background: #f1f5f9;
-      color: #334155;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      font-size: 11.5px;
-      font-weight: 600;
-      padding: 8px 6px;
-      text-align: left;
-      white-space: nowrap;
-    }
-    thead th:first-child { border-left: 1px solid var(--border); border-top-left-radius: 8px; }
-    thead th:last-child { border-right: 1px solid var(--border); border-top-right-radius: 8px; }
-
-    tbody td {
-      border-bottom: 1px solid var(--border);
-      border-left: 1px solid var(--border);
-      padding: 8px 6px;
-      vertical-align: top;
-      font-size: 11.5px;
-      background: #fff;
-      page-break-inside: avoid;
-      break-inside: avoid;
-    }
-    tbody tr td:last-child { border-right: 1px solid var(--border); }
-    tbody tr:nth-child(even) td { background: #fcfdff; }
-    tbody tr:hover td { background: #f8fbff; }
-
-    .left { text-align: left; }
-    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 11px; }
-    .amount-cell { font-weight: 600; }
-    .product-cell { white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
-    .product-name { font-weight: 500; color: #0b1324; }
-    .product-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-    .bottom {
-      display: grid;
-      grid-template-columns: 1fr 300px;
-      gap: 14px;
-      padding: 14px 22px 6px;
-      align-items: start;
-    }
-    .payment-box {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px;
-      background: var(--bg);
-    }
-    .payment-grid {
-      display: grid;
-      grid-template-columns: 1fr 116px;
-      gap: 10px;
-      align-items: center;
-    }
-    .qr {
-      width: 106px;
-      height: 106px;
-      border: 1px dashed #94a3b8;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      color: #64748b;
-      font-size: 11px;
-      background: #fff;
-      padding: 6px;
-    }
-    .totals {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      background: #fff;
-    }
-    .totals .row {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 9px 12px;
-      border-bottom: 1px solid var(--border);
-      font-size: 12.5px;
-    }
-    .totals .row:last-child { border-bottom: 0; }
-    .totals .label { color: var(--muted); }
-    .totals .value { text-align: right; font-variant-numeric: tabular-nums; }
-    .totals .payable {
-      background: var(--success-bg);
-      border-top: 1px solid var(--success-border);
-      font-weight: 700;
-      font-size: 14px;
-      color: #0f172a;
-    }
-    .thank-you {
-      margin: 10px 22px 0;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: #f8fafc;
-      color: #1e293b;
-      padding: 10px 12px;
-      text-align: center;
-      font-size: 12.5px;
-      font-weight: 500;
-    }
-    .signature {
-      margin: 10px 22px 0;
-      display: flex;
-      justify-content: flex-end;
-    }
-    .signature-box {
-      width: 240px;
-      border-top: 1px solid #94a3b8;
-      padding-top: 6px;
-      text-align: center;
-      color: #475569;
-      font-size: 11.5px;
-      font-weight: 600;
-    }
-    .footer {
-      margin-top: 10px;
-      border-top: 1px solid var(--border);
-      padding: 10px 22px 16px;
-      color: #64748b;
-      font-size: 11.5px;
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .footer strong { color: #334155; font-weight: 600; }
-
-    @media (max-width: 820px) {
-      .header { grid-template-columns: 1fr; }
-      .title-box { text-align: left; min-width: 0; }
-      .kv { justify-content: start; }
-      .kv .v { text-align: left; }
-      .info-grid { grid-template-columns: 1fr; }
-      .bottom { grid-template-columns: 1fr; }
-      .payment-grid { grid-template-columns: 1fr; }
-      .qr { width: 96px; height: 96px; }
-    }
-
-    @page { size: A4; margin: 10mm; }
-    @media print {
-      body { background: #fff; padding: 0; }
-      .invoice {
-        max-width: none;
-        box-shadow: none;
-        border: 0;
-        border-radius: 0;
-      }
-      thead { display: table-header-group; }
-      tfoot { display: table-footer-group; }
-      tr, td, th { page-break-inside: avoid; break-inside: avoid; }
-      .table-wrap { overflow: visible; }
-    }
+    ${styles}
   </style>
 </head>
 <body>
   <div class="invoice" id="bill-root">
-    <section class="header">
-      <div class="brand">
-        <div class="logo-wrap">
-          ${
-            data.logoUrl
-              ? `<img src="${escapeHtml(data.logoUrl)}" alt="Logo" />`
-              : `<span>Logo</span>`
-          }
-        </div>
-        <div>
-          <h1>${escapeHtml(pharmacyName)}</h1>
-          <div class="meta">${escapeHtml(pharmacyAddress)}</div>
-          <div class="meta">Phone: ${escapeHtml(pharmacyPhone)} · ${escapeHtml(gstNo)}</div>
-        </div>
-      </div>
-      <div class="title-box">
-        <h2>Pharmacy Invoice</h2>
-        <div class="kv">
-          <div class="k">Invoice No</div><div class="v">${escapeHtml(invoiceNo)}</div>
-          <div class="k">Date</div><div class="v">${escapeHtml(dt.date)}</div>
-          <div class="k">Time</div><div class="v">${escapeHtml(dt.time || "-")}</div>
-          <div class="k">Payment</div><div class="v">${escapeHtml(paymentMethod)}</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="info-grid">
-      <div class="card">
-        <h3>Customer Details</h3>
-        <div class="line"><b>Patient Name:</b> <span>${escapeHtml(data.patientName || "-")}</span></div>
-        <div class="line"><b>Customer Phone:</b> <span>${escapeHtml(data.customerPhone || "-")}</span></div>
-        ${
-          hasDoctor
-            ? `<div class="line"><b>Doctor Name:</b> <span>${escapeHtml(data.doctorName || "")}</span></div>`
-            : ""
-        }
-      </div>
-      <div class="card">
-        <h3>Branch & Visit</h3>
-        <div class="line"><b>Branch:</b> <span>${escapeHtml(data.branchName || "-")}</span></div>
-        <div class="line"><b>Invoice Type:</b> <span>${data.type === "walk_in" ? "Walk-in" : "Prescription"}</span></div>
-        <div class="line"><b>Total Items:</b> <span>${escapeHtml(String(data.lines.length))}</span></div>
-      </div>
-    </section>
-
-    <section class="table-wrap">
-      <table>
-        <colgroup>
-          <col style="width:36%" />
-          <col style="width:11%" />
-          <col style="width:13%" />
-          <col style="width:10%" />
-          <col style="width:9%" />
-          <col style="width:10%" />
-          <col style="width:8%" />
-          <col style="width:13%" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="left">Product Name</th>
-            <th class="left">Batch No</th>
-            <th class="left">Expiry Date</th>
-            <th class="num">Quantity</th>
-            <th class="num">MRP</th>
-            <th class="num">Discount</th>
-            <th class="num">Tax</th>
-            <th class="num">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    </section>
-
+    ${headerHTML}
+    ${infoGridHTML}
+    ${tableHTML}
     <section class="bottom">
-      <div class="payment-box">
-        <div class="payment-grid">
-          <div>
-            <div class="line"><b>Payment Method:</b> <span>${escapeHtml(paymentMethod)}</span></div>
-            <div class="line"><b>Tax Model:</b> <span>GST ${escapeHtml(String(data.taxPercent))}%</span></div>
-            <div class="line"><b>Tax Split:</b> <span>CGST ${money(cgst)} · SGST ${money(sgst)}</span></div>
-          </div>
-          <div class="qr">${escapeHtml(qrLabel)}<br/>QR</div>
-        </div>
-      </div>
-
-      <div class="totals">
-        <div class="row">
-          <span class="label">Medicine Total</span>
-          <span class="value">${money(data.grossTotal)}</span>
-        </div>
-        <div class="row">
-          <span class="label">Discount</span>
-          <span class="value">${money(data.discountAmount ?? 0)}</span>
-        </div>
-        <div class="row">
-          <span class="label">Round Off Discount</span>
-          <span class="value">${money(data.roundOffDiscount ?? 0)}</span>
-        </div>
-        <div class="row">
-          <span class="label">GST (${escapeHtml(String(data.taxPercent))}%)</span>
-          <span class="value">${money(data.taxTotal)}</span>
-        </div>
-        <div class="row">
-          <span class="label">CGST</span>
-          <span class="value">${money(cgst)}</span>
-        </div>
-        <div class="row">
-          <span class="label">SGST</span>
-          <span class="value">${money(sgst)}</span>
-        </div>
-        <div class="row payable">
-          <span>Final Payable Amount</span>
-          <span class="value">${money(data.netTotal)}</span>
-        </div>
-      </div>
+      ${paymentBoxHTML}
+      ${totalsHTML}
     </section>
-
-    <div class="thank-you">Thank you for your purchase. We wish you good health.</div>
-    <div class="signature">
-      <div class="signature-box">Authorized Signature</div>
-    </div>
-
-    <footer class="footer">
-      <div><strong>Note:</strong> Goods once sold will not be taken back.</div>
-      <div>For queries, contact billing desk within 24 hours.</div>
-    </footer>
+    ${adviceHTML}
+    ${signatureHTML}
+    ${footerHTML}
   </div>
 </body>
 </html>`
-}
-
-async function ensureHtml2PdfLoaded(): Promise<any> {
-  if (typeof window === "undefined") return null
-  if (window.html2pdf) return window.html2pdf
-
-  try {
-    // Prefer local dependency import so PDF works without external CDN/network.
-    const mod = await import("html2pdf.js")
-    const html2pdf = (mod as any)?.default ?? (mod as any)
-    if (typeof html2pdf === "function") {
-      window.html2pdf = html2pdf
-      return html2pdf
-    }
-  } catch {
-    // Fall through to explicit error below
-  }
-
-  throw new Error("Failed to load html2pdf.js")
 }
 
 export function generateBillPDFAndPrint(data: BillData): void {
@@ -663,24 +316,10 @@ export function generateBillPDFAndPrint(data: BillData): void {
 async function generateBillPDF(data: BillData): Promise<void> {
   if (typeof window === "undefined") return
 
-  const html2pdf = await ensureHtml2PdfLoaded()
+  const html2pdf = await getHtml2Pdf()
   if (!html2pdf) throw new Error("html2pdf.js is not available")
 
-  const wrapper = document.createElement("div")
-  wrapper.style.position = "fixed"
-  wrapper.style.left = "-100000px"
-  wrapper.style.top = "0"
-  wrapper.style.width = "210mm"
-  wrapper.style.background = "#ffffff"
-  wrapper.innerHTML = buildBillHTML(data)
-  document.body.appendChild(wrapper)
-
-  const element = wrapper.querySelector("#bill-root") as HTMLElement | null
-  if (!element) {
-    document.body.removeChild(wrapper)
-    throw new Error("Unable to build bill template")
-  }
-
+  const html = buildBillHTML(data)
   const customerPart = sanitizeFilePart(data.patientName || "Customer", "Customer")
   const datePart = sanitizeFilePart(String(data.date || ""), String(Date.now()))
   const fileName = `Pharmacy-Bill-${customerPart}-${datePart}.pdf`
@@ -688,34 +327,12 @@ async function generateBillPDF(data: BillData): Promise<void> {
 
   const shouldAutoPrint = configuredPrinterIds.length > 0
   const printBridgeUrl = getPrintBridgeUrl()
-  const options = {
-    margin: [6, 6, 6, 6],
-    filename: fileName,
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      letterRendering: true,
-      scrollX: 0,
-      scrollY: 0,
-    },
-    jsPDF: {
-      unit: "mm",
-      format: "a4",
-      orientation: "portrait",
-      compress: true,
-    },
-    pagebreak: {
-      mode: ["css", "legacy"],
-      avoid: ["tr", "td", ".totals", ".payment-box", ".thank-you"],
-      before: ".footer",
-    },
-  }
+  const options = getDefaultHtml2PdfOptions(fileName)
+
+  const { wrapper, element } = await prepareContainerAndAssets(html, "210mm")
 
   try {
     if (shouldAutoPrint) {
-      // Phase 2 path: send PDF to print bridge for silent/direct printing.
       if (printBridgeUrl) {
         const pdfBlob = (await html2pdf().set(options).from(element).outputPdf("blob")) as Blob
         const bridgePrinted = await sendToPrintBridge(
@@ -728,26 +345,25 @@ async function generateBillPDF(data: BillData): Promise<void> {
         if (bridgePrinted) return
       }
 
-      // Fallback: browser print dialog
       const printWin = window.open("", "_blank")
       if (printWin) {
         printWin.document.open()
         printWin.document.write(buildBillHTML(data))
         printWin.document.close()
         printWin.focus()
-        // Auto-print flow for configured printer environments.
         setTimeout(() => {
           printWin.print()
           printWin.close()
         }, 300)
       } else {
-        // Popup blocked, fallback to download.
         await html2pdf().set(options).from(element).save()
       }
     } else {
       await html2pdf().set(options).from(element).save()
     }
   } finally {
-    document.body.removeChild(wrapper)
+    if (document.body.contains(wrapper)) {
+      document.body.removeChild(wrapper)
+    }
   }
 }

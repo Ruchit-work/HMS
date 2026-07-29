@@ -1,8 +1,14 @@
 /**
  * Export pharmacy reports to Excel and PDF/print.
+ * Standardized on html2pdf.js for PDF export.
  */
 import ExcelJS from 'exceljs'
-import { jsPDF } from 'jspdf'
+import {
+  renderDocumentToPDFDownload,
+  type StandardDocumentConfig,
+  type DocumentTableColumn,
+  type DocumentTableRow,
+} from '@/shared/utils/documents/documentTemplateEngine'
 
 export async function exportToExcel(
   filename: string,
@@ -33,29 +39,34 @@ export function exportToPdf(
   rows: (string | number)[][],
   filename: string
 ): void {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const pageW = doc.internal.pageSize.getWidth()
-  const colW = pageW / columns.length
-  let y = 14
-  doc.setFontSize(12)
-  doc.text(title, 14, y)
-  y += 10
-  doc.setFontSize(9)
-  doc.setFillColor(230, 230, 230)
-  doc.rect(14, y, pageW - 28, 8, 'F')
-  columns.forEach((col, i) => {
-    doc.text(String(col), 14 + i * colW + 2, y + 5.5)
-  })
-  y += 8
-  rows.slice(0, 40).forEach((row) => {
-    if (y > 190) {
-      doc.addPage()
-      y = 14
-    }
-    row.forEach((cell, i) => {
-      doc.text(String(cell ?? '').slice(0, 25), 14 + i * colW + 2, y + 4)
+  const tableColumns: DocumentTableColumn[] = columns.map((col, idx) => ({
+    header: col,
+    key: `col_${idx}`,
+    align: idx > 1 && typeof rows[0]?.[idx] === 'number' ? 'right' : 'left',
+  }))
+
+  const tableRows: DocumentTableRow[] = rows.map((row) => {
+    const rowObj: DocumentTableRow = {}
+    row.forEach((cell, idx) => {
+      rowObj[`col_${idx}`] = cell ?? '—'
     })
-    y += 6
+    return rowObj
   })
-  doc.save(`${filename}.pdf`)
+
+  const config: StandardDocumentConfig = {
+    docTitle: title,
+    docId: filename.toUpperCase(),
+    docDate: new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }),
+    table: {
+      columns: tableColumns,
+      rows: tableRows,
+    },
+    footerNote: `Pharmacy Report Export: ${title}`,
+  }
+
+  void renderDocumentToPDFDownload(config, `${filename}.pdf`)
 }
