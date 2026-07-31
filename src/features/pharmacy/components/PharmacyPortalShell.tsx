@@ -8,6 +8,7 @@ import { useMultiHospital } from '@/providers/MultiHospitalProvider'
 import { usePharmacyPortal } from '@/providers/PharmacyPortalProvider'
 import type { PharmacyPortalTabId } from '@/providers/PharmacyPortalProvider'
 import { GroupedNav } from '@/shared/components'
+import HospitalBrandHeader from '@/shared/components/HospitalBrandHeader'
 import { Button } from '@/shared/components'
 import { ConfirmDialog } from '@/shared/components'
 import {
@@ -242,17 +243,7 @@ export default function PharmacyPortalShell({ children }: { children: React.Reac
         } lg:translate-x-0`}
       >
         <div className="hms-sidebar-header flex h-[76px] shrink-0 items-center justify-between px-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/15">
-              <svg className="h-5 w-5 shrink-0 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-[var(--color-neutral-900)] text-sm font-semibold">Harmony Pharmacy</h1>
-              <p className="text-[var(--color-neutral-500)] text-xs">Operations Center</p>
-            </div>
-          </div>
+          <HospitalBrandHeader subtitle="Pharmacy Operations" />
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}

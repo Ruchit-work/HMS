@@ -23,6 +23,7 @@ import {
   matchesSelectedBranch,
 } from "@/shared/utils/branch/branchFilters"
 import { ConfirmDialog } from '@/shared/components'
+import HospitalBrandHeader from "@/shared/components/HospitalBrandHeader"
 import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
 import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
 import { Notification } from '@/shared/components'
@@ -869,19 +870,7 @@ function AdminDashboardContent() {
       >
         {/* Brand */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-slate-200 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-cyan-600 rounded-lg flex items-center justify-center shrink-0">
-              <Building2 className="w-3.5 h-3.5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900 leading-tight">
-                {isSuperAdmin ? "Harmony HMS" : "HMS"}
-              </p>
-              <p className="text-xs text-slate-400 leading-tight">
-                {isSuperAdmin ? "SaaS platform owner" : "Admin Portal"}
-              </p>
-            </div>
-          </div>
+          <HospitalBrandHeader subtitle={isSuperAdmin ? "SaaS platform owner" : "Admin Portal"} />
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1.5 text-slate-400 hover:text-slate-600 rounded-md transition-colors"

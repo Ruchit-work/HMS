@@ -32,6 +32,8 @@ export const AUDIT_ACTIONS = {
   USER_CREATED: "User Created",
   USER_ROLE_CHANGED: "User Role Changed",
   USER_DISABLED_DELETED: "User Disabled / Deleted",
+  WORKING_HOURS_UPDATED: "Hospital & Branch Working Hours Updated",
+  GENERAL_SETTINGS_CHANGED: "Hospital General Settings Changed",
 } as const
 
 export type AuditModule = (typeof AUDIT_MODULES)[number]

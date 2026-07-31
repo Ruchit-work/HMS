@@ -14,6 +14,7 @@ export type ReceptionistTab =
   | "billing"
   | "whatsapp-bookings"
   | "documents"
+  | "profile"
 
 interface ReceptionistTabPanelsProps {
   activeTab: ReceptionistTab
@@ -106,6 +107,10 @@ const WhatsAppBookingsPanel = dynamic(
 const DocumentsTab = dynamic(
   () => import("@/features/documents/DocumentsTab"),
   { loading: () => <TabSkeleton variant="documents" /> }
+)
+const UserProfile = dynamic(
+  () => import("@/shared/components/profile/UserProfile"),
+  { loading: () => <TabSkeleton variant="form" /> }
 )
 
 function TabPanel({
@@ -320,6 +325,16 @@ export default function ReceptionistTabPanels({
                 canDelete={true}
                 showPatientSelector={true}
               />
+            </PanelSuspense>
+          </div>
+        </TabPanel>
+      )}
+
+      {visitedTabs.has("profile") && (
+        <TabPanel tab="profile" activeTab={activeTab}>
+          <div className="rx-section-card p-6">
+            <PanelSuspense tab="profile">
+              <UserProfile onNotify={(type, message) => onNotification({ type, message })} />
             </PanelSuspense>
           </div>
         </TabPanel>

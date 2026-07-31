@@ -20,6 +20,7 @@ export interface ComputeAvailableSlotsInput {
   doctor: Doctor | Record<string, unknown>
   branchId?: string | null
   branchTimings?: BranchTimings | null
+  hospitalTimings?: BranchTimings | null
 }
 
 export interface ComputeAvailableSlotsResult {
@@ -48,7 +49,7 @@ const emptyResult = (): ComputeAvailableSlotsResult => ({
 export async function computeAvailableSlots(
   input: ComputeAvailableSlotsInput
 ): Promise<ComputeAvailableSlotsResult> {
-  const { hospitalId, doctorId, appointmentDate, doctor, branchId, branchTimings } = input
+  const { hospitalId, doctorId, appointmentDate, doctor, branchId, branchTimings, hospitalTimings } = input
 
   if (!hospitalId || !doctorId || !appointmentDate) {
     return emptyResult()
@@ -67,7 +68,7 @@ export async function computeAvailableSlots(
   } as Doctor
 
   const dateObj = new Date(`${appointmentDate}T00:00:00`)
-  const visitingHours = getVisitingHoursForBranch(doctorWithId, branchId, branchTimings)
+  const visitingHours = getVisitingHoursForBranch(doctorWithId, branchId, branchTimings, hospitalTimings)
   const daySchedule = visitingHours[getDayName(dateObj)]
   const all = daySchedule ? generateTimeSlots(daySchedule) : []
 
@@ -120,7 +121,8 @@ export async function computeAvailableSlots(
     dateObj,
     existing,
     branchId,
-    branchTimings
+    branchTimings,
+    hospitalTimings
   )
 
   const available = openFromSchedule.filter((s) => {

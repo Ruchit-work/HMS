@@ -12,6 +12,7 @@ import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import { ConfirmDialog } from "../overlays/Modals"
 import NotificationBadge from "../feedback/NotificationBadge"
 import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
+import HospitalBrandHeader from "@/shared/components/HospitalBrandHeader"
 
 export default function GlobalHeader() {
   const [user, setUser] = useState<any>(null)
@@ -245,24 +246,13 @@ export default function GlobalHeader() {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4">
-          {/* Logo - Fixed width to prevent overlap */}
+          {/* Logo */}
           <Link 
             href={isDoctor ? "/doctor-dashboard" : isPatient ? "/patient-dashboard" : "/"}
             prefetch={true}
-            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-all duration-300 cursor-pointer flex-shrink-0"
+            className="flex items-center gap-2 hover:opacity-80 transition-all duration-300 cursor-pointer flex-shrink-0"
           >
-            <div className={`bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg flex items-center justify-center text-white shadow-md transition-all duration-300 ${
-              isScrolled ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-8 h-8 sm:w-10 sm:h-10'
-            }`}>
-              <span className={`font-bold transition-all duration-300 ${
-                isScrolled ? 'text-base' : 'text-base sm:text-lg'
-              }`}>H</span>
-            </div>
-            <h1 className={`font-bold text-slate-800 transition-all duration-300 whitespace-nowrap ${
-              isScrolled ? 'text-base sm:text-lg lg:text-xl' : 'text-lg sm:text-xl lg:text-2xl'
-            }`}>
-              HMS
-            </h1>
+            <HospitalBrandHeader subtitle="" />
           </Link>
           
           {/* Desktop Navigation - Centered with proper spacing */}

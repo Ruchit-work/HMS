@@ -170,45 +170,130 @@ export function getBlockedDateInfo(doctor: Doctor, date: Date): { reason: string
   return blocked ? { reason: (blocked.reason || "Doctor not available") as string } : null
 }
 
+export type ScheduleSource = "doctor" | "branch" | "hospital" | "none"
+
+export interface VisitingHoursWithSource {
+  visitingHours: VisitingHours
+  source: ScheduleSource
+  sourceLabel: string
+}
+
+export function createEmptyVisitingHours(): VisitingHours {
+  return WEEK_DAYS.reduce((acc, day) => {
+    acc[day] = { isAvailable: false, slots: [] }
+    return acc
+  }, {} as VisitingHours)
+}
+
+export function hasConfiguredTimings(timings?: BranchTimings | null): boolean {
+  if (!timings) return false
+  return WEEK_DAYS.some((day) => {
+    const t = timings[day]
+    return t && t.isOpen !== false && Boolean(t.start) && Boolean(t.end)
+  })
+}
+
 /**
- * Convert branch timings to VisitingHours format
+ * Convert branch/hospital timings to VisitingHours format
  */
 export function convertBranchTimingsToVisitingHours(branchTimings: BranchTimings): VisitingHours {
   return WEEK_DAYS.reduce((acc, day) => {
     const schedule = branchTimings[day]
-    acc[day] = schedule
-      ? { isAvailable: true, slots: [{ start: schedule.start, end: schedule.end }] }
-      : { isAvailable: false, slots: [] }
+    const isOpen = Boolean(schedule && schedule.isOpen !== false && schedule.start && schedule.end)
+    if (isOpen && schedule) {
+      const slots: { start: string; end: string }[] = []
+      const bStart = schedule.breakStart
+      const bEnd = schedule.breakEnd
+
+      // If optional break time is set and within bounds, split into 2 slot periods
+      if (bStart && bEnd && timeToMinutes(bStart) > timeToMinutes(schedule.start) && timeToMinutes(bEnd) < timeToMinutes(schedule.end)) {
+        slots.push({ start: schedule.start, end: bStart })
+        slots.push({ start: bEnd, end: schedule.end })
+      } else {
+        slots.push({ start: schedule.start, end: schedule.end })
+      }
+
+      acc[day] = { isAvailable: true, slots }
+    } else {
+      acc[day] = { isAvailable: false, slots: [] }
+    }
     return acc
   }, {} as VisitingHours)
 }
 
 /**
- * Get visiting hours for a doctor at a specific branch
- * Priority: 1) Doctor's branch-specific timings, 2) Branch timings, 3) Doctor's general timings, 4) Default
+ * Get visiting hours and exact effective schedule source
+ * Priority: 1) Doctor schedule, 2) Branch schedule, 3) Hospital Default schedule, 4) None ("No schedule configured")
+ */
+export function getVisitingHoursWithSource(
+  doctor?: Doctor | null,
+  branchId?: string | null,
+  branchTimings?: BranchTimings | null,
+  hospitalTimings?: BranchTimings | null
+): VisitingHoursWithSource {
+  // 1. Doctor branch-specific schedule
+  if (branchId && doctor?.branchTimings && doctor.branchTimings[branchId]) {
+    return {
+      visitingHours: doctor.branchTimings[branchId],
+      source: "doctor",
+      sourceLabel: "Doctor Schedule",
+    }
+  }
+
+  // 2. Doctor general visiting hours
+  if (doctor?.visitingHours && Object.values(doctor.visitingHours).some((d) => d.isAvailable)) {
+    return {
+      visitingHours: doctor.visitingHours,
+      source: "doctor",
+      sourceLabel: "Doctor Schedule",
+    }
+  }
+
+  // 3. Branch timings (if provided, configured, and not configured to inherit hospital)
+  if (branchTimings && branchTimings.useHospitalSchedule !== true && hasConfiguredTimings(branchTimings)) {
+    return {
+      visitingHours: convertBranchTimingsToVisitingHours(branchTimings),
+      source: "branch",
+      sourceLabel: "Branch Schedule",
+    }
+  }
+
+  // 4. Hospital default timings (if branch timings are missing/inheriting, check hospital)
+  if (hospitalTimings && hasConfiguredTimings(hospitalTimings)) {
+    return {
+      visitingHours: convertBranchTimingsToVisitingHours(hospitalTimings),
+      source: "hospital",
+      sourceLabel: "Hospital Default Schedule",
+    }
+  }
+
+  // Also check if branchTimings itself has configured timings as fallback if hospitalTimings wasn't passed separately
+  if (branchTimings && hasConfiguredTimings(branchTimings)) {
+    return {
+      visitingHours: convertBranchTimingsToVisitingHours(branchTimings),
+      source: "branch",
+      sourceLabel: "Branch Schedule",
+    }
+  }
+
+  // 5. No schedule configured
+  return {
+    visitingHours: createEmptyVisitingHours(),
+    source: "none",
+    sourceLabel: "No schedule configured",
+  }
+}
+
+/**
+ * Backward compatible getVisitingHoursForBranch wrapper
  */
 export function getVisitingHoursForBranch(
   doctor: Doctor,
   branchId: string | null | undefined,
-  branchTimings: BranchTimings | null | undefined
+  branchTimings: BranchTimings | null | undefined,
+  hospitalTimings?: BranchTimings | null | undefined
 ): VisitingHours {
-  // If doctor has branch-specific timings for this branch, use those
-  if (branchId && doctor.branchTimings && doctor.branchTimings[branchId]) {
-    return doctor.branchTimings[branchId]
-  }
-
-  // If branch timings are provided, convert and use them
-  if (branchTimings) {
-    return convertBranchTimingsToVisitingHours(branchTimings)
-  }
-
-  // Fall back to doctor's general visiting hours
-  if (doctor.visitingHours) {
-    return doctor.visitingHours
-  }
-
-  // Final fallback to default
-  return DEFAULT_VISITING_HOURS
+  return getVisitingHoursWithSource(doctor, branchId, branchTimings, hospitalTimings).visitingHours
 }
 
 // Get available time slots for a specific doctor on a specific date
@@ -217,7 +302,8 @@ export function getAvailableTimeSlots(
   selectedDate: Date,
   existingAppointments: Appointment[],
   branchId?: string | null,
-  branchTimings?: BranchTimings | null
+  branchTimings?: BranchTimings | null,
+  hospitalTimings?: BranchTimings | null
 ): string[] {
   // Check if date is blocked
   if (isDateBlocked(doctor, selectedDate)) {
@@ -225,7 +311,7 @@ export function getAvailableTimeSlots(
   }
   
   // Get visiting hours based on branch (if provided)
-  const visitingHours = getVisitingHoursForBranch(doctor, branchId, branchTimings)
+  const visitingHours = getVisitingHoursForBranch(doctor, branchId, branchTimings, hospitalTimings)
   
   // Get the day name
   const dayName = getDayName(selectedDate)
@@ -257,7 +343,7 @@ export function formatTimeDisplay(time: string): string {
 }
 
 // Get summary of doctor availability (which days they're available)
-export function getAvailabilityDays(visitingHours: VisitingHours = DEFAULT_VISITING_HOURS): string[] {
+export function getAvailabilityDays(visitingHours: VisitingHours = createEmptyVisitingHours()): string[] {
   return WEEK_DAYS.slice(1).concat("sunday")
     .filter(day => visitingHours[day].isAvailable && visitingHours[day].slots.length > 0)
     .map(day => day.charAt(0).toUpperCase() + day.slice(1, 3)) // Mon, Tue, etc.
@@ -268,9 +354,10 @@ export function isDoctorAvailableOnDate(
   doctor: Doctor, 
   date: Date,
   branchId?: string | null,
-  branchTimings?: BranchTimings | null
+  branchTimings?: BranchTimings | null,
+  hospitalTimings?: BranchTimings | null
 ): boolean {
-  const visitingHours = getVisitingHoursForBranch(doctor, branchId, branchTimings)
+  const visitingHours = getVisitingHoursForBranch(doctor, branchId, branchTimings, hospitalTimings)
   const dayName = getDayName(date)
   const daySchedule = visitingHours[dayName]
   

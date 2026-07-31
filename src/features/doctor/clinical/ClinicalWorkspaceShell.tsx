@@ -11,6 +11,7 @@ import { useMultiHospital } from "@/providers/MultiHospitalProvider"
 import { getHospitalCollection } from "@/shared/utils/firebase/hospital-queries"
 import { ConfirmDialog } from '@/shared/components'
 import { NotificationBadge } from '@/shared/components'
+import HospitalBrandHeader from "@/shared/components/HospitalBrandHeader"
 import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
 import {
   getActiveDoctorNavId,
@@ -126,14 +127,8 @@ export default function ClinicalWorkspaceShell({ children }: { children: React.R
         } lg:translate-x-0`}
       >
         <div className="hms-sidebar-header flex h-[76px] shrink-0 items-center justify-between px-5">
-          <Link href="/doctor-dashboard/appointments" className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary)]/15">
-              <Stethoscope className="h-5 w-5 shrink-0 text-[var(--color-primary)]" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-slate-900 text-sm font-semibold truncate">Clinical Workspace</h1>
-              <p className="text-slate-500 text-xs truncate">HMS Doctor Portal</p>
-            </div>
+          <Link href="/doctor-dashboard/appointments" className="min-w-0 flex-1">
+            <HospitalBrandHeader subtitle="Doctor Portal" />
           </Link>
           <button
             type="button"

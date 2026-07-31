@@ -117,19 +117,24 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
       }
 
       // For super admin, fetch all active hospitals
+      let availableHospitals: Hospital[] = []
+
       if (userIsSuperAdmin) {
         const hospitalsSnapshot = await getDocs(collection(db, 'hospitals'))
-        const allHospitals = hospitalsSnapshot.docs
+        availableHospitals = hospitalsSnapshot.docs
           .filter(doc => doc.data().status === 'active')
           .map(doc => ({
             id: doc.id,
             ...doc.data()
           } as Hospital))
-        setUserHospitals(allHospitals)
-        
-        // If no active hospital set, use first one or null
-        if (!currentActiveHospitalId && allHospitals.length > 0) {
-          currentActiveHospitalId = allHospitals[0].id
+        setUserHospitals(availableHospitals)
+
+        // Restore stored active hospital from sessionStorage if set
+        const storedId = typeof window !== 'undefined' ? sessionStorage.getItem('activeHospitalId') : null
+        if (storedId && availableHospitals.some(h => h.id === storedId)) {
+          currentActiveHospitalId = storedId
+        } else if (!currentActiveHospitalId && availableHospitals.length > 0) {
+          currentActiveHospitalId = availableHospitals[0].id
         }
       } else {
         // Regular user: fetch only their hospitals
@@ -153,27 +158,25 @@ export function MultiHospitalProvider({ children }: { children: ReactNode }) {
           return null
         })
 
-        const hospitalsData = (await Promise.all(hospitalPromises)).filter(
+        availableHospitals = (await Promise.all(hospitalPromises)).filter(
           (h): h is Hospital => h !== null
         )
-        setUserHospitals(hospitalsData)
+        setUserHospitals(availableHospitals)
+      }
 
-        // Set active hospital
-        if (currentActiveHospitalId) {
-          const activeHosp = hospitalsData.find(h => h.id === currentActiveHospitalId)
-          if (activeHosp) {
-            setActiveHospitalState(activeHosp)
-            setActiveHospitalId(currentActiveHospitalId)
-          } else if (hospitalsData.length > 0) {
-            // Fallback to first hospital if active hospital not found
-            setActiveHospitalState(hospitalsData[0])
-            setActiveHospitalId(hospitalsData[0].id)
-          }
-        } else if (hospitalsData.length === 1) {
-          // Auto-select if only one hospital
-          setActiveHospitalState(hospitalsData[0])
-          setActiveHospitalId(hospitalsData[0].id)
+      // Set/update active hospital with fresh data
+      if (currentActiveHospitalId) {
+        const activeHosp = availableHospitals.find(h => h.id === currentActiveHospitalId)
+        if (activeHosp) {
+          setActiveHospitalState(activeHosp)
+          setActiveHospitalId(currentActiveHospitalId)
+        } else if (availableHospitals.length > 0) {
+          setActiveHospitalState(availableHospitals[0])
+          setActiveHospitalId(availableHospitals[0].id)
         }
+      } else if (availableHospitals.length > 0) {
+        setActiveHospitalState(availableHospitals[0])
+        setActiveHospitalId(availableHospitals[0].id)
       }
 
       // Store in sessionStorage for persistence

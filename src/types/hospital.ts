@@ -7,6 +7,27 @@ import { Timestamp } from 'firebase/firestore'
 import type { HospitalBillingSettings } from '@/shared/utils/billingSettings'
 import type { HospitalPrintSettings } from '@/types/print'
 
+import type { BranchTimings } from '@/types/branch'
+
+export interface HospitalGeneralSettings {
+  registrationNumber?: string
+  gstNumber?: string
+  website?: string
+  city?: string
+  state?: string
+  country?: string
+  pinCode?: string
+  logo?: string
+  favicon?: string
+  primaryColor?: string
+  secondaryColor?: string
+  timeZone?: string
+  dateFormat?: string
+  timeFormat?: "12h" | "24h"
+  currency?: string
+  language?: string
+}
+
 export interface Hospital {
   id: string
   name: string
@@ -24,6 +45,9 @@ export interface Hospital {
   settings?: {
     billing?: HospitalBillingSettings
     print?: HospitalPrintSettings
+    schedule?: BranchTimings
+    workingHours?: BranchTimings
+    general?: HospitalGeneralSettings
     [key: string]: unknown
   }
   createdAt: Timestamp | string

@@ -232,7 +232,9 @@ export default function BranchDetailDrawer({
                   >
                     <span className="capitalize text-slate-500">{day.slice(0, 3)}</span>
                     <span className="font-medium tabular-nums text-slate-800">
-                      {slot ? `${slot.start} – ${slot.end}` : "Closed"}
+                      {slot && typeof slot === "object" && "start" in slot && "end" in slot
+                        ? `${slot.start} – ${slot.end}`
+                        : "Closed"}
                     </span>
                   </li>
                 )

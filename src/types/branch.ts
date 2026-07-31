@@ -5,14 +5,29 @@
 
 import { Timestamp } from 'firebase/firestore'
 
+export interface DayTiming {
+  start: string
+  end: string
+  breakStart?: string | null
+  breakEnd?: string | null
+  isOpen?: boolean
+}
+
+export interface HolidaySchedule {
+  date: string // YYYY-MM-DD
+  reason?: string
+}
+
 export interface BranchTimings {
-  monday: { start: string; end: string } | null
-  tuesday: { start: string; end: string } | null
-  wednesday: { start: string; end: string } | null
-  thursday: { start: string; end: string } | null
-  friday: { start: string; end: string } | null
-  saturday: { start: string; end: string } | null
-  sunday: { start: string; end: string } | null
+  monday: DayTiming | null
+  tuesday: DayTiming | null
+  wednesday: DayTiming | null
+  thursday: DayTiming | null
+  friday: DayTiming | null
+  saturday: DayTiming | null
+  sunday: DayTiming | null
+  useHospitalSchedule?: boolean
+  holidays?: HolidaySchedule[]
 }
 
 export interface Branch {
@@ -25,4 +40,5 @@ export interface Branch {
   createdAt: Timestamp | string
   updatedAt: Timestamp | string
 }
+
 

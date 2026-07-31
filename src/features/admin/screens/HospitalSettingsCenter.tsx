@@ -1,16 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { CreditCard, Printer, Settings } from "lucide-react"
+import { Building, Clock, CreditCard, Printer, Settings } from "lucide-react"
 import HospitalBillingSettings from "@/features/admin/screens/HospitalBillingSettings"
 import { HospitalPrintSettingsScreen } from "@/features/admin/screens/HospitalPrintSettingsScreen"
+import ScheduleManagement from "@/features/admin/components/ScheduleManagement"
+import GeneralSettings from "@/features/admin/components/GeneralSettings"
 
 type Notify = (type: "success" | "error", message: string) => void
 
-type SettingsSection = "billing" | "print"
+type SettingsSection = "general" | "schedule" | "billing" | "print"
 
 export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify }) {
-  const [section, setSection] = useState<SettingsSection>("billing")
+  const [section, setSection] = useState<SettingsSection>("general")
 
   return (
     <div className="space-y-5">
@@ -22,12 +24,38 @@ export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify 
           <div>
             <h2 className="text-xl font-bold text-slate-900">Hospital Settings</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Configure operational policies for your hospital. Changes apply only to the currently selected hospital.
+              Configure general hospital details, working schedules, billing policies, and print branding.
             </p>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSection("general")}
+            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              section === "general"
+                ? "bg-cyan-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <Building className="h-3.5 w-3.5" />
+            General Settings
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSection("schedule")}
+            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              section === "schedule"
+                ? "bg-cyan-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            Working Hours & Schedule
+          </button>
+
           <button
             type="button"
             onClick={() => setSection("billing")}
@@ -56,6 +84,8 @@ export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify 
         </div>
       </div>
 
+      {section === "general" ? <GeneralSettings onNotify={onNotify} /> : null}
+      {section === "schedule" ? <ScheduleManagement onNotify={onNotify} /> : null}
       {section === "billing" ? <HospitalBillingSettings onNotify={onNotify} /> : null}
       {section === "print" ? <HospitalPrintSettingsScreen onNotify={onNotify} /> : null}
     </div>
