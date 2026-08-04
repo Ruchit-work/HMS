@@ -18,6 +18,7 @@ import { createPdfAccessToken } from "@/shared/utils/pdfAccessToken"
 
 type BookingState =
   | "idle"
+  | "selecting_hospital"
   | "selecting_language"
   | "selecting_branch"
   | "selecting_doctor"
@@ -33,11 +34,14 @@ interface BookingSession {
   language?: "gujarati" | "english"
   needsRegistration?: boolean
   patientUid?: string
+  hospitalId?: string
+  hospitalName?: string
   branchId?: string
   branchName?: string
   doctorId?: string
   appointmentDate?: string
   appointmentTime?: string
+  pickerHospitalOptions?: Array<{ id: string; name: string }>
   pickerBranchOptions?: Array<{ id: string; name: string }>
   pickerDateOptions?: string[]
   pickerTimeOptions?: string[]
@@ -182,7 +186,8 @@ async function getActiveBookingSessionOrExpire(
 
 /** Valid booking state transitions (prevents step skipping / regression). */
 const VALID_BOOKING_TRANSITIONS: Partial<Record<BookingState, BookingState[]>> = {
-  idle: ["selecting_language"],
+  idle: ["selecting_hospital", "selecting_language", "registering_full_name"],
+  selecting_hospital: ["selecting_language", "selecting_branch", "registering_full_name"],
   selecting_language: ["selecting_branch", "registering_full_name"],
   registering_full_name: ["selecting_branch"],
   selecting_branch: ["selecting_doctor"],
@@ -1133,6 +1138,8 @@ export async function POST(req: Request) {
       
       if (BUTTON_HANDLERS[buttonId]) {
         await BUTTON_HANDLERS[buttonId](from)
+      } else if (buttonId.startsWith("hospital_")) {
+        await handleHospitalButtonClick(from, buttonId)
       } else if (buttonId.startsWith("branch_")) {
         await handleBranchButtonClick(from, buttonId)
       } else if (buttonId.startsWith("date_")) {
@@ -1354,25 +1361,38 @@ async function moveToBranchSelection(
     }
   }
 
-  // Get hospital ID from patient
-  let hospitalId: string | null = null
-  if (session.patientUid) {
+  // Get hospital ID from session first, then patient record
+  let hospitalId: string | null = session.hospitalId || null
+  if (!hospitalId && session.patientUid) {
     try {
       const patientDoc = await db.collection("patients").doc(session.patientUid).get()
       if (patientDoc.exists) {
         const patientData = patientDoc.data()
-        hospitalId = patientData?.hospitalId || null
+        hospitalId =
+          patientData?.hospitalId ||
+          (Array.isArray(patientData?.hospitals) && patientData.hospitals[0]) ||
+          patientData?.activeHospital ||
+          null
       }
     } catch {
 
     }
   }
 
-  // Fallback: get first active hospital
+  // If hospitalId is missing, check active hospitals
   if (!hospitalId) {
     const activeHospitals = await getAllActiveHospitals()
-    if (activeHospitals.length > 0) {
+    if (activeHospitals.length === 1) {
       hospitalId = activeHospitals[0].id
+      await sessionRef.update({ hospitalId, hospitalName: activeHospitals[0].name })
+    } else if (activeHospitals.length > 1) {
+      await sessionRef.update({
+        state: "selecting_hospital",
+        pickerHospitalOptions: activeHospitals.map((h) => ({ id: h.id, name: h.name })),
+        updatedAt: new Date().toISOString(),
+      })
+      await sendHospitalPicker(phone, activeHospitals, language)
+      return
     }
   }
 
@@ -1936,8 +1956,8 @@ async function processBookingConfirmation(
     // If still no branchId, get first active branch from hospital
     if (!branchId) {
       try {
-        let hospitalId: string | null = null
-        if (session.patientUid) {
+        let hospitalId: string | null = session.hospitalId || null
+        if (!hospitalId && session.patientUid) {
           const patientDoc = await db.collection("patients").doc(session.patientUid).get()
           if (patientDoc.exists) {
             hospitalId = patientDoc.data()?.hospitalId || null
@@ -1946,7 +1966,7 @@ async function processBookingConfirmation(
         
         if (!hospitalId) {
           const activeHospitals = await getAllActiveHospitals()
-          if (activeHospitals.length > 0) {
+          if (activeHospitals.length === 1) {
             hospitalId = activeHospitals[0].id
           }
         }
@@ -1999,6 +2019,7 @@ async function processBookingConfirmation(
         isRecheckup: session.isRecheckup || false,
         recheckupNote: session.recheckupNote || "",
         originalAppointmentId: session.originalAppointmentId || "",
+        hospitalId: session.hospitalId || null,
         branchId: branchId || null, // CRITICAL: Always include branchId
         branchName: branchName || null, // CRITICAL: Always include branchName
       } as any,
@@ -2143,21 +2164,33 @@ type WhatsAppPatientCreateOptions = {
 
 async function buildWhatsAppPatientHospitalScope(
   db: FirebaseFirestore.Firestore,
-  session: Pick<BookingSession, "branchId" | "branchName"> | null | undefined
+  session: Pick<BookingSession, "branchId" | "branchName" | "hospitalId"> | null | undefined
 ): Promise<WhatsAppPatientCreateOptions | undefined> {
-  if (!session?.branchId) return undefined
-  const branchDoc = await db.collection("branches").doc(session.branchId).get()
-  if (!branchDoc.exists) return undefined
-  const bd = branchDoc.data() || {}
-  const hid = typeof bd.hospitalId === "string" && bd.hospitalId.trim() ? bd.hospitalId.trim() : null
+  let hid = session?.hospitalId || null
+  let defaultBranchId: string | null = null
+  let defaultBranchName: string | null = null
+
+  if (session?.branchId) {
+    defaultBranchId = session.branchId
+    const branchDoc = await db.collection("branches").doc(session.branchId).get()
+    if (branchDoc.exists) {
+      const bd = branchDoc.data() || {}
+      if (!hid && typeof bd.hospitalId === "string" && bd.hospitalId.trim()) {
+        hid = bd.hospitalId.trim()
+      }
+      const branchNameFromSession =
+        typeof session.branchName === "string" && session.branchName.trim() ? session.branchName.trim() : null
+      const branchNameFromDoc = typeof bd.name === "string" && bd.name.trim() ? bd.name.trim() : null
+      defaultBranchName = branchNameFromSession || branchNameFromDoc
+    }
+  }
+
   if (!hid) return undefined
-  const branchNameFromSession =
-    typeof session.branchName === "string" && session.branchName.trim() ? session.branchName.trim() : null
-  const branchNameFromDoc = typeof bd.name === "string" && bd.name.trim() ? bd.name.trim() : null
+
   return {
     hospitalId: hid,
-    defaultBranchId: session.branchId,
-    defaultBranchName: branchNameFromSession || branchNameFromDoc,
+    defaultBranchId,
+    defaultBranchName,
   }
 }
 
@@ -2555,23 +2588,162 @@ async function handleFlowCompletion(value: any): Promise<Response> {
   }
 }
 
+async function sendHospitalPicker(
+  phone: string,
+  hospitals: Array<{ id: string; name: string }>,
+  language: Language = "english"
+) {
+  if (!(await canSendBookingMessage(phone, "sendHospitalPicker"))) {
+    return
+  }
+
+  const pickerHospitalOptions = hospitals.map((h) => ({ id: h.id, name: h.name }))
+
+  if (shouldUseBhashSms()) {
+    const lines = pickerHospitalOptions.map((h, i) => `${i + 1}. ${h.name}`)
+    await sendBookingMessage(
+      phone,
+      lang(
+        language,
+        `🏥 *હોસ્પિટલ પસંદ કરો*\n\nકૃપા કરીને તમારી હોસ્પિટલ પસંદ કરો:\n\n${lines.join("\n")}\n\nનંબર લખી જવાબ આપો (ઉદાહરણ: 1).`,
+        `🏥 *Select Hospital*\n\nPlease select your hospital:\n\n${lines.join("\n")}\n\nReply with the hospital number (e.g. 1).`
+      ),
+      "sendHospitalPicker.bhash"
+    )
+    return
+  }
+
+  if (hospitals.length <= 3) {
+    const buttons = hospitals.map((h) => ({
+      id: `hospital_${h.id}`,
+      title: h.name.length > 20 ? h.name.substring(0, 17) + "..." : h.name,
+    }))
+    await sendMultiButtonMessage(
+      phone,
+      lang(language, "🏥 કૃપા કરીને તમારી હોસ્પિટલ પસંદ કરો:", "🏥 Please select your hospital:"),
+      buttons,
+      getHospitalDisplayName()
+    )
+  } else {
+    const sections = [
+      {
+        title: "Hospitals",
+        rows: hospitals.map((h) => ({
+          id: `hospital_${h.id}`,
+          title: h.name.length > 24 ? h.name.substring(0, 21) + "..." : h.name,
+        })),
+      },
+    ]
+    await sendListMessage(
+      phone,
+      lang(language, "🏥 કૃપા કરીને યાદીમાંથી હોસ્પિટલ પસંદ કરો:", "🏥 Please select a hospital from the list:"),
+      "Select Hospital",
+      sections,
+      getHospitalDisplayName()
+    )
+  }
+}
+
+async function handleHospitalSelection(
+  db: FirebaseFirestore.Firestore,
+  phone: string,
+  normalizedPhone: string,
+  sessionRef: FirebaseFirestore.DocumentReference,
+  text: string,
+  session: BookingSession
+): Promise<boolean> {
+  const language = session.language || "english"
+  const trimmed = text.trim()
+  const activeHospitals = await getAllActiveHospitals()
+  const options = session.pickerHospitalOptions || activeHospitals.map((h) => ({ id: h.id, name: h.name }))
+
+  let selected: { id: string; name: string } | null = null
+
+  if (/^[1-9]\d*$/.test(trimmed)) {
+    const index = parseInt(trimmed, 10) - 1
+    if (index >= 0 && index < options.length) {
+      selected = options[index]
+    }
+  }
+
+  if (!selected) {
+    const lower = trimmed.toLowerCase()
+    selected = options.find((h) => h.name.toLowerCase() === lower || h.name.toLowerCase().includes(lower)) || null
+  }
+
+  if (!selected) {
+    await sendHospitalPicker(phone, activeHospitals, language)
+    return true
+  }
+
+  const { claimed, reason } = await claimBookingInput(sessionRef, text, "selecting_hospital")
+  if (!claimed) {
+    console.log("[WhatsApp booking] hospital selection claim skipped", { phone: normalizedPhone, reason })
+    await sendHospitalPicker(phone, activeHospitals, language)
+    return true
+  }
+
+  const nextState = session.needsRegistration ? "registering_full_name" : "selecting_language"
+
+  await sessionRef.update({
+    hospitalId: selected.id,
+    hospitalName: selected.name,
+    state: nextState,
+    updatedAt: new Date().toISOString(),
+    stateChangedAt: Date.now(),
+  })
+
+  if (session.needsRegistration) {
+    await sendTextMessage(phone, getTranslation("registrationFullName", language))
+  } else {
+    await sendLanguagePicker(phone)
+  }
+  return true
+}
+
+async function handleHospitalButtonClick(phone: string, buttonId: string) {
+  const db = admin.firestore()
+  const normalizedPhone = formatPhoneNumber(phone)
+  const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+  const { session } = await getActiveBookingSessionOrExpire(phone)
+
+  if (!session || session.state !== "selecting_hospital") return
+
+  const hospitalId = buttonId.replace(/^hospital_/, "")
+  const activeHospitals = await getAllActiveHospitals()
+  const selected = activeHospitals.find((h) => h.id === hospitalId)
+  const hospitalName = selected?.name || "Hospital"
+
+  const nextState = session.needsRegistration ? "registering_full_name" : "selecting_language"
+  const language = session.language || "english"
+
+  await sessionRef.update({
+    hospitalId,
+    hospitalName,
+    state: nextState,
+    updatedAt: new Date().toISOString(),
+    stateChangedAt: Date.now(),
+  })
+
+  if (session.needsRegistration) {
+    await sendTextMessage(phone, getTranslation("registrationFullName", language))
+  } else {
+    await sendLanguagePicker(phone)
+  }
+}
+
 async function startBookingConversation(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
 
   // Check if patient exists
   const patient = await findPatientByPhone(db, normalizedPhone)
-  if (!patient) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hospitalmanagementsystem-hazel.vercel.app"
-    const hospital = getHospitalDisplayName()
+  const activeHospitals = await getAllActiveHospitals()
 
+  if (activeHospitals.length === 0) {
     await sendTextMessage(
       phone,
-      `❌ *Profile not found*\n\n` +
-        `We could not find your patient profile at *${hospital}*.\n\n` +
-        `Please register first:\n${baseUrl}\n\n` +
-        `Or contact reception.\n\n` +
-        `_Send any message for the main menu._`
+      "❌ Service currently unavailable. No active hospital found. Please contact reception."
     )
     return
   }
@@ -2582,13 +2754,83 @@ async function startBookingConversation(phone: string) {
 
   const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
   const version = Date.now()
+
+  let assignedHospitalId: string | null = null
+  let assignedHospitalName: string | null = null
+
+  if (patient?.data) {
+    const p = patient.data
+    assignedHospitalId = p.hospitalId || (Array.isArray(p.hospitals) && p.hospitals[0]) || p.activeHospital || null
+    if (assignedHospitalId) {
+      const matched = activeHospitals.find((h) => h.id === assignedHospitalId)
+      assignedHospitalName = matched?.name || "Hospital"
+    }
+  }
+
+  if (assignedHospitalId) {
+    // Existing patient with assigned hospital -> skip hospital selection
+    await sessionRef.set({
+      state: "selecting_language",
+      status: "active",
+      version,
+      processedInputs: [],
+      needsRegistration: false,
+      patientUid: patient!.id,
+      hospitalId: assignedHospitalId,
+      hospitalName: assignedHospitalName || "Hospital",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      stateChangedAt: Date.now(),
+    })
+
+    sessionLog("SESSION CREATED", {
+      phone: normalizedPhone,
+      version,
+      state: "selecting_language",
+      hospitalId: assignedHospitalId,
+    })
+
+    await sendLanguagePicker(phone)
+    return
+  }
+
+  if (activeHospitals.length === 1) {
+    // Single active hospital -> auto-assign
+    const single = activeHospitals[0]
+    await sessionRef.set({
+      state: "selecting_language",
+      status: "active",
+      version,
+      processedInputs: [],
+      needsRegistration: !patient,
+      patientUid: patient?.id,
+      hospitalId: single.id,
+      hospitalName: single.name,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      stateChangedAt: Date.now(),
+    })
+
+    sessionLog("SESSION CREATED", {
+      phone: normalizedPhone,
+      version,
+      state: "selecting_language",
+      hospitalId: single.id,
+    })
+
+    await sendLanguagePicker(phone)
+    return
+  }
+
+  // Multiple active hospitals -> prompt hospital selection
   await sessionRef.set({
-    state: "selecting_language",
+    state: "selecting_hospital",
     status: "active",
     version,
     processedInputs: [],
-    needsRegistration: false,
-    patientUid: patient.id,
+    needsRegistration: !patient,
+    patientUid: patient?.id,
+    pickerHospitalOptions: activeHospitals.map((h) => ({ id: h.id, name: h.name })),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     stateChangedAt: Date.now(),
@@ -2597,10 +2839,10 @@ async function startBookingConversation(phone: string) {
   sessionLog("SESSION CREATED", {
     phone: normalizedPhone,
     version,
-    state: "selecting_language",
+    state: "selecting_hospital",
   })
 
-  await sendLanguagePicker(phone)
+  await sendHospitalPicker(phone, activeHospitals)
 }
 
 async function sendLanguagePicker(phone: string) {
@@ -2695,6 +2937,8 @@ async function handleBookingConversation(phone: string, text: string): Promise<b
   })
 
   switch (session.state) {
+    case "selecting_hospital":
+      return await handleHospitalSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_language":
       return await handleLanguageSelection(db, phone, normalizedPhone, sessionRef, text, session)
     case "selecting_branch":
@@ -3184,13 +3428,58 @@ async function handleBranchButtonClick(phone: string, buttonId: string) {
 async function handleRegistrationPrompt(phone: string) {
   const db = admin.firestore()
   const normalizedPhone = formatPhoneNumber(phone)
-  
+  const activeHospitals = await getAllActiveHospitals()
+
+  if (activeHospitals.length === 0) {
+    await sendTextMessage(
+      phone,
+      "❌ We couldn't register you right now. No active hospital found. Please contact reception."
+    )
+    return
+  }
+
+  const { data: currentSession } = await getSession(normalizedPhone)
+  let sessionHospitalId = currentSession?.hospitalId || null
+
+  let patient = await findPatientByPhone(db, normalizedPhone)
+  let patientHospitalId: string | null = sessionHospitalId
+  if (!patientHospitalId && patient?.data) {
+    patientHospitalId =
+      patient.data.hospitalId ||
+      (Array.isArray(patient.data.hospitals) && patient.data.hospitals[0]) ||
+      patient.data.activeHospital ||
+      null
+  }
+
+  if (!patientHospitalId && activeHospitals.length > 1) {
+    // Prompt hospital selection first for multi-hospital system
+    const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
+    await sessionRef.set({
+      state: "selecting_hospital",
+      status: "active",
+      needsRegistration: true,
+      pickerHospitalOptions: activeHospitals.map((h) => ({ id: h.id, name: h.name })),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    await sendHospitalPicker(phone, activeHospitals)
+    return
+  }
+
+  const targetHospitalId = patientHospitalId || activeHospitals[0].id
+  const targetHospitalName = activeHospitals.find((h) => h.id === targetHospitalId)?.name || "Hospital"
+
   try {
     // Find or create patient record immediately (phone-only registration)
-    let patient = await findPatientByPhone(db, normalizedPhone)
     if (!patient) {
       const placeholderName = `WhatsApp Patient ${normalizedPhone.slice(-4)}`
-      const { patientUid } = await createPatientFromWhatsApp(db, normalizedPhone, placeholderName, "", undefined)
+      const { patientUid } = await createPatientFromWhatsApp(
+        db,
+        normalizedPhone,
+        placeholderName,
+        "",
+        { hospitalId: targetHospitalId }
+      )
       const patientDoc = await db.collection("patients").doc(patientUid).get()
       if (patientDoc.exists) {
         patient = { id: patientDoc.id, data: patientDoc.data()! }
@@ -3209,8 +3498,11 @@ async function handleRegistrationPrompt(phone: string) {
     const sessionRef = db.collection("whatsappBookingSessions").doc(normalizedPhone)
     await sessionRef.set({
       state: "selecting_language",
+      status: "active",
       needsRegistration: false,
       patientUid: patient.id,
+      hospitalId: targetHospitalId,
+      hospitalName: targetHospitalName,
       registrationData: {
         firstName: patient.data.firstName || "",
         lastName: patient.data.lastName || "",
@@ -3222,13 +3514,12 @@ async function handleRegistrationPrompt(phone: string) {
 
     await sendTextMessage(
       phone,
-      "✅ Registration received! We'll have our reception team collect any missing details later. Let's continue booking your appointment."
+      "✅ Registration received! Let's continue booking your appointment."
     )
 
     // Send language picker
     await sendLanguagePicker(phone)
   } catch {
-
     await sendTextMessage(
       phone,
       "❌ We couldn't register you right now. Please try again or contact reception."
@@ -3377,7 +3668,10 @@ async function createPatientFromWhatsApp(
   const activeHospitals = await getAllActiveHospitals()
   const hospitalFromScope =
     typeof scoped?.hospitalId === "string" && scoped.hospitalId.trim() ? scoped.hospitalId.trim() : null
-  const hospitalId = hospitalFromScope || (activeHospitals[0]?.id ? String(activeHospitals[0].id) : null)
+  let hospitalId = hospitalFromScope
+  if (!hospitalId && activeHospitals.length === 1) {
+    hospitalId = activeHospitals[0].id
+  }
 
   const defaultBranchId =
     typeof scoped?.defaultBranchId === "string" && scoped.defaultBranchId.trim()
@@ -3852,6 +4146,11 @@ async function handleListSelection(phone: string, selectedId: string) {
 
   const session = sessionDoc.data() as BookingSession
   const language = session.language || "english"
+
+  if (selectedId.startsWith("hospital_")) {
+    await handleHospitalButtonClick(phone, selectedId)
+    return
+  }
 
   // Check if it's a language selection (ID starts with "lang_")
   if (selectedId.startsWith("lang_")) {
@@ -4771,27 +5070,27 @@ async function createAppointment(
 ) {
   const appointmentTime = normalizeTime(payload.appointmentTime)
   
-  // Prefer patient's registered hospital, then doctor's hospital, then first active hospital (BEFORE transaction)
-  let hospitalId: string | null = null
-  // 1) Try patient record hospitals
+  // Prefer explicit hospitalId from payload, then patient's registered hospital, then doctor's hospital
+  let hospitalId: string | null = (payload as any).hospitalId || null
   const patientData = patient.data || {}
-  if (patientData.hospitalId) {
+  
+  if (!hospitalId && patientData.hospitalId) {
     hospitalId = String(patientData.hospitalId)
-  } else if (Array.isArray(patientData.hospitals) && patientData.hospitals.length > 0) {
+  } else if (!hospitalId && Array.isArray(patientData.hospitals) && patientData.hospitals.length > 0) {
     hospitalId = String(patientData.hospitals[0])
-  } else if (patientData.activeHospital) {
+  } else if (!hospitalId && patientData.activeHospital) {
     hospitalId = String(patientData.activeHospital)
   }
 
-  // 2) Fallback to doctor's hospital if patient hospital is not set
+  // Fallback to doctor's hospital if patient hospital is not set
   if (!hospitalId && payload.doctorId) {
     hospitalId = await getDoctorHospitalId(payload.doctorId)
   }
   
-  // 3) Final fallback: use first active hospital if still not found
+  // Single active hospital fallback
   if (!hospitalId) {
     const activeHospitals = await getAllActiveHospitals()
-    if (activeHospitals.length > 0) {
+    if (activeHospitals.length === 1) {
       hospitalId = activeHospitals[0].id
     }
   }

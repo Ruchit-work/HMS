@@ -26,6 +26,7 @@ export interface HospitalGeneralSettings {
   timeFormat?: "12h" | "24h"
   currency?: string
   language?: string
+  reviewLink?: string
 }
 
 export interface Hospital {

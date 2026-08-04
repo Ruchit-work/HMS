@@ -163,27 +163,37 @@ export async function POST(request: Request) {
       }
     }
 
-    // Get Google Review link from environment variable or fallback to new Google review URL
-    const googleReviewLink = process.env.GOOGLE_REVIEW_LINK || "https://maps.app.goo.gl/742Ho7cF3VVkPYH67"
-    // Build completion message
-    let messageText = `✅ *Checkup Completed*\n\n` +
-      `Hello ${name},\n\n` +
-      `Your checkup is completed! 🎉\n\n` +
-      `Thank you for visiting us. We hope you had a great experience.\n\n` +
-      `Can you please rate us? Your feedback helps us improve our services.\n\n`
-    
-    // Add Google Review link if configured
-    if (googleReviewLink && googleReviewLink.trim() !== "") {
-      messageText += `⭐ *Rate Us on Google:*\n\n` +
-        `👉 *Click here:* ${googleReviewLink}\n\n`
-    } else {
-      messageText += `⭐ *Rate Us:*\n` +
-        `We would love to hear about your experience! Please share your feedback with us.\n\n`
+    // Fetch hospital specific name and reviewLink
+    let hospitalDisplayName = "our hospital"
+    let hospitalReviewLink = ""
+    if (appointmentHospitalId) {
+      try {
+        const hospSnap = await db.collection("hospitals").doc(appointmentHospitalId).get()
+        if (hospSnap.exists) {
+          const hospData = hospSnap.data() || {}
+          if (hospData.name) hospitalDisplayName = hospData.name.trim()
+          hospitalReviewLink =
+            (hospData.settings?.general?.reviewLink as string)?.trim() ||
+            (hospData.reviewLink as string)?.trim() ||
+            ""
+        }
+      } catch {
+        // ignore
+      }
     }
-    
-    messageText += `Thank you for choosing Harmony Medical Services! 🏥`
+    if (!hospitalReviewLink && process.env.GOOGLE_REVIEW_LINK) {
+      hospitalReviewLink = process.env.GOOGLE_REVIEW_LINK.trim()
+    }
 
-    // Add PDF download link if we have it (fallback if document send fails)
+    // Build completion message according to hospital review link setting
+    let messageText = `Thank you for visiting ${hospitalDisplayName}.\n\n` +
+      `We hope you are feeling better.`
+    
+    if (hospitalReviewLink && hospitalReviewLink.trim() !== "") {
+      messageText += `\n\nPlease share your experience:\n${hospitalReviewLink}`
+    }
+
+    // Add PDF download link if available
     let pdfDownloadUrl = ""
     if (pdfStored && pdfAccessToken) {
       pdfDownloadUrl = `${getPdfBaseUrl()}/api/appointments/${appointmentId}/prescription-pdf?token=${encodeURIComponent(pdfAccessToken)}`
@@ -194,7 +204,7 @@ export async function POST(request: Request) {
     const sentViaBhashTemplate = await sendBhashCheckupCompleteTemplateIfConfigured({
       to: phone,
       patientName: name,
-      reviewLink: googleReviewLink,
+      reviewLink: hospitalReviewLink,
     })
 
     let result: { success: boolean; sid?: string; error?: string }
@@ -260,7 +270,7 @@ export async function POST(request: Request) {
         patientPhone: phone,
         patientName: name,
         message: messageText,
-        googleReviewLink: googleReviewLink || null,
+        googleReviewLink: hospitalReviewLink || null,
         sentAt: new Date().toISOString(),
         status: "sent",
         messageId: result.sid,

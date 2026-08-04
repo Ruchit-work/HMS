@@ -100,6 +100,7 @@ export async function GET(request: Request) {
     timeFormat: gen.timeFormat || "12h",
     currency: gen.currency || "INR ₹",
     language: gen.language || "en",
+    reviewLink: gen.reviewLink || data.reviewLink || "",
   }
 
   return NextResponse.json({ success: true, hospitalId, settings })
@@ -155,6 +156,7 @@ export async function PUT(request: Request) {
       timeFormat,
       currency,
       language,
+      reviewLink,
     } = body
 
     // Validation
@@ -168,6 +170,7 @@ export async function PUT(request: Request) {
     const cleanPinCode = typeof pinCode === "string" ? pinCode.trim() : ""
     const cleanGst = typeof gstNumber === "string" ? gstNumber.trim().toUpperCase() : ""
     const cleanWebsite = typeof website === "string" ? website.trim() : ""
+    const cleanReviewLink = typeof reviewLink === "string" ? reviewLink.trim() : ""
 
     if (!cleanName) return NextResponse.json({ error: "Hospital Name is required." }, { status: 400 })
     if (!cleanEmail) return NextResponse.json({ error: "Email address is required." }, { status: 400 })
@@ -193,6 +196,10 @@ export async function PUT(request: Request) {
 
     if (cleanWebsite && !cleanWebsite.startsWith("http://") && !cleanWebsite.startsWith("https://")) {
       return NextResponse.json({ error: "Website URL must start with http:// or https://" }, { status: 400 })
+    }
+
+    if (cleanReviewLink && !cleanReviewLink.startsWith("http://") && !cleanReviewLink.startsWith("https://")) {
+      return NextResponse.json({ error: "Review Link URL must start with http:// or https://" }, { status: 400 })
     }
 
     const db = admin.firestore()
@@ -226,6 +233,7 @@ export async function PUT(request: Request) {
       timeFormat: prevGen.timeFormat || "12h",
       currency: prevGen.currency || "INR ₹",
       language: prevGen.language || "en",
+      reviewLink: prevGen.reviewLink || prevData.reviewLink || "",
     }
 
     const updatedGeneralSettings: HospitalGeneralSettings = {
@@ -245,6 +253,7 @@ export async function PUT(request: Request) {
       timeFormat: timeFormat === "24h" ? "24h" : "12h",
       currency: typeof currency === "string" ? currency.trim() : "INR ₹",
       language: typeof language === "string" ? language.trim() : "en",
+      reviewLink: cleanReviewLink,
     }
 
     const newState: Record<string, unknown> = {
@@ -266,6 +275,7 @@ export async function PUT(request: Request) {
       email: cleanEmail,
       phone: cleanPhone,
       address: cleanAddress,
+      reviewLink: cleanReviewLink,
       "settings.general": updatedGeneralSettings,
       updatedAt: nowIso,
       updatedBy: auth.user.uid,

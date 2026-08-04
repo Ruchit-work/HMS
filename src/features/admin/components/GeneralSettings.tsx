@@ -209,6 +209,7 @@ interface GeneralSettingsData {
   registrationNumber: string
   gstNumber: string
   website: string
+  reviewLink?: string
   city: string
   state: string
   country: string
@@ -270,6 +271,7 @@ export default function GeneralSettings({
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
   const [website, setWebsite] = useState("")
+  const [reviewLink, setReviewLink] = useState("")
 
   const [address, setAddress] = useState("")
   const [city, setCity] = useState("")
@@ -303,6 +305,7 @@ export default function GeneralSettings({
       setEmail(s.email || "")
       setPhone(s.phone || "")
       setWebsite(s.website || "")
+      setReviewLink(s.reviewLink || "")
 
       setAddress(s.address || "")
       setCity(s.city || "")
@@ -346,6 +349,7 @@ export default function GeneralSettings({
         registrationNumber,
         gstNumber,
         website,
+        reviewLink,
         city,
         state,
         country,
@@ -541,6 +545,26 @@ export default function GeneralSettings({
                 placeholder="https://www.harmonyhospital.com"
               />
             </div>
+          </div>
+
+          <div className="md:col-span-2 lg:col-span-3">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Review Link (Google / Feedback URL - Optional)</label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <ExternalLink className="h-3.5 w-3.5" />
+              </span>
+              <input
+                type="url"
+                disabled={!isAdmin}
+                value={reviewLink}
+                onChange={(e) => setReviewLink(e.target.value)}
+                className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:bg-slate-50"
+                placeholder="https://g.page/r/example/review or https://maps.app.goo.gl/..."
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Used in WhatsApp checkup completion thank-you messages to request feedback from patients.
+            </p>
           </div>
         </div>
       </div>
