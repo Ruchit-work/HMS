@@ -35,7 +35,8 @@ export const DEFAULT_VISITING_HOURS: VisitingHours = {
 
 export function normalizeTime(time: string): string {
   if (!time || typeof time !== "string") return time
-  
+  if (time.toUpperCase().includes("FCFS")) return time.trim()
+
   // Remove spaces and convert to uppercase
   let normalized = time.trim().replace(/\s+/g, "").toUpperCase()
   
@@ -336,7 +337,10 @@ export function getAvailableTimeSlots(
 
 // Format time for display (convert 24h to 12h format)
 export function formatTimeDisplay(time: string): string {
+  if (!time) return "N/A"
+  if (time.toUpperCase().includes("FCFS")) return time
   const [hours, minutes] = time.split(':').map(Number)
+  if (isNaN(hours) || isNaN(minutes)) return time
   const period = hours >= 12 ? 'PM' : 'AM'
   const displayHours = hours % 12 || 12
   return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`

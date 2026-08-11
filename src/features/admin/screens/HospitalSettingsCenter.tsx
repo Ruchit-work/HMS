@@ -1,15 +1,16 @@
 "use client"
 
 import { useState } from "react"
-import { Building, Clock, CreditCard, Printer, Settings } from "lucide-react"
+import { Building, Clock, CreditCard, Printer, Settings, UserCheck } from "lucide-react"
 import HospitalBillingSettings from "@/features/admin/screens/HospitalBillingSettings"
 import { HospitalPrintSettingsScreen } from "@/features/admin/screens/HospitalPrintSettingsScreen"
 import ScheduleManagement from "@/features/admin/components/ScheduleManagement"
 import GeneralSettings from "@/features/admin/components/GeneralSettings"
+import HospitalReceptionistSettings from "@/features/admin/components/HospitalReceptionistSettings"
 
 type Notify = (type: "success" | "error", message: string) => void
 
-type SettingsSection = "general" | "schedule" | "billing" | "print"
+type SettingsSection = "general" | "schedule" | "billing" | "print" | "receptionist"
 
 export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify }) {
   const [section, setSection] = useState<SettingsSection>("general")
@@ -24,7 +25,7 @@ export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify 
           <div>
             <h2 className="text-xl font-bold text-slate-900">Hospital Settings</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Configure general hospital details, working schedules, billing policies, and print branding.
+              Configure general hospital details, working schedules, billing policies, print branding, and receptionist experience.
             </p>
           </div>
         </div>
@@ -81,6 +82,19 @@ export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify 
             <Printer className="h-3.5 w-3.5" />
             Print & Document Branding
           </button>
+
+          <button
+            type="button"
+            onClick={() => setSection("receptionist")}
+            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              section === "receptionist"
+                ? "bg-cyan-600 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <UserCheck className="h-3.5 w-3.5" />
+            Receptionist Settings
+          </button>
         </div>
       </div>
 
@@ -88,6 +102,7 @@ export default function HospitalSettingsCenter({ onNotify }: { onNotify: Notify 
       {section === "schedule" ? <ScheduleManagement onNotify={onNotify} /> : null}
       {section === "billing" ? <HospitalBillingSettings onNotify={onNotify} /> : null}
       {section === "print" ? <HospitalPrintSettingsScreen onNotify={onNotify} /> : null}
+      {section === "receptionist" ? <HospitalReceptionistSettings onNotify={onNotify} /> : null}
     </div>
   )
 }

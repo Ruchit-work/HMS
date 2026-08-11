@@ -20,24 +20,6 @@ export const VISIT_TYPE_OPTIONS: Array<{
     shortLabel: "IPD",
     description: "Inpatient room admission and care",
   },
-  {
-    value: "day_care",
-    label: "Day Care",
-    shortLabel: "Day Care",
-    description: "Short stay procedures or observation without overnight stay",
-  },
-  {
-    value: "minor_ot",
-    label: "Minor OT",
-    shortLabel: "Minor OT",
-    description: "Minor surgical procedure or operation theatre visit",
-  },
-  {
-    value: "major_ot",
-    label: "Major OT",
-    shortLabel: "Major OT",
-    description: "Major operation theatre procedure foundation",
-  },
 ]
 
 export const ADMISSION_VISIT_TYPE_OPTIONS = VISIT_TYPE_OPTIONS.filter(

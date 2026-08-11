@@ -368,6 +368,7 @@ export async function POST(request: NextRequest) {
       mimeType: file.type,
       fileSize: file.size,
       storagePath,
+      bucketName: fileRef?.bucket?.name || storageBucket,
       downloadUrl,
       uploadedBy: {
         uid: user.uid,

@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useRef, type ReactNode } from "react"
 import dynamic from "next/dynamic"
 import { TabSkeleton, tabSkeletonForTab } from '@/shared/components'
+import SimpleReceptionistDashboard from "./SimpleReceptionistDashboard"
+import type { HospitalReceptionistSettings } from "@/types/hospital"
 
 export type ReceptionistTab =
   | "dashboard"
@@ -32,6 +34,13 @@ interface ReceptionistTabPanelsProps {
   onTabChange: (tab: ReceptionistTab) => void
   onOpenBilling: (admissionId: string) => void
   onWhatsappPendingCountChange: (count: number) => void
+  receptionistSettings?: HospitalReceptionistSettings
+  badges?: {
+    appointments?: number
+    admitRequests?: number
+    billing?: number
+    whatsappBookings?: number
+  }
 }
 
 // Prefetch helpers — called on sidebar hover
@@ -158,6 +167,8 @@ export default function ReceptionistTabPanels({
   onTabChange,
   onOpenBilling,
   onWhatsappPendingCountChange,
+  receptionistSettings,
+  badges,
 }: ReceptionistTabPanelsProps) {
   const scrollPositionsRef = useRef<Partial<Record<ReceptionistTab, number>>>({})
   const prevTabRef = useRef<ReceptionistTab>(activeTab)
@@ -191,11 +202,20 @@ export default function ReceptionistTabPanels({
       {visitedTabs.has("dashboard") && (
         <TabPanel tab="dashboard" activeTab={activeTab}>
           <PanelSuspense tab="dashboard">
-            <DashboardOverview
-              onTabChange={onTabChange}
-              receptionistBranchId={receptionistBranchId}
-              userName={userName}
-            />
+            {receptionistSettings?.interfaceMode === "simple" ? (
+              <SimpleReceptionistDashboard
+                settings={receptionistSettings}
+                userName={userName}
+                badges={badges}
+                onTabChange={onTabChange}
+              />
+            ) : (
+              <DashboardOverview
+                onTabChange={onTabChange}
+                receptionistBranchId={receptionistBranchId}
+                userName={userName}
+              />
+            )}
           </PanelSuspense>
         </TabPanel>
       )}
@@ -294,6 +314,8 @@ export default function ReceptionistTabPanels({
                 onPatientModeChange={onPatientModeChange}
                 onNotification={onNotification}
                 isActive={activeTab === "book-appointment"}
+                fieldConfig={receptionistSettings?.formFields?.bookAppointment}
+                addPatientFieldConfig={receptionistSettings?.formFields?.addPatient}
               />
             </PanelSuspense>
           </div>

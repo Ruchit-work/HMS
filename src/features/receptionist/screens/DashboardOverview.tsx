@@ -790,7 +790,7 @@ export default function DashboardOverview({
           </div>
 
           <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[500px]">
               <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
                 <tr>
                   {['Time', 'Patient', 'Doctor', 'Status'].map((h) => (

@@ -32,7 +32,7 @@ export function HistoryDocumentViewer({
     .join(" · ")
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="w-full max-w-6xl h-[92vh]">
         <ReportViewer
           title={document.originalFileName || "Document"}

@@ -29,6 +29,44 @@ export interface HospitalGeneralSettings {
   reviewLink?: string
 }
 
+export interface AddPatientFieldConfig {
+  email?: boolean
+  gender?: boolean
+  dateOfBirth?: boolean
+  bloodGroup?: boolean
+  address?: boolean
+  cityStatePincode?: boolean
+  alternatePhone?: boolean
+  emergencyContact?: boolean
+  maritalStatus?: boolean
+  occupation?: boolean
+  heightWeight?: boolean
+  insurance?: boolean
+  documents?: boolean
+  passwordFields?: boolean
+  status?: boolean
+}
+
+export interface BookAppointmentFieldConfig {
+  visitType?: boolean
+  symptoms?: boolean
+  appointmentDate?: boolean
+  appointmentTime?: boolean
+  additionalFees?: boolean
+  paymentMethod?: boolean
+  patientConsent?: boolean
+  documents?: boolean
+}
+
+export interface HospitalReceptionistSettings {
+  interfaceMode: "professional" | "simple"
+  enabledModules: Record<string, boolean>
+  formFields: {
+    addPatient: AddPatientFieldConfig
+    bookAppointment: BookAppointmentFieldConfig
+  }
+}
+
 export interface Hospital {
   id: string
   name: string
@@ -49,6 +87,7 @@ export interface Hospital {
     schedule?: BranchTimings
     workingHours?: BranchTimings
     general?: HospitalGeneralSettings
+    receptionist?: HospitalReceptionistSettings
     [key: string]: unknown
   }
   createdAt: Timestamp | string

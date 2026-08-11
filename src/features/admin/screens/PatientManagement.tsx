@@ -14,9 +14,11 @@ import { SuccessToast, TabSkeleton, ViewModal, DeleteModal, RevealModal, useReve
 import AdminProtected from '@/features/auth/AdminProtected'
 import OTPVerificationModal from '@/features/forms/OTPVerificationModal'
 import PatientProfileForm, { PatientProfileFormValues } from '@/features/forms/PatientProfileForm'
+import { useHospitalReceptionistSettings } from '@/shared/hooks/useHospitalReceptionistSettings'
 import { calculateAge, formatDate, formatDateTime } from '@/shared/utils/shared/date'
 import { useTablePagination } from '@/shared/hooks/useTablePagination'
 import DocumentListCompact from '@/features/documents/DocumentListCompact'
+import { uploadPatientDocuments } from '@/shared/utils/documents/uploadPatientDocuments'
 import PatientVisitHistorySection from '@/features/receptionist/components/PatientVisitHistorySection'
 import type { PatientVisitHistoryDetails } from '@/features/receptionist/utils/visitHistoryDisplay'
 import { formatAuditUserDisplay } from "@/shared/utils/auditHelpers"
@@ -233,33 +235,34 @@ function AddPatientModalContent({
   submitLabel: string
 }) {
   const requestClose = useRevealModalClose()
+  const { addPatientFields } = useHospitalReceptionistSettings()
   const handleCancel = () => {
     requestClose()
   }
   return (
-    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden">
-      <div className="px-4 sm:px-6 py-4 sm:py-5 bg-gradient-to-r from-cyan-600 to-teal-700 text-white flex items-center justify-between">
+    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-gradient-to-r from-cyan-600 to-teal-700 text-white flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
             <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
           </div>
           <div>
-            <h3 className="text-lg sm:text-xl font-bold">Add Patient</h3>
+            <h3 className="text-base sm:text-xl font-bold">Add Patient</h3>
             <p className="text-cyan-100 text-xs sm:text-sm">Create a new patient record</p>
           </div>
         </div>
         <button
           onClick={handleCancel}
-          className="text-white hover:text-cyan-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg"
+          className="text-white hover:text-cyan-200 transition-colors duration-200 p-2 hover:bg-white/20 rounded-lg shrink-0"
         >
           <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
-      <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gray-50 overflow-y-auto max-h-[calc(95vh-200px)]">
+      <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gray-50 flex-1 overflow-y-auto min-h-0">
         <PatientProfileForm
           mode="admin"
           loading={loading}
@@ -271,6 +274,7 @@ function AddPatientModalContent({
           receptionistMode={receptionistBranchId != null}
           initialValues={receptionistBranchId != null ? { password: '123456' } : undefined}
           submitLabel={submitLabel}
+          fieldConfig={addPatientFields}
         />
       </div>
     </div>
@@ -791,17 +795,41 @@ export default function PatientManagement({
                 body: JSON.stringify({ patientData: payload, password: values.password })
             })
 
+            const data = await res.json().catch(() => ({}))
             if (!res.ok) {
-                const data = await res.json().catch(() => ({}))
                 throw new Error(data?.error || 'Failed to create patient')
+            }
+
+            const createdPatientUid = data?.id || data?.uid
+            const createdPatientId = data?.patientId || createdPatientUid
+
+            let documentWarning: string | null = null
+            if (values.attachedFiles && values.attachedFiles.length > 0 && createdPatientUid) {
+                const uploadResult = await uploadPatientDocuments({
+                    files: values.attachedFiles,
+                    patientUid: createdPatientUid,
+                    patientId: createdPatientId,
+                })
+                if (uploadResult.errors.length > 0) {
+                    if (uploadResult.successCount > 0) {
+                        documentWarning = `${uploadResult.successCount} file(s) uploaded. Warning: ${uploadResult.errors.join("; ")}`
+                    } else {
+                        documentWarning = `Document upload failed: ${uploadResult.errors.join("; ")}`
+                    }
+                }
             }
 
             // Real-time listener will automatically update patients
             setShowAddModal(false)
             setShowOtpModal(false)
             setPendingPatientValues(null)
-            setSuccessMessage('Patient added successfully!')
-            setTimeout(() => setSuccessMessage(null), 3000)
+            if (documentWarning) {
+                setSuccessMessage(`Patient added successfully! ${documentWarning}`)
+                setTimeout(() => setSuccessMessage(null), 6000)
+            } else {
+                setSuccessMessage('Patient added successfully!')
+                setTimeout(() => setSuccessMessage(null), 3000)
+            }
         } catch (err) {
             setError((err as Error).message)
         } finally {
@@ -1568,6 +1596,7 @@ export default function PatientManagement({
             title="Patient Profile"
             subtitle="Clinical overview"
             headerColor="blue"
+            size="2xl"
           >
             <div className="space-y-5">
 

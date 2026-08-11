@@ -11,6 +11,7 @@ import { isAppointmentVisibleToReceptionist } from "@/shared/utils/appointments/
 import { useRouter } from "next/navigation"
 import { Notification } from '@/shared/components'
 import { useNotificationBadge } from "@/shared/hooks/useNotificationBadge"
+import { useHospitalReceptionistSettings } from "@/shared/hooks/useHospitalReceptionistSettings"
 import ReceptionistTabPanels, {
   prefetchReceptionistTab,
   type ReceptionistTab,
@@ -18,9 +19,9 @@ import ReceptionistTabPanels, {
 import { ConfirmDialog } from '@/shared/components'
 import HospitalBrandHeader from "@/shared/components/HospitalBrandHeader"
 import {
-  LayoutDashboard, Users, Stethoscope, CalendarDays, BedDouble,
+  LayoutDashboard, Users, UserPlus, Stethoscope, CalendarDays, BedDouble,
   ReceiptText, MessageCircle, FolderOpen, CalendarPlus,
-  LogOut, Menu, X, Building2, ChevronDown
+  LogOut, Menu, X, Building2, ChevronDown, ArrowLeft
 } from "lucide-react"
 
 type ActiveTab = ReceptionistTab
@@ -69,6 +70,7 @@ export default function ReceptionistDashboard() {
   const router = useRouter()
   const { user, loading: authLoading, error: authError, timedOut: authTimedOut } = useAuth("receptionist")
   const { activeHospitalId, loading: hospitalLoading } = useMultiHospital()
+  const { settings: receptionistSettings, isResolved: settingsResolved } = useHospitalReceptionistSettings()
   const [receptionistBranchId, setReceptionistBranchId] = useState<string | null>(null)
 
   const appointmentsBadge = useNotificationBadge({
@@ -288,15 +290,18 @@ export default function ReceptionistDashboard() {
     [navigate]
   )
 
-  const isShellReady = Boolean(
+  const isReady = Boolean(
     user &&
     !authLoading &&
     !authError &&
     !authTimedOut &&
     !hospitalLoading &&
     activeHospitalId &&
-    !loading
+    !loading &&
+    settingsResolved
   )
+
+  const isShellReady = isReady
 
   // Prefetch default tab on mount
   useEffect(() => {
@@ -309,11 +314,146 @@ export default function ReceptionistDashboard() {
     month: "short",
   })
 
-  if (!authLoading && !user) return null
+  // 1. NEUTRAL SKELETON LOADER — NEVER SHOW DEFAULT PROFESSIONAL MODE BEFORE SETTINGS RESOLVE
+  if (!isReady) {
+    if (!authLoading && !user) return null
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xs text-center space-y-4">
+          <div className="h-8 w-36 bg-slate-200 rounded-lg animate-pulse mx-auto" />
+          <div className="space-y-2">
+            <div className="h-4 w-44 bg-slate-200 rounded-md animate-pulse mx-auto" />
+            <div className="h-3 w-28 bg-slate-100 rounded-md animate-pulse mx-auto" />
+          </div>
+          <p className="text-xs font-medium text-slate-400">Loading receptionist portal…</p>
+        </div>
+      </div>
+    )
+  }
 
   const displayName = userName || "Receptionist"
   const initials = displayName.charAt(0).toUpperCase()
+  const isSimpleMode = receptionistSettings?.interfaceMode === "simple"
 
+  // 2. SIMPLE MODE LAYOUT — COMPLETELY NO SIDEBAR
+  if (isSimpleMode) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        {/* Minimal Top Header for Simple Mode */}
+        <header className="bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-30 shadow-xs">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {activeTab !== "dashboard" && (
+              <button
+                onClick={() => navigate("dashboard")}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 hover:bg-cyan-100 px-2.5 sm:px-3 py-1.5 rounded-xl transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
+                <span className="sm:hidden">Back</span>
+              </button>
+            )}
+            <HospitalBrandHeader subtitle="Reception Portal" />
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="hidden sm:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+              <div className="w-6 h-6 rounded-md bg-cyan-600 text-white font-bold text-xs flex items-center justify-center">
+                {initials}
+              </div>
+              <span className="text-xs font-semibold text-slate-800">{displayName}</span>
+            </div>
+
+            {receptionistSettings.enabledModules?.profile !== false && (
+              <button
+                type="button"
+                onClick={() => navigate("profile")}
+                className={`text-xs font-medium px-2.5 sm:px-3 py-1.5 rounded-xl transition-colors ${
+                  activeTab === "profile" ? "bg-cyan-50 text-cyan-800 border border-cyan-200" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                Profile
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setLogoutConfirmOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-red-600 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-red-50 hover:border-red-200 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 p-3 sm:p-6 max-w-7xl mx-auto w-full min-w-0">
+          {(authError || authTimedOut) ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+              <p className="text-sm font-semibold text-amber-800">
+                {authTimedOut ? "Authentication timed out." : "Authentication error."}
+              </p>
+              <p className="mt-2 text-xs text-amber-700">
+                {authError || "Please refresh the page or sign in again."}
+              </p>
+              <button
+                type="button"
+                onClick={() => router.replace("/auth/login?role=receptionist")}
+                className="mt-4 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors"
+              >
+                Return to Login
+              </button>
+            </div>
+          ) : (
+            <ReceptionistTabPanels
+              activeTab={activeTab}
+              visitedTabs={visitedTabs}
+              isShellReady={isShellReady}
+              receptionistBranchId={receptionistBranchId}
+              userName={displayName}
+              patientSubTab={patientSubTab}
+              onPatientSubTabChange={setPatientSubTab}
+              patientMode={patientMode}
+              onPatientModeChange={setPatientMode}
+              billingFocusQuery={billingFocusQuery}
+              onBillingFocusHandled={handleBillingFocusHandled}
+              onNotification={handleNotification}
+              onTabChange={navigate}
+              onOpenBilling={handleOpenBilling}
+              onWhatsappPendingCountChange={setWhatsappPendingCount}
+              receptionistSettings={receptionistSettings}
+              badges={{
+                appointments: appointmentsBadge.displayCount,
+                admitRequests: admitRequestsBadge.displayCount,
+                billing: billingBadge.displayCount,
+                whatsappBookings: whatsappBadge.displayCount,
+              }}
+            />
+          )}
+        </main>
+
+        <ConfirmDialog
+          isOpen={logoutConfirmOpen}
+          title="Sign out?"
+          message="Logging out will return you to the receptionist login screen."
+          confirmText="Logout"
+          cancelText="Stay signed in"
+          onConfirm={handleLogout}
+          onCancel={() => setLogoutConfirmOpen(false)}
+          confirmLoading={logoutLoading}
+        />
+        {notification && (
+          <Notification
+            type={notification.type}
+            message={notification.message}
+            onClose={() => setNotification(null)}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // 3. PROFESSIONAL MODE LAYOUT — EXISTING SIDEBAR & HEADER PRESERVED
   return (
     <div className="rx-shell">
       {/* Mobile overlay */}
@@ -326,7 +466,7 @@ export default function ReceptionistDashboard() {
 
       {/* ── Sidebar ── */}
       <aside
-        className={`rx-sidebar fixed inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-out ${
+        className={`rx-sidebar fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] transform transition-transform duration-300 ease-out ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0`}
       >
@@ -344,80 +484,109 @@ export default function ReceptionistDashboard() {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3">
           {/* Dashboard */}
-          <div className="px-3 mb-1">
-            <button
-              onClick={() => navigate("dashboard")}
-              onMouseEnter={() => prefetchReceptionistTab("dashboard")}
-              className={`rx-nav-item ${activeTab === "dashboard" ? "rx-nav-item--active" : ""}`}
-            >
-              <LayoutDashboard className="w-4 h-4 shrink-0" />
-              <span>Dashboard</span>
-            </button>
-          </div>
+          {receptionistSettings.enabledModules?.dashboard !== false && (
+            <div className="px-3 mb-1">
+              <button
+                onClick={() => navigate("dashboard")}
+                onMouseEnter={() => prefetchReceptionistTab("dashboard")}
+                className={`rx-nav-item ${activeTab === "dashboard" ? "rx-nav-item--active" : ""}`}
+              >
+                <LayoutDashboard className="w-4 h-4 shrink-0" />
+                <span>Dashboard</span>
+              </button>
+            </div>
+          )}
 
           {/* Operations group */}
           <div className="rx-nav-group mt-3">
             <span className="rx-nav-group-label">Operations</span>
             <div className="space-y-0.5 mt-1.5">
-              <button
-                onClick={() => navigate("patients")}
-                onMouseEnter={() => prefetchReceptionistTab("patients")}
-                className={`rx-nav-item ${activeTab === "patients" ? "rx-nav-item--active" : ""}`}
-              >
-                <Users className="w-4 h-4 shrink-0" />
-                <span>Patients</span>
-              </button>
+              {receptionistSettings.enabledModules?.patients !== false && (
+                <button
+                  onClick={() => navigate("patients")}
+                  onMouseEnter={() => prefetchReceptionistTab("patients")}
+                  className={`rx-nav-item ${activeTab === "patients" ? "rx-nav-item--active" : ""}`}
+                >
+                  <Users className="w-4 h-4 shrink-0" />
+                  <span>Patients</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => navigate("appointments")}
-                onMouseEnter={() => prefetchReceptionistTab("appointments")}
-                className={`rx-nav-item ${activeTab === "appointments" ? "rx-nav-item--active" : ""}`}
-              >
-                <CalendarDays className="w-4 h-4 shrink-0" />
-                <span>Appointments</span>
-                {appointmentsBadge.displayCount > 0 && (
-                  <span className="rx-nav-badge rx-nav-badge--amber ml-auto">
-                    {appointmentsBadge.displayCount}
-                  </span>
-                )}
-              </button>
+              {receptionistSettings.enabledModules?.["add-patient"] !== false && (
+                <button
+                  onClick={() => {
+                    navigate("patients")
+                    setTimeout(() => {
+                      const btn = document.querySelector('[data-add-patient]') as HTMLButtonElement | null
+                      if (btn) btn.click()
+                    }, 100)
+                  }}
+                  onMouseEnter={() => prefetchReceptionistTab("patients")}
+                  className="rx-nav-item hover:text-cyan-700"
+                >
+                  <UserPlus className="w-4 h-4 shrink-0 text-cyan-600" />
+                  <span>Add Patient</span>
+                </button>
+              )}
 
-              <button
-                onClick={() => navigate("admit-requests")}
-                onMouseEnter={() => prefetchReceptionistTab("admit-requests")}
-                className={`rx-nav-item ${activeTab === "admit-requests" ? "rx-nav-item--active" : ""}`}
-              >
-                <BedDouble className="w-4 h-4 shrink-0" />
-                <span>IPD Admissions</span>
-                {admitRequestsBadge.displayCount > 0 && (
-                  <span className="rx-nav-badge rx-nav-badge--blue ml-auto">
-                    {admitRequestsBadge.displayCount}
-                  </span>
-                )}
-              </button>
+              {receptionistSettings.enabledModules?.appointments !== false && (
+                <button
+                  onClick={() => navigate("appointments")}
+                  onMouseEnter={() => prefetchReceptionistTab("appointments")}
+                  className={`rx-nav-item ${activeTab === "appointments" ? "rx-nav-item--active" : ""}`}
+                >
+                  <CalendarDays className="w-4 h-4 shrink-0" />
+                  <span>Appointments</span>
+                  {appointmentsBadge.displayCount > 0 && (
+                    <span className="rx-nav-badge rx-nav-badge--amber ml-auto">
+                      {appointmentsBadge.displayCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
-              <button
-                onClick={() => navigate("billing")}
-                onMouseEnter={() => prefetchReceptionistTab("billing")}
-                className={`rx-nav-item ${activeTab === "billing" ? "rx-nav-item--active" : ""}`}
-              >
-                <ReceiptText className="w-4 h-4 shrink-0" />
-                <span>Billing</span>
-                {billingBadge.displayCount > 0 && (
-                  <span className="rx-nav-badge rx-nav-badge--red ml-auto">
-                    {billingBadge.displayCount}
-                  </span>
-                )}
-              </button>
+              {receptionistSettings.enabledModules?.["admit-requests"] !== false && (
+                <button
+                  onClick={() => navigate("admit-requests")}
+                  onMouseEnter={() => prefetchReceptionistTab("admit-requests")}
+                  className={`rx-nav-item ${activeTab === "admit-requests" ? "rx-nav-item--active" : ""}`}
+                >
+                  <BedDouble className="w-4 h-4 shrink-0" />
+                  <span>IPD Admissions</span>
+                  {admitRequestsBadge.displayCount > 0 && (
+                    <span className="rx-nav-badge rx-nav-badge--blue ml-auto">
+                      {admitRequestsBadge.displayCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
-              <button
-                onClick={() => navigate("doctors")}
-                onMouseEnter={() => prefetchReceptionistTab("doctors")}
-                className={`rx-nav-item ${activeTab === "doctors" ? "rx-nav-item--active" : ""}`}
-              >
-                <Stethoscope className="w-4 h-4 shrink-0" />
-                <span>Doctors</span>
-              </button>
+              {receptionistSettings.enabledModules?.billing !== false && (
+                <button
+                  onClick={() => navigate("billing")}
+                  onMouseEnter={() => prefetchReceptionistTab("billing")}
+                  className={`rx-nav-item ${activeTab === "billing" ? "rx-nav-item--active" : ""}`}
+                >
+                  <ReceiptText className="w-4 h-4 shrink-0" />
+                  <span>Billing</span>
+                  {billingBadge.displayCount > 0 && (
+                    <span className="rx-nav-badge rx-nav-badge--red ml-auto">
+                      {billingBadge.displayCount}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {receptionistSettings.enabledModules?.doctors !== false && (
+                <button
+                  onClick={() => navigate("doctors")}
+                  onMouseEnter={() => prefetchReceptionistTab("doctors")}
+                  className={`rx-nav-item ${activeTab === "doctors" ? "rx-nav-item--active" : ""}`}
+                >
+                  <Stethoscope className="w-4 h-4 shrink-0" />
+                  <span>Doctors</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -425,108 +594,116 @@ export default function ReceptionistDashboard() {
           <div className="rx-nav-group mt-4">
             <span className="rx-nav-group-label">Workspace</span>
             <div className="space-y-0.5 mt-1.5">
-              <button
-                onClick={() => navigate("whatsapp-bookings")}
-                onMouseEnter={() => prefetchReceptionistTab("whatsapp-bookings")}
-                className={`rx-nav-item ${activeTab === "whatsapp-bookings" ? "rx-nav-item--active" : ""}`}
-              >
-                <MessageCircle className="w-4 h-4 shrink-0" />
-                <span>WhatsApp Bookings</span>
-                {whatsappBadge.displayCount > 0 && (
-                  <span className="rx-nav-badge rx-nav-badge--amber ml-auto">
-                    {whatsappBadge.displayCount}
-                  </span>
-                )}
-              </button>
+              {receptionistSettings.enabledModules?.["whatsapp-bookings"] !== false && (
+                <button
+                  onClick={() => navigate("whatsapp-bookings")}
+                  onMouseEnter={() => prefetchReceptionistTab("whatsapp-bookings")}
+                  className={`rx-nav-item ${activeTab === "whatsapp-bookings" ? "rx-nav-item--active" : ""}`}
+                >
+                  <MessageCircle className="w-4 h-4 shrink-0" />
+                  <span>WhatsApp Bookings</span>
+                  {whatsappBadge.displayCount > 0 && (
+                    <span className="rx-nav-badge rx-nav-badge--amber ml-auto">
+                      {whatsappBadge.displayCount}
+                    </span>
+                  )}
+                </button>
+              )}
 
-              <button
-                onClick={() => navigate("documents")}
-                onMouseEnter={() => prefetchReceptionistTab("documents")}
-                className={`rx-nav-item ${activeTab === "documents" ? "rx-nav-item--active" : ""}`}
-              >
-                <FolderOpen className="w-4 h-4 shrink-0" />
-                <span>Documents</span>
-              </button>
+              {receptionistSettings.enabledModules?.documents !== false && (
+                <button
+                  onClick={() => navigate("documents")}
+                  onMouseEnter={() => prefetchReceptionistTab("documents")}
+                  className={`rx-nav-item ${activeTab === "documents" ? "rx-nav-item--active" : ""}`}
+                >
+                  <FolderOpen className="w-4 h-4 shrink-0" />
+                  <span>Documents</span>
+                </button>
+              )}
             </div>
           </div>
 
           {/* Quick actions group */}
-          <div className="rx-nav-group mt-4">
-            <span className="rx-nav-group-label">Quick Actions</span>
-            <div className="mt-1.5">
-              <button
-                onClick={() => {
-                  if (!bookSubOpen) navigate("book-appointment")
-                  setBookSubOpen(!bookSubOpen)
-                }}
-                onMouseEnter={() => prefetchReceptionistTab("book-appointment")}
-                className={`rx-nav-item rx-nav-item--cta ${
-                  activeTab === "book-appointment" ? "rx-nav-item--active rx-nav-item--cta" : ""
-                }`}
-              >
-                <CalendarPlus className="w-4 h-4 shrink-0" />
-                <span>Book Appointment</span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 ml-auto transition-transform duration-200 ${
-                    bookSubOpen ? "rotate-180" : ""
+          {receptionistSettings.enabledModules?.["book-appointment"] !== false && (
+            <div className="rx-nav-group mt-4">
+              <span className="rx-nav-group-label">Quick Actions</span>
+              <div className="mt-1.5">
+                <button
+                  onClick={() => {
+                    if (!bookSubOpen) navigate("book-appointment")
+                    setBookSubOpen(!bookSubOpen)
+                  }}
+                  onMouseEnter={() => prefetchReceptionistTab("book-appointment")}
+                  className={`rx-nav-item rx-nav-item--cta ${
+                    activeTab === "book-appointment" ? "rx-nav-item--active rx-nav-item--cta" : ""
                   }`}
-                />
-              </button>
+                >
+                  <CalendarPlus className="w-4 h-4 shrink-0" />
+                  <span>Book Appointment</span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 ml-auto transition-transform duration-200 ${
+                      bookSubOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
-              {bookSubOpen && (
-                <div className="ml-5 pl-3 mt-1 space-y-0.5 border-l border-slate-200">
-                  <button
-                    onClick={() => {
-                      navigate("book-appointment")
-                      setPatientMode("existing")
-                    }}
-                    className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      activeTab === "book-appointment" && patientMode === "existing"
-                        ? "text-emerald-700 bg-emerald-50"
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    Existing Patient
-                  </button>
-                  <button
-                    onClick={() => {
-                      navigate("book-appointment")
-                      setPatientMode("new")
-                    }}
-                    className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      activeTab === "book-appointment" && patientMode === "new"
-                        ? "text-emerald-700 bg-emerald-50"
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    New Patient
-                  </button>
-                </div>
-              )}
+                {bookSubOpen && (
+                  <div className="ml-5 pl-3 mt-1 space-y-0.5 border-l border-slate-200">
+                    <button
+                      onClick={() => {
+                        navigate("book-appointment")
+                        setPatientMode("existing")
+                      }}
+                      className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        activeTab === "book-appointment" && patientMode === "existing"
+                          ? "text-emerald-700 bg-emerald-50"
+                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      Existing Patient
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate("book-appointment")
+                        setPatientMode("new")
+                      }}
+                      className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        activeTab === "book-appointment" && patientMode === "new"
+                          ? "text-emerald-700 bg-emerald-50"
+                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      New Patient
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </nav>
 
         {/* User / sign-out */}
         <div className="border-t border-slate-200 p-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              navigate("profile")
-              setSidebarOpen(false)
-            }}
-            className={`w-full flex items-center gap-2.5 px-2 py-2 mb-1 rounded-xl text-left transition-colors ${
-              activeTab === "profile" ? "bg-cyan-50 border border-cyan-200" : "hover:bg-slate-100"
-            }`}
-          >
-            <div className="w-7 h-7 rounded-md bg-cyan-600 flex items-center justify-center shrink-0">
-              <span className="text-white text-xs font-bold">{initials}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-900 truncate">{displayName}</p>
-              <p className="text-[10px] text-cyan-700 font-medium">My Profile & Settings</p>
-            </div>
-          </button>
+          {receptionistSettings.enabledModules?.profile !== false && (
+            <button
+              type="button"
+              onClick={() => {
+                navigate("profile")
+                setSidebarOpen(false)
+              }}
+              className={`w-full flex items-center gap-2.5 px-2 py-2 mb-1 rounded-xl text-left transition-colors ${
+                activeTab === "profile" ? "bg-cyan-50 border border-cyan-200" : "hover:bg-slate-100"
+              }`}
+            >
+              <div className="w-7 h-7 rounded-md bg-cyan-600 flex items-center justify-center shrink-0">
+                <span className="text-white text-xs font-bold">{initials}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-900 truncate">{displayName}</p>
+                <p className="text-[10px] text-cyan-700 font-medium">My Profile & Settings</p>
+              </div>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setLogoutConfirmOpen(true)}
@@ -602,6 +779,13 @@ export default function ReceptionistDashboard() {
             onTabChange={navigate}
             onOpenBilling={handleOpenBilling}
             onWhatsappPendingCountChange={setWhatsappPendingCount}
+            receptionistSettings={receptionistSettings}
+            badges={{
+              appointments: appointmentsBadge.displayCount,
+              admitRequests: admitRequestsBadge.displayCount,
+              billing: billingBadge.displayCount,
+              whatsappBookings: whatsappBadge.displayCount,
+            }}
           />
           )}
         </main>

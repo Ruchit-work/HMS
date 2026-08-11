@@ -284,6 +284,7 @@ interface ViewModalProps {
   headerColor: 'blue' | 'green' | 'purple' | 'orange'
   children: ReactNode
   zIndex?: number
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
 }
 
 const viewModalHeaderClasses = {
@@ -298,15 +299,26 @@ const viewModalTextColorClasses = {
   purple: 'text-cyan-100',
   orange: 'text-orange-100',
 }
+const viewModalSizeClasses = {
+  sm: 'max-w-xl',
+  md: 'max-w-4xl',
+  lg: 'max-w-5xl',
+  xl: 'max-w-6xl',
+  '2xl': 'max-w-7xl',
+  full: 'max-w-[94vw]',
+}
+
 function ViewModalContent({
   title,
   subtitle,
   headerColor,
   children,
-}: Pick<ViewModalProps, 'title' | 'subtitle' | 'headerColor' | 'children'>) {
+  size = 'md',
+}: Pick<ViewModalProps, 'title' | 'subtitle' | 'headerColor' | 'children' | 'size'>) {
   const requestClose = useRevealModalClose()
+  const sizeClass = viewModalSizeClasses[size] || viewModalSizeClasses.md
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl max-w-4xl w-full max-h-[95vh] flex flex-col">
+    <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${sizeClass} w-full max-h-[95vh] flex flex-col`}>
       <div className={`px-6 py-4 ${viewModalHeaderClasses[headerColor]} text-white shrink-0`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -347,12 +359,13 @@ export function ViewModal({
   headerColor,
   children,
   zIndex,
+  size = 'md',
 }: ViewModalProps) {
   if (!isOpen) return null
 
   return (
     <RevealModal isOpen={isOpen} onClose={onClose} contentClassName="p-0" zIndex={zIndex}>
-      <ViewModalContent title={title} subtitle={subtitle} headerColor={headerColor}>
+      <ViewModalContent title={title} subtitle={subtitle} headerColor={headerColor} size={size}>
         {children}
       </ViewModalContent>
     </RevealModal>

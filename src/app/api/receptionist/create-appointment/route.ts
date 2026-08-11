@@ -35,14 +35,21 @@ const sendAppointmentWhatsApp = async (appointmentData: UnknownRecord) => {
   })
   
   const timeStr = getString(appointmentData.appointmentTime) || ""
-  const [h, m] = timeStr.split(":").map(Number)
-  const timeDisplay = !isNaN(h) && !isNaN(m) 
-    ? new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-    : timeStr
+  const isFcfsMsg = appointmentData.isFcfs === true || timeStr.toUpperCase().includes("FCFS")
+  let timeDisplay = timeStr
+  if (isFcfsMsg) {
+    const queueNum = appointmentData.queueNumber || appointmentData.tokenNumber
+    timeDisplay = queueNum ? `First-Come-First-Serve (Queue #${queueNum})` : "First-Come-First-Serve"
+  } else {
+    const [h, m] = timeStr.split(":").map(Number)
+    timeDisplay = !isNaN(h) && !isNaN(m) 
+      ? new Date(2000, 0, 1, h, m).toLocaleTimeString("en-IN", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+      : timeStr
+  }
   
   const message = `🎉 *Appointment Successfully Booked!*
 
@@ -152,11 +159,17 @@ export async function POST(request: Request) {
       return Response.json({ error: "Missing appointmentData" }, { status: 400 })
     }
 
-    const required = ["patientId", "patientName", "doctorId", "doctorName", "appointmentDate", "appointmentTime"]
+    const rawTimeStr = getString(appointmentData.appointmentTime) || ""
+    const isFcfs = appointmentData.isFcfs === true || rawTimeStr.toUpperCase().includes("FCFS") || !rawTimeStr
+
+    const required = ["patientId", "patientName", "doctorId", "doctorName", "appointmentDate"]
     for (const k of required) {
       if (!appointmentData[k]) {
         return Response.json({ error: `Missing ${k}` }, { status: 400 })
       }
+    }
+    if (!isFcfs && !rawTimeStr) {
+      return Response.json({ error: "Missing appointmentTime" }, { status: 400 })
     }
 
     const nowIso = new Date().toISOString()
@@ -169,8 +182,8 @@ export async function POST(request: Request) {
       return defaultValue
     }
     
-    // Normalize appointment time to 24-hour format (HH:MM) for consistent storage
-    const normalizedAppointmentTime = normalizeTime(String(appointmentData.appointmentTime))
+    // Normalize appointment time to 24-hour format (HH:MM) for consistent storage (or FCFS)
+    const normalizedAppointmentTime = isFcfs ? "FCFS" : normalizeTime(rawTimeStr)
     
     // Get doctor's hospital ID - appointment belongs to doctor's hospital
     const doctorHospitalId = await getDoctorHospitalId(String(appointmentData.doctorId))
@@ -307,31 +320,77 @@ export async function POST(request: Request) {
     })
 
     const firestore = admin.firestore()
-    // Use normalized time for slot document ID (already normalized above)
-    const slotDocId = `${docData.doctorId}_${docData.appointmentDate}_${normalizedAppointmentTime}`.replace(/[:\s]/g, "-")
     appointmentId = null // Reset for this transaction
 
     await firestore.runTransaction(async (transaction) => {
-      const slotRef = firestore.collection("appointmentSlots").doc(slotDocId)
-      const slotSnap = await transaction.get(slotRef)
-      if (slotSnap.exists) {
-        throw new Error("SLOT_ALREADY_BOOKED")
-      }
+      if (isFcfs) {
+        // First-Come-First-Serve atomic queue sequencing:
+        // Scoped to Hospital + Branch + Doctor + Appointment Date
+        const queueCounterDocId = `queue_${doctorHospitalId}_${branchId || "default"}_${docData.doctorId}_${docData.appointmentDate}`.replace(/[:\s]/g, "-")
+        const queueCounterRef = firestore.collection("appointmentQueues").doc(queueCounterDocId)
+        const queueSnap = await transaction.get(queueCounterRef)
+        const currentQueue = queueSnap.exists ? (Number(queueSnap.data()?.lastQueueNumber) || 0) : 0
+        const nextQueueNumber = currentQueue + 1
 
-      // Create appointment in hospital-scoped subcollection
-      const appointmentRef = firestore
-        .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
-        .doc()
-      appointmentId = appointmentRef.id
-      transaction.set(appointmentRef, docData)
-      transaction.set(slotRef, {
-        appointmentId,
-        doctorId: docData.doctorId,
-        appointmentDate: docData.appointmentDate,
-        appointmentTime: normalizedAppointmentTime, // Always store in 24-hour format
-        createdAt: nowIso,
-        hospitalId: doctorHospitalId, // Store hospitalId in slot
-      })
+        transaction.set(
+          queueCounterRef,
+          {
+            lastQueueNumber: nextQueueNumber,
+            hospitalId: doctorHospitalId,
+            branchId: branchId || null,
+            doctorId: docData.doctorId,
+            appointmentDate: docData.appointmentDate,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        )
+
+        docData.queueNumber = nextQueueNumber
+        docData.tokenNumber = nextQueueNumber
+        docData.isFcfs = true
+        docData.appointmentTime = `FCFS #${nextQueueNumber}`
+
+        const slotDocId = `fcfs_${docData.doctorId}_${docData.appointmentDate}_${nextQueueNumber}`.replace(/[:\s]/g, "-")
+        const slotRef = firestore.collection("appointmentSlots").doc(slotDocId)
+
+        const appointmentRef = firestore
+          .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
+          .doc()
+        appointmentId = appointmentRef.id
+        transaction.set(appointmentRef, docData)
+        transaction.set(slotRef, {
+          appointmentId,
+          doctorId: docData.doctorId,
+          appointmentDate: docData.appointmentDate,
+          appointmentTime: docData.appointmentTime,
+          queueNumber: nextQueueNumber,
+          isFcfs: true,
+          createdAt: nowIso,
+          hospitalId: doctorHospitalId,
+        })
+      } else {
+        // Standard Slot-based booking:
+        const slotDocId = `${docData.doctorId}_${docData.appointmentDate}_${normalizedAppointmentTime}`.replace(/[:\s]/g, "-")
+        const slotRef = firestore.collection("appointmentSlots").doc(slotDocId)
+        const slotSnap = await transaction.get(slotRef)
+        if (slotSnap.exists) {
+          throw new Error("SLOT_ALREADY_BOOKED")
+        }
+
+        const appointmentRef = firestore
+          .collection(getHospitalCollectionPath(doctorHospitalId, "appointments"))
+          .doc()
+        appointmentId = appointmentRef.id
+        transaction.set(appointmentRef, docData)
+        transaction.set(slotRef, {
+          appointmentId,
+          doctorId: docData.doctorId,
+          appointmentDate: docData.appointmentDate,
+          appointmentTime: normalizedAppointmentTime,
+          createdAt: nowIso,
+          hospitalId: doctorHospitalId,
+        })
+      }
     })
 
     // If patient phone is missing, try to fetch it from the patient record

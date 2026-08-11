@@ -208,6 +208,7 @@ export default function PatientVisitDetailModal({
       subtitle="Complete visit record"
       headerColor="blue"
       zIndex={60}
+      size="2xl"
     >
       <div className="space-y-5 max-h-[calc(95vh-8rem)] overflow-y-auto pr-1">
         <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-start sm:justify-between">

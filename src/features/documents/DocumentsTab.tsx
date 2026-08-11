@@ -831,16 +831,14 @@ export default function DocumentsTab({
 
       {/* Document Viewer Modal */}
       {selectedDocument && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <DocumentViewer
-              document={selectedDocument}
-              onClose={() => setSelectedDocument(null)}
-              onDelete={canDelete ? handleDelete : undefined}
-              canEdit={canEdit}
-              canDelete={canDelete}
-            />
-          </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-sm p-2 sm:p-4 animate-in fade-in duration-200">
+          <DocumentViewer
+            document={selectedDocument}
+            onClose={() => setSelectedDocument(null)}
+            onDelete={canDelete ? handleDelete : undefined}
+            canEdit={canEdit}
+            canDelete={canDelete}
+          />
         </div>
       )}
 

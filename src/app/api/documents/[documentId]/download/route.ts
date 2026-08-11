@@ -54,16 +54,45 @@ export async function GET(
 
     // Generate signed URL (valid for 1 hour)
     const adminApp = admin.app()
-    let storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    if (storageBucket?.startsWith("gs://")) {
-      storageBucket = storageBucket.replace("gs://", "")
+    const projectId = process.env.FIREBASE_PROJECT_ID || "hospital-management-sys-eabb2"
+
+    const candidateBuckets: string[] = []
+    if (documentData.bucketName) {
+      candidateBuckets.push(documentData.bucketName)
     }
-    if (!storageBucket && adminApp.options.storageBucket) {
-      storageBucket = adminApp.options.storageBucket
+    const envBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    if (envBucket) {
+      candidateBuckets.push(envBucket.replace(/^gs:\/\//, ""))
     }
-    const bucket = storageBucket ? getStorage().bucket(storageBucket) : getStorage().bucket()
-    const fileRef = bucket.file(documentData.storagePath)
-    const [url] = await fileRef.getSignedUrl({
+    if (adminApp.options.storageBucket) {
+      candidateBuckets.push(adminApp.options.storageBucket)
+    }
+    candidateBuckets.push(`${projectId}.firebasestorage.app`)
+    candidateBuckets.push(`${projectId}.appspot.com`)
+
+    const uniqueBuckets = Array.from(new Set(candidateBuckets.filter(Boolean)))
+
+    let targetFileRef = null
+    for (const bName of uniqueBuckets) {
+      try {
+        const b = getStorage().bucket(bName)
+        const f = b.file(documentData.storagePath)
+        const [exists] = await f.exists()
+        if (exists) {
+          targetFileRef = f
+          break
+        }
+      } catch (err) {
+        // Try next bucket candidate
+      }
+    }
+
+    if (!targetFileRef) {
+      const defaultBucketName = uniqueBuckets[0] || `${projectId}.appspot.com`
+      targetFileRef = getStorage().bucket(defaultBucketName).file(documentData.storagePath)
+    }
+
+    const [url] = await targetFileRef.getSignedUrl({
       action: "read",
       expires: Date.now() + 3600 * 1000, // 1 hour
     })

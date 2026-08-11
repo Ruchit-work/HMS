@@ -421,16 +421,14 @@ export default function AppointmentDocuments({
 
       {/* Document Viewer Modal */}
       {selectedDocument && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] h-full flex flex-col overflow-y-auto">
-            <DocumentViewer
-              document={selectedDocument}
-              onClose={() => setSelectedDocument(null)}
-              onDelete={canDelete ? handleDelete : undefined}
-              canEdit={canEdit}
-              canDelete={canDelete}
-            />
-          </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-sm p-2 sm:p-4 animate-in fade-in duration-200">
+          <DocumentViewer
+            document={selectedDocument}
+            onClose={() => setSelectedDocument(null)}
+            onDelete={canDelete ? handleDelete : undefined}
+            canEdit={canEdit}
+            canDelete={canDelete}
+          />
         </div>
       )}
 
