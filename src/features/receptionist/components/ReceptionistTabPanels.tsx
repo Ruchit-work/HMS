@@ -9,6 +9,7 @@ import type { HospitalReceptionistSettings } from "@/types/hospital"
 export type ReceptionistTab =
   | "dashboard"
   | "patients"
+  | "add-patient"
   | "doctors"
   | "appointments"
   | "book-appointment"
@@ -53,6 +54,9 @@ export const prefetchReceptionistTab = (tab: ReceptionistTab) => {
       void import("@/features/admin/screens/PatientManagement")
       void import("@/features/admin/screens/PatientAnalytics")
       break
+    case "add-patient":
+      void import("@/features/receptionist/screens/AddPatientPanel")
+      break
     case "doctors":
       void import("@/features/admin/screens/DoctorManagement")
       break
@@ -84,6 +88,10 @@ const DashboardOverview = dynamic(
 const PatientManagement = dynamic(
   () => import("@/features/admin/screens/PatientManagement"),
   { loading: () => <TabSkeleton variant="table" /> }
+)
+const AddPatientPanel = dynamic(
+  () => import("@/features/receptionist/screens/AddPatientPanel"),
+  { loading: () => <TabSkeleton variant="form" /> }
 )
 const PatientAnalytics = dynamic(
   () => import("@/features/admin/screens/PatientAnalytics"),
@@ -251,6 +259,21 @@ export default function ReceptionistTabPanels({
                 )}
               </PanelSuspense>
             </div>
+          </div>
+        </TabPanel>
+      )}
+
+      {visitedTabs.has("add-patient") && (
+        <TabPanel tab="add-patient" activeTab={activeTab}>
+          <div className="rx-section-card p-6">
+            <PanelSuspense tab="add-patient">
+              <AddPatientPanel
+                receptionistBranchId={receptionistBranchId}
+                onNotification={onNotification}
+                onTabChange={onTabChange}
+                fieldConfig={receptionistSettings?.formFields?.addPatient}
+              />
+            </PanelSuspense>
           </div>
         </TabPanel>
       )}

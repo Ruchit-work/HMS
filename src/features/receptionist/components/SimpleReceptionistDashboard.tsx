@@ -47,25 +47,25 @@ export default function SimpleReceptionistDashboard({
 
   const allCards: ModuleCardDef[] = [
     {
+      id: "add-patient",
+      tab: "add-patient",
+      title: "Add New Patient",
+      description: "Register a new patient profile in the hospital database",
+      icon: UserPlus,
+    },
+    {
+      id: "patients",
+      tab: "patients",
+      title: "Patient History",
+      description: "Search and inspect patient profiles & clinical history",
+      icon: Users,
+    },
+    {
       id: "book-appointment",
       tab: "book-appointment",
       title: "Book Appointment",
       description: "Schedule consultations for existing or new patients",
       icon: CalendarPlus,
-    },
-    {
-      id: "patients",
-      tab: "patients",
-      title: "Patient Records",
-      description: "Search and inspect patient profiles & clinical history",
-      icon: Users,
-    },
-    {
-      id: "add-patient",
-      tab: "patients",
-      title: "Add New Patient",
-      description: "Register a new patient profile in the hospital database",
-      icon: UserPlus,
     },
     {
       id: "appointments",

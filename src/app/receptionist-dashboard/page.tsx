@@ -28,7 +28,8 @@ type ActiveTab = ReceptionistTab
 
 const TAB_TITLES: Record<ActiveTab, string> = {
   dashboard: "Dashboard",
-  patients: "Patients",
+  patients: "Patient History",
+  "add-patient": "Add New Patient",
   doctors: "Doctors",
   appointments: "Appointments",
   "admit-requests": "IPD Admissions",
@@ -629,10 +630,7 @@ export default function ReceptionistDashboard() {
               <span className="rx-nav-group-label">Quick Actions</span>
               <div className="mt-1.5">
                 <button
-                  onClick={() => {
-                    if (!bookSubOpen) navigate("book-appointment")
-                    setBookSubOpen(!bookSubOpen)
-                  }}
+                  onClick={() => navigate("book-appointment")}
                   onMouseEnter={() => prefetchReceptionistTab("book-appointment")}
                   className={`rx-nav-item rx-nav-item--cta ${
                     activeTab === "book-appointment" ? "rx-nav-item--active rx-nav-item--cta" : ""
@@ -640,43 +638,7 @@ export default function ReceptionistDashboard() {
                 >
                   <CalendarPlus className="w-4 h-4 shrink-0" />
                   <span>Book Appointment</span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 ml-auto transition-transform duration-200 ${
-                      bookSubOpen ? "rotate-180" : ""
-                    }`}
-                  />
                 </button>
-
-                {bookSubOpen && (
-                  <div className="ml-5 pl-3 mt-1 space-y-0.5 border-l border-slate-200">
-                    <button
-                      onClick={() => {
-                        navigate("book-appointment")
-                        setPatientMode("existing")
-                      }}
-                      className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        activeTab === "book-appointment" && patientMode === "existing"
-                          ? "text-emerald-700 bg-emerald-50"
-                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      Existing Patient
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigate("book-appointment")
-                        setPatientMode("new")
-                      }}
-                      className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        activeTab === "book-appointment" && patientMode === "new"
-                          ? "text-emerald-700 bg-emerald-50"
-                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      New Patient
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}

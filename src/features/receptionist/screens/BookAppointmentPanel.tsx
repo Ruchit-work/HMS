@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useRef } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { createPortal } from "react-dom"
 import { doc, getDoc, getDocs, query, where } from "firebase/firestore"
 import { db } from "@/firebase/config"
@@ -21,7 +21,7 @@ import { isDateBlocked } from "@/shared/utils/analytics/blockedDates"
 import { computeAvailableSlots } from "@/shared/utils/computeAvailableSlots"
 import VoiceInput from "@/shared/ui/VoiceInput"
 import PatientConsentVideo from "@/features/consent/PatientConsentVideo"
-import { Button } from '@/shared/components'
+import { Button } from "@/shared/components"
 import { assertAppointmentSlotAvailable } from "@/shared/utils/checkAppointmentSlot"
 import { useHospitalBillingSettings } from "@/shared/hooks/useHospitalBillingSettings"
 import { useHospitalReceptionistSettings } from "@/shared/hooks/useHospitalReceptionistSettings"
@@ -29,10 +29,9 @@ import { VISIT_TYPE_OPTIONS, type VisitType } from "@/shared/utils/visitTypes"
 import type { BookAppointmentFieldConfig, AddPatientFieldConfig } from "@/types/hospital"
 import { uploadPatientDocuments } from "@/shared/utils/documents/uploadPatientDocuments"
 
-
 interface BookAppointmentPanelProps {
-  patientMode: "existing" | "new"
-  onPatientModeChange: (_mode: "existing" | "new") => void
+  patientMode?: "existing" | "new"
+  onPatientModeChange?: (_mode: "existing" | "new") => void
   onNotification?: (_payload: { type: "success" | "error"; message: string } | null) => void
   /** When false, pause doctor realtime subscription (keep-alive tab optimization). Default true. */
   isActive?: boolean
@@ -77,20 +76,17 @@ const emptyBookingPayment: BookingPaymentData = {
 }
 
 export default function BookAppointmentPanel({
-  patientMode,
-  onPatientModeChange,
   onNotification,
   isActive = true,
   fieldConfig: propFieldConfig,
   addPatientFieldConfig: propAddPatientFieldConfig,
 }: BookAppointmentPanelProps) {
-  const scrollYBeforeModeChange = useRef(0)
   const patientPanelRef = useRef<HTMLDivElement>(null)
   const { activeHospitalId } = useMultiHospital()
   const { frontDeskPaymentMethods } = useHospitalBillingSettings()
   const {
     bookAppointmentFields: hookFieldConfig,
-    addPatientFields: hookAddPatientConfig
+    addPatientFields: hookAddPatientConfig,
   } = useHospitalReceptionistSettings()
   const fieldConfig = propFieldConfig ?? hookFieldConfig
   const addPatientConfig = propAddPatientFieldConfig ?? hookAddPatientConfig
@@ -106,35 +102,25 @@ export default function BookAppointmentPanel({
     enabled: Boolean(isActive && activeHospitalId),
   })
 
-  const handlePatientModeChange = useCallback(
-    (mode: "existing" | "new") => {
-      if (mode === patientMode) return
-      scrollYBeforeModeChange.current = window.scrollY
-      onPatientModeChange(mode)
-    },
-    [patientMode, onPatientModeChange]
-  )
-
-  useLayoutEffect(() => {
-    window.scrollTo({ top: scrollYBeforeModeChange.current, behavior: "auto" })
-  }, [patientMode])
-
   const [bookLoading, setBookLoading] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
   const [bookErrorFade, setBookErrorFade] = useState(false)
 
-  const [searchPatient, setSearchPatient] = useState("")
-  const [showPatientSuggestions, setShowPatientSuggestions] = useState(false)
+  // ── Unified Patient Search & Shared Phone Detection State ──
+  const [phoneSearch, setPhoneSearch] = useState("")
+  const [debouncedPhoneSearch, setDebouncedPhoneSearch] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
+
+  const [selectedPatient, setSelectedPatient] = useState<any | null>(null)
   const [selectedPatientId, setSelectedPatientId] = useState("")
   const [selectedPatientInfo, setSelectedPatientInfo] = useState<any | null>(null)
-  const [patientInfoLoading, setPatientInfoLoading] = useState(false)
-  const [patientInfoError, setPatientInfoError] = useState<string | null>(null)
 
   const [newPatient, setNewPatient] = useState<NewPatientForm>(initialNewPatient)
   const RECEPTIONIST_DEFAULT_PASSWORD = "123456"
   const [newPatientPassword, setNewPatientPassword] = useState(RECEPTIONIST_DEFAULT_PASSWORD)
   const [newPatientPasswordConfirm, setNewPatientPasswordConfirm] = useState(RECEPTIONIST_DEFAULT_PASSWORD)
 
+  // ── Appointment Setup State ──
   const [selectedDoctorId, setSelectedDoctorId] = useState("")
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], [])
   const [searchDoctor, setSearchDoctor] = useState("")
@@ -153,7 +139,6 @@ export default function BookAppointmentPanel({
   const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod | null>(null)
   const [paymentData, setPaymentData] = useState<BookingPaymentData>(emptyBookingPayment)
 
-  // Additional fees/services
   interface AdditionalFee {
     id: string
     description: string
@@ -165,9 +150,23 @@ export default function BookAppointmentPanel({
   const [successData, setSuccessData] = useState<any>(null)
   const [pendingDoctorId, setPendingDoctorId] = useState<string | null>(null)
   const [showDoctorConfirmModal, setShowDoctorConfirmModal] = useState(false)
-  const [bookingDocumentNames, setBookingDocumentNames] = useState<string[]>([])
   const [newPatientAttachedFiles, setNewPatientAttachedFiles] = useState<File[]>([])
   const [newPatientDocumentNames, setNewPatientDocumentNames] = useState<string[]>([])
+
+  // Debounce phone search to avoid premature triggers and unnecessary lag
+  useEffect(() => {
+    if (!phoneSearch.trim()) {
+      setDebouncedPhoneSearch("")
+      setIsSearching(false)
+      return
+    }
+    setIsSearching(true)
+    const timer = setTimeout(() => {
+      setDebouncedPhoneSearch(phoneSearch)
+      setIsSearching(false)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [phoneSearch])
 
   // Sync date to today's date if appointmentDate feature is disabled or empty
   useEffect(() => {
@@ -183,60 +182,93 @@ export default function BookAppointmentPanel({
 
   const selectedDoctorFee =
     selectedDoctor?.consultationFee != null ? Number(selectedDoctor.consultationFee) : null
-  
-  // Calculate total payment amount: consultation fee + additional fees
+
   const totalAdditionalFees = useMemo(() => {
     return additionalFees.reduce((sum, fee) => sum + (fee.amount || 0), 0)
   }, [additionalFees])
-  
+
   const paymentAmount = useMemo(() => {
     return (selectedDoctorFee || 0) + totalAdditionalFees
   }, [selectedDoctorFee, totalAdditionalFees])
 
+  // Filter existing patients matching debounced search input (by phone, name, email, or patient ID)
+  const matchingPatients = useMemo(() => {
+    const q = debouncedPhoneSearch.trim().toLowerCase()
+    if (!q) return []
+    const searchDigits = q.replace(/\D/g, "")
+
+    return patients.filter((p: any) => {
+      const fullName = `${p.firstName || ""} ${p.lastName || ""}`.trim().toLowerCase()
+      const pPhoneDigits = (p.phone || p.phoneNumber || p.contact || "").replace(/\D/g, "")
+      const pId = p.patientId ? String(p.patientId).toLowerCase() : ""
+      const pEmail = (p.email || "").toLowerCase()
+
+      const phoneMatch = searchDigits.length >= 2 && pPhoneDigits.includes(searchDigits)
+      const nameMatch = fullName.includes(q)
+      const idMatch = pId.includes(q)
+      const emailMatch = pEmail.includes(q)
+
+      return phoneMatch || nameMatch || idMatch || emailMatch
+    })
+  }, [patients, debouncedPhoneSearch])
+
+  // Handle typing in primary phone search input
+  const handlePhoneSearchChange = (val: string) => {
+    setPhoneSearch(val)
+    setNewPatient((prev) => ({ ...prev, phone: val }))
+
+    // If an existing patient was selected and user changes phone number, clear selection to avoid stale data
+    if (selectedPatientId || selectedPatient) {
+      setSelectedPatient(null)
+      setSelectedPatientId("")
+      setSelectedPatientInfo(null)
+      setNewPatient({
+        ...initialNewPatient,
+        phone: val,
+      })
+    }
+  }
+
+  // Handle explicit patient selection from optional suggestions
+  const handleSelectPatient = (patient: any) => {
+    setSelectedPatient(patient)
+    setSelectedPatientId(patient.id)
+    setSelectedPatientInfo(patient)
+
+    // Populate patient form fields with selected patient's information
+    setNewPatient({
+      firstName: patient.firstName || "",
+      lastName: patient.lastName || "",
+      email: patient.email || "",
+      phone: patient.phone || patient.phoneNumber || patient.contact || phoneSearch.trim(),
+      gender: patient.gender || "",
+      bloodGroup: patient.bloodGroup || "",
+      dateOfBirth: patient.dateOfBirth || "",
+      address: patient.address || "",
+      heightCm: patient.heightCm || "",
+      weightKg: patient.weightKg || "",
+    })
+  }
+
+  // Clear selected patient to return to new patient registration state
+  const handleClearPatient = () => {
+    setSelectedPatient(null)
+    setSelectedPatientId("")
+    setSelectedPatientInfo(null)
+    setNewPatient({
+      ...initialNewPatient,
+      phone: phoneSearch.trim(),
+    })
+  }
+
   const selectedPatientSnapshot = useMemo(() => {
-    if (patientMode === "existing") {
-      if (selectedPatientInfo) return selectedPatientInfo
-      if (selectedPatientId) {
-        return patients.find((p: any) => p.id === selectedPatientId) || null
-      }
-      return null
+    if (selectedPatientInfo) return selectedPatientInfo
+    if (selectedPatient) return selectedPatient
+    if (selectedPatientId) {
+      return patients.find((p: any) => p.id === selectedPatientId) || null
     }
-
-    if (
-      !newPatient.firstName &&
-      !newPatient.lastName &&
-      !newPatient.email &&
-      !newPatient.phone &&
-      !newPatient.address
-    ) {
-      return null
-    }
-
-    return {
-      firstName: newPatient.firstName,
-      lastName: newPatient.lastName,
-      email: newPatient.email,
-      phone: newPatient.phone,
-      bloodGroup: newPatient.bloodGroup,
-      gender: newPatient.gender,
-      patientId: null,
-      dateOfBirth: newPatient.dateOfBirth,
-      address: newPatient.address,
-    }
-  }, [
-    patientMode,
-    selectedPatientInfo,
-    selectedPatientId,
-    patients,
-    newPatient.firstName,
-    newPatient.lastName,
-    newPatient.email,
-    newPatient.phone,
-    newPatient.address,
-    newPatient.bloodGroup,
-    newPatient.gender,
-    newPatient.dateOfBirth,
-  ])
+    return null
+  }, [selectedPatientInfo, selectedPatient, selectedPatientId, patients])
 
   const paymentMethodLabel = useMemo(() => {
     if (!paymentMethod) return "Not selected"
@@ -263,33 +295,16 @@ export default function BookAppointmentPanel({
   }, [appointmentDate, appointmentTime, fieldConfig?.appointmentTime])
 
   const patientSummaryLabel = useMemo(() => {
-    if (!selectedPatientSnapshot) return patientMode === "existing" ? "Select a patient" : "Fill patient details"
-    const fullName = [selectedPatientSnapshot.firstName, selectedPatientSnapshot.lastName]
-      .filter(Boolean)
-      .join(" ")
-    return fullName || selectedPatientSnapshot.email || "Patient details"
-  }, [patientMode, selectedPatientSnapshot])
+    if (selectedPatientSnapshot) {
+      const fullName = [selectedPatientSnapshot.firstName, selectedPatientSnapshot.lastName]
+        .filter(Boolean)
+        .join(" ")
+      return `${fullName || selectedPatientSnapshot.email || "Patient"} (Existing Patient)`
+    }
+    const fullName = [newPatient.firstName, newPatient.lastName].filter(Boolean).join(" ")
+    return fullName || newPatient.email || "New Patient"
+  }, [selectedPatientSnapshot, newPatient.firstName, newPatient.lastName, newPatient.email])
 
-  const contactSummaryLabel = useMemo(() => {
-    if (!selectedPatientSnapshot) return patientMode === "existing" ? "Not selected" : "Add contact info"
-    return selectedPatientSnapshot.phone || selectedPatientSnapshot.email || "Contact not provided"
-  }, [patientMode, selectedPatientSnapshot])
-
-  const doctorSummaryLabel = useMemo(() => {
-    if (!selectedDoctor) return "Pick a doctor"
-    const name = `${selectedDoctor.firstName || ""} ${selectedDoctor.lastName || ""}`.trim()
-    const specialization = selectedDoctor.specialization ? ` — ${selectedDoctor.specialization}` : ""
-    return `${name}${specialization}`
-  }, [selectedDoctor])
-
-  const symptomSummary = useMemo(() => {
-    if (!symptomCategory) return customSymptom ? customSymptom : "Optional"
-    if (symptomCategory === "custom") return customSymptom || "Custom details pending"
-    const category = SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)
-    return category ? category.label : "Symptoms recorded"
-  }, [symptomCategory, customSymptom])
-
-  // Filter symptoms based on search
   const filteredSymptoms = useMemo(() => {
     if (!symptomSearch.trim()) return SYMPTOM_CATEGORIES
     const searchTerm = symptomSearch.toLowerCase()
@@ -308,34 +323,21 @@ export default function BookAppointmentPanel({
     return isDateBlocked(appointmentDate, blockedDates)
   }, [selectedDoctorId, appointmentDate, doctors])
 
-  const filteredPatients = useMemo(() => {
-    if (!searchPatient) return patients
-    const s = searchPatient.toLowerCase()
-    return patients.filter((p: any) =>
-      `${p.firstName} ${p.lastName}`.toLowerCase().includes(s) ||
-      p.email?.toLowerCase().includes(s) ||
-      p.phone?.toLowerCase().includes(s) ||
-      (p.patientId ? String(p.patientId).toLowerCase().includes(s) : false)
-    )
-  }, [patients, searchPatient])
-
-  // Filter doctors based on symptom category (same logic as patient side)
+  // Filter doctors based on symptom category
   const filteredDoctors = useMemo(() => {
     if (!symptomCategory || symptomCategory === "custom") return doctors
     const category = SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)
     if (!category) return doctors
-    
-    // Normalize doctor specialization - remove special chars and convert to lowercase
+
     const normalize = (str: string) => str.toLowerCase().replace(/[()\/]/g, " ").replace(/\s+/g, " ").trim()
-    
+
     return doctors.filter((doc: any) => {
       const docSpecialization = normalize(doc.specialization || "")
-      if (!docSpecialization) return true // If doctor has no specialization, show them
-      
-      // Specialization mappings: category specialization -> doctor specialization variations
+      if (!docSpecialization) return true
+
       const specializationMappings: Record<string, string[]> = {
-        "general physician": ["family medicine", "family physician", "family medicine specialist", "general practitioner", "gp", "general practice"],
-        "gynecology": ["gynecologist", "obstetrician", "ob gyn", "obstetrician ob gyn", "gynecologist obstetrician", "women's health"],
+        "general physician": ["family medicine", "family physician", "general practitioner", "gp", "general practice"],
+        "gynecology": ["gynecologist", "obstetrician", "ob gyn", "women's health"],
         "psychology": ["psychologist"],
         "psychiatry": ["psychiatrist"],
         "gastroenterology": ["gastroenterologist"],
@@ -344,55 +346,43 @@ export default function BookAppointmentPanel({
         "orthopedic surgery": ["orthopedic", "orthopedics", "orthopedic surgeon"],
         "dermatology": ["dermatologist"],
         "ophthalmology": ["ophthalmologist", "eye specialist"],
-        "pulmonology": ["pulmonologist", "chest specialist", "respiratory"],
+        "pulmonology": ["pulmonologist", "chest specialist"],
         "nephrology": ["nephrologist", "kidney specialist"],
         "urology": ["urologist"],
-        "internal medicine": ["internal medicine", "internal medicine specialist"],
-        "hematology": ["hematologist"],
-        "rheumatology": ["rheumatologist"],
-        "allergy specialist": ["allergy specialist", "allergist"],
+        "internal medicine": ["internal medicine"],
         "pediatrics": ["pediatrician", "child specialist"],
-        "geriatrics": ["geriatrician"],
-        "oncology": ["oncologist", "medical oncologist", "surgical oncologist", "radiation oncologist", "cancer specialist"]
+        "oncology": ["oncologist", "cancer specialist"],
       }
-      
-      // Check if any category specialization matches the doctor's specialization
-      return category.relatedSpecializations.some(categorySpec => {
+
+      return category.relatedSpecializations.some((categorySpec) => {
         const categorySpecLower = normalize(categorySpec)
-        
-        // Direct match - check if doctor specialization contains category spec or vice versa
+
         if (docSpecialization.includes(categorySpecLower) || categorySpecLower.includes(docSpecialization)) {
           return true
         }
-        
-        // Check if doctor specialization matches any variation of the category specialization
+
         const variations = specializationMappings[categorySpecLower] || []
         for (const variation of variations) {
           const variationNormalized = normalize(variation)
-          // Check if doctor specialization contains variation or variation contains doctor specialization
           if (docSpecialization.includes(variationNormalized) || variationNormalized.includes(docSpecialization)) {
             return true
           }
-          // Also check word-by-word matching for better accuracy
           const docWords = docSpecialization.split(/\s+/)
           const varWords = variationNormalized.split(/\s+/)
-          if (varWords.some(word => docWords.includes(word) && word.length > 3)) {
+          if (varWords.some((word) => docWords.includes(word) && word.length > 3)) {
             return true
           }
         }
-        
         return false
       })
     })
   }, [symptomCategory, doctors])
 
-  // Calculate which doctors are recommended vs all others
   const recommendedDoctors = filteredDoctors.length > 0 ? filteredDoctors : (symptomCategory && symptomCategory !== "custom" ? [] : doctors)
   const otherDoctors = symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0
     ? doctors.filter((doc: any) => !recommendedDoctors.some((filtered: any) => filtered.id === doc.id))
     : []
 
-  // Doctor search: applied on top of symptom-filtered list for the card grid
   const visibleDoctors = useMemo(() => {
     const base = symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0
       ? recommendedDoctors
@@ -414,17 +404,15 @@ export default function BookAppointmentPanel({
     )
   }, [searchDoctor, otherDoctors])
 
-  // Clear additional fees when doctor is deselected
   useEffect(() => {
     if (!selectedDoctorId) {
       setAdditionalFees([])
     }
   }, [selectedDoctorId])
 
-  // Handle doctor selection with confirmation for non-recommended doctors
   const handleDoctorSelect = (doctorId: string) => {
     const isRecommended = recommendedDoctors.some((doc: any) => doc.id === doctorId)
-    
+
     if (isRecommended || !symptomCategory || symptomCategory === "custom") {
       setSelectedDoctorId(doctorId)
     } else {
@@ -433,7 +421,6 @@ export default function BookAppointmentPanel({
     }
   }
 
-  // Confirm selection of non-recommended doctor
   const handleConfirmDoctorSelection = () => {
     if (pendingDoctorId) {
       setSelectedDoctorId(pendingDoctorId)
@@ -450,57 +437,28 @@ export default function BookAppointmentPanel({
   )
 
   useEffect(() => {
-    if (patientMode === "new") {
-      setNewPatient(initialNewPatient)
-      setNewPatientPassword(RECEPTIONIST_DEFAULT_PASSWORD)
-      setNewPatientPasswordConfirm(RECEPTIONIST_DEFAULT_PASSWORD)
-      setNewPatientAttachedFiles([])
-      setNewPatientDocumentNames([])
-    } else {
-      setSearchPatient("")
-      setSelectedPatientId("")
-      setSelectedPatientInfo(null)
-    }
-  }, [patientMode])
-
-  useEffect(() => {
-    if (!patientMode || patientMode !== "existing") return
-    if (!selectedPatientId) {
-      setSelectedPatientInfo(null)
-      return
-    }
-
+    if (!selectedPatientId) return
     let cancelled = false
     const load = async () => {
       try {
-        setPatientInfoLoading(true)
-        setPatientInfoError(null)
         const snap = await getDoc(doc(db, "patients", selectedPatientId))
         if (!cancelled) {
           if (snap.exists()) {
-            setSelectedPatientInfo({ id: snap.id, ...snap.data() })
-          } else {
-            setPatientInfoError("Patient not found")
+            const data = { id: snap.id, ...snap.data() }
+            setSelectedPatientInfo(data)
+            setSelectedPatient(data)
           }
         }
       } catch (error) {
-        if (!cancelled) {
-          setPatientInfoError(error instanceof Error ? error.message : "Failed to load patient")
-        }
-      } finally {
-        if (!cancelled) {
-          setPatientInfoLoading(false)
-        }
+        console.error("Failed to load patient info:", error)
       }
     }
-
-    load()
+    void load()
     return () => {
       cancelled = true
     }
-  }, [selectedPatientId, patientMode])
+  }, [selectedPatientId])
 
-  // Recompute slots when doctor schedule fields change — not on every doctors[] identity update
   const selectedDoctorScheduleKey = useMemo(() => {
     if (!selectedDoctor) return ""
     const d = selectedDoctor as any
@@ -549,15 +507,14 @@ export default function BookAppointmentPanel({
     }
   }, [bookError])
 
-  // Calculate dropdown position and close when clicking outside
   useEffect(() => {
     const updateDropdownPosition = () => {
       if (symptomDropdownRef.current && showSymptomDropdown) {
         const rect = symptomDropdownRef.current.getBoundingClientRect()
         setDropdownPosition({
-          top: rect.bottom + 4, // For fixed positioning, use getBoundingClientRect directly
+          top: rect.bottom + 4,
           left: rect.left,
-          width: rect.width
+          width: rect.width,
         })
       }
     }
@@ -565,9 +522,8 @@ export default function BookAppointmentPanel({
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement
       if (showSymptomDropdown) {
-        // Check if click is outside both the container and the portal dropdown
-        const isOutsideContainer = !target.closest('.symptom-dropdown-container')
-        const isOutsideDropdown = !target.closest('[data-symptom-dropdown]')
+        const isOutsideContainer = !target.closest(".symptom-dropdown-container")
+        const isOutsideDropdown = !target.closest("[data-symptom-dropdown]")
         if (isOutsideContainer && isOutsideDropdown) {
           setShowSymptomDropdown(false)
         }
@@ -575,52 +531,40 @@ export default function BookAppointmentPanel({
     }
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && showSymptomDropdown) {
+      if (event.key === "Escape" && showSymptomDropdown) {
         setShowSymptomDropdown(false)
       }
     }
 
     if (showSymptomDropdown) {
-      // Update position immediately and after a tiny delay to ensure DOM is ready
       updateDropdownPosition()
       const timeoutId = setTimeout(updateDropdownPosition, 0)
-      window.addEventListener('resize', updateDropdownPosition)
-      window.addEventListener('scroll', updateDropdownPosition, true)
-      document.addEventListener('mousedown', handleClickOutside)
-      document.addEventListener('keydown', handleEscape)
-      
+      window.addEventListener("resize", updateDropdownPosition)
+      window.addEventListener("scroll", updateDropdownPosition, true)
+      document.addEventListener("mousedown", handleClickOutside)
+      document.addEventListener("keydown", handleEscape)
+
       return () => {
         clearTimeout(timeoutId)
-        window.removeEventListener('resize', updateDropdownPosition)
-        window.removeEventListener('scroll', updateDropdownPosition, true)
-        document.removeEventListener('mousedown', handleClickOutside)
-        document.removeEventListener('keydown', handleEscape)
+        window.removeEventListener("resize", updateDropdownPosition)
+        window.removeEventListener("scroll", updateDropdownPosition, true)
+        document.removeEventListener("mousedown", handleClickOutside)
+        document.removeEventListener("keydown", handleEscape)
       }
     }
   }, [showSymptomDropdown])
 
-  const handleExistingPatientSearch = (value: string) => {
-    setSearchPatient(value)
-    setShowPatientSuggestions(value.trim().length > 0)
-    // Immediate match for exact matches
-    const valLower = value.toLowerCase()
-    const match = patients.find((p: any) => {
-      const label = `${p.firstName} ${p.lastName} — ${p.email}`
-      if (label.toLowerCase() === valLower) return true
-      if (p.patientId && String(p.patientId).toLowerCase() === valLower) return true
-      return false
-    })
-    setSelectedPatientId(match ? match.id : "")
-  }
-
   const resetBookingForm = useCallback(() => {
-    onPatientModeChange("existing")
-    setSearchPatient("")
+    setSelectedPatient(null)
     setSelectedPatientId("")
     setSelectedPatientInfo(null)
+    setPhoneSearch("")
+    setDebouncedPhoneSearch("")
     setNewPatient(initialNewPatient)
     setNewPatientPassword(RECEPTIONIST_DEFAULT_PASSWORD)
     setNewPatientPasswordConfirm(RECEPTIONIST_DEFAULT_PASSWORD)
+    setNewPatientAttachedFiles([])
+    setNewPatientDocumentNames([])
     setSelectedDoctorId("")
     setSearchDoctor("")
     setAppointmentDate(todayStr)
@@ -633,7 +577,7 @@ export default function BookAppointmentPanel({
     setAdditionalFees([])
     setPaymentData(emptyBookingPayment)
     setAvailableSlots([])
-  }, [onPatientModeChange, todayStr])
+  }, [todayStr])
 
   const createPatientForBooking = useCallback(async () => {
     return authedFetchJson<{ id: string; patientId?: string }>(
@@ -641,63 +585,59 @@ export default function BookAppointmentPanel({
       {
         method: "POST",
         body: JSON.stringify({
-        patientData: {
-          ...newPatient,
-          status: "active",
-          createdBy: "receptionist",
-          createdAt: new Date().toISOString(),
-        },
-        password: newPatientPassword,
-      }),
+          patientData: {
+            ...newPatient,
+            phone: newPatient.phone || phoneSearch.trim(),
+            status: "active",
+            createdBy: "receptionist",
+            createdAt: new Date().toISOString(),
+          },
+          password: newPatientPassword,
+        }),
       },
       "Failed to create patient"
     )
-  }, [newPatient, newPatientPassword])
+  }, [newPatient, newPatientPassword, phoneSearch])
 
   const createAppointment = useCallback(
     async (patientId: string, patientPayload: any) => {
       const doctor = doctors.find((x: any) => x.id === selectedDoctorId)
-      
-      // Try multiple phone number fields from patient data
-      const patientPhone = patientPayload.phone || 
-                          patientPayload.phoneNumber || 
-                          patientPayload.contact ||
-                          patientPayload.mobile ||
-                          ""
-      
-      // Generate chiefComplaint from symptomCategory or customSymptom
+
+      const patientPhone =
+        patientPayload?.phone ||
+        patientPayload?.phoneNumber ||
+        patientPayload?.contact ||
+        patientPayload?.mobile ||
+        phoneSearch.trim() ||
+        ""
+
       let chiefComplaint = ""
       if (customSymptom && customSymptom.trim().length > 0) {
-        // Use custom symptom if provided
         chiefComplaint = customSymptom.trim()
       } else if (symptomCategory && symptomCategory !== "custom" && symptomCategory.trim().length > 0) {
-        // Find the symptom category label
         const category = SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)
         if (category) {
           chiefComplaint = category.label
         }
       }
-      // If neither is provided, chiefComplaint will be empty string (API will handle it)
-      
-      // Generate medical history from patient data
+
       let medicalHistory = ""
       const historyParts: string[] = []
-      if (patientPayload.allergies && patientPayload.allergies.trim().length > 0) {
+      if (patientPayload?.allergies && patientPayload.allergies.trim().length > 0) {
         historyParts.push(`Allergies: ${patientPayload.allergies.trim()}`)
       }
-      if (patientPayload.currentMedications && patientPayload.currentMedications.trim().length > 0) {
+      if (patientPayload?.currentMedications && patientPayload.currentMedications.trim().length > 0) {
         historyParts.push(`Current medications: ${patientPayload.currentMedications.trim()}`)
       }
       medicalHistory = historyParts.join(". ")
-      
+
       const appointmentData = {
         patientId,
-        patientName: `${patientPayload.firstName || ""} ${patientPayload.lastName || ""}`.trim(),
-        patientEmail: patientPayload.email || "",
+        patientName: `${patientPayload?.firstName || ""} ${patientPayload?.lastName || ""}`.trim(),
+        patientEmail: patientPayload?.email || "",
         patientPhone: patientPhone,
-        // Also include alternative phone fields for fallback
-        patientPhoneNumber: patientPayload.phoneNumber || patientPayload.phone || "",
-        patientContact: patientPayload.contact || patientPayload.mobile || "",
+        patientPhoneNumber: patientPayload?.phoneNumber || patientPayload?.phone || patientPhone,
+        patientContact: patientPayload?.contact || patientPayload?.mobile || patientPhone,
         doctorId: doctor?.id,
         doctorName: `${doctor?.firstName || ""} ${doctor?.lastName || ""}`.trim(),
         doctorSpecialization: doctor?.specialization || "",
@@ -711,15 +651,18 @@ export default function BookAppointmentPanel({
         paymentAmount: paymentAmount,
         paymentMethod: paymentMethod,
         paymentType: "full",
-        // Include additional fees if any
-        additionalFees: additionalFees.length > 0 ? additionalFees.map(fee => ({
-          description: fee.description,
-          amount: fee.amount,
-        })) : undefined,
+        additionalFees:
+          additionalFees.length > 0
+            ? additionalFees.map((fee) => ({
+                description: fee.description,
+                amount: fee.amount,
+              }))
+            : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: "receptionist",
       }
+
       await authedFetchJson(
         "/api/receptionist/create-appointment",
         {
@@ -730,7 +673,20 @@ export default function BookAppointmentPanel({
       )
       return appointmentData
     },
-    [appointmentDate, appointmentTime, doctors, paymentAmount, paymentMethod, selectedDoctorId, symptomCategory, customSymptom, additionalFees, visitType]
+    [
+      appointmentDate,
+      appointmentTime,
+      doctors,
+      paymentAmount,
+      paymentMethod,
+      selectedDoctorId,
+      symptomCategory,
+      customSymptom,
+      additionalFees,
+      visitType,
+      fieldConfig?.appointmentTime,
+      phoneSearch,
+    ]
   )
 
   const preventDuplicateAppointment = useCallback(
@@ -760,6 +716,7 @@ export default function BookAppointmentPanel({
       setBookError(null)
 
       if (!selectedDoctorId) throw new Error("Please select a doctor")
+
       if (fieldConfig?.appointmentTime === false) {
         if (fieldConfig?.appointmentDate !== false && !appointmentDate) {
           throw new Error("Please select an appointment date")
@@ -777,12 +734,23 @@ export default function BookAppointmentPanel({
       if (isSelectedDateBlocked) throw new Error("Doctor is not available on the selected date")
       if (!paymentMethod) throw new Error("Please select a payment method")
 
-      let patientId = selectedPatientId
-      let patientPayload: any = null
+      let finalPatientId = ""
+      let finalPatientPayload: any = null
 
-      if (patientMode === "new") {
+      // ── STRICT SUBMIT SEPARATION ──
+      if (selectedPatientId) {
+        // PATH 1: Existing Patient selected
+        // SKIP createPatient API completely!
+        finalPatientId = selectedPatientId
+        finalPatientPayload = selectedPatientInfo || selectedPatient || patients.find((x: any) => x.id === selectedPatientId)
+      } else {
+        // PATH 2: New Patient (either 0 matches or receptionist didn't select existing suggestion)
+        // EXECUTE createPatient API
         if (!newPatient.firstName || !newPatient.lastName) {
-          throw new Error("Fill first name and last name")
+          throw new Error("Please enter first name and last name for the patient")
+        }
+        if (!newPatient.phone && !phoneSearch.trim()) {
+          throw new Error("Please enter phone number")
         }
         if (newPatient.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatient.email.trim())) {
           throw new Error("Please enter a valid email address")
@@ -795,31 +763,30 @@ export default function BookAppointmentPanel({
             throw new Error("Passwords do not match")
           }
         }
-        // Create patient directly without OTP verification (receptionist flow)
-        const result = await createPatientForBooking()
-        patientId = result.id
-        patientPayload = { ...newPatient, patientId: result.patientId }
 
-        if (newPatientAttachedFiles.length > 0 && result.id) {
-          const uploadRes = await uploadPatientDocuments({
-            files: newPatientAttachedFiles,
-            patientUid: result.id,
-            patientId: result.patientId || result.id,
-          })
-          if (uploadRes.errors.length > 0) {
-            console.warn("[BookAppointmentPanel] Patient documents upload result:", uploadRes)
-          }
+        const result = await createPatientForBooking()
+        finalPatientId = result.id
+        finalPatientPayload = {
+          ...newPatient,
+          phone: newPatient.phone || phoneSearch.trim(),
+          patientId: result.patientId || result.id,
         }
-      } else {
-        if (!patientId) {
-          throw new Error("Please select an existing patient")
-        }
-        const patient = selectedPatientInfo || patients.find((x: any) => x.id === patientId)
-        patientPayload = patient
       }
 
-      await preventDuplicateAppointment(patientId)
-      const appointmentData = await createAppointment(patientId, patientPayload)
+      // Handle attached documents for either existing or new patient UID
+      if (newPatientAttachedFiles.length > 0 && finalPatientId) {
+        const uploadRes = await uploadPatientDocuments({
+          files: newPatientAttachedFiles,
+          patientUid: finalPatientId,
+          patientId: finalPatientPayload?.patientId || finalPatientId,
+        })
+        if (uploadRes.errors.length > 0) {
+          console.warn("[BookAppointmentPanel] Patient documents upload result:", uploadRes)
+        }
+      }
+
+      await preventDuplicateAppointment(finalPatientId)
+      const appointmentData = await createAppointment(finalPatientId, finalPatientPayload)
 
       const txnId = `RCPT${Date.now()}`
       setSuccessData({
@@ -864,8 +831,7 @@ export default function BookAppointmentPanel({
 
   return (
     <div className="space-y-4 min-w-0 overflow-x-hidden [overflow-anchor:none]">
-
-      {/* ── Compact page header ── */}
+      {/* Header Banner */}
       <div className="rx-section-card">
         <div className="rx-section-header flex-wrap gap-y-3">
           <div className="min-w-0">
@@ -875,32 +841,6 @@ export default function BookAppointmentPanel({
               {appointmentDate && selectedDoctorId && availableSlots.length > 0 && ` · ${availableSlots.length} slots open`}
               {paymentAmount > 0 && ` · ₹${new Intl.NumberFormat("en-IN").format(paymentAmount)} due`}
             </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-              <button
-                type="button"
-                onClick={() => handlePatientModeChange("existing")}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                  patientMode === "existing"
-                    ? "bg-white text-cyan-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                Existing Patient
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePatientModeChange("new")}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                  patientMode === "new"
-                    ? "bg-white text-cyan-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                New Patient
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -918,457 +858,447 @@ export default function BookAppointmentPanel({
         </div>
       )}
 
-      {/* ── Main workspace: guided steps (left) + live summary (right) ── */}
-      <div className="grid gap-4 xl:grid-cols-[1fr_300px] min-w-0 items-start">
-
-        {/* ── LEFT: Step-by-step booking ── */}
-        <div className="space-y-4 min-w-0">
-
-          {/* ── Visit Type Selection (OPD / IPD) ── */}
-          {fieldConfig?.visitType !== false && (
-            <div className="rx-section-card p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                    Visit Type
-                  </label>
-                  <p className="text-xs text-slate-400 mt-0.5">Select Outpatient or Inpatient visit</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:w-64">
-                  {VISIT_TYPE_OPTIONS.map((vt) => {
-                    const isSelected = visitType === vt.value
-                    return (
-                      <button
-                        key={vt.value}
-                        type="button"
-                        onClick={() => setVisitType(vt.value)}
-                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
-                          isSelected
-                            ? "border-cyan-600 bg-cyan-50/90 text-cyan-900 ring-2 ring-cyan-500/20 font-bold shadow-xs"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span className="text-xs font-bold">{vt.shortLabel}</span>
-                        <span className="text-[10px] text-slate-500 mt-0.5">{vt.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
+      {/* Main Workspace */}
+      <div className="space-y-4 min-w-0">
+        {/* Visit Type */}
+        {fieldConfig?.visitType !== false && (
+          <div className="rx-section-card p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                  Visit Type
+                </label>
+                <p className="text-xs text-slate-400 mt-0.5">Select Outpatient or Inpatient visit</p>
               </div>
-            </div>
-          )}
-
-          {/* ── STEP 1: Patient ── */}
-          <div className="rx-section-card">
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
-                selectedPatientSnapshot ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
-              }`}>
-                {selectedPatientSnapshot ? (
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                ) : "1"}
-              </span>
-              <p className="text-sm font-semibold text-slate-900">Patient</p>
-              {selectedPatientSnapshot && (
-                <span className="ml-auto text-xs text-emerald-600 font-medium truncate max-w-[200px]">
-                  {patientSummaryLabel}
-                </span>
-              )}
-            </div>
-
-            <div ref={patientPanelRef} className="p-4">
-              <div className="relative min-h-[20rem]">
-                {/* Existing patient panel */}
-                <div
-                  className={`absolute inset-0 space-y-3 overflow-y-auto pr-1 transition-opacity duration-150 ${
-                    patientMode === "existing" ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
-                  }`}
-                  aria-hidden={patientMode !== "existing"}
-                >
-                  <div className="relative flex items-center">
-                    <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      value={searchPatient}
-                      onChange={(e) => handleExistingPatientSearch(e.target.value)}
-                      placeholder="Name, email, phone, or patient ID…"
-                      className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-12 py-2.5 text-sm shadow-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                    />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
-                      <div className="pointer-events-auto">
-                        <VoiceInput
-                          onTranscript={(text) => {
-                            handleExistingPatientSearch(text)
-                            setShowPatientSuggestions(true)
-                          }}
-                          language="en-IN"
-                          useMedicalModel={false}
-                          allowGujarati
-                          variant="inline"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative w-full">
-                    {showPatientSuggestions && searchPatient.trim().length > 0 && (
-                      <div
-                        className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onBlur={() => setShowPatientSuggestions(false)}
-                      >
-                        {filteredPatients.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-slate-500">No results found</div>
-                        ) : (
-                          filteredPatients.slice(0, 10).map((p: any) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="w-full px-4 py-3 text-left text-sm transition hover:bg-slate-50 border-b border-slate-100 last:border-0"
-                              onClick={() => {
-                                setSelectedPatientId(p.id)
-                                setSearchPatient(`${p.firstName} ${p.lastName} — ${p.email}`)
-                                setShowPatientSuggestions(false)
-                              }}
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">
-                                  {p.firstName?.charAt(0)}{p.lastName?.charAt(0)}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-slate-900 truncate">{p.firstName} {p.lastName}</p>
-                                  <p className="text-xs text-slate-500 truncate">{p.email}{p.phone ? ` · ${p.phone}` : ""}</p>
-                                  {p.patientId && <p className="text-[10px] font-mono text-slate-400">#{p.patientId}</p>}
-                                </div>
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {selectedPatientId && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      {patientInfoLoading && <p className="text-xs text-slate-500">Loading patient details…</p>}
-                      {patientInfoError && <p className="text-xs text-red-600">{patientInfoError}</p>}
-                      {selectedPatientInfo && !patientInfoLoading && !patientInfoError && (
-                        <div className="space-y-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center text-sm font-bold text-cyan-700 flex-shrink-0">
-                              {selectedPatientInfo.firstName?.charAt(0)}{selectedPatientInfo.lastName?.charAt(0)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-slate-900">{selectedPatientInfo.firstName} {selectedPatientInfo.lastName}</p>
-                              <div className="flex flex-wrap gap-1.5 mt-1">
-                                {selectedPatientInfo.bloodGroup && (
-                                  <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-1.5 py-0.5">{selectedPatientInfo.bloodGroup}</span>
-                                )}
-                                {selectedPatientInfo.gender && (
-                                  <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-md px-1.5 py-0.5 capitalize">{selectedPatientInfo.gender}</span>
-                                )}
-                                {selectedPatientInfo.phone && (
-                                  <span className="text-xs text-slate-600 bg-white border border-slate-200 rounded-md px-1.5 py-0.5">{selectedPatientInfo.phone}</span>
-                                )}
-                                {selectedPatientInfo.patientId && (
-                                  <span className="text-[10px] font-mono text-slate-400 bg-white border border-slate-200 rounded-md px-1.5 py-0.5">#{selectedPatientInfo.patientId}</span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => { setSelectedPatientId(""); setSearchPatient(""); setSelectedPatientInfo(null) }}
-                              className="flex-shrink-0 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"
-                              title="Clear patient"
-                            >
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                          {(selectedPatientInfo.allergies || selectedPatientInfo.currentMedications) && (
-                            <div className="flex flex-wrap gap-2">
-                              {selectedPatientInfo.allergies && (
-                                <span className="inline-flex items-center gap-1 text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-md px-2 py-0.5">
-                                  <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                  Allergies: {selectedPatientInfo.allergies}
-                                </span>
-                              )}
-                              {selectedPatientInfo.currentMedications && (
-                                <span className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-md px-2 py-0.5">
-                                  Meds: {selectedPatientInfo.currentMedications}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          <div className="pt-3 border-t border-slate-200">
-                            <PatientConsentVideo
-                              patientId={selectedPatientInfo.patientId || selectedPatientId}
-                              patientUid={selectedPatientId}
-                              patientName={`${selectedPatientInfo.firstName || ""} ${selectedPatientInfo.lastName || ""}`.trim()}
-                              optional={true}
-                              compact={true}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* New patient panel */}
-                <div
-                  className={`absolute inset-0 space-y-3 overflow-y-auto pr-1 transition-opacity duration-150 ${
-                    patientMode === "new" ? "z-10 opacity-100" : "pointer-events-none z-0 opacity-0"
-                  }`}
-                  aria-hidden={patientMode !== "new"}
-                >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {/* System Required Fields */}
-                    <input
-                      placeholder="First name *"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                      value={newPatient.firstName}
-                      onChange={(e) => setNewPatient((v) => ({ ...v, firstName: e.target.value }))}
-                    />
-                    <input
-                      placeholder="Last name *"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                      value={newPatient.lastName}
-                      onChange={(e) => setNewPatient((v) => ({ ...v, lastName: e.target.value }))}
-                    />
-                    <input
-                      placeholder="Phone *"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                      value={newPatient.phone}
-                      onChange={(e) => setNewPatient((v) => ({ ...v, phone: e.target.value }))}
-                    />
-
-                    {/* Password Credentials */}
-                    {addPatientConfig?.passwordFields !== false && (
-                      <>
-                        <div className="space-y-1">
-                          <input
-                            placeholder="Password (default: 123456)"
-                            type="password"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                            value={newPatientPassword}
-                            onChange={(e) => setNewPatientPassword(e.target.value)}
-                          />
-                          <p className="text-[10px] text-slate-400">Min 6 chars. Patient can change later.</p>
-                        </div>
-                        <input
-                          placeholder="Confirm password"
-                          type="password"
-                          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                          value={newPatientPasswordConfirm}
-                          onChange={(e) => setNewPatientPasswordConfirm(e.target.value)}
-                        />
-                      </>
-                    )}
-
-                    {/* Account Status */}
-                    {addPatientConfig?.status !== false && (
-                      <select
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                        value={(newPatient as any).status || "active"}
-                        onChange={(e) => setNewPatient((v: any) => ({ ...v, status: e.target.value }))}
-                      >
-                        <option value="active">Status: Active</option>
-                        <option value="inactive">Status: Inactive</option>
-                      </select>
-                    )}
-
-                    {/* Configurable Optional Fields matching Add Patient Settings */}
-                    {addPatientConfig?.email !== false && (
-                      <input
-                        placeholder="Email (optional)"
-                        type="email"
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                        value={newPatient.email}
-                        onChange={(e) => setNewPatient((v) => ({ ...v, email: e.target.value }))}
-                      />
-                    )}
-                    {addPatientConfig?.gender !== false && (
-                      <select
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                        value={newPatient.gender}
-                        onChange={(e) => setNewPatient((v) => ({ ...v, gender: e.target.value }))}
-                      >
-                        <option value="">Gender</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    )}
-                    {addPatientConfig?.dateOfBirth !== false && (
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-500">Date of Birth</label>
-                        <input
-                          type="date"
-                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                          max={todayStr}
-                          value={newPatient.dateOfBirth}
-                          onChange={(e) => setNewPatient((v) => ({ ...v, dateOfBirth: e.target.value }))}
-                        />
-                      </div>
-                    )}
-                    {addPatientConfig?.bloodGroup !== false && (
-                      <select
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                        value={newPatient.bloodGroup}
-                        onChange={(e) => setNewPatient((v) => ({ ...v, bloodGroup: e.target.value }))}
-                      >
-                        <option value="">Blood group</option>
-                        {bloodGroups.map((bg) => (
-                          <option key={bg} value={bg}>{bg}</option>
-                        ))}
-                      </select>
-                    )}
-                    {addPatientConfig?.heightWeight !== false && (
-                      <>
-                        <input
-                          placeholder="Height (cm) — e.g. 170"
-                          type="number"
-                          inputMode="decimal"
-                          min={1}
-                          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                          value={newPatient.heightCm}
-                          onChange={(e) => setNewPatient((v) => ({ ...v, heightCm: e.target.value }))}
-                        />
-                        <input
-                          placeholder="Weight (kg) — e.g. 65"
-                          type="number"
-                          inputMode="decimal"
-                          min={1}
-                          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                          value={newPatient.weightKg}
-                          onChange={(e) => setNewPatient((v) => ({ ...v, weightKg: e.target.value }))}
-                        />
-                      </>
-                    )}
-                    {addPatientConfig?.address !== false && (
-                      <input
-                        placeholder="Address"
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100 sm:col-span-2"
-                        value={newPatient.address}
-                        onChange={(e) => setNewPatient((v) => ({ ...v, address: e.target.value }))}
-                      />
-                    )}
-                    {addPatientConfig?.documents !== false && (
-                      <div className="sm:col-span-2 space-y-2 pt-2 border-t border-slate-100">
-                        <label className="block text-xs font-medium text-slate-600">Patient Documents & ID Proof</label>
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/*,.pdf,.doc,.docx"
-                          onChange={(e) => {
-                            const files = e.target.files
-                            if (files && files.length > 0) {
-                              const fileArray = Array.from(files)
-                              setNewPatientAttachedFiles((prev) => [...prev, ...fileArray])
-                              setNewPatientDocumentNames((prev) => [...prev, ...fileArray.map((f) => f.name)])
-                            }
-                          }}
-                          className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer rounded-xl border border-slate-200 bg-white p-2"
-                        />
-                        {newPatientDocumentNames.length > 0 && (
-                          <ul className="space-y-1 mt-2">
-                            {newPatientDocumentNames.map((name, idx) => (
-                              <li key={idx} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-                                <span className="truncate max-w-[240px]">📄 {name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setNewPatientAttachedFiles((prev) => prev.filter((_, i) => i !== idx))
-                                    setNewPatientDocumentNames((prev) => prev.filter((_, i) => i !== idx))
-                                  }}
-                                  className="text-slate-400 hover:text-red-500 font-bold ml-2"
-                                >
-                                  ×
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 gap-2 sm:w-64">
+                {VISIT_TYPE_OPTIONS.map((vt) => {
+                  const isSelected = visitType === vt.value
+                  return (
+                    <button
+                      key={vt.value}
+                      type="button"
+                      onClick={() => setVisitType(vt.value)}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all ${
+                        isSelected
+                          ? "border-cyan-600 bg-cyan-50/90 text-cyan-900 ring-2 ring-cyan-500/20 font-bold shadow-xs"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="text-xs font-bold">{vt.shortLabel}</span>
+                      <span className="text-[10px] text-slate-500 mt-0.5">{vt.label}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
+        )}
 
-          {/* ── STEP 2: Visit Setup ── */}
-          <div className="rx-section-card">
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
-                selectedDoctorId && appointmentDate && (fieldConfig?.appointmentTime === false || appointmentTime) ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
-              }`}>
-                {selectedDoctorId && appointmentDate && (fieldConfig?.appointmentTime === false || appointmentTime) ? (
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                ) : "2"}
+        {/* STEP 1: Unified Patient Identification & Selection */}
+        <div className="rx-section-card">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+            <span
+              className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
+                selectedPatientSnapshot ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
+              }`}
+            >
+              {selectedPatientSnapshot ? (
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                "1"
+              )}
+            </span>
+            <p className="text-sm font-semibold text-slate-900">Patient Identification</p>
+            {selectedPatientSnapshot && (
+              <span className="ml-auto text-xs text-emerald-600 font-medium truncate max-w-[260px]">
+                {patientSummaryLabel}
               </span>
-              <p className="text-sm font-semibold text-slate-900">Visit Setup</p>
-              {selectedDoctorId && appointmentDate && (fieldConfig?.appointmentTime === false || appointmentTime) && (
-                <span className="ml-auto text-xs text-emerald-600 font-medium">{appointmentSummaryLabel}</span>
+            )}
+          </div>
+
+          <div ref={patientPanelRef} className="p-4 space-y-4">
+            {/* Primary Contact / Phone Number Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                Contact Number <span className="text-red-500">*</span>
+              </label>
+              <div className="relative flex items-center">
+                <svg
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  value={phoneSearch}
+                  onChange={(e) => handlePhoneSearchChange(e.target.value)}
+                  placeholder="Enter patient phone number (e.g. 7359057367)…"
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-20 py-2.5 text-sm shadow-xs focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100 font-medium"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  {isSearching && (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
+                  )}
+                  <VoiceInput
+                    onTranscript={(text) => handlePhoneSearchChange(text)}
+                    language="en-IN"
+                    useMedicalModel={false}
+                    allowGujarati
+                    variant="inline"
+                  />
+                </div>
+              </div>
+
+              {/* Optional Selectable Suggestions if matching patients exist */}
+              {debouncedPhoneSearch.trim().length >= 2 && matchingPatients.length > 0 && !selectedPatientId && (
+                <div className="rounded-xl border border-slate-200 bg-white shadow-md overflow-hidden divide-y divide-slate-100 my-3">
+                  <div className="px-3 py-2 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                    <span>Existing patients with this contact number ({matchingPatients.length}):</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Optional — click to select existing patient</span>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto divide-y divide-slate-100">
+                    {matchingPatients.map((p: any) => {
+                      const pName = `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Unnamed Patient"
+                      const pId = p.patientId ? `#${p.patientId}` : `#${p.id.slice(0, 6)}`
+                      const pPhone = p.phone || p.phoneNumber || p.contact || phoneSearch
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleSelectPatient(p)}
+                          className="w-full px-4 py-2.5 text-left transition hover:bg-cyan-50/70 flex items-center justify-between group"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-2 h-2 rounded-full bg-cyan-600 group-hover:scale-125 transition-transform" />
+                            <span className="text-xs font-bold text-slate-900 group-hover:text-cyan-800">
+                              {pName}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                              Patient ID: {pId}
+                            </span>
+                          </div>
+                          <span className="text-xs font-mono text-slate-600">{pPhone}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Selected Existing Patient Compact Indicator */}
+              {selectedPatientId && (
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-3.5 flex items-center justify-between my-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                      ✓
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-emerald-700">Existing Patient</span>
+                        {selectedPatientSnapshot?.patientId && (
+                          <span className="text-[10px] font-mono text-slate-500 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
+                            Patient ID: #{selectedPatientSnapshot.patientId}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">
+                        {selectedPatientSnapshot?.firstName} {selectedPatientSnapshot?.lastName}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearPatient}
+                    className="text-xs font-semibold text-cyan-700 bg-white border border-cyan-200 hover:bg-cyan-100 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Change Patient
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="p-4 space-y-5 overflow-visible">
-              {fieldConfig?.symptoms !== false && (
-                <div className="relative">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chief Complaint / Symptoms</label>
-                  <div className="mt-2 relative symptom-dropdown-container">
-                    {/* Searchable Dropdown */}
-                    <div
-                      ref={symptomDropdownRef}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus-within:border-cyan-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-cyan-100 cursor-pointer"
-                      onClick={() => {
-                        if (!showSymptomDropdown && symptomDropdownRef.current) {
-                          // Calculate position before opening
-                          const rect = symptomDropdownRef.current.getBoundingClientRect()
-                          setDropdownPosition({
-                            top: rect.bottom + 4,
-                            left: rect.left,
-                            width: rect.width
-                          })
-                        }
-                        setShowSymptomDropdown(!showSymptomDropdown)
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className={symptomCategory ? "text-slate-900" : "text-slate-400"}>
-                          {symptomCategory === "custom"
-                            ? "Custom…"
-                            : symptomCategory
-                            ? SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)?.label || "Select symptoms"
-                            : "Select symptoms — filters recommended doctors"}
-                        </span>
-                        <svg
-                          className={`w-4 h-4 text-slate-500 transition-transform ${showSymptomDropdown ? "rotate-180" : ""}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
+            {/* Patient Details Form (Always Visible by Default) */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-4 mt-2">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  {selectedPatientId ? "Existing Patient Record" : "Patient Profile Details"}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {selectedPatientId ? "Selected existing patient profile" : "Complete details below if registering a new patient"}
+                </span>
+              </div>
 
-                    {/* Dropdown Menu - Using Portal for proper z-index */}
-                    {showSymptomDropdown && typeof window !== 'undefined' && createPortal(
-                      <div 
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1">First Name *</label>
+                  <input
+                    placeholder="First name *"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                    value={newPatient.firstName}
+                    onChange={(e) => setNewPatient((v) => ({ ...v, firstName: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1">Last Name *</label>
+                  <input
+                    placeholder="Last name *"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                    value={newPatient.lastName}
+                    onChange={(e) => setNewPatient((v) => ({ ...v, lastName: e.target.value }))}
+                  />
+                </div>
+
+                {!selectedPatientId && addPatientConfig?.passwordFields !== false && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-500 block">Password</label>
+                      <input
+                        placeholder="Password"
+                        type="password"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                        value={newPatientPassword}
+                        onChange={(e) => setNewPatientPassword(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-500 block">Confirm Password</label>
+                      <input
+                        placeholder="Confirm password"
+                        type="password"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                        value={newPatientPasswordConfirm}
+                        onChange={(e) => setNewPatientPasswordConfirm(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {addPatientConfig?.email !== false && (
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Email Address</label>
+                    <input
+                      placeholder="Email (optional)"
+                      type="email"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                      value={newPatient.email}
+                      onChange={(e) => setNewPatient((v) => ({ ...v, email: e.target.value }))}
+                    />
+                  </div>
+                )}
+                {addPatientConfig?.gender !== false && (
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Gender</label>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                      value={newPatient.gender}
+                      onChange={(e) => setNewPatient((v) => ({ ...v, gender: e.target.value }))}
+                    >
+                      <option value="">Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                )}
+                {addPatientConfig?.dateOfBirth !== false && (
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Date of Birth</label>
+                    <input
+                      type="date"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                      max={todayStr}
+                      value={newPatient.dateOfBirth}
+                      onChange={(e) => setNewPatient((v) => ({ ...v, dateOfBirth: e.target.value }))}
+                    />
+                  </div>
+                )}
+                {addPatientConfig?.bloodGroup !== false && (
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Blood Group</label>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                      value={newPatient.bloodGroup}
+                      onChange={(e) => setNewPatient((v) => ({ ...v, bloodGroup: e.target.value }))}
+                    >
+                      <option value="">Blood group</option>
+                      {bloodGroups.map((bg) => (
+                        <option key={bg} value={bg}>
+                          {bg}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {addPatientConfig?.heightWeight !== false && (
+                  <>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Height (cm)</label>
+                      <input
+                        placeholder="Height (cm) — e.g. 170"
+                        type="number"
+                        inputMode="decimal"
+                        min={1}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                        value={newPatient.heightCm}
+                        onChange={(e) => setNewPatient((v) => ({ ...v, heightCm: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 block mb-1">Weight (kg)</label>
+                      <input
+                        placeholder="Weight (kg) — e.g. 65"
+                        type="number"
+                        inputMode="decimal"
+                        min={1}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                        value={newPatient.weightKg}
+                        onChange={(e) => setNewPatient((v) => ({ ...v, weightKg: e.target.value }))}
+                      />
+                    </div>
+                  </>
+                )}
+                {addPatientConfig?.address !== false && (
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Address</label>
+                    <input
+                      placeholder="Address"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none"
+                      value={newPatient.address}
+                      onChange={(e) => setNewPatient((v) => ({ ...v, address: e.target.value }))}
+                    />
+                  </div>
+                )}
+                {addPatientConfig?.documents !== false && (
+                  <div className="sm:col-span-2 space-y-2 pt-2 border-t border-slate-200">
+                    <label className="block text-xs font-medium text-slate-600">Patient Documents & ID Proof</label>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf,.doc,.docx"
+                      onChange={(e) => {
+                        const files = e.target.files
+                        if (files && files.length > 0) {
+                          const fileArray = Array.from(files)
+                          setNewPatientAttachedFiles((prev) => [...prev, ...fileArray])
+                          setNewPatientDocumentNames((prev) => [...prev, ...fileArray.map((f) => f.name)])
+                        }
+                      }}
+                      className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer rounded-xl border border-slate-200 bg-white p-2"
+                    />
+                    {newPatientDocumentNames.length > 0 && (
+                      <ul className="space-y-1 mt-2">
+                        {newPatientDocumentNames.map((name, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700"
+                          >
+                            <span className="truncate max-w-[240px]">📄 {name}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewPatientAttachedFiles((prev) => prev.filter((_, i) => i !== idx))
+                                setNewPatientDocumentNames((prev) => prev.filter((_, i) => i !== idx))
+                              }}
+                              className="text-slate-400 hover:text-red-500 font-bold ml-2"
+                            >
+                              ×
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* STEP 2: Visit Setup */}
+        <div className="rx-section-card">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+            <span
+              className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
+                selectedDoctorId && appointmentDate && (fieldConfig?.appointmentTime === false || appointmentTime)
+                  ? "bg-emerald-500 text-white"
+                  : "bg-cyan-600 text-white"
+              }`}
+            >
+              {selectedDoctorId && appointmentDate && (fieldConfig?.appointmentTime === false || appointmentTime) ? (
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                "2"
+              )}
+            </span>
+            <p className="text-sm font-semibold text-slate-900">Visit Setup</p>
+            {selectedDoctorId && appointmentDate && (fieldConfig?.appointmentTime === false || appointmentTime) && (
+              <span className="ml-auto text-xs text-emerald-600 font-medium">{appointmentSummaryLabel}</span>
+            )}
+          </div>
+
+          <div className="p-4 space-y-5 overflow-visible">
+            {fieldConfig?.symptoms !== false && (
+              <div className="relative">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chief Complaint / Symptoms</label>
+                <div className="mt-2 relative symptom-dropdown-container">
+                  <div
+                    ref={symptomDropdownRef}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus-within:border-cyan-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-cyan-100 cursor-pointer"
+                    onClick={() => {
+                      if (!showSymptomDropdown && symptomDropdownRef.current) {
+                        const rect = symptomDropdownRef.current.getBoundingClientRect()
+                        setDropdownPosition({
+                          top: rect.bottom + 4,
+                          left: rect.left,
+                          width: rect.width,
+                        })
+                      }
+                      setShowSymptomDropdown(!showSymptomDropdown)
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={symptomCategory ? "text-slate-900" : "text-slate-400"}>
+                        {symptomCategory === "custom"
+                          ? "Custom…"
+                          : symptomCategory
+                          ? SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)?.label || "Select symptoms"
+                          : "Select symptoms — filters recommended doctors"}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-slate-500 transition-transform ${showSymptomDropdown ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {showSymptomDropdown &&
+                    typeof window !== "undefined" &&
+                    createPortal(
+                      <div
                         data-symptom-dropdown
                         className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-xl max-h-80 overflow-hidden"
                         style={{
                           top: `${dropdownPosition.top}px`,
                           left: `${dropdownPosition.left}px`,
-                          width: `${dropdownPosition.width || 400}px`
+                          width: `${dropdownPosition.width || 400}px`,
                         }}
                       >
-                        {/* Search Input */}
                         <div className="p-2 border-b border-slate-200">
                           <div className="relative">
                             <svg
@@ -1382,9 +1312,7 @@ export default function BookAppointmentPanel({
                             <input
                               type="text"
                               value={symptomSearch}
-                              onChange={(e) => {
-                                setSymptomSearch(e.target.value)
-                              }}
+                              onChange={(e) => setSymptomSearch(e.target.value)}
                               onClick={(e) => e.stopPropagation()}
                               placeholder="Search symptoms..."
                               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-100 focus:border-cyan-600"
@@ -1393,632 +1321,405 @@ export default function BookAppointmentPanel({
                           </div>
                         </div>
 
-                        {/* Options List */}
                         <div className="max-h-64 overflow-y-auto">
-                          {/* Clear/None Option */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
                               setSymptomCategory("")
                               setCustomSymptom("")
-                              setSymptomSearch("")
                               setShowSymptomDropdown(false)
-                              setSelectedDoctorId("")
+                              setSymptomSearch("")
                             }}
-                            className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-slate-600"
+                            className="w-full px-4 py-2.5 text-left text-sm text-slate-500 hover:bg-slate-50 border-b border-slate-100 font-medium"
                           >
-                            Clear selection
+                            None / Clear Symptoms
                           </button>
-
-                          {/* Filtered Symptoms */}
-                          {filteredSymptoms.length > 0 ? (
-                            filteredSymptoms.map((cat) => (
-                              <button
-                                key={cat.id}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSymptomCategory(cat.id)
-                                  setSelectedDoctorId("")
-                                  setCustomSymptom("")
-                                  setSymptomSearch("")
-                                  setShowSymptomDropdown(false)
-                                }}
-                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cyan-50 ${
-                                  symptomCategory === cat.id ? "bg-cyan-100 font-semibold" : ""
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span>{cat.icon}</span>
-                                  <span>{cat.label}</span>
-                                </div>
-                              </button>
-                            ))
-                          ) : (
-                            <div className="px-4 py-3 text-sm text-slate-500 text-center">
-                              No symptoms found
-                            </div>
-                          )}
-
-                          {/* Custom Option */}
+                          {filteredSymptoms.map((cat) => (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSymptomCategory(cat.id)
+                                setCustomSymptom("")
+                                setShowSymptomDropdown(false)
+                                setSymptomSearch("")
+                              }}
+                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-cyan-50 transition-colors flex items-center justify-between ${
+                                symptomCategory === cat.id ? "bg-cyan-50 text-cyan-900 font-bold" : "text-slate-700"
+                              }`}
+                            >
+                              <span>{cat.label}</span>
+                              {symptomCategory === cat.id && (
+                                <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
                               setSymptomCategory("custom")
-                              setSelectedDoctorId("")
-                              setCustomSymptom("")
-                              setSymptomSearch("")
                               setShowSymptomDropdown(false)
+                              setSymptomSearch("")
                             }}
-                            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cyan-50 border-t border-slate-200 ${
-                              symptomCategory === "custom" ? "bg-cyan-100 font-semibold" : ""
+                            className={`w-full px-4 py-2.5 text-left text-sm hover:bg-cyan-50 transition-colors font-medium ${
+                              symptomCategory === "custom" ? "bg-cyan-50 text-cyan-900 font-bold" : "text-slate-700"
                             }`}
                           >
-                            Custom...
+                            + Other / Custom Symptom
                           </button>
                         </div>
-                      </div>
-                      , document.body
+                      </div>,
+                      document.body
                     )}
-                  </div>
 
                   {symptomCategory === "custom" && (
-                    <div className="mt-3 space-y-2">
-                      <input
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-medium text-slate-500">Custom Symptom / Notes</label>
+                        <VoiceInput
+                          onTranscript={(text) => setCustomSymptom((prev) => (prev ? `${prev} ${text}` : text))}
+                          language="en-IN"
+                          useMedicalModel={true}
+                          allowGujarati
+                          variant="inline"
+                        />
+                      </div>
+                      <textarea
+                        placeholder="Describe symptoms or chief complaint…"
                         value={customSymptom}
                         onChange={(e) => setCustomSymptom(e.target.value)}
-                        placeholder="Describe patient symptom (e.g., severe back pain)"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                        rows={2}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                       />
-                      <p className="text-xs text-slate-500">
-                        Doctor list is not auto-filtered for custom notes. Please pick a doctor manually.
-                      </p>
                     </div>
                   )}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* ── Doctor cards ── */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length > 0
-                      ? `Recommended Doctors (${visibleDoctors.length})`
-                      : `Select Doctor (${visibleDoctors.length}${searchDoctor ? ` of ${doctors.length}` : ""})`}
-                  </label>
-                  {selectedDoctorFee !== null && (
-                    <span className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-md px-2 py-0.5">
-                      ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)} fee
-                    </span>
-                  )}
-                </div>
+            {/* Doctor Picker */}
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Select Doctor <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={searchDoctor}
+                  onChange={(e) => setSearchDoctor(e.target.value)}
+                  placeholder="Search doctor or specialty…"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs focus:border-cyan-600 focus:outline-none focus:ring-1 focus:ring-cyan-100 w-full sm:w-52"
+                />
+              </div>
 
-                {/* Doctor search — only shown when 6+ doctors to avoid clutter */}
-                {doctors.length >= 6 && (
-                  <div className="relative mb-3">
-                    <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={searchDoctor}
-                      onChange={(e) => setSearchDoctor(e.target.value)}
-                      placeholder="Search by name or specialization…"
-                      className="w-full rounded-lg border border-slate-200 bg-white pl-8 pr-8 py-2 text-xs focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                    />
-                    {searchDoctor && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchDoctor("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {symptomCategory && symptomCategory !== "custom" && recommendedDoctors.length === 0 && doctors.length > 0 && (
-                  <p className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    No doctors matched these symptoms — showing all available.
-                  </p>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-                  {visibleDoctors.length === 0 && searchDoctor ? (
-                    <p className="sm:col-span-2 text-xs text-slate-400 py-4 text-center">
-                      No doctors match &ldquo;{searchDoctor}&rdquo;
-                    </p>
-                  ) : visibleDoctors.map((doc: any) => (
-                    <button
-                      key={doc.id}
-                      type="button"
-                      onClick={() => handleDoctorSelect(doc.id)}
-                      className={`text-left p-3 rounded-xl border transition-all ${
-                        selectedDoctorId === doc.id
-                          ? "border-cyan-500 bg-cyan-50 ring-1 ring-cyan-200"
-                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                          selectedDoctorId === doc.id ? "bg-cyan-200 text-cyan-800" : "bg-slate-100 text-slate-600"
-                        }`}>
-                          {doc.firstName?.charAt(0)}{doc.lastName?.charAt(0)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-slate-900 truncate">
-                            Dr. {doc.firstName} {doc.lastName}
-                          </p>
-                          <p className="text-[10px] text-slate-500 truncate">{doc.specialization || "General"}</p>
-                          {doc.consultationFee && (
-                            <p className="text-[10px] font-bold text-teal-600 mt-0.5">
-                              ₹{new Intl.NumberFormat("en-IN").format(doc.consultationFee)}
-                            </p>
-                          )}
-                        </div>
-                        {selectedDoctorId === doc.id && (
-                          <svg className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Other (non-recommended) doctors */}
-                {symptomCategory && symptomCategory !== "custom" && visibleOtherDoctors.length > 0 && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 py-1">
-                      <svg className="h-3 w-3 transition-transform [[open]_&]:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              {doctors.length === 0 ? (
+                <p className="text-xs text-slate-400 italic py-2">No active doctors registered for this hospital</p>
+              ) : (
+                <div className="space-y-3">
+                  {symptomCategory && symptomCategory !== "custom" && (
+                    <div className="flex items-center gap-2 py-1 px-2.5 bg-cyan-50/70 border border-cyan-100 rounded-lg text-xs text-cyan-900 font-medium">
+                      <svg className="w-3.5 h-3.5 text-cyan-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      {visibleOtherDoctors.length} other doctor{visibleOtherDoctors.length > 1 ? "s" : ""} (not specifically recommended)
-                    </summary>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {visibleOtherDoctors.map((doc: any) => (
-                        <button
-                          key={doc.id}
-                          type="button"
-                          onClick={() => handleDoctorSelect(doc.id)}
-                          className={`text-left p-3 rounded-xl border transition-all opacity-70 hover:opacity-100 ${
-                            selectedDoctorId === doc.id
-                              ? "border-amber-400 bg-amber-50 ring-1 ring-amber-200 opacity-100"
-                              : "border-slate-200 bg-white hover:border-amber-200"
+                      <span>
+                        {recommendedDoctors.length > 0
+                          ? `Showing recommended doctors for ${SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)?.label || symptomCategory}`
+                          : `No direct specialization match found for ${SYMPTOM_CATEGORIES.find((c) => c.id === symptomCategory)?.label || symptomCategory}. Showing all available doctors below.`}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                    {visibleDoctors.map((docObj: any) => {
+                      const isSelected = selectedDoctorId === docObj.id
+                      const fee = docObj.consultationFee != null ? Number(docObj.consultationFee) : null
+
+                      return (
+                        <div
+                          key={docObj.id}
+                          onClick={() => handleDoctorSelect(docObj.id)}
+                          className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                            isSelected
+                              ? "border-cyan-600 bg-cyan-50/90 ring-2 ring-cyan-500/20 shadow-xs"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                           }`}
                         >
                           <div className="flex items-start gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
-                              {doc.firstName?.charAt(0)}{doc.lastName?.charAt(0)}
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                                isSelected ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {(docObj.firstName || "D").charAt(0)}
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-slate-800 truncate">Dr. {doc.firstName} {doc.lastName}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{doc.specialization || "General"}</p>
-                              {doc.consultationFee && (
-                                <p className="text-[10px] font-bold text-teal-600 mt-0.5">₹{new Intl.NumberFormat("en-IN").format(doc.consultationFee)}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-xs font-bold truncate ${isSelected ? "text-cyan-900" : "text-slate-900"}`}>
+                                Dr. {docObj.firstName} {docObj.lastName}
+                              </p>
+                              <p className="text-[11px] text-slate-500 truncate">{docObj.specialization || "General"}</p>
+                              {fee != null && (
+                                <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">
+                                  ₹{new Intl.NumberFormat("en-IN").format(fee)} fee
+                                </p>
                               )}
                             </div>
+                            {isSelected && (
+                              <svg className="w-4 h-4 text-cyan-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
                           </div>
-                        </button>
-                      ))}
-                    </div>
-                  </details>
-                )}
-
-                {selectedDoctorId && symptomCategory && symptomCategory !== "custom" && !recommendedDoctors.some((d: any) => d.id === selectedDoctorId) && (
-                  <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                    <svg className="h-3.5 w-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    Not specifically recommended for these symptoms
+                        </div>
+                      )
+                    })}
                   </div>
-                )}
-              </div>
 
-              {/* ── Date + visual time slot picker ── */}
-              {(fieldConfig?.appointmentDate !== false || fieldConfig?.appointmentTime !== false) && (
-                <div className={`grid grid-cols-1 ${fieldConfig?.appointmentDate !== false && fieldConfig?.appointmentTime !== false ? "sm:grid-cols-2" : ""} gap-4`}>
-                  {fieldConfig?.appointmentDate !== false && (
-                    <div>
-                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</label>
-                      <input
-                        type="date"
-                        min={todayStr}
-                        value={appointmentDate}
-                        onChange={(e) => setAppointmentDate(e.target.value)}
-                        className={`mt-2 w-full rounded-xl border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-100 ${
-                          isSelectedDateBlocked
-                            ? "border-red-400 bg-red-50 text-red-700"
-                            : "border-slate-200 bg-white focus:border-cyan-600"
-                        }`}
-                      />
-                      {isSelectedDateBlocked && (
-                        <p className="mt-1.5 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                          Doctor unavailable on this date — pick another.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {symptomCategory && symptomCategory !== "custom" && visibleOtherDoctors.length > 0 && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Other Doctors</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                        {visibleOtherDoctors.map((docObj: any) => {
+                          const isSelected = selectedDoctorId === docObj.id
+                          const fee = docObj.consultationFee != null ? Number(docObj.consultationFee) : null
 
-                  {fieldConfig?.appointmentTime !== false && (
-                    <div>
-                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Time Slot
-                        {availableSlots.length > 0 && (
-                          <span className="ml-1 normal-case font-normal text-slate-400">({availableSlots.length} open)</span>
-                        )}
-                      </label>
-                      <div className="mt-2">
-                        {!selectedDoctorId || !appointmentDate ? (
-                          <p className="text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
-                            {fieldConfig?.appointmentDate === false ? "Select a doctor first" : "Select doctor & date first"}
-                          </p>
-                        ) : isSelectedDateBlocked ? (
-                          <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-                            Doctor unavailable
-                          </p>
-                        ) : availableSlots.length === 0 ? (
-                          <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                            {fieldConfig?.appointmentDate === false ? "No slots available for today" : "No slots available for this date"}
-                          </p>
-                        ) : (
-                          <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">
-                            {availableSlots.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => setAppointmentTime(s)}
-                                className={`py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
-                                  appointmentTime === s
-                                    ? "bg-cyan-600 text-white border-cyan-600"
-                                    : "bg-white text-slate-700 border-slate-200 hover:border-cyan-300 hover:bg-cyan-50"
-                                }`}
-                              >
-                                {formatTimeDisplay(s)}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                          return (
+                            <div
+                              key={docObj.id}
+                              onClick={() => handleDoctorSelect(docObj.id)}
+                              className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                                isSelected
+                                  ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500/20 shadow-xs"
+                                  : "border-slate-200 bg-slate-50/50 hover:border-slate-300 hover:bg-slate-100/50 opacity-80"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-slate-800 truncate">
+                                    Dr. {docObj.firstName} {docObj.lastName}
+                                  </p>
+                                  <p className="text-[10px] text-slate-500 truncate">{docObj.specialization || "General"}</p>
+                                </div>
+                                {fee != null && (
+                                  <span className="text-[10px] font-bold text-slate-600 shrink-0">₹{fee}</span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
                 </div>
               )}
-              {/* ── Appointment Documents & Reports ── */}
-              {fieldConfig?.documents !== false && (
-                <div className="pt-3 border-t border-slate-100 space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 block">
-                    Attach Appointment Documents / Reports
+            </div>
+
+            {/* Date & Slot selection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {fieldConfig?.appointmentDate !== false && (
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 block mb-1">
+                    Appointment Date
                   </label>
                   <input
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf,.doc,.docx"
-                    onChange={(e) => {
-                      const files = e.target.files
-                      if (files && files.length > 0) {
-                        const names = Array.from(files).map((f) => f.name)
-                        setBookingDocumentNames((prev) => [...prev, ...names])
-                      }
-                    }}
-                    className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer rounded-xl border border-slate-200 bg-white p-2"
+                    type="date"
+                    value={appointmentDate}
+                    onChange={(e) => setAppointmentDate(e.target.value)}
+                    min={todayStr}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
                   />
-                  <p className="text-[10px] text-slate-400">Attach previous prescriptions, lab reports, or referral letters</p>
-
-                  {bookingDocumentNames.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-xs font-semibold text-slate-700">Attached Documents ({bookingDocumentNames.length}):</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {bookingDocumentNames.map((name, idx) => (
-                          <span key={idx} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">
-                            <span>📄 {name}</span>
-                            <button
-                              type="button"
-                              onClick={() => setBookingDocumentNames((prev) => prev.filter((_, i) => i !== idx))}
-                              className="text-slate-400 hover:text-red-500 font-bold"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* ── STEP 3: Payment ── */}
-          <div className="rx-section-card">
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
-                paymentMethod ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
-              }`}>
-                {paymentMethod ? (
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                ) : "3"}
-              </span>
-              <p className="text-sm font-semibold text-slate-900">Payment</p>
-              {paymentMethod && (
-                <span className="ml-auto text-xs text-emerald-600 font-medium">
-                  {paymentMethodLabel} · ₹{new Intl.NumberFormat("en-IN").format(paymentAmount)}
-                </span>
-              )}
-            </div>
-            <div className="p-4 space-y-4">
-              {selectedDoctorFee === null ? (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-400">
-                  Select a doctor to see the consultation fee
+              {fieldConfig?.appointmentTime !== false ? (
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 block mb-1">
+                    Time Slot ({availableSlots.length} available)
+                  </label>
+                  {availableSlots.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-2">
+                      {selectedDoctorId ? "No slots available for date" : "Select doctor & date first"}
+                    </p>
+                  ) : (
+                    <select
+                      value={appointmentTime}
+                      onChange={(e) => setAppointmentTime(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    >
+                      <option value="">Select time slot…</option>
+                      {availableSlots.map((slot) => (
+                        <option key={slot} value={slot}>
+                          {formatTimeDisplay(slot)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               ) : (
-                <>
-                  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <span className="text-sm font-medium text-slate-700">Consultation Fee</span>
-                    <span className="text-base font-semibold text-slate-900">
-                      ₹{new Intl.NumberFormat("en-IN").format(selectedDoctorFee)}
-                    </span>
-                  </div>
-
-                  {fieldConfig?.additionalFees !== false && (
-                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h4 className="text-sm font-semibold text-slate-900">Additional Fees</h4>
-                          <p className="text-xs text-slate-400 mt-0.5">File charges, reports, etc.</p>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const newFee: AdditionalFee = {
-                              id: `fee-${Date.now()}-${Math.random()}`,
-                              description: "",
-                              amount: 0,
-                            }
-                            setAdditionalFees([...additionalFees, newFee])
-                          }}
-                        >
-                          + Add
-                        </Button>
-                      </div>
-                      {additionalFees.length > 0 && (
-                        <div className="space-y-2">
-                          {additionalFees.map((fee, index) => (
-                            <div key={fee.id} className="flex gap-2 items-start p-2 bg-slate-50 rounded-lg border border-slate-200">
-                              <div className="flex-1 space-y-2">
-                                <input
-                                  type="text"
-                                  placeholder="Description (e.g., File Charges)"
-                                  value={fee.description}
-                                  onChange={(e) => {
-                                    const updated = [...additionalFees]
-                                    updated[index] = { ...fee, description: e.target.value }
-                                    setAdditionalFees(updated)
-                                  }}
-                                  className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                                />
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-500">₹</span>
-                                  <input
-                                    type="number"
-                                    placeholder="Amount"
-                                    value={fee.amount || ""}
-                                    onChange={(e) => {
-                                      const value = e.target.value === "" ? 0 : parseFloat(e.target.value)
-                                      const updated = [...additionalFees]
-                                      updated[index] = { ...fee, amount: isNaN(value) ? 0 : value }
-                                      setAdditionalFees(updated)
-                                    }}
-                                    min="0"
-                                    step="0.01"
-                                    className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                                  />
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setAdditionalFees(additionalFees.filter((_, i) => i !== index))}
-                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          ))}
-                          {totalAdditionalFees > 0 && (
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                              <span className="text-xs font-medium text-slate-600">Additional Total</span>
-                              <span className="text-sm font-semibold text-slate-900">
-                                ₹{new Intl.NumberFormat("en-IN").format(totalAdditionalFees)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {fieldConfig?.paymentMethod !== false && (
-                    <PaymentMethodSection
-                      paymentMethod={paymentMethod}
-                      setPaymentMethod={setPaymentMethod}
-                      paymentData={paymentData}
-                      setPaymentData={(data) => setPaymentData(data as BookingPaymentData)}
-                      amountToPay={paymentAmount}
-                      title="Payment Mode"
-                      methods={paymentMethods}
-                    />
-                  )}
-                </>
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-cyan-50 border border-cyan-100 text-xs text-cyan-800 font-semibold sm:col-span-2">
+                  <svg className="w-4 h-4 text-cyan-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>First-Come-First-Serve (FCFS) mode enabled — no specific slot required.</span>
+                </div>
               )}
-
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <span className="text-sm font-semibold text-slate-700">Total Due</span>
-                <span className="text-xl font-bold text-slate-900">
-                  {paymentAmount ? `₹${new Intl.NumberFormat("en-IN").format(paymentAmount)}` : "—"}
-                </span>
-              </div>
             </div>
           </div>
-
         </div>
 
-        {/* ── RIGHT: Sticky booking summary ── */}
-        <div className="xl:sticky xl:top-4 space-y-3">
-          <div className="rx-section-card">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <p className="text-sm font-semibold text-slate-900">Booking Summary</p>
-            </div>
-            <div className="p-4">
-              <dl className="space-y-3 text-xs">
-                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
-                  <dt className="text-slate-500 font-medium shrink-0">Patient</dt>
-                  <dd className={`text-right font-semibold truncate max-w-[160px] ${selectedPatientSnapshot ? "text-slate-900" : "text-slate-400"}`}>
-                    {patientSummaryLabel}
-                  </dd>
-                </div>
-                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
-                  <dt className="text-slate-500 font-medium shrink-0">Contact</dt>
-                  <dd className={`text-right truncate max-w-[160px] ${selectedPatientSnapshot ? "text-slate-700" : "text-slate-400"}`}>
-                    {contactSummaryLabel}
-                  </dd>
-                </div>
-                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
-                  <dt className="text-slate-500 font-medium shrink-0">Doctor</dt>
-                  <dd className={`text-right font-semibold truncate max-w-[160px] ${selectedDoctor ? "text-slate-900" : "text-slate-400"}`}>
-                    {doctorSummaryLabel}
-                  </dd>
-                </div>
-                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
-                  <dt className="text-slate-500 font-medium shrink-0">Schedule</dt>
-                  <dd className={`text-right truncate max-w-[160px] ${appointmentDate ? "text-slate-700" : "text-slate-400"}`}>
-                    {appointmentSummaryLabel}
-                  </dd>
-                </div>
-                <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
-                  <dt className="text-slate-500 font-medium shrink-0">Symptoms</dt>
-                  <dd className="text-right text-slate-600 truncate max-w-[160px]">{symptomSummary}</dd>
-                </div>
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-slate-500 font-medium shrink-0">Payment</dt>
-                  <dd className={`text-right font-semibold ${paymentMethod ? "text-slate-900" : "text-slate-400"}`}>
-                    {paymentMethod
-                      ? `${paymentMethodLabel} · ₹${new Intl.NumberFormat("en-IN").format(paymentAmount)}`
-                      : paymentMethodLabel}
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="mt-5 pt-4 border-t border-slate-200">
-                <Button
-                  onClick={handleBookAppointment}
-                  loading={bookLoading}
-                  loadingText={patientMode === "new" ? "Creating Patient & Booking..." : "Booking..."}
-                  size="lg"
-                  className="w-full"
-                >
-                  Confirm Booking
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick stats strip */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rx-metric-card">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Doctors</p>
-              <p className="mt-1 text-xl font-bold text-slate-900">{doctors.length}</p>
-              <p className="text-[10px] text-slate-400">active</p>
-            </div>
-            {fieldConfig?.appointmentTime === false ? (
-              <div className="rx-metric-card">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Booking Mode</p>
-                <p className="mt-1 text-xl font-bold text-slate-900">FCFS</p>
-                <p className="text-[10px] text-slate-400">First Come First Serve</p>
-              </div>
-            ) : (
-              <div className="rx-metric-card">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Open Slots</p>
-                <p className="mt-1 text-xl font-bold text-slate-900">
-                  {appointmentDate && selectedDoctorId ? availableSlots.length : "—"}
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  {appointmentDate && selectedDoctorId
-                    ? (fieldConfig?.appointmentDate === false ? "for today" : "for selected date")
-                    : (fieldConfig?.appointmentDate === false ? "select a doctor" : "select doctor & date")}
-                </p>
-              </div>
+        {/* STEP 3: Payment & Final Submit */}
+        <div className="rx-section-card">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+            <span
+              className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors ${
+                paymentMethod ? "bg-emerald-500 text-white" : "bg-cyan-600 text-white"
+              }`}
+            >
+              {paymentMethod ? (
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                "3"
+              )}
+            </span>
+            <p className="text-sm font-semibold text-slate-900">Payment Collection</p>
+            {paymentMethod && (
+              <span className="ml-auto text-xs text-emerald-600 font-medium">{paymentMethodLabel}</span>
             )}
           </div>
-        </div>
 
-      </div>
+          <div className="p-4 space-y-4">
+            <PaymentMethodSection
+              amountToPay={paymentAmount}
+              paymentMethod={paymentMethod}
+              setPaymentMethod={(m) => setPaymentMethod(m)}
+              paymentData={paymentData}
+              setPaymentData={setPaymentData}
+              methods={paymentMethods}
+            />
 
-      <AppointmentSuccessModal isOpen={successOpen} onClose={() => setSuccessOpen(false)} appointmentData={successData} />
+            {fieldConfig?.additionalFees !== false && selectedDoctorId && (
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Additional Services & Fees</label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAdditionalFees((prev) => [
+                        ...prev,
+                        { id: `fee-${Date.now()}`, description: "", amount: 0 },
+                      ])
+                    }
+                    className="text-xs font-bold text-cyan-600 hover:text-cyan-700 flex items-center gap-1"
+                  >
+                    + Add Service Fee
+                  </button>
+                </div>
+                {additionalFees.length > 0 && (
+                  <div className="space-y-2">
+                    {additionalFees.map((fee, idx) => (
+                      <div key={fee.id} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Service description (e.g. ECG, Lab test)"
+                          value={fee.description}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setAdditionalFees((prev) => prev.map((f, i) => (i === idx ? { ...f, description: val } : f)))
+                          }}
+                          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-cyan-600 focus:outline-none"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Amount (₹)"
+                          value={fee.amount || ""}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0
+                            setAdditionalFees((prev) => prev.map((f, i) => (i === idx ? { ...f, amount: val } : f)))
+                          }}
+                          className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-cyan-600 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAdditionalFees((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-slate-400 hover:text-red-500 text-xs font-bold p-1"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-      {/* Doctor confirmation modal */}
-      {showDoctorConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl">
-            <div className="border-b border-slate-100 px-5 py-4">
-              <h3 className="text-base font-semibold text-slate-900">Confirm Doctor Selection</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Not specifically recommended for these symptoms</p>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                <svg className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <p className="text-xs text-amber-800">
-                  Symptoms: <strong>{symptomCategory && SYMPTOM_CATEGORIES.find(c => c.id === symptomCategory)?.label}</strong>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-500">Total Payable Amount</p>
+                <p className="text-lg font-extrabold text-slate-900">
+                  ₹{new Intl.NumberFormat("en-IN").format(paymentAmount)}
                 </p>
               </div>
-              {(() => {
-                const doctorToConfirm = doctors.find((d: any) => d.id === pendingDoctorId)
-                return doctorToConfirm ? (
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-600 flex-shrink-0">
-                      {doctorToConfirm.firstName?.charAt(0)}{doctorToConfirm.lastName?.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        Dr. {doctorToConfirm.firstName} {doctorToConfirm.lastName}
-                      </p>
-                      <p className="text-xs text-slate-500">{doctorToConfirm.specialization}</p>
-                      {doctorToConfirm.consultationFee && (
-                        <p className="text-xs font-bold text-teal-700 mt-1">
-                          ₹{new Intl.NumberFormat("en-IN").format(doctorToConfirm.consultationFee)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : null
-              })()}
-            </div>
-            <div className="px-5 py-4 flex justify-end gap-3 border-t border-slate-100">
               <Button
+                type="button"
+                onClick={handleBookAppointment}
+                disabled={bookLoading}
+                className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-sm transition-all"
+              >
+                {bookLoading ? "Booking Appointment…" : "Confirm & Book Appointment"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Modal for non-recommended doctor */}
+      {showDoctorConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900">Confirm Doctor Selection</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This doctor is not in the recommended list for the selected symptom category ({symptomCategory}). Would you like to proceed with this doctor anyway?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
                 variant="outline"
                 onClick={() => {
                   setShowDoctorConfirmModal(false)
                   setPendingDoctorId(null)
                 }}
+                className="text-xs"
               >
-                Cancel
+                Choose Recommended Doctor
               </Button>
-              <Button onClick={handleConfirmDoctorSelection}>
-                Select Anyway
+              <Button
+                type="button"
+                onClick={handleConfirmDoctorSelection}
+                className="bg-cyan-600 text-xs font-bold text-white hover:bg-cyan-700"
+              >
+                Proceed with Selected Doctor
               </Button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Success Modal */}
+      {successOpen && successData && (
+        <AppointmentSuccessModal
+          isOpen={successOpen}
+          onClose={() => {
+            setSuccessOpen(false)
+            setSuccessData(null)
+          }}
+          appointmentData={successData}
+        />
       )}
     </div>
   )

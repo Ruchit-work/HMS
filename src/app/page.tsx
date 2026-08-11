@@ -540,12 +540,6 @@ export default function Home() {
                 >
                   Login to Healthcare Portal
                 </Link>
-                <Link
-                  href="/auth/signup"
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-blue-50/80 bg-cyan-500/10 px-5 py-2.5 text-sm font-semibold text-blue-50 hover:bg-cyan-500/20"
-                >
-                  Create an Account
-                </Link>
               </div>
             </div>
           </div>

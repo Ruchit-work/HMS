@@ -2,7 +2,7 @@ import type { HospitalReceptionistSettings } from "@/types/hospital"
 
 export const DEFAULT_RECEPTIONIST_MODULES = [
   { id: "dashboard", label: "Dashboard", description: "Quick metrics and overview cards" },
-  { id: "patients", label: "Patients History", description: "Search, view and manage patient records" },
+  { id: "patients", label: "Patient History", description: "Search, view and manage patient records" },
   { id: "add-patient", label: "Add Patient", description: "Register new patient profiles" },
   { id: "appointments", label: "Appointments", description: "View and filter scheduled appointments" },
   { id: "book-appointment", label: "Book Appointment", description: "Create appointments for existing or new patients" },

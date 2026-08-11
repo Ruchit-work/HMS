@@ -5,6 +5,8 @@ import PasswordRequirements, { isPasswordValid } from '@/features/forms/Password
 import { bloodGroups } from '@/constants/signup'
 import { Button } from '@/shared/components'
 import type { AddPatientFieldConfig } from '@/types/hospital'
+import { useMultiHospital } from '@/providers/MultiHospitalProvider'
+import { usePatients } from '@/shared/hooks/usePatients'
 
 export interface PatientProfileFormValues {
   firstName: string
@@ -68,6 +70,9 @@ export default function PatientProfileForm({
   receptionistMode = false,
   fieldConfig,
 }: PatientProfileFormProps) {
+  const { activeHospitalId } = useMultiHospital()
+  const { patients } = usePatients(activeHospitalId, { enabled: Boolean(activeHospitalId) })
+
   const [formError, setFormError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
@@ -125,6 +130,20 @@ export default function PatientProfileForm({
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showBloodGroupDropdown])
+
+  // Filter hospital patients matching entered phone number
+  const matchingExistingPatients = useMemo(() => {
+    const digits = phone.replace(/\D/g, "")
+    if (digits.length < 7) return []
+    const searchLast10 = digits.length >= 10 ? digits.slice(-10) : digits
+
+    return patients.filter((p: any) => {
+      const pPhoneDigits = (p.phone || p.phoneNumber || p.contact || "").replace(/\D/g, "")
+      if (!pPhoneDigits) return false
+      const pLast10 = pPhoneDigits.length >= 10 ? pPhoneDigits.slice(-10) : pPhoneDigits
+      return pLast10.includes(searchLast10) || searchLast10.includes(pLast10)
+    })
+  }, [patients, phone])
 
   if (fieldConfig === null) {
     return (
@@ -347,8 +366,73 @@ export default function PatientProfileForm({
           </div>
           <div>
             <p className="rx-form-section-title">Personal Information</p>
-            <p className="rx-form-section-desc">Basic identification details for the patient record</p>
+            <p className="rx-form-section-desc">Basic identification and contact details for the patient record</p>
           </div>
+        </div>
+
+        {/* ── Contact / Phone Number (TOP FIELD) ── */}
+        <div className="rx-form-field mb-4">
+          <label className="rx-form-label">
+            Contact / Phone Number <span className="rx-required">*</span>
+          </label>
+          <div className="flex gap-2">
+            {enableCountryCode && (
+              <input
+                type="text"
+                value={countryCode}
+                onChange={(e) => { setCountryCode(e.target.value); clearErrors() }}
+                className="rx-form-input w-20 shrink-0"
+                placeholder="+91"
+              />
+            )}
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value)
+                if (fieldErrors.phone) {
+                  setFieldErrors(prev => { const n = { ...prev }; delete n.phone; return n })
+                }
+                clearErrors()
+              }}
+              onBlur={(e) => handleFieldBlur('phone', e.target.value)}
+              className={`rx-form-input flex-1 ${fieldErrors.phone ? 'rx-form-input--error' : ''}`}
+              placeholder={enableCountryCode ? '98765 43210' : 'Enter phone number (e.g. 7359057367)'}
+              required
+            />
+          </div>
+          {fieldErrors.phone && (
+            <p className="rx-form-error-text mt-1">
+              <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {fieldErrors.phone}
+            </p>
+          )}
+
+          {/* Compact Informational List for Existing Patients sharing this phone number */}
+          {matchingExistingPatients.length > 0 && (
+            <div className="mt-2.5 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs space-y-1.5 shadow-2xs">
+              <p className="font-bold text-amber-900 flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Existing patients using this contact number:
+              </p>
+              <ul className="space-y-1 pl-1">
+                {matchingExistingPatients.map((p: any) => {
+                  const pName = `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Unnamed Patient"
+                  const pId = p.patientId ? `#${p.patientId}` : `#${p.id.slice(0, 6)}`
+                  const pPhone = p.phone || p.phoneNumber || p.contact || phone
+                  return (
+                    <li key={p.id} className="text-amber-800 font-medium leading-tight">
+                      • {pName} — Patient ID: {pId} — {pPhone}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Name row */}
@@ -539,376 +623,249 @@ export default function PatientProfileForm({
       </div>
 
       {/* ══════════════════════════════════════
-          Section 2 — Contact Details
+          Section 2 — Contact & Address Details
           ══════════════════════════════════════ */}
-      <div className="rx-form-section">
-        <div className="rx-form-section-header">
-          <div className="rx-form-section-icon">
-            <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <div>
-            <p className="rx-form-section-title">Contact Details</p>
-            <p className="rx-form-section-desc">How the hospital and patient portal reach this patient</p>
-          </div>
-        </div>
-
-        {/* Email */}
-        {fieldConfig?.email !== false && (
-          <div className="rx-form-field">
-            <label className="rx-form-label">
-              Email Address
-              {emailRequired && <span className="rx-required">*</span>}
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value)
-                if (fieldErrors.email) {
-                  setFieldErrors(prev => { const n = { ...prev }; delete n.email; return n })
-                }
-                clearErrors()
-              }}
-              onBlur={(e) => handleFieldBlur('email', e.target.value)}
-              className={`rx-form-input ${fieldErrors.email ? 'rx-form-input--error' : ''}`}
-              placeholder="patient@example.com"
-              required={emailRequired}
-            />
-            {fieldErrors.email ? (
-              <p className="rx-form-error-text">
-                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                {fieldErrors.email}
-              </p>
-            ) : (
-              <p className="rx-form-helper">{emailRequired ? 'Used for appointment reminders, reports, and portal login' : 'Optional — used for appointment reminders, reports, and portal login'}</p>
-            )}
-          </div>
-        )}
-
-        {/* Phone — Always Required System Field */}
-        <div className="rx-form-field mt-4">
-          <label className="rx-form-label">
-            Phone Number
-            {mode === 'public' && <span className="rx-required">*</span>}
-          </label>
-          <div className="flex gap-2">
-            {enableCountryCode && (
-              <input type="text" value={countryCode}
-                onChange={(e) => { setCountryCode(e.target.value); clearErrors() }}
-                className="rx-form-input w-20 shrink-0"
-                placeholder="+91"
-              />
-            )}
-            <input type="tel" value={phone}
-              onChange={(e) => { setPhone(e.target.value); clearErrors() }}
-              className="rx-form-input flex-1"
-              placeholder={enableCountryCode ? '98765 43210' : 'Mobile number'}
-            />
-          </div>
-        </div>
-
-        {/* Alternate Phone */}
-        {fieldConfig?.alternatePhone !== false && (
-          <div className="rx-form-field mt-4">
-            <label className="rx-form-label">Alternate Phone Number</label>
-            <input
-              type="tel"
-              value={alternatePhone}
-              onChange={(e) => { setAlternatePhone(e.target.value); clearErrors() }}
-              className="rx-form-input"
-              placeholder="Secondary contact number"
-            />
-          </div>
-        )}
-
-        {/* Address */}
-        {fieldConfig?.address !== false && (
-          <div className="rx-form-field mt-4">
-            <label className="rx-form-label">Home Address</label>
-            <textarea
-              value={address}
-              onChange={(e) => { setAddress(e.target.value); clearErrors() }}
-              className="rx-form-textarea"
-              placeholder="Street address or locality"
-              rows={2}
-            />
-          </div>
-        )}
-
-        {/* City, State, Pincode */}
-        {fieldConfig?.cityStatePincode !== false && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mt-4">
-            <div className="rx-form-field">
-              <label className="rx-form-label">City</label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => { setCity(e.target.value); clearErrors() }}
-                className="rx-form-input"
-                placeholder="e.g. Mumbai"
-              />
-            </div>
-            <div className="rx-form-field">
-              <label className="rx-form-label">State</label>
-              <input
-                type="text"
-                value={state}
-                onChange={(e) => { setState(e.target.value); clearErrors() }}
-                className="rx-form-input"
-                placeholder="e.g. Maharashtra"
-              />
-            </div>
-            <div className="rx-form-field">
-              <label className="rx-form-label">Pincode</label>
-              <input
-                type="text"
-                value={pincode}
-                onChange={(e) => { setPincode(e.target.value); clearErrors() }}
-                className="rx-form-input"
-                placeholder="e.g. 400001"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Emergency Contact */}
-        {fieldConfig?.emergencyContact !== false && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
-            <div className="rx-form-field">
-              <label className="rx-form-label">Emergency Contact Name</label>
-              <input
-                type="text"
-                value={emergencyContactName}
-                onChange={(e) => { setEmergencyContactName(e.target.value); clearErrors() }}
-                className="rx-form-input"
-                placeholder="Relative or guardian name"
-              />
-            </div>
-            <div className="rx-form-field">
-              <label className="rx-form-label">Emergency Contact Phone</label>
-              <input
-                type="tel"
-                value={emergencyContactPhone}
-                onChange={(e) => { setEmergencyContactPhone(e.target.value); clearErrors() }}
-                className="rx-form-input"
-                placeholder="Emergency contact phone"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Marital Status & Occupation */}
-        {(fieldConfig?.maritalStatus !== false || fieldConfig?.occupation !== false) && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
-            {fieldConfig?.maritalStatus !== false && (
-              <div className="rx-form-field">
-                <label className="rx-form-label">Marital Status</label>
-                <select
-                  value={maritalStatus}
-                  onChange={(e) => { setMaritalStatus(e.target.value); clearErrors() }}
-                  className="rx-form-select"
-                >
-                  <option value="">Select status</option>
-                  <option value="Single">Single</option>
-                  <option value="Married">Married</option>
-                  <option value="Divorced">Divorced</option>
-                  <option value="Widowed">Widowed</option>
-                </select>
-              </div>
-            )}
-            {fieldConfig?.occupation !== false && (
-              <div className="rx-form-field">
-                <label className="rx-form-label">Occupation</label>
-                <input
-                  type="text"
-                  value={occupation}
-                  onChange={(e) => { setOccupation(e.target.value); clearErrors() }}
-                  className="rx-form-input"
-                  placeholder="e.g. Engineer, Business, Student"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Insurance Information */}
-        {fieldConfig?.insurance !== false && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
-            <div className="rx-form-field">
-              <label className="rx-form-label">Insurance Provider</label>
-              <input
-                type="text"
-                value={insuranceProvider}
-                onChange={(e) => { setInsuranceProvider(e.target.value); clearErrors() }}
-                className="rx-form-input"
-                placeholder="e.g. Star Health, HDFC ERGO"
-              />
-            </div>
-            <div className="rx-form-field">
-              <label className="rx-form-label">Insurance Policy Number</label>
-              <input
-                type="text"
-                value={insurancePolicyNumber}
-                onChange={(e) => { setInsurancePolicyNumber(e.target.value); clearErrors() }}
-                className="rx-form-input"
-                placeholder="Policy / Member ID"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ══════════════════════════════════════
-          Section 3 — Account Settings (admin)
-          ══════════════════════════════════════ */}
-      {showStatusField && (
+      {!receptionistMode && (fieldConfig?.email !== false || fieldConfig?.alternatePhone !== false || fieldConfig?.address !== false || fieldConfig?.cityStatePincode !== false) && (
         <div className="rx-form-section">
           <div className="rx-form-section-header">
             <div className="rx-form-section-icon">
               <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
             <div>
-              <p className="rx-form-section-title">Account Settings</p>
-              <p className="rx-form-section-desc">Control the patient's access to the portal</p>
+              <p className="rx-form-section-title">Contact & Address Details</p>
+              <p className="rx-form-section-desc">Email, address, and alternate contact information</p>
             </div>
           </div>
-          {fieldConfig?.status !== false && (
+
+          {/* Email */}
+          {fieldConfig?.email !== false && (
             <div className="rx-form-field">
-              <label className="rx-form-label">Account Status</label>
-              <select value={status}
-                onChange={(e) => { setStatus(e.target.value as PatientProfileFormValues['status']); clearErrors() }}
-                className="rx-form-select">
-                <option value="active">Active — Patient can log in and book appointments</option>
-                <option value="inactive">Inactive — Portal access disabled</option>
-              </select>
+              <label className="rx-form-label">
+                Email Address
+                {emailRequired && <span className="rx-required">*</span>}
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (fieldErrors.email) {
+                    setFieldErrors(prev => { const n = { ...prev }; delete n.email; return n })
+                  }
+                  clearErrors()
+                }}
+                onBlur={(e) => handleFieldBlur('email', e.target.value)}
+                className={`rx-form-input ${fieldErrors.email ? 'rx-form-input--error' : ''}`}
+                placeholder="patient@example.com"
+                required={emailRequired}
+              />
+              {fieldErrors.email ? (
+                <p className="rx-form-error-text">
+                  <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {fieldErrors.email}
+                </p>
+              ) : (
+                <p className="rx-form-helper">{emailRequired ? 'Used for appointment reminders, reports, and portal login' : 'Optional — used for appointment reminders, reports, and portal login'}</p>
+              )}
+            </div>
+          )}
+
+          {/* Alternate Phone */}
+          {fieldConfig?.alternatePhone !== false && (
+            <div className="rx-form-field mt-4">
+              <label className="rx-form-label">Alternate Phone Number</label>
+              <input
+                type="tel"
+                value={alternatePhone}
+                onChange={(e) => { setAlternatePhone(e.target.value); clearErrors() }}
+                className="rx-form-input"
+                placeholder="Landline or family member number"
+              />
+            </div>
+          )}
+
+          {/* Address */}
+          {fieldConfig?.address !== false && (
+            <div className="rx-form-field mt-4">
+              <label className="rx-form-label">Residential Address</label>
+              <textarea
+                rows={3}
+                value={address}
+                onChange={(e) => { setAddress(e.target.value); clearErrors() }}
+                className="rx-form-input"
+                placeholder="House/flat no., street, landmark..."
+              />
+            </div>
+          )}
+
+          {/* City, State, Pincode */}
+          {fieldConfig?.cityStatePincode !== false && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mt-4">
+              <div className="rx-form-field">
+                <label className="rx-form-label">City</label>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => { setCity(e.target.value); clearErrors() }}
+                  className="rx-form-input"
+                  placeholder="e.g. Mumbai"
+                />
+              </div>
+              <div className="rx-form-field">
+                <label className="rx-form-label">State</label>
+                <input
+                  type="text"
+                  value={state}
+                  onChange={(e) => { setState(e.target.value); clearErrors() }}
+                  className="rx-form-input"
+                  placeholder="e.g. Maharashtra"
+                />
+              </div>
+              <div className="rx-form-field">
+                <label className="rx-form-label">PIN Code</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pincode}
+                  onChange={(e) => { setPincode(e.target.value); clearErrors() }}
+                  className="rx-form-input"
+                  placeholder="e.g. 400001"
+                />
+              </div>
             </div>
           )}
         </div>
       )}
 
       {/* ══════════════════════════════════════
-          Section 4 — Account Security
+          Section 3 — Emergency & Additional Details
           ══════════════════════════════════════ */}
-      {!isEditMode && fieldConfig?.passwordFields !== false && (
+      {(fieldConfig?.emergencyContact !== false ||
+        fieldConfig?.maritalStatus !== false ||
+        fieldConfig?.occupation !== false ||
+        fieldConfig?.insurance !== false) && (
         <div className="rx-form-section">
-        <div className="rx-form-section-header">
-          <div className="rx-form-section-icon">
-            <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <div>
-            <p className="rx-form-section-title">Account Security</p>
-            <p className="rx-form-section-desc">Login credentials for the patient portal</p>
-          </div>
-        </div>
-
-        {receptionistMode && (
-          <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3">
-            <svg className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          <div className="rx-form-section-header">
+            <div className="rx-form-section-icon">
+              <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
             <div>
-              <p className="text-xs font-semibold text-cyan-800">Default password is pre-filled</p>
-              <p className="mt-0.5 text-[11px] text-cyan-700">The patient can change this password after their first login from the patient dashboard.</p>
+              <p className="rx-form-section-title">Emergency & Additional Info</p>
+              <p className="rx-form-section-desc">Emergency contact, occupation, and insurance</p>
             </div>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {/* Password */}
-          <div className="rx-form-field">
-            <label className="rx-form-label">
-              Password <span className="rx-required">*</span>
-            </label>
-            <input type="password" value={password}
-              onChange={(e) => {
-                setPassword(e.target.value)
-                if (fieldErrors.password) {
-                  setFieldErrors(prev => { const n = { ...prev }; delete n.password; return n })
-                }
-                clearErrors()
-              }}
-              onBlur={(e) => handleFieldBlur('password', e.target.value)}
-              className={`rx-form-input ${fieldErrors.password ? 'rx-form-input--error' : ''}`}
-              placeholder="Enter password"
-              minLength={6}
-              required
-            />
-            {fieldErrors.password ? (
-              <p className="rx-form-error-text">
-                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                {fieldErrors.password}
-              </p>
-            ) : receptionistMode ? (
-              <p className="rx-form-helper">Minimum 6 characters</p>
-            ) : null}
-            {!receptionistMode && <PasswordRequirements password={password} />}
-          </div>
+          {/* Emergency Contact */}
+          {fieldConfig?.emergencyContact !== false && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rx-form-field">
+                <label className="rx-form-label">Emergency Contact Name</label>
+                <input
+                  type="text"
+                  value={emergencyContactName}
+                  onChange={(e) => { setEmergencyContactName(e.target.value); clearErrors() }}
+                  className="rx-form-input"
+                  placeholder="e.g. Spouse / Parent name"
+                />
+              </div>
+              <div className="rx-form-field">
+                <label className="rx-form-label">Emergency Contact Phone</label>
+                <input
+                  type="tel"
+                  value={emergencyContactPhone}
+                  onChange={(e) => { setEmergencyContactPhone(e.target.value); clearErrors() }}
+                  className="rx-form-input"
+                  placeholder="Phone number"
+                />
+              </div>
+            </div>
+          )}
 
-          {/* Confirm Password */}
-          <div className="rx-form-field">
-            <label className="rx-form-label">
-              Confirm Password <span className="rx-required">*</span>
-            </label>
-            <input type="password" value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value)
-                if (fieldErrors.confirmPassword) {
-                  setFieldErrors(prev => { const n = { ...prev }; delete n.confirmPassword; return n })
-                }
-                clearErrors()
-              }}
-              onBlur={(e) => handleFieldBlur('confirmPassword', e.target.value)}
-              className={`rx-form-input ${
-                fieldErrors.confirmPassword || (confirmPassword && password !== confirmPassword)
-                  ? 'rx-form-input--error'
-                  : confirmPassword && password === confirmPassword
-                  ? 'rx-form-input--success'
-                  : ''
-              }`}
-              placeholder="Re-enter password"
-              minLength={6}
-              required
-            />
-            {fieldErrors.confirmPassword ? (
-              <p className="rx-form-error-text">
-                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                {fieldErrors.confirmPassword}
-              </p>
-            ) : confirmPassword ? (
-              <p className={`text-xs font-semibold ${password === confirmPassword ? 'text-emerald-600' : 'text-red-600'}`}>
-                {password === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
-              </p>
-            ) : (
-              <p className="rx-form-helper">Must exactly match the password above</p>
-            )}
-          </div>
+          {/* Marital Status + Occupation */}
+          {(fieldConfig?.maritalStatus !== false || fieldConfig?.occupation !== false) && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+              {fieldConfig?.maritalStatus !== false && (
+                <div className="rx-form-field">
+                  <label className="rx-form-label">Marital Status</label>
+                  <select
+                    value={maritalStatus}
+                    onChange={(e) => { setMaritalStatus(e.target.value); clearErrors() }}
+                    className="rx-form-input"
+                  >
+                    <option value="">Select marital status</option>
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                    <option value="Divorced">Divorced</option>
+                    <option value="Widowed">Widowed</option>
+                  </select>
+                </div>
+              )}
+              {fieldConfig?.occupation !== false && (
+                <div className="rx-form-field">
+                  <label className="rx-form-label">Occupation</label>
+                  <input
+                    type="text"
+                    value={occupation}
+                    onChange={(e) => { setOccupation(e.target.value); clearErrors() }}
+                    className="rx-form-input"
+                    placeholder="e.g. Engineer, Business"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Insurance Provider + Policy Number */}
+          {fieldConfig?.insurance !== false && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+              <div className="rx-form-field">
+                <label className="rx-form-label">Insurance Provider</label>
+                <input
+                  type="text"
+                  value={insuranceProvider}
+                  onChange={(e) => { setInsuranceProvider(e.target.value); clearErrors() }}
+                  className="rx-form-input"
+                  placeholder="e.g. Star Health, HDFC ERGO"
+                />
+              </div>
+              <div className="rx-form-field">
+                <label className="rx-form-label">Insurance Policy Number</label>
+                <input
+                  type="text"
+                  value={insurancePolicyNumber}
+                  onChange={(e) => { setInsurancePolicyNumber(e.target.value); clearErrors() }}
+                  className="rx-form-input"
+                  placeholder="Policy ID / Member No."
+                />
+              </div>
+            </div>
+          )}
         </div>
-      </div>
       )}
+
       {/* ══════════════════════════════════════
-          Section — Patient Documents & ID Proofs
+          Section 4 — Documents Upload (ID / Medical)
           ══════════════════════════════════════ */}
       {fieldConfig?.documents !== false && (
         <div className="rx-form-section">
           <div className="rx-form-section-header">
             <div className="rx-form-section-icon">
               <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <div>
-              <p className="rx-form-section-title">Patient Documents & ID Proof</p>
+              <p className="rx-form-section-title">Documents Upload</p>
+              <p className="rx-form-section-desc">Attach ID proof or prior medical records (Optional)</p>
             </div>
           </div>
 
           <div className="rx-form-field">
-            <label className="rx-form-label">Upload Documents (PDF / Image / Doc)</label>
             <input
               type="file"
               multiple
@@ -917,68 +874,165 @@ export default function PatientProfileForm({
                 const files = e.target.files
                 if (files && files.length > 0) {
                   const fileArray = Array.from(files)
-                  setSelectedFiles((prev) => [...prev, ...fileArray])
-                  setDocumentNames((prev) => [...prev, ...fileArray.map((f) => f.name)])
+                  setSelectedFiles(prev => [...prev, ...fileArray])
+                  setDocumentNames(prev => [...prev, ...fileArray.map(f => f.name)])
                 }
               }}
-              className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer rounded-xl border border-slate-200 bg-slate-50 p-2"
+              className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer rounded-xl border border-slate-200 bg-white p-2"
             />
-            <p className="rx-form-helper">Allowed formats: PDF, PNG, JPG, DOC (Max 10MB per file)</p>
-          </div>
-
-          {documentNames.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-xs font-semibold text-slate-700">Attached Files ({documentNames.length}):</p>
-              <ul className="space-y-1">
+            {documentNames.length > 0 && (
+              <ul className="space-y-1.5 mt-3">
                 {documentNames.map((name, idx) => (
-                  <li key={idx} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-                    <span className="truncate flex-1 min-w-0 mr-2">📄 {name}</span>
+                  <li key={idx} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                    <span className="truncate max-w-[300px]">📄 {name}</span>
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))
-                        setDocumentNames((prev) => prev.filter((_, i) => i !== idx))
+                        setSelectedFiles(prev => prev.filter((_, i) => i !== idx))
+                        setDocumentNames(prev => prev.filter((_, i) => i !== idx))
                       }}
-                      className="text-slate-400 hover:text-red-500 font-bold ml-1 shrink-0 p-1"
+                      className="text-slate-400 hover:text-red-500 font-bold ml-2"
                     >
                       ×
                     </button>
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          Section 5 — Account & Access Settings
+          ══════════════════════════════════════ */}
+      {(!receptionistMode && (!isEditMode || showStatusField)) && (
+        <div className="rx-form-section">
+          <div className="rx-form-section-header">
+            <div className="rx-form-section-icon">
+              <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <div>
+              <p className="rx-form-section-title">Account & Access</p>
+              <p className="rx-form-section-desc">Portal login credentials and account status</p>
+            </div>
+          </div>
+
+          {!isEditMode && !receptionistMode && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rx-form-field">
+                  <label className="rx-form-label">
+                    Password <span className="rx-required">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      if (fieldErrors.password) {
+                        setFieldErrors(prev => { const n = { ...prev }; delete n.password; return n })
+                      }
+                      clearErrors()
+                    }}
+                    onBlur={(e) => handleFieldBlur('password', e.target.value)}
+                    className={`rx-form-input ${fieldErrors.password ? 'rx-form-input--error' : ''}`}
+                    placeholder="Set password"
+                    required
+                  />
+                  {fieldErrors.password ? (
+                    <p className="rx-form-error-text">
+                      <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      {fieldErrors.password}
+                    </p>
+                  ) : (
+                    <PasswordRequirements password={password} />
+                  )}
+                </div>
+                <div className="rx-form-field">
+                  <label className="rx-form-label">
+                    Confirm Password <span className="rx-required">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value)
+                      if (fieldErrors.confirmPassword) {
+                        setFieldErrors(prev => { const n = { ...prev }; delete n.confirmPassword; return n })
+                      }
+                      clearErrors()
+                    }}
+                    onBlur={(e) => handleFieldBlur('confirmPassword', e.target.value)}
+                    className={`rx-form-input ${fieldErrors.confirmPassword ? 'rx-form-input--error' : ''}`}
+                    placeholder="Re-enter password"
+                    required
+                  />
+                  {fieldErrors.confirmPassword && (
+                    <p className="rx-form-error-text">
+                      <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      {fieldErrors.confirmPassword}
+                    </p>
+                  )}
+                </div>
+              </div>
+          )}
+
+          {showStatusField && !receptionistMode && (
+            <div className="rx-form-field mt-4">
+              <label className="rx-form-label">Account Status</label>
+              <div className="flex items-center gap-4">
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                  <input
+                    type="radio"
+                    name="status"
+                    value="active"
+                    checked={status === 'active'}
+                    onChange={() => setStatus('active')}
+                    className="w-4 h-4 text-cyan-600 focus:ring-cyan-500 border-slate-300"
+                  />
+                  <span>Active</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                  <input
+                    type="radio"
+                    name="status"
+                    value="inactive"
+                    checked={status === 'inactive'}
+                    onChange={() => setStatus('inactive')}
+                    className="w-4 h-4 text-slate-400 focus:ring-slate-400 border-slate-300"
+                  />
+                  <span>Inactive</span>
+                </label>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Submit ── */}
-      {(() => {
-        const isFormLoading = loading || isSubmitting
-        const defaultLoadingText = receptionistMode ? 'Creating Patient...' : 'Saving Patient...'
-        const activeLoadingText = submitLabel
-          ? (submitLabel.endsWith('...') ? submitLabel : `${submitLabel}...`)
-          : defaultLoadingText
-
-        return (
-          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel} disabled={isFormLoading}>
-                Cancel
-              </Button>
-            )}
-            <Button
-              type="submit"
-              size="lg"
-              loading={isFormLoading}
-              loadingText={activeLoadingText}
-              disabled={isFormLoading}
-            >
-              {submitLabel ?? (mode === 'public' ? 'Create Patient Account' : 'Save Patient')}
-            </Button>
-          </div>
-        )
-      })()}
+      {/* ══════════════════════════════════════
+          Form Actions Footer
+          ══════════════════════════════════════ */}
+      <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-200 mt-6">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading || isSubmitting}
+            className="px-5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        )}
+        <Button
+          type="submit"
+          disabled={loading || isSubmitting}
+          className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-xs transition-all disabled:opacity-50"
+        >
+          {loading || isSubmitting ? 'Saving...' : submitLabel ?? (isEditMode ? 'Update Patient' : 'Register Patient')}
+        </Button>
+      </div>
     </form>
   )
 }
-

@@ -1005,21 +1005,7 @@ function LoginContent() {
               </form>
             )}
 
-            {(role === "patient" || role === "doctor" || !role) && !redirectBanner && (
-              <div className="mt-6 border-t border-slate-100 pt-5 text-center">
-                <p className="text-sm text-slate-600">
-                  Don&apos;t have an account?{" "}
-                  <a
-                    href={role ? `/auth/signup?role=${role}` : "/auth/signup?role=patient"}
-                    className="font-semibold text-cyan-700 transition hover:text-cyan-800"
-                  >
-                    Create {role === "doctor" ? "doctor" : role === "patient" ? "patient" : "account"}
-                  </a>
-                </p>
-              </div>
-            )}
-
-            {(role === "admin" || role === "receptionist" || role === "pharmacy") && !redirectBanner && (
+            {!mfaRequired && !redirectBanner && (role === "admin" || role === "pharmacy" || role === "doctor" || role === "receptionist") && (
               <div className="mt-6 rounded-2xl border border-cyan-100 bg-gradient-to-r from-cyan-50 to-teal-50 p-4">
                 <p className="text-sm font-semibold text-cyan-900">Need an account?</p>
                 <p className="mt-1 text-xs leading-relaxed text-cyan-800">
@@ -1027,6 +1013,8 @@ function LoginContent() {
                     ? "Admin accounts are created by system administrators. Please contact your IT department or system administrator for access."
                     : role === "pharmacy"
                     ? "Pharmacy accounts are created by administrators. Use the credentials provided by your admin or see the table below."
+                    : role === "doctor"
+                    ? "Doctor accounts are created by administrators from the admin dashboard."
                     : "Receptionist accounts are created by administrators. Please contact your supervisor or system administrator for access."}
                 </p>
               </div>
