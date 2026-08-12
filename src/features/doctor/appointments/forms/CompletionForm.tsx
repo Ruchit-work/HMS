@@ -263,39 +263,26 @@ export default function CompletionForm({
 
     return (
       <form id={formId} onSubmit={onSubmit} className="min-h-0 flex flex-col h-full">
-        <div className="flex-1 min-h-0 px-3">
-          <ConsultationWorkspace
-            leftCollapsed={leftCollapsed}
-            left={
-              <ConsultationContextPanel
-                appointment={appointment}
-                patientHistory={patientHistory}
-                historyDocuments={historyDocuments}
-                onDocumentClick={onDocumentClick}
-                latestRecommendation={latestRecommendation}
-                onLastVisitClick={onLastVisitClick}
-                isReturningPatient={isReturningPatient}
-                extraBottom={leftExtraBottom}
-              />
-            }
-            center={
-              <ConsultationClinicalPanel
-                appointment={appointment}
-                completionData={completionData}
-                updating={updating}
-                aiDiagnosisText={aiDiagnosisText}
-                loadingAiDiagnosis={loadingAiDiagnosis}
-                showAiDiagnosisSuggestion={showAiDiagnosisSuggestion}
-                onCompletionDataChange={onCompletionDataChange}
-                onGenerateAiDiagnosis={onGenerateAiDiagnosis}
-                onAiDiagnosisRegenerate={onAiDiagnosisRegenerate}
-                onDeclineAiDiagnosis={onDeclineAiDiagnosis}
-                onCompleteConsultation={() => onSubmit({} as React.FormEvent)}
-                showCompletionForm={Boolean(formId)}
-                extraContent={centerExtraContent}
-                headerLeading={headerLeading}
-              />
-            }
+        <div className="flex-1 min-h-0 w-full overflow-hidden">
+          <ConsultationClinicalPanel
+            appointment={appointment}
+            completionData={completionData}
+            updating={updating}
+            patientHistory={patientHistory}
+            historyDocuments={historyDocuments}
+            onDocumentClick={onDocumentClick}
+            onOpenDocuments={onOpenDocuments}
+            isReturningPatient={isReturningPatient}
+            aiDiagnosisText={aiDiagnosisText}
+            loadingAiDiagnosis={loadingAiDiagnosis}
+            showAiDiagnosisSuggestion={showAiDiagnosisSuggestion}
+            onCompletionDataChange={onCompletionDataChange}
+            onGenerateAiDiagnosis={onGenerateAiDiagnosis}
+            onAiDiagnosisRegenerate={onAiDiagnosisRegenerate}
+            onDeclineAiDiagnosis={onDeclineAiDiagnosis}
+            onCompleteConsultation={() => onSubmit({} as React.FormEvent)}
+            showCompletionForm={Boolean(formId)}
+            extraContent={centerExtraContent}
           />
         </div>
         {actionBar}
